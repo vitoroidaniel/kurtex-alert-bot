@@ -58,16 +58,6 @@ async def post_init(application: Application) -> None:
     from shifts import SUPER_ADMINS
     from telegram import BotCommandScopeChat
 
-    # Set webhook if configured (for Railway/production)
-    if config.USE_WEBHOOK:
-        webhook_url = f"{config.WEBHOOK_URL}/webhook"
-        await application.bot.set_webhook(
-            url=webhook_url,
-            secret_token=config.WEBHOOK_SECRET or None,
-            drop_pending_updates=True,
-        )
-        logger.info(f"Webhook set to: {webhook_url}")
-
     base_commands = [
         ("start",       "Register with Kurtex Alert Bot"),
         ("shifts",      "View current shift roster"),
@@ -232,21 +222,8 @@ def main():
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    
-    if config.USE_WEBHOOK:
-        # Webhook mode for Railway/production
-        logger.info(f"Using webhook mode: {config.WEBHOOK_URL}")
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=int(os.getenv("PORT", 8080)),
-            url_path="webhook",
-            webhook_url=config.WEBHOOK_URL,
-            secret_token=config.WEBHOOK_SECRET or None,
-            drop_pending_updates=True,
-        )
-    else:
-        # Polling mode for local development
-        app.run_polling(drop_pending_updates=True)
+    # Use polling - Railway will use single instance to prevent conflicts
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == '__main__':
