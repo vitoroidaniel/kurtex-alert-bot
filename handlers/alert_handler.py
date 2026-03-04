@@ -280,6 +280,30 @@ class AlertHandler:
         except Exception as e:
             logger.error(f"Error processing AI channel message: {e}")
 
+    async def poll_ai_alerts(self, ctx) -> None:
+        """Alias kept for scheduler compatibility."""
+        try:
+            from config import config as main_config
+            channel_id = getattr(main_config, "AI_ALERTS_CHANNEL_ID", 0)
+            if not channel_id:
+                return
+            updates = await ctx.bot.get_updates(
+                offset=self._last_ai_update_id + 1 if self._last_ai_update_id >= 0 else None,
+                limit=20,
+                timeout=0,
+                allowed_updates=["channel_post"],
+            )
+            for update in updates:
+                self._last_ai_update_id = update.update_id
+                msg = update.channel_post
+                if not msg or msg.chat.id != channel_id:
+                    continue
+                if not msg.text or "AI DETECTED ISSUE" not in msg.text:
+                    continue
+                await self._process_ai_channel_message(msg, ctx)
+        except Exception as e:
+            logger.error(f"poll_ai_alerts error: {e}")
+
     async def handle_channel_post(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         """Handles messages posted to the AI Alerts channel directly."""
         msg = update.channel_post or update.effective_message
@@ -417,8 +441,8 @@ class AlertHandler:
                     "📋 *New Case Report*\n\nIs this a Truck or Trailer issue?",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🚚 Truck",   callback_data="rpt_type|truck"),
-                        InlineKeyboardButton("🚚➖T railer", callback_data="rpt_type|trailer"),
+                        InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
+                        InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
                         InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
                     ]])
                 )
