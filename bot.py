@@ -39,17 +39,29 @@ logger = logging.getLogger(__name__)
 async def auth_middleware(update: Update, ctx):
     user = update.effective_user
     if not user:
+        logger.info("Auth: no user, ignoring")
         return
+    
     chat = update.effective_chat
+    chat_type = chat.type if chat else "none"
+    logger.info(f"Auth: user={user.id}(@{user.username}), chat_type={chat_type}")
+    
+    # Allow group chats to pass through for trigger detection
     if chat and chat.type in ("group", "supergroup"):
+        logger.info(f"Auth: allowing group message")
         return
+    
+    # Check if user is admin
     if user.id not in ADMINS and user.id != MAIN_ADMIN_ID:
+        logger.info(f"Auth: user {user.id} not authorized")
         if update.message:
             await update.message.reply_text(
                 "You are not authorized to use this bot.\n"
                 "Contact an administrator for access."
             )
         raise ApplicationHandlerStop
+    
+    logger.info(f"Auth: user {user.id} authorized")
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
@@ -228,3 +240,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
