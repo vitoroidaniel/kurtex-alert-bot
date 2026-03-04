@@ -183,6 +183,19 @@ async def cmd_help(update: Update, ctx):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+async def reset_polling_offset(app):
+    """Force reset polling offset to get all pending updates"""
+    logger.info("Forcing polling offset reset...")
+    try:
+        # Get updates with a high offset to skip all pending
+        updates = await app.bot.get_updates(offset=2147483647, limit=1)
+        if updates:
+            # Set offset to last update + 1
+            await app.bot.get_updates(offset=updates[-1].update_id + 1)
+            logger.info(f"Polling offset reset to {updates[-1].update_id + 1}")
+    except Exception as e:
+        logger.error(f"Error resetting polling: {e}")
+
 def main():
     alert_h = AlertHandler()
 
@@ -192,6 +205,10 @@ def main():
         .post_init(post_init)
         .build()
     )
+    
+    # Add startup callback to reset polling
+    import asyncio
+    asyncio.get_event_loop().run_until_complete(reset_polling_offset(app))
     
     # Add error handler to log any errors
     async def error_handler(update: Update, ctx):
