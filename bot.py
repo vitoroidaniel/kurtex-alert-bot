@@ -278,8 +278,9 @@ def main():
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    # Use polling - drop_pending=False to pick up any messages sent during startup
-    app.run_polling(drop_pending_updates=False)
+    # Use polling - explicitly allow ALL updates
+    # This fixes the issue where deleteWebhook restricts updates to only ["channel_post"]
+    app.run_polling(drop_pending_updates=False, allowed_updates=[])
 
 
 if __name__ == '__main__':
