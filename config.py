@@ -88,6 +88,11 @@ class Config:
     DRIVER_GROUP_ID  = int(os.getenv("DRIVER_GROUP_ID")  or (_ini.get("channels", "driver_group_id",  fallback="0") if _ini else "0"))
     REPORTS_GROUP_ID = int(os.getenv("REPORTS_GROUP_ID") or (_ini.get("channels", "reports_group_id", fallback="0") if _ini else "0"))
     AI_ALERTS_CHANNEL_ID = int(os.getenv("AI_ALERTS_CHANNEL_ID") or (_ini.get("channels", "ai_alerts_channel_id", fallback="0") if _ini else "0"))
+    
+    # Webhook configuration (for Railway/production deployment)
+    WEBHOOK_URL      = os.getenv("WEBHOOK_URL", "").strip()
+    WEBHOOK_SECRET   = os.getenv("WEBHOOK_SECRET", "").strip()
+    USE_WEBHOOK      = bool(WEBHOOK_URL)
 
 
 config = Config()

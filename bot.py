@@ -79,6 +79,23 @@ async def post_init(application: Application) -> None:
     from shifts import SUPER_ADMINS, ADMINS
     from telegram import BotCommandScopeChat
     
+    # Reset webhook to allow all update types
+    try:
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Webhook deleted with drop_pending_updates=True to reset allowed_updates")
+    except Exception as e:
+        logger.warning(f"Could not reset webhook: {e}")
+    
+    # Set webhook if configured (for Railway/production)
+    if config.USE_WEBHOOK:
+        webhook_url = f"{config.WEBHOOK_URL}/webhook"
+        await application.bot.set_webhook(
+            url=webhook_url,
+            secret_token=config.WEBHOOK_SECRET or None,
+            drop_pending_updates=True,
+        )
+        logger.info(f"Webhook set to: {webhook_url}")
+    
     # Debug: log loaded admins
     logger.info(f"DEBUG: ADMINS loaded: {list(ADMINS.keys())}")
     logger.info(f"DEBUG: SUPER_ADMINS loaded: {SUPER_ADMINS}")
@@ -278,9 +295,22 @@ def main():
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    # Use polling - explicitly allow ALL updates
-    # This fixes the issue where deleteWebhook restricts updates to only ["channel_post"]
-    app.run_polling(drop_pending_updates=False, allowed_updates=[])
+    
+    # Webhook mode is recommended for production (Railway) - avoids getUpdates conflicts
+    # Set WEBHOOK_URL env var to enable (e.g., https://your-app.railway.app)
+    if config.USE_WEBHOOK:
+        logger.info(f"Using webhook mode: {config.WEBHOOK_URL}")
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=int(os.getenv("PORT", 8080)),
+            url_path="webhook",
+            webhook_url=config.WEBHOOK_URL,
+            secret_token=config.WEBHOOK_SECRET or None,
+            drop_pending_updates=True,
+        )
+    else:
+        # Polling mode for local development
+        app.run_polling(drop_pending_updates=False, allowed_updates=[])
 
 
 if __name__ == '__main__':
