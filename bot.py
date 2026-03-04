@@ -185,14 +185,19 @@ async def cmd_help(update: Update, ctx):
 
 async def reset_polling_offset(app):
     """Force reset polling offset to get all pending updates"""
-    logger.info("Forcing polling offset reset...")
+    logger.info("Forcing polling offset reset - fetching all pending updates...")
     try:
-        # Get updates with a high offset to skip all pending
-        updates = await app.bot.get_updates(offset=2147483647, limit=1)
+        # Get ALL pending updates ( Telegram keeps last 24 hours)
+        updates = await app.bot.get_updates(limit=100)
         if updates:
-            # Set offset to last update + 1
+            logger.info(f"Found {len(updates)} pending updates!")
+            for u in updates:
+                logger.info(f"  - Update {u.update_id}: {u.message.text if u.message else u.callback_query.data if u.callback_query else 'other'}")
+            # Set offset to last update + 1 to ACK them
             await app.bot.get_updates(offset=updates[-1].update_id + 1)
             logger.info(f"Polling offset reset to {updates[-1].update_id + 1}")
+        else:
+            logger.info("No pending updates found")
     except Exception as e:
         logger.error(f"Error resetting polling: {e}")
 
