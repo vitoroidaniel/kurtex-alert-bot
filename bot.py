@@ -234,8 +234,8 @@ def main():
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    # Use polling - Railway will use single instance to prevent conflicts
-    app.run_polling(drop_pending_updates=True)
+    # Use polling - drop_pending=False to pick up any messages sent during startup
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == '__main__':
