@@ -51,16 +51,7 @@ def _load_token():
             pass
         return token
     except (EOFError, OSError):
-        # More helpful error message for Railway/cloud deployments
-        print("\n" + "=" * 50)
-        print("ERROR: BOT_TOKEN environment variable is required!")
-        print("=" * 50)
-        print("\nFor Railway deployment, set these environment variables:")
-        print("  - BOT_TOKEN        (your Telegram bot token)")
-        print("  - DRIVER_GROUP_ID (driver group chat ID)")
-        print("  - REPORTS_GROUP_ID(reports group chat ID)")
-        print("\nLearn more: https://docs.railway.app/develop/variables")
-        sys.exit("Missing required environment variable: BOT_TOKEN")
+        sys.exit("BOT_TOKEN environment variable is required on Railway.")
 
 
 def _load_ini():
@@ -88,16 +79,7 @@ def _load_ini():
         print("[OK] Config saved.\n")
         return ini
     except (EOFError, OSError):
-        # More helpful error message for Railway/cloud deployments
-        print("\n" + "=" * 50)
-        print("ERROR: DRIVER_GROUP_ID and REPORTS_GROUP_ID required!")
-        print("=" * 50)
-        print("\nFor Railway deployment, set these environment variables:")
-        print("  - BOT_TOKEN        (your Telegram bot token)")
-        print("  - DRIVER_GROUP_ID (driver group chat ID)")
-        print("  - REPORTS_GROUP_ID(reports group chat ID)")
-        print("\nLearn more: https://docs.railway.app/develop/variables")
-        sys.exit("Missing required environment variables: DRIVER_GROUP_ID and REPORTS_GROUP_ID")
+        sys.exit("DRIVER_GROUP_ID and REPORTS_GROUP_ID environment variables are required on Railway.")
 
 
 class Config:
