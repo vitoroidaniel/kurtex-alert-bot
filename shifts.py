@@ -54,6 +54,6 @@ SHIFTS = [
 
 TIMEZONE = "America/New_York"
 
-MAIN_ADMIN_ID = 1615926408, 7769230456, 1401145589,    # keep this as primary (used for reports fallback)
+MAIN_ADMIN_ID = 1615926408, 7769230456, 1401145589, 7808593054,     # keep this as primary (used for reports fallback)
 
-SUPER_ADMINS = {1615926408, 7769230456, 1401145589}  # all super admins
+SUPER_ADMINS = {1615926408, 7769230456, 1401145589, 7808593054}  # all super admins
