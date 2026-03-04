@@ -67,8 +67,13 @@ async def auth_middleware(update: Update, ctx):
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 async def post_init(application: Application) -> None:
-    from shifts import SUPER_ADMINS
+    from shifts import SUPER_ADMINS, ADMINS
     from telegram import BotCommandScopeChat
+    
+    # Debug: log loaded admins
+    logger.info(f"DEBUG: ADMINS loaded: {list(ADMINS.keys())}")
+    logger.info(f"DEBUG: SUPER_ADMINS loaded: {SUPER_ADMINS}")
+    logger.info(f"DEBUG: MAIN_ADMIN_ID: {MAIN_ADMIN_ID}")
 
     base_commands = [
         ("start",       "Register with Kurtex Alert Bot"),
@@ -178,6 +183,12 @@ def main():
         .post_init(post_init)
         .build()
     )
+    
+    # Add error handler to log any errors
+    async def error_handler(update: Update, ctx):
+        logger.error(f"Exception while handling update: {ctx.error}", exc_info=ctx.error)
+    
+    app.add_error_handler(error_handler)
 
     app.bot_data["alert_handler"] = alert_h
 
