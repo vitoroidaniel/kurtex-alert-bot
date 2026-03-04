@@ -51,18 +51,19 @@ def _is_admin(user_id):
 
 def _active_case_text(case):
     return (
-        f"Active case\n\n"
-        f"Group: {case['group_name']}\n"
-        f"Driver: {case['driver_name']}\n"
-        f"Issue: {(case.get('description') or '')[:120]}\n"
-        f"Assigned: {_fmt_dt(case.get('assigned_at'))}"
+        f"📋 *Active Case*\n\n"
+        f"📌 *Group:* {case['group_name']}\n"
+        f"👤 *Driver:* {case['driver_name']}\n"
+        f"📝 *Issue:* {(case.get('description') or '—')[:200]}"
     )
 
 
 def _active_case_keyboard(case_id):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Solve", callback_data=f"solve|{case_id}")],
-        [InlineKeyboardButton("Delete", callback_data=f"delete_confirm|{case_id}")],
+        [
+            InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"),
+            InlineKeyboardButton("✅ Close",  callback_data=f"delete_confirm|{case_id}"),
+        ],
     ])
 
 
@@ -85,6 +86,7 @@ async def cmd_mycases(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for case in active_only:
         await update.message.reply_text(
             _active_case_text(case),
+            parse_mode="Markdown",
             reply_markup=_active_case_keyboard(case["id"])
         )
 
