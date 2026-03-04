@@ -104,15 +104,6 @@ async def job_escalation_check(ctx) -> None:
         alert_handler._alerts.pop(alert_id, None)
 
 
-
-async def job_poll_ai_alerts(ctx) -> None:
-    """Runs every 10s — picks up AI scanner detections and sends to admins."""
-    alert_handler = ctx.bot_data.get("alert_handler")
-    if not alert_handler:
-        return
-    await alert_handler.poll_ai_alerts(ctx)
-
-
 # ── Register jobs with the application ───────────────────────────────────────
 
 def register_jobs(app: Application) -> None:
@@ -133,12 +124,4 @@ def register_jobs(app: Application) -> None:
         name="escalation_check",
     )
 
-    # Poll for AI scanner alerts every 10 seconds
-    jq.run_repeating(
-        job_poll_ai_alerts,
-        interval=10,
-        first=15,
-        name="poll_ai_alerts",
-    )
-
-    logger.info("Scheduled jobs registered: daily_report @ 23:55 UTC, escalation every 5min, AI poll every 10s")
+    logger.info("Scheduled jobs registered: daily_report @ 23:55 UTC, escalation every 5min")
