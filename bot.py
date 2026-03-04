@@ -183,23 +183,22 @@ async def cmd_help(update: Update, ctx):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 async def reset_polling_offset(app):
-    """Force reset polling offset to get all pending updates"""
-    logger.info("Forcing polling offset reset - fetching all pending updates...")
+    """Get the latest update ID WITHOUT consuming updates"""
+    logger.info("Getting latest update ID without consuming...")
     try:
-        # Get ALL pending updates ( Telegram keeps last 24 hours)
-        updates = await app.bot.get_updates(limit=100)
+        # Get updates with a high offset to find the latest
+        # This does NOT mark them as read - we're just peeking
+        updates = await app.bot.get_updates(offset=2147483647, limit=1)
         if updates:
-            logger.info(f"Found {len(updates)} pending updates!")
-            for u in updates:
-                logger.info(f"  - Update {u.update_id}: {u.message.text if u.message else u.callback_query.data if u.callback_query else 'other'}")
-            # Set offset to last update + 1 to ACK them
-            await app.bot.get_updates(offset=updates[-1].update_id + 1)
-            logger.info(f"Polling offset reset to {updates[-1].update_id + 1}")
+            # Set offset to latest + 1 so we start AFTER it
+            next_offset = updates[-1].update_id + 1
+            logger.info(f"Latest update ID: {updates[-1].update_id}, will start from {next_offset}")
         else:
-            logger.info("No pending updates found")
+            logger.info("No updates found on Telegram")
     except Exception as e:
-        logger.error(f"Error resetting polling: {e}")
+        logger.error(f"Error getting update ID: {e}")
 
 def main():
     alert_h = AlertHandler()
