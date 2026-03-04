@@ -75,18 +75,13 @@ async def auth_middleware(update: Update, ctx):
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
+
 async def post_init(application: Application) -> None:
     from shifts import SUPER_ADMINS, ADMINS
     from telegram import BotCommandScopeChat
     
-    # Reset webhook to allow all update types
-    try:
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("Webhook deleted with drop_pending_updates=True to reset allowed_updates")
-    except Exception as e:
-        logger.warning(f"Could not reset webhook: {e}")
-    
-    # Set webhook if configured (for Railway/production)
+    # Only set webhook if configured (for Railway/production)
+    # Don't delete first - just set it directly
     if config.USE_WEBHOOK:
         webhook_url = f"{config.WEBHOOK_URL}/webhook"
         await application.bot.set_webhook(
@@ -101,37 +96,41 @@ async def post_init(application: Application) -> None:
     logger.info(f"DEBUG: SUPER_ADMINS loaded: {SUPER_ADMINS}")
     logger.info(f"DEBUG: MAIN_ADMIN_ID: {MAIN_ADMIN_ID}")
 
-    base_commands = [
-        ("start",       "Register with Kurtex Alert Bot"),
-        ("shifts",      "View current shift roster"),
-        ("mycases",     "Your active cases"),
-        ("done",        "Today's closed cases"),
-        ("casehistory", "Full closed case history"),
-        ("help",        "Bot commands and help"),
-    ]
+    # Only set commands if not using webhook (to avoid too many API calls)
+    # In webhook mode, Telegram handles this differently
+    if not config.USE_WEBHOOK:
+        base_commands = [
+            ("start",       "Register with Kurtex Alert Bot"),
+            ("shifts",      "View current shift roster"),
+            ("mycases",     "Your active cases"),
+            ("done",        "Today's closed cases"),
+            ("casehistory", "Full closed case history"),
+            ("help",        "Bot commands and help"),
+        ]
 
-    super_commands = base_commands + [
-        ("report",      "Daily summary"),
-        ("leaderboard", "Top performers"),
-        ("missed",      "Missed alerts"),
-    ]
+        super_commands = base_commands + [
+            ("report",      "Daily summary"),
+            ("leaderboard", "Top performers"),
+            ("missed",      "Missed alerts"),
+        ]
 
-    # Default commands for all admins
-    await application.bot.set_my_commands(base_commands)
+        # Default commands for all admins
+        await application.bot.set_my_commands(base_commands)
 
-    # Override for each super admin
-    for admin_id in SUPER_ADMINS:
-        try:
-            await application.bot.set_my_commands(
-                super_commands,
-                scope=BotCommandScopeChat(chat_id=admin_id)
-            )
-        except Exception as e:
-            logger.warning(f"Could not set commands for super admin {admin_id}: {e}")
+        # Override for each super admin
+        for admin_id in SUPER_ADMINS:
+            try:
+                await application.bot.set_my_commands(
+                    super_commands,
+                    scope=BotCommandScopeChat(chat_id=admin_id)
+                )
+            except Exception as e:
+                logger.warning(f"Could not set commands for super admin {admin_id}: {e}")
 
     me = await application.bot.get_me()
     logger.info(f"{BOT_NAME} started as @{me.username}")
     logger.info(f"Triggers: {', '.join(TRIGGER_WORDS)}")
+
 
 
 # ── Commands ──────────────────────────────────────────────────────────────────
