@@ -40,9 +40,9 @@ def _type_kb():
 
 def _priority_kb():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🟢 Low",      callback_data="rpt_priority|truck"),
-        InlineKeyboardButton("🟡 Medium", callback_data="rpt_priority|trailer"),
-        InlineKeyboardButton("🔴 High",    callback_data="rpt_priority|reefer"),
+        InlineKeyboardButton("🟢 Low",    callback_data="rpt_priority|low"),
+        InlineKeyboardButton("🟡 Medium", callback_data="rpt_priority|medium"),
+        InlineKeyboardButton("🔴 High",   callback_data="rpt_priority|high"),
     ]])
 
 
@@ -54,9 +54,15 @@ def _confirm_kb():
 
 
 PRIORITY_META = {
-    "truck":   {"icon": "🟢", "label": "Truck",       "level": "Low"},
-    "trailer": {"icon": "🟡", "label": "Trailer",      "level": "Medium"},
-    "reefer":  {"icon": "🔴", "label": "Reefer Issue", "level": "High"},
+    "low":    {"icon": "🟢", "level": "Low"},
+    "medium": {"icon": "🟡", "level": "Medium"},
+    "high":   {"icon": "🔴", "level": "High"},
+}
+
+VTYPE_LABELS = {
+    "truck":   "🚛 Truck",
+    "trailer": "🚜 Trailer",
+    "reefer":  "❄️ Reefer",
 }
 
 
@@ -70,14 +76,25 @@ def _esc(text) -> str:
 
 
 def _build_report(d: dict) -> str:
-    vtype = d.get("vehicle_type", "truck")
-    p     = PRIORITY_META.get(vtype, PRIORITY_META["truck"])
+    vtype        = d.get("vehicle_type", "truck")
+    priority_key = d.get("priority", "low")
+    p            = PRIORITY_META.get(priority_key, PRIORITY_META["low"])
+    vtype_label  = VTYPE_LABELS.get(vtype, vtype.title())
+    unit         = d.get("unit_number", "")
+    unit_str     = f" — Unit {_esc(unit)}" if unit else ""
+
+    if vtype == "truck":
+        truck_line = f"*Truck:* {_esc(unit)}" if unit else "*Truck:* —"
+    elif vtype == "trailer":
+        truck_line = f"*Trailer:* {_esc(unit)}" if unit else "*Trailer:* —"
+    else:
+        truck_line = f"*Trailer:* {_esc(unit)}" if unit else "*Trailer:* —"
 
     lines = [
-        f"{p['icon']} *Case Report — {p['label']}*",
+        f"{p['icon']} *Case Report — {vtype_label}*",
         f"Priority: *{p['level']}*",
         "",
-        f"*Truck/Trailer:* {_esc(d.get('vehicle_type', '—').title())}",
+        truck_line,
         f"*Driver:* {_esc(d.get('driver', '—'))}",
         f"*Issue:* {_esc(d.get('issue', '—'))}",
         "",
@@ -348,16 +365,24 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         if media:
             kind, file_id = media[0]
-            if kind == "photo":
-                await ctx.bot.send_photo(dest_id, photo=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN)
-            elif kind == "video":
-                await ctx.bot.send_video(dest_id, video=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN)
-            else:
-                await ctx.bot.send_document(dest_id, document=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN)
+            try:
+                if kind == "photo":
+                    await ctx.bot.send_photo(dest_id, photo=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN, read_timeout=30, write_timeout=30)
+                elif kind == "video":
+                    await ctx.bot.send_video(dest_id, video=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN, read_timeout=60, write_timeout=60)
+                else:
+                    await ctx.bot.send_document(dest_id, document=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN, read_timeout=30, write_timeout=30)
+            except TelegramError as e:
+                logger.error(f"Failed to send first media: {e}")
+                await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
+
             for kind, file_id in media[1:]:
-                if kind == "photo":   await ctx.bot.send_photo(dest_id, photo=file_id)
-                elif kind == "video": await ctx.bot.send_video(dest_id, video=file_id)
-                else:                 await ctx.bot.send_document(dest_id, document=file_id)
+                try:
+                    if kind == "photo":   await ctx.bot.send_photo(dest_id, photo=file_id, read_timeout=30, write_timeout=30)
+                    elif kind == "video": await ctx.bot.send_video(dest_id, video=file_id, read_timeout=60, write_timeout=60)
+                    else:                 await ctx.bot.send_document(dest_id, document=file_id, read_timeout=30, write_timeout=30)
+                except TelegramError as e:
+                    logger.error(f"Failed to send media item: {e}")
         else:
             await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -385,6 +410,7 @@ def get_report_conversation():
         entry_points=[CallbackQueryHandler(cb_type, pattern=r'^rpt_type\|')],
         states={
             ASK_TYPE:          [CallbackQueryHandler(cb_type,         pattern=r'^rpt_type\|')],
+            ASK_UNIT:          [MessageHandler(text_only,             recv_unit)],
             ASK_DRIVER:        [MessageHandler(text_only,             recv_driver)],
             ASK_ISSUE:         [MessageHandler(text_only,             recv_issue)],
             ASK_LOAD:          [MessageHandler(text_only,             recv_load),
