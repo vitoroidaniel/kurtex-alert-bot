@@ -29,18 +29,9 @@ BOT_TAGLINE = "Truck Maintenance Command Center"
 
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.DEBUG  # Changed to DEBUG to see all logs
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-
-# ── Debug handler ───────────────────────────────────────────────────────────
-
-async def debug_all_updates(update: Update, ctx):
-    """Catch-all to debug ALL updates"""
-    logger.warning(f"DEBUG ALL: Received update: {update}")
-    if update.message:
-        logger.warning(f"DEBUG ALL: Message: {update.message.text}, Chat: {update.effective_chat.type if update.effective_chat else 'None'}, User: {update.effective_user.id if update.effective_user else 'None'}")
 
 
 # ── Auth middleware ───────────────────────────────────────────────────────────
@@ -166,7 +157,7 @@ async def cmd_help(update: Update, ctx):
         "Agent commands:\n"
         "/mycases — Your active cases\n"
         "/done — Today's closed cases\n"
-        "/casehistory — Full case history\n"
+        "/casehistory — Full closed case history\n"
         "/shifts — Who is on duty\n"
     )
 
@@ -200,9 +191,6 @@ def main():
     app.add_error_handler(error_handler)
 
     app.bot_data["alert_handler"] = alert_h
-
-    # Debug catch-all handler — runs first to log ALL updates
-    app.add_handler(TypeHandler(Update, debug_all_updates), group=-2)
 
     # Auth middleware — runs before everything
     app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
