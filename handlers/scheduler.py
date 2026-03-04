@@ -121,7 +121,7 @@ def register_jobs(app: Application) -> None:
     # Daily report at 23:55
     jq.run_daily(
         job_daily_report,
-        time=datetime.strptime("23:55", "%H:%M").time().replace(tzinfo=timezone.utc),
+        time=datetime.strptime("06:50", "%H:%M").time().replace(tzinfo=timezone.utc),
         name="daily_report",
     )
 

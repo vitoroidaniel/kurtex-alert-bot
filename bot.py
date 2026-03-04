@@ -200,6 +200,12 @@ def main():
         alert_h.handle
     ))
 
+    # ── AI Alerts channel listener ───────────────────────────────────────────
+    app.add_handler(MessageHandler(
+        filters.ChatType.CHANNEL & filters.TEXT,
+        alert_h.handle_channel_post
+    ))
+
     # ── Button callbacks ──────────────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,   pattern=r'^reassign_'))

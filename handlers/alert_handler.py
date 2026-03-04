@@ -176,34 +176,16 @@ class AlertHandler:
             "text":            text,
         }
 
-    # ── AI Channel polling ────────────────────────────────────────────────────
+    # ── AI Channel message handler ───────────────────────────────────────────
 
-    async def poll_ai_alerts(self, ctx) -> None:
-        """Called every 10s — reads AI Alerts channel and processes new alerts."""
-        try:
-            from config import config as main_config
-            channel_id = getattr(main_config, "AI_ALERTS_CHANNEL_ID", 0)
-            if not channel_id:
-                return
-
-            updates = await ctx.bot.get_updates(
-                offset=self._last_ai_update_id + 1 if self._last_ai_update_id >= 0 else None,
-                limit=20,
-                timeout=0,
-                allowed_updates=["channel_post"],
-            )
-
-            for update in updates:
-                self._last_ai_update_id = update.update_id
-                msg = update.channel_post
-                if not msg or msg.chat.id != channel_id:
-                    continue
-                if not msg.text or "AI DETECTED ISSUE" not in msg.text:
-                    continue
-                await self._process_ai_channel_message(msg, ctx)
-
-        except Exception as e:
-            logger.error(f"poll_ai_alerts error: {e}")
+    async def handle_ai_channel(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+        """Receives channel posts from AI Alerts channel and processes them."""
+        msg = update.channel_post or update.message
+        if not msg or not msg.text:
+            return
+        if "AI DETECTED ISSUE" not in msg.text:
+            return
+        await self._process_ai_channel_message(msg, ctx)
 
     async def _process_ai_channel_message(self, message, ctx) -> None:
         """Parse AI alert from channel and DM admins with full Assign & Report buttons."""
@@ -297,6 +279,19 @@ class AlertHandler:
 
         except Exception as e:
             logger.error(f"Error processing AI channel message: {e}")
+
+    async def handle_channel_post(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        """Handles messages posted to the AI Alerts channel directly."""
+        msg = update.channel_post or update.effective_message
+        if not msg or not msg.text:
+            return
+        if "AI DETECTED ISSUE" not in msg.text:
+            return
+        from config import config as main_config
+        channel_id = getattr(main_config, "AI_ALERTS_CHANNEL_ID", 0)
+        if channel_id and msg.chat.id != channel_id:
+            return
+        await self._process_ai_channel_message(msg, ctx)
 
     # ── Assignment ────────────────────────────────────────────────────────────
 
