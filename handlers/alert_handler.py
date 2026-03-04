@@ -105,36 +105,15 @@ class AlertHandler:
             else f"Hey, you've been mentioned in *{chat_title}*."
         )
 
-        if last_alert_id and last_alert_id in self._alerts:
-            record = self._alerts[last_alert_id]
-            if not record.get("taken_by"):
-                for aid, mids in record["recipients"].items():
-                    for mid in mids:
-                        try:
-                            await ctx.bot.delete_message(chat_id=aid, message_id=mid)
-                        except TelegramError:
-                            pass
-                record["recipients"] = {}
-                record["text"] = text
-                alert_id = last_alert_id
-            else:
-                alert_id = str(uuid.uuid4())
-                self._new_alert(alert_id, driver_id, user, chat_title, text, now)
-                case_store.create_case(
-                    case_id=alert_id,
-                    driver_name=self._alerts[alert_id]["driver_name"],
-                    driver_username=self._alerts[alert_id]["driver_username"],
-                    group_name=chat_title, description=text,
-                )
-        else:
-            alert_id = str(uuid.uuid4())
-            self._new_alert(alert_id, driver_id, user, chat_title, text, now)
-            case_store.create_case(
-                case_id=alert_id,
-                driver_name=self._alerts[alert_id]["driver_name"],
-                driver_username=self._alerts[alert_id]["driver_username"],
-                group_name=chat_title, description=text,
-            )
+        # Always create a new alert — never delete or reuse old ones
+        alert_id = str(uuid.uuid4())
+        self._new_alert(alert_id, driver_id, user, chat_title, text, now)
+        case_store.create_case(
+            case_id=alert_id,
+            driver_name=self._alerts[alert_id]["driver_name"],
+            driver_username=self._alerts[alert_id]["driver_username"],
+            group_name=chat_title, description=text,
+        )
 
         driver_rec["last_alert_id"] = alert_id
         short_id = self._register_alert(alert_id)
