@@ -227,9 +227,7 @@ def main():
         .build()
     )
     
-    # Add startup callback to reset polling
-    import asyncio
-    asyncio.get_event_loop().run_until_complete(reset_polling_offset(app))
+    # Note: reset_polling_offset removed - not needed in webhook mode, causes conflicts
     
     # Add error handler to log any errors
     async def error_handler(update: Update, ctx):
