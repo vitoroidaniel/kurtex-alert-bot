@@ -34,9 +34,9 @@ def _type_kb():
 
 def _priority_kb():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🟢 Truck (Low)",      callback_data="rpt_priority|truck"),
-        InlineKeyboardButton("🟡 Trailer (Medium)", callback_data="rpt_priority|trailer"),
-        InlineKeyboardButton("🔴 Reefer (High)",    callback_data="rpt_priority|reefer"),
+        InlineKeyboardButton("🟢 (Low)",      callback_data="rpt_priority|truck"),
+        InlineKeyboardButton("🟡 (Medium)", callback_data="rpt_priority|trailer"),
+        InlineKeyboardButton("🔴 (High)",    callback_data="rpt_priority|reefer"),
     ]])
 
 
