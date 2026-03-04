@@ -1,7 +1,7 @@
 """
 Kurtex Alert Bot — Truck Maintenance Command Center
 """
-
+import os
 import logging
 from telegram import Update
 from telegram.ext import (
