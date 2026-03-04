@@ -9,7 +9,7 @@ from telegram.ext import (
     ApplicationHandlerStop
 )
 
-from crash_reporter import install_global_handler
+from crash_report import install_global_handler
 install_global_handler("kurtex-main-bot")
 
 from config import config
