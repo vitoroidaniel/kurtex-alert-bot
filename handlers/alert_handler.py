@@ -15,7 +15,7 @@ from storage import case_store
 
 logger = logging.getLogger(__name__)
 
-TRIGGER_WORDS = ['#maintenance', '#repairs', '#problem', '#help', '#emergency']
+TRIGGER_WORDS = ['#maintenance', '#issue', '#breakdown', '#problem', '#help', '#emergency']
 
 
 async def _delete_after(bot, chat_id, message_id, seconds):
@@ -37,15 +37,16 @@ class AlertHandler:
         self.REMINDER_THRESHOLD  = 3
 
     def _make_kb(self, short_id: str) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup([
-            [
-                InlineKeyboardButton("✅ Assign",          callback_data=f"assign|{short_id}"),
-                InlineKeyboardButton("📋 Assign & Report", callback_data=f"assignrpt|{short_id}"),
-            ],
-            [
-                InlineKeyboardButton("🚫 Ignore",          callback_data=f"ignore|{short_id}"),
-            ],
-        ])
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Assign", callback_data=f"assign|{short_id}"),
+            InlineKeyboardButton("🚫 Ignore", callback_data=f"ignore|{short_id}"),
+        ]])
+
+    def _make_case_kb(self, short_id: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("📋 Report & Close", callback_data=f"assignrpt|{short_id}"),
+            InlineKeyboardButton("✅ Close",           callback_data=f"close|{short_id}"),
+        ]])
 
     def _register_alert(self, alert_id: str) -> str:
         short_id = alert_id.replace("-", "")[:12]
@@ -99,11 +100,19 @@ class AlertHandler:
         driver_rec["last_alert_time"] = now
 
         chat_title = update.effective_chat.title or "the driver group"
-        dm_text = (
-            f"⏰ *REMINDER:* Driver still needs help in *{chat_title}*!"
-            if is_reminder
-            else f"Hey, you've been mentioned in *{chat_title}*."
-        )
+        driver_name = f"{user.first_name} {user.last_name or ''}".strip()
+        if is_reminder:
+            dm_text = (
+                "\u23f0 *REMINDER \u2014 " + chat_title + "*\n\n"
+                "\U0001f464 *Driver:* " + driver_name + "\n"
+                "\U0001f4dd *Issue:* " + text[:200]
+            )
+        else:
+            dm_text = (
+                "\U0001f514 You have been mentioned in *" + chat_title + "*\n\n"
+                "\U0001f464 *Driver:* " + driver_name + "\n"
+                "\U0001f4dd *Issue:* " + text[:200]
+            )
 
         # Always create a new alert — never delete or reuse old ones
         alert_id = str(uuid.uuid4())
@@ -378,6 +387,11 @@ class AlertHandler:
             )
             return
 
+        if action == "close":
+            case_store.close_case(alert_id, resolution="Closed by agent")
+            await query.edit_message_text("✅ Case closed.", reply_markup=None)
+            return
+
         if action in ("assign", "assignrpt"):
             if record["taken_by"] is not None:
                 already = record["taken_by"][1]
@@ -399,10 +413,11 @@ class AlertHandler:
 
             if action == "assign":
                 try:
-                    sent = await ctx.bot.send_message(
-                        admin.id, "✅ You are now handling this alert. Thanks!"
+                    await ctx.bot.send_message(
+                        admin.id,
+                        "✅ Case assigned to you. Use /mycases to view your cases.",
+                        parse_mode=ParseMode.MARKDOWN,
                     )
-                    asyncio.create_task(_delete_after(ctx.bot, admin.id, sent.message_id, 5))
                 except TelegramError:
                     pass
 
