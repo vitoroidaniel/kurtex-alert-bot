@@ -16,10 +16,10 @@ from shift_manager import MAIN_ADMIN_ID
 logger = logging.getLogger(__name__)
 
 (
-    ASK_TYPE, ASK_DRIVER, ASK_ISSUE, ASK_LOAD, ASK_PICKUP,
+    ASK_TYPE, ASK_UNIT, ASK_DRIVER, ASK_ISSUE, ASK_LOAD, ASK_PICKUP,
     ASK_DELIVERY, ASK_LOCATION, ASK_SETPOINT, ASK_CURRENT_TEMP,
     ASK_TEMP_RECORDER, ASK_COMMENTS, ASK_MEDIA, ASK_PRIORITY, CONFIRM,
-) = range(14)
+) = range(15)
 
 SKIP_KB = InlineKeyboardMarkup([[InlineKeyboardButton("Skip", callback_data="rpt_skip")]])
 
