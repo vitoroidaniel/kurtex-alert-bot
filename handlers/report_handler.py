@@ -16,9 +16,21 @@ from shift_manager import MAIN_ADMIN_ID
 logger = logging.getLogger(__name__)
 
 (
-    ASK_TYPE, ASK_UNIT, ASK_DRIVER, ASK_ISSUE, ASK_LOAD, ASK_PICKUP,
-    ASK_DELIVERY, ASK_LOCATION, ASK_SETPOINT, ASK_CURRENT_TEMP,
-    ASK_TEMP_RECORDER, ASK_COMMENTS, ASK_MEDIA, ASK_PRIORITY, CONFIRM,
+    ASK_TYPE,
+    ASK_UNIT,
+    ASK_DRIVER,
+    ASK_ISSUE,
+    ASK_LOAD,
+    ASK_PICKUP,
+    ASK_DELIVERY,
+    ASK_LOCATION,
+    ASK_SETPOINT,
+    ASK_CURRENT_TEMP,
+    ASK_TEMP_RECORDER,
+    ASK_COMMENTS,
+    ASK_MEDIA,
+    ASK_PRIORITY,
+    CONFIRM,
 ) = range(15)
 
 SKIP_KB = InlineKeyboardMarkup([[InlineKeyboardButton("Skip", callback_data="rpt_skip")]])
@@ -28,6 +40,18 @@ LOAD_TYPE_KB = InlineKeyboardMarkup([[
     InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
     InlineKeyboardButton("Skip",        callback_data="rpt_skip"),
 ]])
+
+VTYPE_LABELS = {
+    "truck":   "Truck",
+    "trailer": "Trailer",
+    "reefer":  "Reefer",
+}
+
+PRIORITY_META = {
+    "low":    {"icon": "🟢", "level": "Low"},
+    "medium": {"icon": "🟡", "level": "Medium"},
+    "high":   {"icon": "🔴", "level": "High"},
+}
 
 
 def _type_kb():
@@ -53,21 +77,7 @@ def _confirm_kb():
     ]])
 
 
-PRIORITY_META = {
-    "low":    {"icon": "🟢", "level": "Low"},
-    "medium": {"icon": "🟡", "level": "Medium"},
-    "high":   {"icon": "🔴", "level": "High"},
-}
-
-VTYPE_LABELS = {
-    "truck":   "🚛 Truck",
-    "trailer": "🚜 Trailer",
-    "reefer":  "❄️ Reefer",
-}
-
-
 def _esc(text) -> str:
-    """Escape special Markdown v1 characters in user-provided text."""
     if not text or text == "—":
         return "—"
     for ch in ['_', '*', '`', '[']:
@@ -79,22 +89,18 @@ def _build_report(d: dict) -> str:
     vtype        = d.get("vehicle_type", "truck")
     priority_key = d.get("priority", "low")
     p            = PRIORITY_META.get(priority_key, PRIORITY_META["low"])
-    vtype_label  = VTYPE_LABELS.get(vtype, vtype.title())
     unit         = d.get("unit_number", "")
-    unit_str     = f" — Unit {_esc(unit)}" if unit else ""
 
     if vtype == "truck":
-        truck_line = f"*Truck:* {_esc(unit)}" if unit else "*Truck:* —"
-    elif vtype == "trailer":
-        truck_line = f"*Trailer:* {_esc(unit)}" if unit else "*Trailer:* —"
+        unit_line = f"*Truck:* {_esc(unit)}" if unit else "*Truck:* —"
     else:
-        truck_line = f"*Trailer:* {_esc(unit)}" if unit else "*Trailer:* —"
+        unit_line = f"*Trailer:* {_esc(unit)}" if unit else "*Trailer:* —"
 
     lines = [
-        f"{p['icon']} *Case Report — {vtype_label}*",
+        f"{p['icon']} *Case Report — {VTYPE_LABELS.get(vtype, vtype.title())}*",
         f"Priority: *{p['level']}*",
         "",
-        truck_line,
+        unit_line,
         f"*Driver:* {_esc(d.get('driver', '—'))}",
         f"*Issue:* {_esc(d.get('issue', '—'))}",
         "",
@@ -112,42 +118,30 @@ def _build_report(d: dict) -> str:
             f"*Temp recorder:* {_esc(d.get('temp_recorder', '—'))}",
         ]
 
-    comments = d.get("comments")
-    if comments:
-        lines += ["", f"*Comments:* {_esc(comments)}"]
+    if d.get("comments"):
+        lines += ["", f"*Comments:* {_esc(d.get('comments'))}"]
 
     lines += ["", f"*Handled by:* {_esc(d.get('handler', '—'))}"]
-
     return "\n".join(lines)
-
-
-async def _ask(update_or_query, text, reply_markup=None, edit=False):
-    if edit and hasattr(update_or_query, "edit_message_text"):
-        await update_or_query.edit_message_text(
-            text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup
-        )
-    elif hasattr(update_or_query, "message"):
-        await update_or_query.message.reply_text(
-            text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup
-        )
-    else:
-        await update_or_query.reply_text(
-            text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup
-        )
 
 
 async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     vtype = query.data.split("|")[1]
-    if "report" not in ctx.user_data:
-        ctx.user_data["report"] = {"media": []}
-    ctx.user_data["report"]["vehicle_type"] = vtype
+    ctx.user_data["report"] = {"media": [], "vehicle_type": vtype}
+    unit_prompt = "Truck number:" if vtype == "truck" else "Trailer number:"
     label = {"truck": "🚛 Truck", "trailer": "🚜 Trailer", "reefer": "❄️ Reefer"}[vtype]
     await query.edit_message_text(
-        f"Type: *{label}*\n\nDriver name:",
+        f"Type: *{label}*\n\n{unit_prompt}",
         parse_mode=ParseMode.MARKDOWN, reply_markup=None
     )
+    return ASK_UNIT
+
+
+async def recv_unit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["report"]["unit_number"] = update.message.text.strip()
+    await update.message.reply_text("Driver name:")
     return ASK_DRIVER
 
 
@@ -169,7 +163,10 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ltype = query.data.split("|")[1]
     label = "JBS Load" if ltype == "jbs" else "Broker Load"
     ctx.user_data["report"]["load"] = label
-    await query.edit_message_text(f"Load type: *{label}*\n\nPick up Location / Time:", parse_mode="Markdown", reply_markup=SKIP_KB)
+    await query.edit_message_text(
+        f"Load: *{label}*\n\nPick up Location / Time:",
+        parse_mode=ParseMode.MARKDOWN, reply_markup=SKIP_KB
+    )
     return ASK_PICKUP
 
 
@@ -242,19 +239,31 @@ async def recv_media(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg    = update.message
     report = ctx.user_data.setdefault("report", {"media": []})
     media  = report.setdefault("media", [])
-    if msg.photo:
-        media.append(("photo", msg.photo[-1].file_id)); kind = "Photo"
-    elif msg.video:
-        media.append(("video", msg.video.file_id)); kind = "Video"
-    elif msg.document:
-        media.append(("document", msg.document.file_id)); kind = "File"
-    else:
-        await msg.reply_text("Please send a photo, video, or file.")
-        return ASK_MEDIA
-    await msg.reply_text(
-        f"{kind} received ({len(media)} total).\nSend more or press Done:",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done", callback_data="rpt_mediadone")]])
-    )
+    try:
+        if msg.photo:
+            file_id = msg.photo[-1].file_id
+            if not any(fid == file_id for _, fid in media):
+                media.append(("photo", file_id))
+            kind = "Photo"
+        elif msg.video:
+            media.append(("video", msg.video.file_id))
+            kind = "Video"
+        elif msg.document:
+            media.append(("document", msg.document.file_id))
+            kind = "File"
+        else:
+            await msg.reply_text("Please send a photo, video, or file.")
+            return ASK_MEDIA
+        await msg.reply_text(
+            f"{kind} received ({len(media)} total). Send more or press Done:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done ✅", callback_data="rpt_mediadone")]])
+        )
+    except Exception as e:
+        logger.error(f"recv_media error: {e}")
+        await msg.reply_text(
+            "Something went wrong. Try again or press Done:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done ✅", callback_data="rpt_mediadone")]])
+        )
     return ASK_MEDIA
 
 
@@ -265,8 +274,8 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if "load" not in report:
         report["load"] = "—"
-        await query.edit_message_text("Load type:", reply_markup=LOAD_TYPE_KB)
-        return ASK_LOAD
+        await query.edit_message_text("Pick up Location / Time:", reply_markup=SKIP_KB)
+        return ASK_PICKUP
     elif "pickup" not in report:
         report["pickup"] = "—"
         await query.edit_message_text("Delivery Location / Time:", reply_markup=SKIP_KB)
@@ -312,12 +321,12 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cb_media_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query       = update.callback_query
     await query.answer()
-    vtype = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
-    p     = PRIORITY_META.get(vtype, PRIORITY_META["truck"])
+    vtype       = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
+    vtype_label = VTYPE_LABELS.get(vtype, vtype.title())
     await query.edit_message_text(
-        f"Suggested priority: *{p['icon']} {p['label']} ({p['level']})*\n\nConfirm or override:",
+        f"Vehicle: *{vtype_label}*\n\nSelect priority:",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=_priority_kb()
     )
@@ -327,13 +336,10 @@ async def cb_media_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cb_priority(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query  = update.callback_query
     await query.answer()
-    chosen = query.data.split("|")[1]
-    ctx.user_data["report"]["vehicle_type"] = chosen
-
+    ctx.user_data["report"]["priority"] = query.data.split("|")[1]
     preview = _build_report(ctx.user_data["report"])
     media   = ctx.user_data["report"].get("media", [])
     note    = f"\n\n📎 {len(media)} media file(s) attached" if media else ""
-
     await query.edit_message_text(
         f"*Preview — confirm and send?*\n\n{preview}{note}",
         parse_mode=ParseMode.MARKDOWN,
@@ -354,7 +360,6 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     data    = ctx.user_data.pop("report", {})
     dest_id = config.REPORTS_GROUP_ID or MAIN_ADMIN_ID
-
     if not dest_id:
         await query.edit_message_text("No reports group configured.", reply_markup=None)
         return ConversationHandler.END
@@ -373,16 +378,15 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 else:
                     await ctx.bot.send_document(dest_id, document=file_id, caption=report_text, parse_mode=ParseMode.MARKDOWN, read_timeout=30, write_timeout=30)
             except TelegramError as e:
-                logger.error(f"Failed to send first media: {e}")
+                logger.error(f"First media failed: {e}")
                 await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
-
             for kind, file_id in media[1:]:
                 try:
                     if kind == "photo":   await ctx.bot.send_photo(dest_id, photo=file_id, read_timeout=30, write_timeout=30)
                     elif kind == "video": await ctx.bot.send_video(dest_id, video=file_id, read_timeout=60, write_timeout=60)
                     else:                 await ctx.bot.send_document(dest_id, document=file_id, read_timeout=30, write_timeout=30)
                 except TelegramError as e:
-                    logger.error(f"Failed to send media item: {e}")
+                    logger.error(f"Media item failed: {e}")
         else:
             await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
 
@@ -391,7 +395,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     except TelegramError as e:
         logger.error(f"Failed to send report: {e}")
-        await query.edit_message_text(f"Failed to send report. Please try again.", reply_markup=None)
+        await query.edit_message_text("Failed to send report. Please try again.", reply_markup=None)
 
     return ConversationHandler.END
 
@@ -409,30 +413,32 @@ def get_report_conversation():
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(cb_type, pattern=r'^rpt_type\|')],
         states={
-            ASK_TYPE:          [CallbackQueryHandler(cb_type,         pattern=r'^rpt_type\|')],
-            ASK_UNIT:          [MessageHandler(text_only,             recv_unit)],
-            ASK_DRIVER:        [MessageHandler(text_only,             recv_driver)],
-            ASK_ISSUE:         [MessageHandler(text_only,             recv_issue)],
-            ASK_LOAD:          [MessageHandler(text_only,             recv_load),
-                                CallbackQueryHandler(cb_loadtype,     pattern=r'^rpt_loadtype\|'),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_PICKUP:        [MessageHandler(text_only,             recv_pickup),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_DELIVERY:      [MessageHandler(text_only,             recv_delivery),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_LOCATION:      [MessageHandler(text_only,             recv_location),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_SETPOINT:      [MessageHandler(text_only,             recv_setpoint),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_CURRENT_TEMP:  [MessageHandler(text_only,             recv_current_temp),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_TEMP_RECORDER: [CallbackQueryHandler(cb_temp_recorder,pattern=r'^rpt_temprec\|')],
-            ASK_COMMENTS:      [MessageHandler(text_only,             recv_comments),
-                                CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
-            ASK_MEDIA:         [MessageHandler(media_filter,          recv_media),
-                                CallbackQueryHandler(cb_media_done,   pattern=r'^rpt_mediadone$')],
-            ASK_PRIORITY:      [CallbackQueryHandler(cb_priority,     pattern=r'^rpt_priority\|')],
-            CONFIRM:           [CallbackQueryHandler(cb_confirm,      pattern=r'^rpt_confirm\|')],
+            ASK_TYPE:          [CallbackQueryHandler(cb_type,          pattern=r'^rpt_type\|')],
+            ASK_UNIT:          [MessageHandler(text_only,              recv_unit)],
+            ASK_DRIVER:        [MessageHandler(text_only,              recv_driver)],
+            ASK_ISSUE:         [MessageHandler(text_only,              recv_issue)],
+            ASK_LOAD:          [
+                                CallbackQueryHandler(cb_loadtype,      pattern=r'^rpt_loadtype\|'),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$'),
+                                MessageHandler(text_only,              recv_load),
+                               ],
+            ASK_PICKUP:        [MessageHandler(text_only,              recv_pickup),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
+            ASK_DELIVERY:      [MessageHandler(text_only,              recv_delivery),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
+            ASK_LOCATION:      [MessageHandler(text_only,              recv_location),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
+            ASK_SETPOINT:      [MessageHandler(text_only,              recv_setpoint),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
+            ASK_CURRENT_TEMP:  [MessageHandler(text_only,              recv_current_temp),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
+            ASK_TEMP_RECORDER: [CallbackQueryHandler(cb_temp_recorder, pattern=r'^rpt_temprec\|')],
+            ASK_COMMENTS:      [MessageHandler(text_only,              recv_comments),
+                                CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
+            ASK_MEDIA:         [MessageHandler(media_filter,           recv_media),
+                                CallbackQueryHandler(cb_media_done,    pattern=r'^rpt_mediadone$')],
+            ASK_PRIORITY:      [CallbackQueryHandler(cb_priority,      pattern=r'^rpt_priority\|')],
+            CONFIRM:           [CallbackQueryHandler(cb_confirm,       pattern=r'^rpt_confirm\|')],
         },
         fallbacks=[CommandHandler("cancel", cmd_cancel)],
         per_message=False,
