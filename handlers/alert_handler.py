@@ -417,8 +417,8 @@ class AlertHandler:
                     "📋 *New Case Report*\n\nIs this a Truck or Trailer issue?",
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
-                        InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
+                        InlineKeyboardButton("🚚 Truck",   callback_data="rpt_type|truck"),
+                        InlineKeyboardButton("🚚➖T railer", callback_data="rpt_type|trailer"),
                         InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
                     ]])
                 )
