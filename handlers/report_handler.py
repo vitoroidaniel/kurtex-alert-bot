@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 SKIP_KB = InlineKeyboardMarkup([[InlineKeyboardButton("Skip", callback_data="rpt_skip")]])
 
+LOAD_TYPE_KB = InlineKeyboardMarkup([[
+    InlineKeyboardButton("JBS Load",    callback_data="rpt_loadtype|jbs"),
+    InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
+    InlineKeyboardButton("Skip",        callback_data="rpt_skip"),
+]])
+
 
 def _type_kb():
     return InlineKeyboardMarkup([[
@@ -34,9 +40,9 @@ def _type_kb():
 
 def _priority_kb():
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("🟢 (Low)",      callback_data="rpt_priority|truck"),
-        InlineKeyboardButton("🟡 (Medium)", callback_data="rpt_priority|trailer"),
-        InlineKeyboardButton("🔴 (High)",    callback_data="rpt_priority|reefer"),
+        InlineKeyboardButton("🟢 Low",      callback_data="rpt_priority|truck"),
+        InlineKeyboardButton("🟡 Medium", callback_data="rpt_priority|trailer"),
+        InlineKeyboardButton("🔴 High",    callback_data="rpt_priority|reefer"),
     ]])
 
 
@@ -136,8 +142,18 @@ async def recv_driver(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def recv_issue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["issue"] = update.message.text.strip()
-    await update.message.reply_text("JBS/Broker Load #:", reply_markup=SKIP_KB)
+    await update.message.reply_text("Load type:", reply_markup=LOAD_TYPE_KB)
     return ASK_LOAD
+
+
+async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ltype = query.data.split("|")[1]
+    label = "JBS Load" if ltype == "jbs" else "Broker Load"
+    ctx.user_data["report"]["load"] = label
+    await query.edit_message_text(f"Load type: *{label}*\n\nPick up Location / Time:", parse_mode="Markdown", reply_markup=SKIP_KB)
+    return ASK_PICKUP
 
 
 async def recv_load(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -232,8 +248,8 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if "load" not in report:
         report["load"] = "—"
-        await query.edit_message_text("Pick up Location / Time:", reply_markup=SKIP_KB)
-        return ASK_PICKUP
+        await query.edit_message_text("Load type:", reply_markup=LOAD_TYPE_KB)
+        return ASK_LOAD
     elif "pickup" not in report:
         report["pickup"] = "—"
         await query.edit_message_text("Delivery Location / Time:", reply_markup=SKIP_KB)
@@ -372,6 +388,7 @@ def get_report_conversation():
             ASK_DRIVER:        [MessageHandler(text_only,             recv_driver)],
             ASK_ISSUE:         [MessageHandler(text_only,             recv_issue)],
             ASK_LOAD:          [MessageHandler(text_only,             recv_load),
+                                CallbackQueryHandler(cb_loadtype,     pattern=r'^rpt_loadtype\|'),
                                 CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
             ASK_PICKUP:        [MessageHandler(text_only,             recv_pickup),
                                 CallbackQueryHandler(cb_skip,         pattern=r'^rpt_skip$')],
