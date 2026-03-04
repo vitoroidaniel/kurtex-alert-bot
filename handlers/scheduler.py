@@ -107,6 +107,8 @@ async def job_escalation_check(ctx) -> None:
 # ── Register jobs with the application ───────────────────────────────────────
 
 def register_jobs(app: Application) -> None:
+    from config import config
+    
     jq = app.job_queue
 
     # Daily report at 23:55
@@ -124,4 +126,21 @@ def register_jobs(app: Application) -> None:
         name="escalation_check",
     )
 
-    logger.info("Scheduled jobs registered: daily_report @ 23:55 UTC, escalation every 5min")
+    # AI Alerts channel polling - every 10 seconds if configured
+    if getattr(config, "AI_ALERTS_CHANNEL_ID", 0):
+        async def job_poll_ai(ctx):
+            alert_handler = ctx.bot_data.get("alert_handler")
+            if alert_handler:
+                await alert_handler.poll_ai_alerts(ctx)
+        
+        jq.run_repeating(
+            job_poll_ai,
+            interval=10,   # 10 seconds
+            first=30,      # start after 30s so bot is fully ready
+            name="poll_ai_alerts",
+        )
+        logger.info(f"AI Alerts polling enabled (channel ID: {config.AI_ALERTS_CHANNEL_ID})")
+    else:
+        logger.info("AI Alerts channel not configured - polling disabled")
+
+    logger.info("Scheduled jobs registered: daily_report @ 23:55 UTC, escalation every 5min, AI poll every 10s")
