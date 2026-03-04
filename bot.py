@@ -9,6 +9,9 @@ from telegram.ext import (
     ApplicationHandlerStop
 )
 
+from crash_reporter import install_global_handler
+install_global_handler("kurtex-main-bot")
+
 from config import config
 from shifts import ADMINS, MAIN_ADMIN_ID
 from handlers.alert_handler import AlertHandler, TRIGGER_WORDS
