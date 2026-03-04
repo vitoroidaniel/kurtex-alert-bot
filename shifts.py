@@ -6,7 +6,7 @@ All times are US Eastern Time (ET).
 from datetime import time
 
 ADMINS = {
-    #899045897:  {"name": "Alexei",  "username": "ahusenberg"},
+    899045897:  {"name": "Alexei",  "username": "ahusenberg"},
     1615926408: {"name": "Danika",  "username": "danikav"},
     #1401145589: {"name": "Ionut",   "username": "ionut_ci0banu"},
     #1128711004: {"name": "Victor",  "username": "vmitrea"},
@@ -14,7 +14,7 @@ ADMINS = {
     #1095527903: {"name": "Daniel",  "username": "Storm33S"},
     #790341145:  {"name": "Sasa AH", "username": "Sasha5639"},
     #1373070156: {"name": "Anton",   "username": "AntonOgl"},
-    #8422260316: {"name": "Alex",    "username": "alexrepairs"},
+    8422260316: {"name": "Alex",    "username": "alexrepairs"},
     #7769230456: {"name": "Andrei",  "username": "Andrei_Cr05"},
 }
 
