@@ -25,6 +25,13 @@ from storage.case_store import (
 )
 from shifts import ADMINS
 
+
+def _busy_agents(ctx) -> set:
+    if "busy_agents" not in ctx.bot_data:
+        ctx.bot_data["busy_agents"] = set()
+    return ctx.bot_data["busy_agents"]
+
+
 logger = logging.getLogger(__name__)
 
 CASES_PER_PAGE    = 5
@@ -47,18 +54,23 @@ def _is_admin(user_id):
 
 
 def _active_case_text(case):
+    badge = "📋 *Reported Case*" if case.get("status") == "reported" else "📋 *Active Case*"
     return (
-        f"📋 *Active Case*\n\n"
+        f"{badge}\n\n"
         f"📌 *Group:* {case['group_name']}\n"
         f"👤 *Driver:* {case['driver_name']}\n"
         f"📝 *Issue:* {(case.get('description') or '—')[:200]}"
     )
 
 
-def _active_case_keyboard(case_id):
+def _active_case_keyboard(case_id, status="assigned"):
+    if status == "reported":
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Solve", callback_data=f"close_ask|{case_id}"),
+        ]])
     return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{case_id}"),
         InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"),
-        InlineKeyboardButton("✅ Close",  callback_data=f"close_ask|{case_id}"),
     ]])
 
 
@@ -79,7 +91,7 @@ async def cmd_mycases(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     all_cases   = get_all_cases_for_agent(user.id)
-    active_only = [c for c in all_cases if c["status"] == "assigned"]
+    active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
 
     if not active_only:
         await update.message.reply_text("No active cases. You are free!")
@@ -89,7 +101,7 @@ async def cmd_mycases(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             _active_case_text(case),
             parse_mode="Markdown",
-            reply_markup=_active_case_keyboard(case["id"])
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
         )
 
 
@@ -196,7 +208,7 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     case_id = query.data.split("|")[1]
     case    = get_case(case_id)
 
-    if not case or case["status"] != "assigned":
+    if not case or case["status"] not in ("assigned", "reported"):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
@@ -204,7 +216,7 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     existing = ctx.user_data.get("solving_case_id")
     if existing and existing != case_id:
         existing_case = get_case(existing)
-        if existing_case and existing_case["status"] == "assigned":
+        if existing_case and existing_case["status"] in ("assigned", "reported"):
             await query.answer(
                 "Finish your current case first before opening another.",
                 show_alert=True
@@ -214,13 +226,25 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("pending_solution", None)
     ctx.user_data["solving_case_id"] = case_id
 
+    user = update.effective_user
+    handler_name = f"{user.first_name} {user.last_name or ''}".strip()
+    ctx.user_data["report_case_id"] = case_id
+    ctx.user_data["report_handler"] = handler_name
+    _busy_agents(ctx).add(user.id)
+
     await query.edit_message_text(
-        f"📋 Reporting case:\n\n"
+        f"📋 *Report*\n\n"
         f"Driver: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
-        "Type your resolution note (or /cancel):"
+        "Select vehicle type:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
+            InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
+            InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
+        ]])
     )
-    return AWAITING_SOLUTION
+    return ConversationHandler.END
 
 
 async def cb_solve_receive_solution(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -286,14 +310,14 @@ async def cb_solve_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await asyncio.sleep(6)
         agent_id    = update.effective_user.id
         all_cases   = get_all_cases_for_agent(agent_id)
-        active_only = [c for c in all_cases if c["status"] == "assigned"]
+        active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
         if active_only:
             for c in active_only:
                 try:
                     await query.bot.send_message(
                         agent_id, _active_case_text(c),
                         parse_mode="Markdown",
-                        reply_markup=_active_case_keyboard(c["id"])
+                        reply_markup=_active_case_keyboard(c["id"], c.get("status", "assigned"))
                     )
                 except TelegramError:
                     pass
@@ -314,11 +338,11 @@ async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     case_id = query.data.split("|")[1]
     case    = get_case(case_id)
 
-    if case and case["status"] == "assigned":
+    if case and case["status"] in ("assigned", "reported"):
         await query.edit_message_text(
             _active_case_text(case),
             parse_mode="Markdown",
-            reply_markup=_active_case_keyboard(case["id"])
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
         )
     else:
         await query.edit_message_text("Case not found.", reply_markup=None)
@@ -327,6 +351,9 @@ async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("solving_case_id", None)
     ctx.user_data.pop("pending_solution", None)
+    ctx.user_data.pop("report_case_id", None)
+    ctx.user_data.pop("report_handler", None)
+    _busy_agents(ctx).discard(update.effective_user.id)
     await update.message.reply_text("Cancelled. Use /mycases to see your cases.")
     return ConversationHandler.END
 
@@ -340,7 +367,7 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     case_id = query.data.split("|")[1]
     case    = get_case(case_id)
 
-    if not case or case["status"] != "assigned":
+    if not case or case["status"] not in ("assigned", "reported"):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
@@ -348,7 +375,7 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     existing = ctx.user_data.get("solving_case_id")
     if existing and existing != case_id:
         existing_case = get_case(existing)
-        if existing_case and existing_case["status"] == "assigned":
+        if existing_case and existing_case["status"] in ("assigned", "reported"):
             await query.answer(
                 "Finish your current case first before opening another.",
                 show_alert=True
@@ -359,10 +386,11 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["solving_case_id"] = case_id
 
     await query.edit_message_text(
-        f"✅ Closing case:\n\n"
+        f"✅ *Solve Case*\n\n"
         f"Driver: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
-        "Type a reason for closing (or /cancel):"
+        "Type your reason for closing (or /cancel):",
+        parse_mode="Markdown",
     )
     return AWAITING_CLOSE_REASON
 
@@ -429,14 +457,14 @@ async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await asyncio.sleep(6)
         agent_id    = update.effective_user.id
         all_cases   = get_all_cases_for_agent(agent_id)
-        active_only = [c for c in all_cases if c["status"] == "assigned"]
+        active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
         if active_only:
             for c in active_only:
                 try:
                     await query.bot.send_message(
                         agent_id, _active_case_text(c),
                         parse_mode="Markdown",
-                        reply_markup=_active_case_keyboard(c["id"])
+                        reply_markup=_active_case_keyboard(c["id"], c.get("status", "assigned"))
                     )
                 except TelegramError:
                     pass
@@ -457,11 +485,11 @@ async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     case_id = query.data.split("|")[1]
     case    = get_case(case_id)
 
-    if case and case["status"] == "assigned":
+    if case and case["status"] in ("assigned", "reported"):
         await query.edit_message_text(
             _active_case_text(case),
             parse_mode="Markdown",
-            reply_markup=_active_case_keyboard(case["id"])
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
         )
     else:
         await query.edit_message_text("Case not found.", reply_markup=None)
@@ -534,11 +562,11 @@ async def cb_delete_keep(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     case_id = query.data.split("|")[1]
     case    = get_case(case_id)
-    if case and case["status"] == "assigned":
+    if case and case["status"] in ("assigned", "reported"):
         await query.edit_message_text(
             _active_case_text(case),
             parse_mode="Markdown",
-            reply_markup=_active_case_keyboard(case["id"])
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
         )
     else:
         await query.edit_message_text("Case not found.", reply_markup=None)
