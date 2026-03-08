@@ -130,6 +130,50 @@ def _build_report(d: dict) -> str:
     return "\n".join(lines)
 
 
+
+async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Entry point from Report button (solve|case_id). Stores handler info and shows vehicle selector."""
+    query   = update.callback_query
+    await query.answer()
+    case_id = query.data.split("|")[1]
+
+    from storage.case_store import get_case
+    case = get_case(case_id)
+    if not case or case["status"] not in ("assigned", "reported"):
+        await query.edit_message_text("This case is no longer active.", reply_markup=None)
+        return ConversationHandler.END
+
+    # Block if agent is mid-report on another case
+    existing_case_id = ctx.user_data.get("report_case_id")
+    if existing_case_id and existing_case_id != case_id:
+        existing = get_case(existing_case_id)
+        if existing and existing["status"] in ("assigned", "reported"):
+            await query.answer("Finish your current report first.", show_alert=True)
+            return ConversationHandler.END
+
+    # Store handler name and case_id
+    user = update.effective_user
+    handler_name = f"{user.first_name} {user.last_name or ''}".strip()
+    ctx.user_data["report_case_id"] = case_id
+    ctx.user_data["report_handler"] = handler_name
+    if "busy_agents" not in ctx.bot_data:
+        ctx.bot_data["busy_agents"] = set()
+    ctx.bot_data["busy_agents"].add(user.id)
+
+    await query.edit_message_text(
+        f"📋 *Report*\n\n"
+        f"Driver: {case['driver_name']} — {case['group_name']}\n"
+        f"Issue: {(case.get('description') or '')[:80]}\n\n"
+        "Select vehicle type:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
+            InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
+            InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
+        ]])
+    )
+    return ASK_TYPE
+
 async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -404,7 +448,6 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ Report sent!", reply_markup=None)
         logger.info(f"Report sent to {dest_id}")
 
-        # Mark case as reported — stays in /mycases until agent solves it
         case_id = ctx.user_data.pop("report_case_id", None)
         ctx.user_data.pop("report_handler", None)
         if "busy_agents" in ctx.bot_data:
@@ -450,21 +493,21 @@ async def _show_preview(target, ctx, edit=True):
 
 def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
     fields = [
-        ("Unit number",    "rpt_editfield|unit"),
-        ("Driver name",    "rpt_editfield|driver"),
-        ("Issue",          "rpt_editfield|issue"),
-        ("Load type",      "rpt_editfield|load"),
-        ("Pick up",        "rpt_editfield|pickup"),
-        ("Delivery",       "rpt_editfield|delivery"),
-        ("Location",       "rpt_editfield|location"),
-        ("Comments",       "rpt_editfield|comments"),
-        ("Priority",       "rpt_editfield|priority"),
+        ("Unit number",   "rpt_editfield|unit"),
+        ("Driver name",   "rpt_editfield|driver"),
+        ("Issue",         "rpt_editfield|issue"),
+        ("Load type",     "rpt_editfield|load"),
+        ("Pick up",       "rpt_editfield|pickup"),
+        ("Delivery",      "rpt_editfield|delivery"),
+        ("Location",      "rpt_editfield|location"),
+        ("Comments",      "rpt_editfield|comments"),
+        ("Priority",      "rpt_editfield|priority"),
     ]
     if vtype in ("trailer", "reefer"):
         fields[7:7] = [
-            ("Setpoint",       "rpt_editfield|setpoint"),
-            ("Current temp",   "rpt_editfield|current_temp"),
-            ("Temp recorder",  "rpt_editfield|temp_recorder"),
+            ("Setpoint",      "rpt_editfield|setpoint"),
+            ("Current temp",  "rpt_editfield|current_temp"),
+            ("Temp recorder", "rpt_editfield|temp_recorder"),
         ]
     rows = [[InlineKeyboardButton(label, callback_data=cb)] for label, cb in fields]
     rows.append([InlineKeyboardButton("↩️ Back to preview", callback_data="rpt_edit_back")])
@@ -492,18 +535,12 @@ async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     field = query.data.split("|")[1]
     ctx.user_data["editing_field"] = field
     prompts = {
-        "unit":         "Enter new unit number:",
-        "driver":       "Enter new driver name:",
-        "issue":        "Enter new issue description:",
-        "load":         "Enter load type (e.g. JBS Load / Broker Load):",
-        "pickup":       "Enter new pick up location/time:",
-        "delivery":     "Enter new delivery location/time:",
-        "location":     "Enter new current location:",
-        "setpoint":     "Enter new setpoint temperature:",
-        "current_temp": "Enter new current temperature:",
-        "temp_recorder":"Temp recorder: Y or N?",
-        "comments":     "Enter new comments:",
-        "priority":     "Select new priority:",
+        "unit": "Enter new unit number:", "driver": "Enter new driver name:",
+        "issue": "Enter new issue description:", "load": "Enter load type:",
+        "pickup": "Enter new pick up location/time:", "delivery": "Enter new delivery location/time:",
+        "location": "Enter new current location:", "setpoint": "Enter new setpoint temperature:",
+        "current_temp": "Enter new current temperature:", "temp_recorder": "Temp recorder: Y or N?",
+        "comments": "Enter new comments:", "priority": "Select new priority:",
     }
     if field == "temp_recorder":
         await query.edit_message_text(prompts[field], reply_markup=InlineKeyboardMarkup([[
@@ -528,8 +565,7 @@ async def cb_edit_val_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     field = ctx.user_data.pop("editing_field", None)
     value = query.data.split("|")[1]
     if field:
-        key = "unit_number" if field == "unit" else field
-        ctx.user_data["report"][key] = value
+        ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
     await _show_preview(query, ctx, edit=True)
     return CONFIRM
 
@@ -538,8 +574,7 @@ async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     value = update.message.text.strip()
     field = ctx.user_data.pop("editing_field", None)
     if field:
-        key = "unit_number" if field == "unit" else field
-        ctx.user_data["report"][key] = value
+        ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
     await _show_preview(update.message, ctx, edit=False)
     return CONFIRM
 
@@ -548,7 +583,10 @@ def get_report_conversation():
     media_filter = filters.PHOTO | filters.VIDEO | filters.Document.ALL
 
     return ConversationHandler(
-        entry_points=[CallbackQueryHandler(cb_type, pattern=r'^rpt_type\|')],
+        entry_points=[
+            CallbackQueryHandler(cb_report_entry, pattern=r'^solve\|'),
+            CallbackQueryHandler(cb_type,         pattern=r'^rpt_type\|'),
+        ],
         states={
             ASK_TYPE:          [CallbackQueryHandler(cb_type,          pattern=r'^rpt_type\|')],
             ASK_UNIT:          [MessageHandler(text_only,              recv_unit)],
