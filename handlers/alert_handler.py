@@ -66,13 +66,9 @@ class AlertHandler:
         text  = msg.text or msg.caption or ""
         photo = msg.photo[-1] if msg.photo else None
 
-        logger.info(f"handle() called: chat={update.effective_chat.id if update.effective_chat else None} user={update.effective_user.id} text={repr(text[:60])}")
-
         matched = next((w for w in TRIGGER_WORDS if w.lower() in text.lower()), None)
         if not matched:
-            logger.info(f"handle(): no trigger word found in text")
             return
-        logger.info(f"handle(): matched trigger '{matched}'")
 
         user      = update.effective_user
         driver_id = user.id
@@ -363,35 +359,27 @@ class AlertHandler:
                 )
                 return
 
-            if action == "assign":
+            if action in ("assign", "assignrpt"):
+                from storage.case_store import get_case as _get_case
+                case = _get_case(alert_id)
+                case_text = (
+                    f"📋 *Active Case*\n\n"
+                    f"📌 *Group:* {saved_record.get('group_name', '—')}\n"
+                    f"👤 *Driver:* {saved_record.get('driver_name', '—')}\n"
+                    f"📝 *Issue:* {(saved_record.get('text') or '—')[:200]}"
+                )
+                case_kb = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{alert_id}"),
+                    InlineKeyboardButton("📋 Report", callback_data=f"solve|{alert_id}"),
+                ]])
                 try:
                     await ctx.bot.send_message(
-                        admin.id,
-                        "✅ Case assigned to you\\. Use /mycases to view your cases\\.",
-                        parse_mode="MarkdownV2",
+                        admin.id, case_text,
+                        parse_mode=ParseMode.MARKDOWN,
+                        reply_markup=case_kb,
                     )
                 except TelegramError:
                     pass
-
-            elif action == "assignrpt":
-                ctx.user_data["report"] = {
-                    "handler":      tag,
-                    "alert_record": saved_record,
-                    "photos":       [],
-                    "driver_name":  saved_record.get("driver_name", ""),
-                    "group_name":   saved_record.get("group_name", ""),
-                    "issue":        saved_record.get("text", ""),
-                }
-                await ctx.bot.send_message(
-                    admin.id,
-                    "📋 *New Case Report*\n\nIs this a Truck or Trailer issue?",
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
-                        InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
-                        InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
-                    ]])
-                )
 
     async def handle_reassign(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
