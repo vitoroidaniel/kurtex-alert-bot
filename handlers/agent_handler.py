@@ -183,40 +183,7 @@ async def cb_hist_delete_chat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg_ids.append(query.message.message_id)
     for mid in msg_ids:
         try:
-            await bot.delete_message(chat_id=chat_id, message_id=mid)
-        except TelegramError:
-            pass
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _check_one_at_a_time(ctx, case_id):
-    """Returns True if blocked (already working on a different case)."""
-    existing = ctx.user_data.get("solving_case_id")
-    if existing and existing != case_id:
-        existing_case = get_case(existing)
-        if existing_case and existing_case["status"] == "assigned":
-            return True
-    return False
-
-
-async def _show_remaining(bot, agent_id):
-    await asyncio.sleep(2)
-    all_cases   = get_all_cases_for_agent(agent_id)
-    active_only = [c for c in all_cases if c["status"] == "assigned"]
-    if active_only:
-        for c in active_only:
-            try:
-                await bot.send_message(
-                    agent_id, _active_case_text(c),
-                    parse_mode="Markdown",
-                    reply_markup=_active_case_keyboard(c["id"])
-                )
-            except TelegramError:
-                pass
-    else:
-        try:
-            await bot.send_message(agent_id, "✅ No more active cases. You are free!")
+            await ctx.bot.delete_message(chat_id=chat_id, message_id=mid)
         except TelegramError:
             pass
 
@@ -233,9 +200,16 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
-    if _check_one_at_a_time(ctx, case_id):
-        await query.answer("Finish your current case first.", show_alert=True)
-        return ConversationHandler.END
+    # Block if already solving another case
+    existing = ctx.user_data.get("solving_case_id")
+    if existing and existing != case_id:
+        existing_case = get_case(existing)
+        if existing_case and existing_case["status"] == "assigned":
+            await query.answer(
+                "Finish your current case first before opening another.",
+                show_alert=True
+            )
+            return ConversationHandler.END
 
     ctx.user_data.pop("pending_solution", None)
     ctx.user_data["solving_case_id"] = case_id
@@ -254,7 +228,7 @@ async def cb_solve_receive_solution(update: Update, ctx: ContextTypes.DEFAULT_TY
 
     if not solution or len(solution) < 3:
         await update.message.reply_text(
-            "⚠️ Please describe what was done (min 3 characters):"
+            "⚠️ A resolution note is required.\n\nPlease describe what was done:"
         )
         return AWAITING_SOLUTION
 
@@ -305,8 +279,31 @@ async def cb_solve_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Note: {solution}",
         reply_markup=None
     )
+    asyncio.create_task(_delete_after(query.bot, query.message.chat_id, query.message.message_id, 6))
 
-    asyncio.create_task(_show_remaining(query.bot, update.effective_user.id))
+    # Show remaining active cases after delay
+    async def _show_remaining():
+        await asyncio.sleep(6)
+        agent_id    = update.effective_user.id
+        all_cases   = get_all_cases_for_agent(agent_id)
+        active_only = [c for c in all_cases if c["status"] == "assigned"]
+        if active_only:
+            for c in active_only:
+                try:
+                    await query.bot.send_message(
+                        agent_id, _active_case_text(c),
+                        parse_mode="Markdown",
+                        reply_markup=_active_case_keyboard(c["id"])
+                    )
+                except TelegramError:
+                    pass
+        else:
+            try:
+                await query.bot.send_message(agent_id, "✅ No more active cases. You are free!")
+            except TelegramError:
+                pass
+
+    asyncio.create_task(_show_remaining())
 
 
 async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -330,12 +327,11 @@ async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data.pop("solving_case_id", None)
     ctx.user_data.pop("pending_solution", None)
-    ctx.user_data.pop("pending_close_reason", None)
     await update.message.reply_text("Cancelled. Use /mycases to see your cases.")
     return ConversationHandler.END
 
 
-# ── Close flow ────────────────────────────────────────────────────────────────
+# ── Close flow (requires reason) ─────────────────────────────────────────────
 
 async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Ask for a close reason before closing."""
@@ -348,9 +344,16 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
-    if _check_one_at_a_time(ctx, case_id):
-        await query.answer("Finish your current case first.", show_alert=True)
-        return ConversationHandler.END
+    # Block if already solving another case
+    existing = ctx.user_data.get("solving_case_id")
+    if existing and existing != case_id:
+        existing_case = get_case(existing)
+        if existing_case and existing_case["status"] == "assigned":
+            await query.answer(
+                "Finish your current case first before opening another.",
+                show_alert=True
+            )
+            return ConversationHandler.END
 
     ctx.user_data.pop("pending_close_reason", None)
     ctx.user_data["solving_case_id"] = case_id
@@ -359,7 +362,7 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"✅ Closing case:\n\n"
         f"Driver: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
-        "How was this resolved? (or /cancel):"
+        "Type a reason for closing (or /cancel):"
     )
     return AWAITING_CLOSE_REASON
 
@@ -369,7 +372,7 @@ async def cb_close_receive_reason(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
     if not reason or len(reason) < 3:
         await update.message.reply_text(
-            "⚠️ Please describe how it was resolved (min 3 characters):"
+            "⚠️ A reason is required to close a case.\n\nPlease type a reason:"
         )
         return AWAITING_CLOSE_REASON
 
@@ -381,20 +384,87 @@ async def cb_close_receive_reason(update: Update, ctx: ContextTypes.DEFAULT_TYPE
         ctx.user_data.pop("solving_case_id", None)
         return ConversationHandler.END
 
-    # Close immediately after reason is typed — no extra confirm step
-    close_case(case_id, notes=reason)
-    ctx.user_data.pop("solving_case_id", None)
-    ctx.user_data.pop("pending_close_reason", None)
+    ctx.user_data["pending_close_reason"] = reason
 
     await update.message.reply_text(
-        f"✅ Case closed!\n\n"
+        f"Confirm closing?\n\n"
         f"Group: {case['group_name']}\n"
         f"Driver: {case['driver_name']}\n"
-        f"Reason: {reason}"
+        f"Reason: {reason}",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yes, close", callback_data=f"close_confirm|{case_id}"),
+            InlineKeyboardButton("❌ Cancel",     callback_data=f"close_cancel|{case_id}"),
+        ]])
     )
-
-    asyncio.create_task(_show_remaining(ctx.bot, update.effective_user.id))
     return ConversationHandler.END
+
+
+async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query   = update.callback_query
+    await query.answer()
+    case_id = query.data.split("|")[1]
+    reason  = ctx.user_data.pop("pending_close_reason", None)
+    ctx.user_data.pop("solving_case_id", None)
+
+    if not reason:
+        await query.edit_message_text(
+            "⚠️ No reason found. Use /mycases and try again.",
+            reply_markup=None
+        )
+        return
+
+    close_case(case_id, notes=reason)
+    case = get_case(case_id)
+
+    await query.edit_message_text(
+        f"✅ Case closed!\n\n"
+        f"Group: {case['group_name'] if case else '—'}\n"
+        f"Driver: {case['driver_name'] if case else '—'}\n"
+        f"Reason: {reason}",
+        reply_markup=None
+    )
+    asyncio.create_task(_delete_after(query.bot, query.message.chat_id, query.message.message_id, 6))
+
+    async def _show_remaining():
+        await asyncio.sleep(6)
+        agent_id    = update.effective_user.id
+        all_cases   = get_all_cases_for_agent(agent_id)
+        active_only = [c for c in all_cases if c["status"] == "assigned"]
+        if active_only:
+            for c in active_only:
+                try:
+                    await query.bot.send_message(
+                        agent_id, _active_case_text(c),
+                        parse_mode="Markdown",
+                        reply_markup=_active_case_keyboard(c["id"])
+                    )
+                except TelegramError:
+                    pass
+        else:
+            try:
+                await query.bot.send_message(agent_id, "✅ No more active cases. You are free!")
+            except TelegramError:
+                pass
+
+    asyncio.create_task(_show_remaining())
+
+
+async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query   = update.callback_query
+    await query.answer()
+    ctx.user_data.pop("pending_close_reason", None)
+    ctx.user_data.pop("solving_case_id", None)
+    case_id = query.data.split("|")[1]
+    case    = get_case(case_id)
+
+    if case and case["status"] == "assigned":
+        await query.edit_message_text(
+            _active_case_text(case),
+            parse_mode="Markdown",
+            reply_markup=_active_case_keyboard(case["id"])
+        )
+    else:
+        await query.edit_message_text("Case not found.", reply_markup=None)
 
 
 # ── /done ─────────────────────────────────────────────────────────────────────
@@ -444,8 +514,9 @@ async def cb_done_pick(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return AWAITING_SOLUTION
 
 
-# Keep for backward compat
+# Keep these for backward compat (delete_confirm/do/keep no longer used but registered in bot.py)
 async def cb_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    # Redirect to close_ask
     query = update.callback_query
     case_id = query.data.split("|")[1]
     query.data = f"close_ask|{case_id}"
