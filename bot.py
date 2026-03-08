@@ -168,6 +168,7 @@ def main():
         Application.builder()
         .token(config.TELEGRAM_TOKEN)
         .post_init(post_init)
+        .connection_pool_size(16)
         .build()
     )
 
