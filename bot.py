@@ -73,29 +73,18 @@ async def post_init(application: Application) -> None:
         ("missed",      "Missed alerts"),
     ]
 
-    from telegram import BotCommandScopeDefault, BotCommandScopeAllGroupChats
-    from shifts import ADMINS
+    # Default commands for all admins
+    await application.bot.set_my_commands(base_commands)
 
-    # Clear commands globally and from all groups
-    try:
-        await application.bot.delete_my_commands(scope=BotCommandScopeDefault())
-    except Exception:
-        pass
-    try:
-        await application.bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
-    except Exception:
-        pass
-
-    # Set commands only per individual admin DM — invisible to everyone else
-    for admin_id in ADMINS:
+    # Override for each super admin
+    for admin_id in SUPER_ADMINS:
         try:
-            cmds = super_commands if admin_id in SUPER_ADMINS else base_commands
             await application.bot.set_my_commands(
-                cmds,
+                super_commands,
                 scope=BotCommandScopeChat(chat_id=admin_id)
             )
         except Exception as e:
-            logger.warning(f"Could not set commands for {admin_id}: {e}")
+            logger.warning(f"Could not set commands for super admin {admin_id}: {e}")
 
     me = await application.bot.get_me()
     logger.info(f"{BOT_NAME} started as @{me.username}")
@@ -212,7 +201,7 @@ def main():
     ))
 
     # ── Button callbacks ──────────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore|close)\|'))
+    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,   pattern=r'^reassign_'))
     app.add_handler(CallbackQueryHandler(cb_done_pick,      pattern=r'^done_pick\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,          pattern=r'^solve_confirm\|'))
@@ -227,7 +216,7 @@ def main():
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == '__main__':
