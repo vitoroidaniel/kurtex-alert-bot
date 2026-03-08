@@ -18,6 +18,7 @@ from handlers.agent_handler import (
     cmd_done, cmd_mycases, cmd_casehistory, cb_done_pick,
     cb_solve_confirm, cb_solve_cancel,
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
+    cb_close_confirm, cb_close_cancel,
     cb_histpage, cb_hist_delete_chat, get_solve_conversation
 )
 from handlers.admin_handler import cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin
@@ -42,6 +43,9 @@ async def auth_middleware(update: Update, ctx):
         return
     chat = update.effective_chat
     if chat and chat.type in ("group", "supergroup"):
+        msg = update.effective_message
+        if msg and msg.text and msg.text.startswith("/"):
+            raise ApplicationHandlerStop
         return
     if user.id not in ADMINS and user.id != MAIN_ADMIN_ID:
         if update.message:
