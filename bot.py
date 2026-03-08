@@ -11,7 +11,7 @@ from telegram.ext import (
 )
 
 from config import config
-from shifts import ADMINS, MAIN_ADMIN_ID, SUPER_ADMINS
+from shifts import ADMINS, MAIN_ADMIN_ID
 from handlers.alert_handler import AlertHandler, TRIGGER_WORDS
 from handlers.report_handler import get_report_conversation
 from handlers.agent_handler import (
@@ -47,7 +47,7 @@ async def auth_middleware(update: Update, ctx):
         if msg and msg.text and msg.text.startswith("/"):
             raise ApplicationHandlerStop
         return
-    if user.id not in ADMINS and user.id not in SUPER_ADMINS:
+    if user.id not in ADMINS and user.id != MAIN_ADMIN_ID:
         if update.message:
             await update.message.reply_text(
                 "You are not authorized to use this bot.\n"
@@ -210,6 +210,8 @@ def main():
     app.add_handler(CallbackQueryHandler(cb_done_pick,      pattern=r'^done_pick\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,          pattern=r'^solve_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_cancel,           pattern=r'^solve_cancel\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_confirm,          pattern=r'^close_confirm\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_cancel,           pattern=r'^close_cancel\|'))
     app.add_handler(CallbackQueryHandler(cb_delete_confirm,         pattern=r'^delete_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_delete_do,              pattern=r'^delete_do\|'))
     app.add_handler(CallbackQueryHandler(cb_delete_keep,            pattern=r'^delete_keep\|'))
