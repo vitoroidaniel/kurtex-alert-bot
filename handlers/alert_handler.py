@@ -10,12 +10,15 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
-from shift_manager import get_on_shift_admins, get_all_admins, get_current_shift_name
+from shift_manager import get_on_shift_admins, get_all_admins
 from storage import case_store
 
 logger = logging.getLogger(__name__)
 
 TRIGGER_WORDS = ['#maintenance', '#issue', '#breakdown', '#problem', '#help', '#emergency']
+
+# Minimum seconds between alerts from the same driver (prevents spam)
+COOLDOWN_SECONDS = 30
 
 
 async def _delete_after(bot, chat_id, message_id, seconds):
@@ -29,12 +32,10 @@ async def _delete_after(bot, chat_id, message_id, seconds):
 class AlertHandler:
     def __init__(self):
         self._alerts: dict[str, dict] = {}
-        self._driver_requests: dict[int, dict] = {}
+        self._driver_last_time: dict[int, datetime] = {}  # driver_id → last alert time
         self._short_map: dict[str, str] = {}
-        self._last_ai_update_id: int    = -1
-        self._processed_ai_ids: set     = set()
-        self.COOLDOWN_SECONDS    = 5
-        self.REMINDER_THRESHOLD  = 3
+        self._last_ai_update_id: int = -1
+        self._processed_ai_ids: set = set()
 
     def _make_kb(self, short_id: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([[
@@ -71,64 +72,38 @@ class AlertHandler:
 
         user      = update.effective_user
         driver_id = user.id
-        on_shift  = get_on_shift_admins()
         now       = datetime.now()
 
-        if driver_id not in self._driver_requests:
-            self._driver_requests[driver_id] = {
-                "attempt_count": 0, "last_alert_id": None, "last_alert_time": None,
-            }
+        # Simple cooldown — only one alert per driver per COOLDOWN_SECONDS
+        last_time = self._driver_last_time.get(driver_id)
+        if last_time and (now - last_time).total_seconds() < COOLDOWN_SECONDS:
+            return
 
-        driver_rec    = self._driver_requests[driver_id]
-        last_time     = driver_rec.get("last_alert_time")
-        last_alert_id = driver_rec.get("last_alert_id")
-        attempt_count = driver_rec.get("attempt_count", 0)
+        self._driver_last_time[driver_id] = now
 
-        is_reminder = False
-        if attempt_count >= self.REMINDER_THRESHOLD - 1:
-            if last_alert_id and last_alert_id in self._alerts:
-                if not self._alerts[last_alert_id].get("taken_by"):
-                    is_reminder = True
-                else:
-                    driver_rec["attempt_count"] = 0
-
-        if not is_reminder:
-            if last_time and (now - last_time).total_seconds() < self.COOLDOWN_SECONDS:
-                return
-
-        driver_rec["attempt_count"] += 1
-        driver_rec["last_alert_time"] = now
-
-        chat_title = update.effective_chat.title or "the driver group"
+        chat_title  = update.effective_chat.title or "Driver Group"
         driver_name = f"{user.first_name} {user.last_name or ''}".strip()
-        if is_reminder:
-            dm_text = (
-                "\u23f0 *REMINDER \u2014 " + chat_title + "*\n\n"
-                "\U0001f464 *Driver:* " + driver_name + "\n"
-                "\U0001f4dd *Issue:* " + text[:200]
-            )
-        else:
-            dm_text = (
-                "\U0001f514 You have been mentioned in *" + chat_title + "*\n\n"
-                "\U0001f464 *Driver:* " + driver_name + "\n"
-                "\U0001f4dd *Issue:* " + text[:200]
-            )
 
-        # Always create a new alert — never delete or reuse old ones
+        dm_text = (
+            "\U0001f514 You have been mentioned in *" + chat_title + "*\n\n"
+            "\U0001f464 *Driver:* " + driver_name + "\n"
+            "\U0001f4dd *Issue:* " + text[:200]
+        )
+
+        # Create alert record and DB case
         alert_id = str(uuid.uuid4())
         self._new_alert(alert_id, driver_id, user, chat_title, text, now)
         case_store.create_case(
             case_id=alert_id,
-            driver_name=self._alerts[alert_id]["driver_name"],
-            driver_username=self._alerts[alert_id]["driver_username"],
-            group_name=chat_title, description=text,
+            driver_name=driver_name,
+            driver_username=user.username or None,
+            group_name=chat_title,
+            description=text,
         )
 
-        driver_rec["last_alert_id"] = alert_id
-        short_id = self._register_alert(alert_id)
-        kb = self._make_kb(short_id)
-
-        recipients = on_shift if on_shift else get_all_admins()
+        short_id   = self._register_alert(alert_id)
+        kb         = self._make_kb(short_id)
+        recipients = get_on_shift_admins() or get_all_admins()
         notified   = 0
 
         for admin in recipients:
@@ -164,10 +139,9 @@ class AlertHandler:
             "text":            text,
         }
 
-    # ── AI Channel message handler ───────────────────────────────────────────
+    # ── AI Channel ────────────────────────────────────────────────────────────
 
     async def handle_ai_channel(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-        """Receives channel posts from AI Alerts channel and processes them."""
         msg = update.channel_post or update.message
         if not msg or not msg.text:
             return
@@ -176,18 +150,14 @@ class AlertHandler:
         await self._process_ai_channel_message(msg, ctx)
 
     async def _process_ai_channel_message(self, message, ctx) -> None:
-        """Parse AI alert from channel and DM admins with full Assign & Report buttons."""
         import re as _re
         try:
             text = message.text or ""
-
-            # Extract UUID from last line
             uuid_match = _re.search(
                 r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
                 text, _re.IGNORECASE
             )
             if not uuid_match:
-                logger.warning("No UUID found in AI channel message")
                 return
 
             alert_id = uuid_match.group(0)
@@ -195,11 +165,10 @@ class AlertHandler:
                 return
             self._processed_ai_ids.add(alert_id)
 
-            # Parse fields — strip markdown asterisks/underscores
-            driver_name   = "Unknown"
-            group_name    = "Driver Group"
-            summary       = ""
-            confidence    = "HIGH"
+            driver_name = "Unknown"
+            group_name  = "Driver Group"
+            summary     = ""
+            confidence  = "HIGH"
             original_text = ""
 
             for line in text.split("\n"):
@@ -215,7 +184,6 @@ class AlertHandler:
                 elif clean.startswith("Message:"):
                     original_text = clean[len("Message:"):].strip().strip("_")
 
-            # Create alert record
             now = datetime.now()
             self._alerts[alert_id] = {
                 "recipients":      {},
@@ -228,7 +196,6 @@ class AlertHandler:
                 "text":            original_text or summary,
                 "source":          "ai_scanner",
             }
-
             case_store.create_case(
                 case_id=alert_id,
                 driver_name=driver_name,
@@ -241,17 +208,14 @@ class AlertHandler:
             kb       = self._make_kb(short_id)
 
             dm_text = (
-                f"\U0001f916 *AI Detected Issue*\n\n"
-                f"\U0001f4cc *Group:* {group_name}\n"
-                f"\U0001f464 *Driver:* {driver_name}\n"
-                f"\u26a0\ufe0f *Issue:* {summary}\n"
-                f"\U0001f4ac *Said:* _{original_text[:150]}_\n\n"
-                f"_Detected automatically \u2014 {confidence} confidence_"
+                "\U0001f916 *AI Detected Issue* in *" + group_name + "*\n\n"
+                "\U0001f464 *Driver:* " + driver_name + "\n"
+                "\U0001f4dd *Issue:* " + summary + "\n"
+                "_Detected automatically \u2014 " + confidence + " confidence_"
             )
 
             recipients = get_on_shift_admins() or get_all_admins()
             notified   = 0
-
             for admin in recipients:
                 try:
                     sent = await ctx.bot.send_message(
@@ -264,12 +228,10 @@ class AlertHandler:
                     logger.warning(f"Could not DM admin {admin['id']}: {e}")
 
             logger.info(f"AI alert {alert_id} forwarded to {notified} admins")
-
         except Exception as e:
             logger.error(f"Error processing AI channel message: {e}")
 
     async def poll_ai_alerts(self, ctx) -> None:
-        """Alias kept for scheduler compatibility."""
         try:
             from config import config as main_config
             channel_id = getattr(main_config, "AI_ALERTS_CHANNEL_ID", 0)
@@ -277,13 +239,12 @@ class AlertHandler:
                 return
             updates = await ctx.bot.get_updates(
                 offset=self._last_ai_update_id + 1 if self._last_ai_update_id >= 0 else None,
-                limit=20,
-                timeout=0,
+                limit=20, timeout=0,
                 allowed_updates=["channel_post"],
             )
-            for update in updates:
-                self._last_ai_update_id = update.update_id
-                msg = update.channel_post
+            for upd in updates:
+                self._last_ai_update_id = upd.update_id
+                msg = upd.channel_post
                 if not msg or msg.chat.id != channel_id:
                     continue
                 if not msg.text or "AI DETECTED ISSUE" not in msg.text:
@@ -293,7 +254,6 @@ class AlertHandler:
             logger.error(f"poll_ai_alerts error: {e}")
 
     async def handle_channel_post(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        """Handles messages posted to the AI Alerts channel directly."""
         msg = update.channel_post or update.effective_message
         if not msg or not msg.text:
             return
@@ -313,22 +273,18 @@ class AlertHandler:
 
         record["taken_by"] = (admin.id, tag)
 
-        for mid in record["recipients"].get(admin.id, []):
-            try:
-                await ctx.bot.delete_message(chat_id=admin.id, message_id=mid)
-            except TelegramError:
-                pass
-
+        # Remove alert buttons from all other admins
         for aid, mids in record["recipients"].items():
-            if aid == admin.id:
-                continue
             for mid in mids:
                 try:
-                    await ctx.bot.edit_message_text(
-                        chat_id=aid, message_id=mid,
-                        text=f"✅ Case assigned to {tag}.\nNo action needed.",
-                        reply_markup=None
-                    )
+                    if aid == admin.id:
+                        await ctx.bot.delete_message(chat_id=aid, message_id=mid)
+                    else:
+                        await ctx.bot.edit_message_text(
+                            chat_id=aid, message_id=mid,
+                            text=f"✅ Case assigned to {tag}.\nNo action needed.",
+                            reply_markup=None
+                        )
                 except TelegramError:
                     pass
 
@@ -337,8 +293,9 @@ class AlertHandler:
             agent_name=name, agent_username=admin.username,
         )
 
-        from shift_manager import MAIN_ADMIN_ID
+        # Post to reports group
         from config import config as cfg
+        from shift_manager import MAIN_ADMIN_ID
         dest_id = cfg.REPORTS_GROUP_ID or MAIN_ADMIN_ID
         if dest_id:
             created_at = record.get("created_at", datetime.now())
@@ -356,20 +313,16 @@ class AlertHandler:
             except TelegramError as e:
                 logger.warning(f"Could not send report: {e}")
 
-        driver_id = record.get("driver_id", 0)
-        self._alerts.pop(alert_id, None)
-        if driver_id in self._driver_requests:
-            self._driver_requests[driver_id]["attempt_count"] = 0
-
+        # Keep alert in self._alerts so mycases can still find it via case_store
+        # Just mark it taken — don't pop it
         return True
 
     async def handle_assignment(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
+        query    = update.callback_query
         await query.answer()
-        admin = update.effective_user
-        name  = f"{admin.first_name} {admin.last_name or ''}".strip()
-        tag   = f"@{admin.username}" if admin.username else name
-
+        admin    = update.effective_user
+        name     = f"{admin.first_name} {admin.last_name or ''}".strip()
+        tag      = f"@{admin.username}" if admin.username else name
         parts    = query.data.split("|")
         action   = parts[0]
         short_id = parts[1] if len(parts) > 1 else ""
@@ -385,11 +338,6 @@ class AlertHandler:
                 "🚫 You ignored this alert. Another agent can still take it.",
                 reply_markup=None
             )
-            return
-
-        if action == "close":
-            case_store.close_case(alert_id, resolution="Closed by agent")
-            await query.edit_message_text("✅ Case closed.", reply_markup=None)
             return
 
         if action in ("assign", "assignrpt"):
@@ -415,8 +363,8 @@ class AlertHandler:
                 try:
                     await ctx.bot.send_message(
                         admin.id,
-                        "✅ Case assigned to you. Use /mycases to view your cases.",
-                        parse_mode=ParseMode.MARKDOWN,
+                        "✅ Case assigned to you\\. Use /mycases to view your cases\\.",
+                        parse_mode="MarkdownV2",
                     )
                 except TelegramError:
                     pass
