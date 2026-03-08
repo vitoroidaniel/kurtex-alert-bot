@@ -18,7 +18,6 @@ from handlers.agent_handler import (
     cmd_done, cmd_mycases, cmd_casehistory, cb_done_pick,
     cb_solve_confirm, cb_solve_cancel,
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
-    cb_close_confirm, cb_close_cancel,
     cb_histpage, cb_hist_delete_chat, get_solve_conversation
 )
 from handlers.admin_handler import cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin
@@ -43,9 +42,6 @@ async def auth_middleware(update: Update, ctx):
         return
     chat = update.effective_chat
     if chat and chat.type in ("group", "supergroup"):
-        msg = update.effective_message
-        if msg and msg.text and msg.text.startswith("/"):
-            raise ApplicationHandlerStop
         return
     if user.id not in ADMINS and user.id != MAIN_ADMIN_ID:
         if update.message:
@@ -77,18 +73,29 @@ async def post_init(application: Application) -> None:
         ("missed",      "Missed alerts"),
     ]
 
-    # Default commands for all admins
-    await application.bot.set_my_commands(base_commands)
+    from telegram import BotCommandScopeDefault, BotCommandScopeAllGroupChats
+    from shifts import ADMINS
 
-    # Override for each super admin
-    for admin_id in SUPER_ADMINS:
+    # Clear commands globally and from all groups
+    try:
+        await application.bot.delete_my_commands(scope=BotCommandScopeDefault())
+    except Exception:
+        pass
+    try:
+        await application.bot.delete_my_commands(scope=BotCommandScopeAllGroupChats())
+    except Exception:
+        pass
+
+    # Set commands only per individual admin DM — invisible to everyone else
+    for admin_id in ADMINS:
         try:
+            cmds = super_commands if admin_id in SUPER_ADMINS else base_commands
             await application.bot.set_my_commands(
-                super_commands,
+                cmds,
                 scope=BotCommandScopeChat(chat_id=admin_id)
             )
         except Exception as e:
-            logger.warning(f"Could not set commands for super admin {admin_id}: {e}")
+            logger.warning(f"Could not set commands for {admin_id}: {e}")
 
     me = await application.bot.get_me()
     logger.info(f"{BOT_NAME} started as @{me.username}")
@@ -168,7 +175,6 @@ def main():
         Application.builder()
         .token(config.TELEGRAM_TOKEN)
         .post_init(post_init)
-        .connection_pool_size(16)
         .build()
     )
 
@@ -206,7 +212,7 @@ def main():
     ))
 
     # ── Button callbacks ──────────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore)\|'))
+    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore|close)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,   pattern=r'^reassign_'))
     app.add_handler(CallbackQueryHandler(cb_done_pick,      pattern=r'^done_pick\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,          pattern=r'^solve_confirm\|'))
