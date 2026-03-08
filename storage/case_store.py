@@ -1,27 +1,5 @@
 """
 storage/case_store.py
-
-Saves and loads case records to/from a JSON file.
-All other modules import from here — single source of truth.
-
-Case structure:
-{
-    "id":             str,         # alert_id (UUID)
-    "driver_name":    str,
-    "driver_username":str | None,
-    "group_name":     str,
-    "description":    str,
-    "opened_at":      str,         # ISO datetime
-    "assigned_at":    str | None,
-    "closed_at":      str | None,
-    "agent_id":       int | None,
-    "agent_name":     str | None,
-    "agent_username": str | None,
-    "status":         str,         # "open" | "assigned" | "done" | "missed"
-    "notes":          str | None,
-    "response_secs":  int | None,  # seconds from open to assigned
-    "resolution_secs":int | None,  # seconds from assigned to done
-}
 """
 
 import json
@@ -114,6 +92,22 @@ def assign_case(case_id: str, agent_id: int, agent_name: str, agent_username: Op
     return None
 
 
+def report_case(case_id: str, notes: Optional[str] = "case reported") -> Optional[dict]:
+    """Mark case as reported — stays active in /mycases until agent solves it."""
+    cases = _load()
+    for case in cases:
+        if case["id"] == case_id:
+            case.update({
+                "status": "reported",
+                "notes":  notes,
+            })
+            _save(cases)
+            logger.info(f"Case {case_id} marked as reported")
+            return case
+    logger.warning(f"report_case: case {case_id} not found")
+    return None
+
+
 def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
     cases = _load()
     for case in cases:
@@ -171,12 +165,12 @@ def get_all_cases_for_agent(agent_id: int) -> list[dict]:
 
 
 def get_active_case_for_agent(agent_id: int) -> Optional[dict]:
-    """Returns the most recent assigned (not yet done) case for this agent."""
-    assigned = [
+    """Returns the most recent active (assigned or reported) case for this agent."""
+    active = [
         c for c in _load()
-        if c.get("agent_id") == agent_id and c["status"] == "assigned"
+        if c.get("agent_id") == agent_id and c["status"] in ("assigned", "reported")
     ]
-    return assigned[-1] if assigned else None
+    return active[-1] if active else None
 
 
 def get_cases_today() -> list[dict]:
