@@ -322,7 +322,7 @@ class AlertHandler:
         await query.answer()
         admin    = update.effective_user
         name     = f"{admin.first_name} {admin.last_name or ''}".strip()
-        tag      = f"@{admin.username}" if admin.username else name
+        tag      = name
         parts    = query.data.split("|")
         action   = parts[0]
         short_id = parts[1] if len(parts) > 1 else ""
