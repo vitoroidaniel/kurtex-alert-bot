@@ -15,7 +15,7 @@ from storage import case_store
 
 logger = logging.getLogger(__name__)
 
-TRIGGER_WORDS = ['#maintenance', '#issue', '#breakdown', '#problem', '#help', '#emergency']
+TRIGGER_WORDS = ['#maintenance', '#repairs', '#breakdown', '#problem', '#help', '#emergency', '#repair']
 
 # Minimum seconds between alerts from the same driver (prevents spam)
 COOLDOWN_SECONDS = 30
