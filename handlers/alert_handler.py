@@ -15,10 +15,10 @@ from storage import case_store
 
 logger = logging.getLogger(__name__)
 
-TRIGGER_WORDS = ['#maintenance', '#repairs', '#breakdown', '#problem', '#help', '#emergency']
+TRIGGER_WORDS = ['#maintenance', '#issue', '#breakdown', '#problem', '#help', '#emergency']
 
 # Minimum seconds between alerts from the same driver (prevents spam)
-COOLDOWN_SECONDS = 10
+COOLDOWN_SECONDS = 30
 
 
 async def _delete_after(bot, chat_id, message_id, seconds):
@@ -66,9 +66,13 @@ class AlertHandler:
         text  = msg.text or msg.caption or ""
         photo = msg.photo[-1] if msg.photo else None
 
+        logger.info(f"handle() called: chat={update.effective_chat.id if update.effective_chat else None} user={update.effective_user.id} text={repr(text[:60])}")
+
         matched = next((w for w in TRIGGER_WORDS if w.lower() in text.lower()), None)
         if not matched:
+            logger.info(f"handle(): no trigger word found in text")
             return
+        logger.info(f"handle(): matched trigger '{matched}'")
 
         user      = update.effective_user
         driver_id = user.id
