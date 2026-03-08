@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 TRIGGER_WORDS = ['#maintenance', '#repairs', '#breakdown', '#problem', '#help', '#emergency', '#repair']
 
 # Minimum seconds between alerts from the same driver (prevents spam)
-COOLDOWN_SECONDS = 30
+COOLDOWN_SECONDS = 10
 
 
 async def _delete_after(bot, chat_id, message_id, seconds):
