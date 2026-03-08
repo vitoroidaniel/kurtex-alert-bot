@@ -216,7 +216,7 @@ def main():
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    app.run_polling(drop_pending_updates=False)
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == '__main__':
