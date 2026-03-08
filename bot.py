@@ -41,13 +41,14 @@ async def auth_middleware(update: Update, ctx):
     if not user:
         return
     chat = update.effective_chat
-    if chat and chat.type in ("group", "supergroup"):
+    # Always let group messages through (trigger words, etc.)
+    if chat and chat.type in ("group", "supergroup", "channel"):
         return
-    if user.id not in ADMINS and user.id != MAIN_ADMIN_ID:
+    # In private — allow admins only
+    if user.id not in ADMINS:
         if update.message:
             await update.message.reply_text(
-                "You are not authorized to use this bot.\n"
-                "Contact an administrator for access."
+                "You are not authorized to use this bot."
             )
         raise ApplicationHandlerStop
 
@@ -66,7 +67,6 @@ async def post_init(application: Application) -> None:
         ("casehistory", "Full closed case history"),
         ("help",        "Bot commands and help"),
     ]
-
     super_commands = base_commands + [
         ("report",      "Daily summary"),
         ("leaderboard", "Top performers"),
@@ -74,7 +74,6 @@ async def post_init(application: Application) -> None:
     ]
 
     await application.bot.set_my_commands(base_commands)
-
     for admin_id in SUPER_ADMINS:
         try:
             await application.bot.set_my_commands(
@@ -82,11 +81,12 @@ async def post_init(application: Application) -> None:
                 scope=BotCommandScopeChat(chat_id=admin_id)
             )
         except Exception as e:
-            logger.warning(f"Could not set commands for super admin {admin_id}: {e}")
+            logger.warning(f"Could not set commands for {admin_id}: {e}")
 
     me = await application.bot.get_me()
     logger.info(f"{BOT_NAME} started as @{me.username}")
     logger.info(f"Triggers: {', '.join(TRIGGER_WORDS)}")
+    logger.info(f"Admins: {list(ADMINS.keys())}")
 
 
 # ── Commands ──────────────────────────────────────────────────────────────────
@@ -101,7 +101,6 @@ async def cmd_start(update: Update, ctx):
         f"Welcome to {BOT_NAME}!\n\n"
         f"{BOT_TAGLINE}\n\n"
         "You are now registered and will receive alerts during your shift.\n\n"
-        "Quick start:\n"
         "/shifts — See who is on duty\n"
         "/help — View all commands"
     )
@@ -113,8 +112,7 @@ async def cmd_shifts(update: Update, ctx):
     on_shift   = get_on_shift_admins()
     if on_shift:
         names = "\n".join(
-            f"  {a['name']} (@{a['username']})" if a['username']
-            else f"  {a['name']}"
+            f"  {a['name']} (@{a['username']})" if a['username'] else f"  {a['name']}"
             for a in on_shift
         )
         await update.message.reply_text(f"Shift: {shift_name}\n\nOn duty:\n{names}")
@@ -128,12 +126,9 @@ async def cmd_help(update: Update, ctx):
     user     = update.effective_user
     is_super = _is_main_admin(user.id)
     words    = "  ".join(TRIGGER_WORDS)
-
     text = (
-        f"{BOT_NAME}\n"
-        f"{BOT_TAGLINE}\n\n"
-        "Driver reporting — post in driver group:\n"
-        f"{words}\n\n"
+        f"{BOT_NAME}\n{BOT_TAGLINE}\n\n"
+        f"Driver reporting — post in driver group:\n{words}\n\n"
         "Example: #maintenance engine overheating, truck 42\n\n"
         "Agent commands:\n"
         "/mycases — Your active cases\n"
@@ -141,7 +136,6 @@ async def cmd_help(update: Update, ctx):
         "/casehistory — Full closed case history\n"
         "/shifts — Who is on duty\n"
     )
-
     if is_super:
         text += (
             "\nSuper admin commands:\n"
@@ -149,7 +143,6 @@ async def cmd_help(update: Update, ctx):
             "/leaderboard — Top performers\n"
             "/missed — Unhandled alerts\n"
         )
-
     await update.message.reply_text(text)
 
 
@@ -164,6 +157,10 @@ def main():
         .post_init(post_init)
         .build()
     )
+
+    async def error_handler(update, ctx):
+        logger.error(f"Error: {ctx.error}", exc_info=ctx.error)
+    app.add_error_handler(error_handler)
 
     app.bot_data["alert_handler"] = alert_h
 
@@ -188,6 +185,11 @@ def main():
         (filters.TEXT | filters.PHOTO) &
         filters.Regex(f'(?i)({trigger_pattern})'),
         alert_h.handle
+    ))
+
+    app.add_handler(MessageHandler(
+        filters.ChatType.CHANNEL & filters.TEXT,
+        alert_h.handle_channel_post
     ))
 
     app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore|close)\|'))
