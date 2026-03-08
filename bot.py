@@ -18,7 +18,6 @@ from handlers.agent_handler import (
     cmd_done, cmd_mycases, cmd_casehistory, cb_done_pick,
     cb_solve_confirm, cb_solve_cancel,
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
-    cb_close_confirm, cb_close_cancel,
     cb_histpage, cb_hist_delete_chat, get_solve_conversation
 )
 from handlers.admin_handler import cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin
@@ -43,9 +42,6 @@ async def auth_middleware(update: Update, ctx):
         return
     chat = update.effective_chat
     if chat and chat.type in ("group", "supergroup"):
-        msg = update.effective_message
-        if msg and msg.text and msg.text.startswith("/"):
-            raise ApplicationHandlerStop
         return
     if user.id not in ADMINS and user.id != MAIN_ADMIN_ID:
         if update.message:
@@ -77,10 +73,8 @@ async def post_init(application: Application) -> None:
         ("missed",      "Missed alerts"),
     ]
 
-    # Default commands for all admins
     await application.bot.set_my_commands(base_commands)
 
-    # Override for each super admin
     for admin_id in SUPER_ADMINS:
         try:
             await application.bot.set_my_commands(
@@ -173,29 +167,21 @@ def main():
 
     app.bot_data["alert_handler"] = alert_h
 
-    # Auth middleware — runs before everything
     app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
 
-    # ── Commands ──────────────────────────────────────────────────────────────
-    app.add_handler(CommandHandler("start",        cmd_start))
-    app.add_handler(CommandHandler("shifts",       cmd_shifts))
-    app.add_handler(CommandHandler("help",         cmd_help))
+    app.add_handler(CommandHandler("start",       cmd_start))
+    app.add_handler(CommandHandler("shifts",      cmd_shifts))
+    app.add_handler(CommandHandler("help",        cmd_help))
+    app.add_handler(CommandHandler("done",        cmd_done))
+    app.add_handler(CommandHandler("mycases",     cmd_mycases))
+    app.add_handler(CommandHandler("casehistory", cmd_casehistory))
+    app.add_handler(CommandHandler("report",      cmd_report))
+    app.add_handler(CommandHandler("leaderboard", cmd_leaderboard))
+    app.add_handler(CommandHandler("missed",      cmd_missed))
 
-    # Agent commands
-    app.add_handler(CommandHandler("done",         cmd_done))
-    app.add_handler(CommandHandler("mycases",      cmd_mycases))
-    app.add_handler(CommandHandler("casehistory",  cmd_casehistory))
-
-    # Admin commands (super admin only — enforced in handlers)
-    app.add_handler(CommandHandler("report",       cmd_report))
-    app.add_handler(CommandHandler("leaderboard",  cmd_leaderboard))
-    app.add_handler(CommandHandler("missed",       cmd_missed))
-
-    # ── Conversation handlers (must be before standalone CallbackQueryHandlers)
     app.add_handler(get_solve_conversation())
     app.add_handler(get_report_conversation())
 
-    # ── Trigger word detection ────────────────────────────────────────────────
     trigger_pattern = '|'.join(TRIGGER_WORDS).replace('#', r'\#')
     app.add_handler(MessageHandler(
         filters.ChatType.GROUPS &
@@ -204,23 +190,21 @@ def main():
         alert_h.handle
     ))
 
-    # ── Button callbacks ──────────────────────────────────────────────────────
-    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore)\|'))
+    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment, pattern=r'^(assign|assignrpt|ignore|close)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,   pattern=r'^reassign_'))
-    app.add_handler(CallbackQueryHandler(cb_done_pick,      pattern=r'^done_pick\|'))
-    app.add_handler(CallbackQueryHandler(cb_solve_confirm,          pattern=r'^solve_confirm\|'))
-    app.add_handler(CallbackQueryHandler(cb_solve_cancel,           pattern=r'^solve_cancel\|'))
-    app.add_handler(CallbackQueryHandler(cb_delete_confirm,         pattern=r'^delete_confirm\|'))
-    app.add_handler(CallbackQueryHandler(cb_delete_do,              pattern=r'^delete_do\|'))
-    app.add_handler(CallbackQueryHandler(cb_delete_keep,            pattern=r'^delete_keep\|'))
-    app.add_handler(CallbackQueryHandler(cb_histpage,               pattern=r'^histpage\|'))
-    app.add_handler(CallbackQueryHandler(cb_hist_delete_chat,       pattern=r'^hist_delete_chat$'))
+    app.add_handler(CallbackQueryHandler(cb_done_pick,        pattern=r'^done_pick\|'))
+    app.add_handler(CallbackQueryHandler(cb_solve_confirm,    pattern=r'^solve_confirm\|'))
+    app.add_handler(CallbackQueryHandler(cb_solve_cancel,     pattern=r'^solve_cancel\|'))
+    app.add_handler(CallbackQueryHandler(cb_delete_confirm,   pattern=r'^delete_confirm\|'))
+    app.add_handler(CallbackQueryHandler(cb_delete_do,        pattern=r'^delete_do\|'))
+    app.add_handler(CallbackQueryHandler(cb_delete_keep,      pattern=r'^delete_keep\|'))
+    app.add_handler(CallbackQueryHandler(cb_histpage,         pattern=r'^histpage\|'))
+    app.add_handler(CallbackQueryHandler(cb_hist_delete_chat, pattern=r'^hist_delete_chat$'))
 
-    # ── Scheduled jobs ────────────────────────────────────────────────────────
     register_jobs(app)
 
     logger.info(f"Starting {BOT_NAME}...")
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == '__main__':
