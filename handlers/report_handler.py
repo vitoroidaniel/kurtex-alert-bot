@@ -129,7 +129,11 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     vtype = query.data.split("|")[1]
+    # Preserve report_case_id if set by agent_handler
+    report_case_id = ctx.user_data.get("report_case_id")
     ctx.user_data["report"] = {"media": [], "vehicle_type": vtype}
+    if report_case_id:
+        ctx.user_data["report_case_id"] = report_case_id
     unit_prompt = "Truck number:" if vtype == "truck" else "Trailer number:"
     label = {"truck": "🚛 Truck", "trailer": "🚜 Trailer", "reefer": "❄️ Reefer"}[vtype]
     await query.edit_message_text(
@@ -392,6 +396,16 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("✅ Report sent!", reply_markup=None)
         logger.info(f"Report sent to {dest_id}")
+
+        # Auto-close the case with "case reported"
+        case_id = ctx.user_data.pop("report_case_id", None)
+        if case_id:
+            try:
+                from storage.case_store import close_case, get_case
+                close_case(case_id, notes="case reported")
+                logger.info(f"Case {case_id} auto-closed after report")
+            except Exception as e:
+                logger.error(f"Failed to auto-close case after report: {e}")
 
     except TelegramError as e:
         logger.error(f"Failed to send report: {e}")
