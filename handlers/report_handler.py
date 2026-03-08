@@ -78,9 +78,7 @@ def _confirm_kb():
             InlineKeyboardButton("✅ Send Report", callback_data="rpt_confirm|yes"),
             InlineKeyboardButton("❌ Cancel",      callback_data="rpt_confirm|no"),
         ],
-        [
-            InlineKeyboardButton("✏️ Edit",        callback_data="rpt_edit"),
-        ],
+        [InlineKeyboardButton("✏️ Edit", callback_data="rpt_edit")],
     ])
 
 
@@ -136,7 +134,13 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     vtype = query.data.split("|")[1]
+    report_case_id = ctx.user_data.get("report_case_id")
+    report_handler = ctx.user_data.get("report_handler")
     ctx.user_data["report"] = {"media": [], "vehicle_type": vtype}
+    if report_case_id:
+        ctx.user_data["report_case_id"] = report_case_id
+    if report_handler:
+        ctx.user_data["report"]["handler"] = report_handler
     unit_prompt = "Truck number:" if vtype == "truck" else "Trailer number:"
     label = {"truck": "🚛 Truck", "trailer": "🚜 Trailer", "reefer": "❄️ Reefer"}[vtype]
     await query.edit_message_text(
@@ -400,6 +404,19 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ Report sent!", reply_markup=None)
         logger.info(f"Report sent to {dest_id}")
 
+        # Mark case as reported — stays in /mycases until agent solves it
+        case_id = ctx.user_data.pop("report_case_id", None)
+        ctx.user_data.pop("report_handler", None)
+        if "busy_agents" in ctx.bot_data:
+            ctx.bot_data["busy_agents"].discard(update.effective_user.id)
+        if case_id:
+            try:
+                from storage.case_store import report_case
+                report_case(case_id)
+                logger.info(f"Case {case_id} marked reported")
+            except Exception as e:
+                logger.error(f"Failed to mark case reported: {e}")
+
     except TelegramError as e:
         logger.error(f"Failed to send report: {e}")
         await query.edit_message_text("Failed to send report. Please try again.", reply_markup=None)
@@ -407,39 +424,47 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def cmd_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.pop("report", None)
+    ctx.user_data.pop("report_case_id", None)
+    ctx.user_data.pop("report_handler", None)
+    if "busy_agents" in ctx.bot_data:
+        ctx.bot_data["busy_agents"].discard(update.effective_user.id)
+    await update.message.reply_text("Report cancelled. Use /mycases to continue.")
+    return ConversationHandler.END
 
-async def _show_preview(query_or_msg, ctx, edit=True):
-    """Re-show the preview. Works from both callback queries and messages."""
+
+
+async def _show_preview(target, ctx, edit=True):
     report  = ctx.user_data.get("report", {})
     preview = _build_report(report)
     media   = report.get("media", [])
     note    = f"\n\n📎 {len(media)} media file(s) attached" if media else ""
     text    = f"*Preview — confirm and send?*\n\n{preview}{note}"
-    if edit and hasattr(query_or_msg, "edit_message_text"):
-        await query_or_msg.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=_confirm_kb())
+    if edit and hasattr(target, "edit_message_text"):
+        await target.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=_confirm_kb())
     else:
-        target = query_or_msg.message if hasattr(query_or_msg, "message") else query_or_msg
-        await target.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=_confirm_kb())
+        msg = target.message if hasattr(target, "message") else target
+        await msg.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=_confirm_kb())
 
 
 def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
-    """Keyboard listing all editable fields for the current vehicle type."""
     fields = [
-        ("Unit number",   "rpt_editfield|unit"),
-        ("Driver name",   "rpt_editfield|driver"),
-        ("Issue",         "rpt_editfield|issue"),
-        ("Load type",     "rpt_editfield|load"),
-        ("Pick up",       "rpt_editfield|pickup"),
-        ("Delivery",      "rpt_editfield|delivery"),
-        ("Location",      "rpt_editfield|location"),
-        ("Comments",      "rpt_editfield|comments"),
-        ("Priority",      "rpt_editfield|priority"),
+        ("Unit number",    "rpt_editfield|unit"),
+        ("Driver name",    "rpt_editfield|driver"),
+        ("Issue",          "rpt_editfield|issue"),
+        ("Load type",      "rpt_editfield|load"),
+        ("Pick up",        "rpt_editfield|pickup"),
+        ("Delivery",       "rpt_editfield|delivery"),
+        ("Location",       "rpt_editfield|location"),
+        ("Comments",       "rpt_editfield|comments"),
+        ("Priority",       "rpt_editfield|priority"),
     ]
     if vtype in ("trailer", "reefer"):
         fields[7:7] = [
-            ("Setpoint",      "rpt_editfield|setpoint"),
-            ("Current temp",  "rpt_editfield|current_temp"),
-            ("Temp recorder", "rpt_editfield|temp_recorder"),
+            ("Setpoint",       "rpt_editfield|setpoint"),
+            ("Current temp",   "rpt_editfield|current_temp"),
+            ("Temp recorder",  "rpt_editfield|temp_recorder"),
         ]
     rows = [[InlineKeyboardButton(label, callback_data=cb)] for label, cb in fields]
     rows.append([InlineKeyboardButton("↩️ Back to preview", callback_data="rpt_edit_back")])
@@ -447,19 +472,14 @@ def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
 
 
 async def cb_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Show the list of fields agent can edit."""
     query = update.callback_query
     await query.answer()
     vtype = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
-    await query.edit_message_text(
-        "Which field would you like to edit?",
-        reply_markup=_edit_fields_kb(vtype)
-    )
+    await query.edit_message_text("Which field would you like to edit?", reply_markup=_edit_fields_kb(vtype))
     return ASK_EDIT_FIELD
 
 
 async def cb_edit_back(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Go back to preview without changing anything."""
     query = update.callback_query
     await query.answer()
     await _show_preview(query, ctx, edit=True)
@@ -467,17 +487,15 @@ async def cb_edit_back(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Agent picked a field — ask for new value."""
     query = update.callback_query
     await query.answer()
     field = query.data.split("|")[1]
     ctx.user_data["editing_field"] = field
-
     prompts = {
         "unit":         "Enter new unit number:",
         "driver":       "Enter new driver name:",
         "issue":        "Enter new issue description:",
-        "load":         "Enter load type (JBS Load / Broker Load):",
+        "load":         "Enter load type (e.g. JBS Load / Broker Load):",
         "pickup":       "Enter new pick up location/time:",
         "delivery":     "Enter new delivery location/time:",
         "location":     "Enter new current location:",
@@ -487,60 +505,43 @@ async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "comments":     "Enter new comments:",
         "priority":     "Select new priority:",
     }
-
     if field == "temp_recorder":
-        await query.edit_message_text(
-            prompts[field],
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("Y", callback_data="rpt_editval|Y"),
-                InlineKeyboardButton("N", callback_data="rpt_editval|N"),
-            ]])
-        )
+        await query.edit_message_text(prompts[field], reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Y", callback_data="rpt_editval|Y"),
+            InlineKeyboardButton("N", callback_data="rpt_editval|N"),
+        ]]))
         return ASK_EDIT_VALUE
-
     if field == "priority":
-        await query.edit_message_text(
-            prompts[field],
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🟢 Low",    callback_data="rpt_editval|low"),
-                InlineKeyboardButton("🟡 Medium", callback_data="rpt_editval|medium"),
-                InlineKeyboardButton("🔴 High",   callback_data="rpt_editval|high"),
-            ]])
-        )
+        await query.edit_message_text(prompts[field], reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🟢 Low",    callback_data="rpt_editval|low"),
+            InlineKeyboardButton("🟡 Medium", callback_data="rpt_editval|medium"),
+            InlineKeyboardButton("🔴 High",   callback_data="rpt_editval|high"),
+        ]]))
         return ASK_EDIT_VALUE
-
     await query.edit_message_text(prompts.get(field, "Enter new value:"))
     return ASK_EDIT_VALUE
 
 
 async def cb_edit_val_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Handle button-based edit values (priority, temp_recorder)."""
     query = update.callback_query
     await query.answer()
     field = ctx.user_data.pop("editing_field", None)
     value = query.data.split("|")[1]
     if field:
-        field_map = {"unit": "unit_number"}
-        ctx.user_data["report"][field_map.get(field, field)] = value
+        key = "unit_number" if field == "unit" else field
+        ctx.user_data["report"][key] = value
     await _show_preview(query, ctx, edit=True)
     return CONFIRM
 
 
 async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Handle text-based edit values."""
     value = update.message.text.strip()
     field = ctx.user_data.pop("editing_field", None)
     if field:
-        field_map = {"unit": "unit_number"}
-        ctx.user_data["report"][field_map.get(field, field)] = value
+        key = "unit_number" if field == "unit" else field
+        ctx.user_data["report"][key] = value
     await _show_preview(update.message, ctx, edit=False)
     return CONFIRM
-
-async def cmd_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data.pop("report", None)
-    await update.message.reply_text("Report cancelled. Use /mycases to continue.")
-    return ConversationHandler.END
-
 
 def get_report_conversation():
     text_only    = filters.TEXT & ~filters.COMMAND
@@ -575,15 +576,15 @@ def get_report_conversation():
                                 CallbackQueryHandler(cb_media_done,    pattern=r'^rpt_mediadone$')],
             ASK_PRIORITY:      [CallbackQueryHandler(cb_priority,      pattern=r'^rpt_priority\|')],
             CONFIRM:           [
-                                CallbackQueryHandler(cb_confirm,       pattern=r'^rpt_confirm\|'),
-                                CallbackQueryHandler(cb_edit,          pattern=r'^rpt_edit$'),
+                                CallbackQueryHandler(cb_confirm,         pattern=r'^rpt_confirm\|'),
+                                CallbackQueryHandler(cb_edit,            pattern=r'^rpt_edit$'),
                                ],
             ASK_EDIT_FIELD:    [
-                                CallbackQueryHandler(cb_edit_field,    pattern=r'^rpt_editfield\|'),
-                                CallbackQueryHandler(cb_edit_back,     pattern=r'^rpt_edit_back$'),
+                                CallbackQueryHandler(cb_edit_field,      pattern=r'^rpt_editfield\|'),
+                                CallbackQueryHandler(cb_edit_back,       pattern=r'^rpt_edit_back$'),
                                ],
             ASK_EDIT_VALUE:    [
-                                MessageHandler(text_only,              recv_edit_value),
+                                MessageHandler(text_only,                recv_edit_value),
                                 CallbackQueryHandler(cb_edit_val_button, pattern=r'^rpt_editval\|'),
                                ],
         },
