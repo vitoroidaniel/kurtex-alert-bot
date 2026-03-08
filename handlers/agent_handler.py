@@ -57,8 +57,8 @@ def _active_case_text(case):
 
 def _active_case_keyboard(case_id):
     return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{case_id}"),
         InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"),
-        InlineKeyboardButton("✅ Close",  callback_data=f"close_ask|{case_id}"),
     ]])
 
 
@@ -215,12 +215,20 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["solving_case_id"] = case_id
 
     await query.edit_message_text(
-        f"📋 Reporting case:\n\n"
+        f"📋 *Report*\n\n"
         f"Driver: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
-        "Type your resolution note (or /cancel):"
+        "Select vehicle type:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🚛 Truck",   callback_data=f"rpt_type|truck"),
+            InlineKeyboardButton("🚜 Trailer", callback_data=f"rpt_type|trailer"),
+            InlineKeyboardButton("❄️ Reefer",  callback_data=f"rpt_type|reefer"),
+        ]])
     )
-    return AWAITING_SOLUTION
+    # Store case_id so report_handler can close the case after submit
+    ctx.user_data["report_case_id"] = case_id
+    return ConversationHandler.END
 
 
 async def cb_solve_receive_solution(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -359,10 +367,11 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["solving_case_id"] = case_id
 
     await query.edit_message_text(
-        f"✅ Closing case:\n\n"
+        f"✅ *Solve Case*\n\n"
         f"Driver: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
-        "Type a reason for closing (or /cancel):"
+        "Type your reason for closing (or /cancel):",
+        parse_mode="Markdown",
     )
     return AWAITING_CLOSE_REASON
 
