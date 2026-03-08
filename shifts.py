@@ -13,7 +13,7 @@ ADMINS = {
     #1095527903: {"name": "Daniel",  "username": "Storm33S"},
     #790341145:  {"name": "Sasa AH", "username": "Sasha5639"},
     #1373070156: {"name": "Anton",   "username": "AntonOgl"},
-    #8422260316: {"name": "Alex",    "username": "alexrepairs"},
+    8422260316: {"name": "Alex",    "username": "alexrepairs"},
     #7769230456: {"name": "Andrei",  "username": "Andrei_Cr05"},
     #7808593054: {"name": "Petru",   "username": "Petru S"},
 }
@@ -53,6 +53,6 @@ SHIFTS = [
 
 TIMEZONE = "America/New_York"
 
-MAIN_ADMIN_ID = 1615926408     # keep this as primary (used for reports fallback)
+MAIN_ADMIN_ID = 1615926408,      # keep this as primary (used for reports fallback)
 
-SUPER_ADMINS = {1615926408}  # all super admins
+SUPER_ADMINS = {1615926408, 8422260316}  # all super admins
