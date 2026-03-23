@@ -66,7 +66,12 @@ class AlertHandler:
         text  = msg.text or msg.caption or ""
         photo = msg.photo[-1] if msg.photo else None
 
-        matched = next((w for w in TRIGGER_WORDS if w.lower() in text.lower()), None)
+        def _word_match(word, haystack):
+            if word.startswith('#'):
+                return word.lower() in haystack.lower()
+            return bool(re.search(r'\b' + re.escape(word) + r'\b', haystack, re.IGNORECASE))
+
+        matched = next((w for w in TRIGGER_WORDS if _word_match(w, text)), None)
         if not matched:
             return
 
