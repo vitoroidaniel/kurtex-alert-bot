@@ -106,7 +106,7 @@ def _build_report(d: dict) -> str:
         f"Priority: *{p['level']}*",
         "",
         unit_line,
-f"*Reported by:* {_esc(d.get('driver', '—'))}",
+f"*Driver:* {_esc(d.get('driver', '—'))}",
         f"*Issue:* {_esc(d.get('issue', '—'))}",
         "",
         f"*JBS/Broker Load:* {_esc(d.get('load', '—'))}",
