@@ -58,7 +58,7 @@ def _active_case_text(case):
     return (
         f"{badge}\n\n"
         f"📌 *Group:* {case['group_name']}\n"
-        f"👤 *Driver:* {case['driver_name']}\n"
+        f"👤 *Reported by:* {case['driver_name']}\n"
         f"📝 *Issue:* {(case.get('description') or '—')[:200]}"
     )
 
@@ -150,7 +150,7 @@ async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
         text = (
             f"Case {num}\n\n"
             f"Group: {case['group_name']}\n"
-            f"Driver: {case['driver_name']}\n"
+            f"Reported by: {case['driver_name']}\n"
             f"Issue: {(case.get('description') or '')[:80]}\n"
             f"Closed: {_fmt_dt(case.get('closed_at'))}"
             + (f"\nNote: {case['notes']}" if case.get("notes") else "")
@@ -234,7 +234,7 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"📋 *Report*\n\n"
-        f"Driver: {case['driver_name']} — {case['group_name']}\n"
+        f"Reported by: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
         "Select vehicle type:",
         parse_mode="Markdown",
@@ -269,7 +269,7 @@ async def cb_solve_receive_solution(update: Update, ctx: ContextTypes.DEFAULT_TY
     await update.message.reply_text(
         f"Confirm closing this case?\n\n"
         f"Group: {case['group_name']}\n"
-        f"Driver: {case['driver_name']}\n"
+        f"Reported by: {case['driver_name']}\n"
         f"Note: {solution}",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Yes, close it", callback_data=f"solve_confirm|{case_id}"),
@@ -299,7 +299,7 @@ async def cb_solve_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"✅ Case closed!\n\n"
         f"Group: {case['group_name'] if case else '—'}\n"
-        f"Driver: {case['driver_name'] if case else '—'}\n"
+        f"Reported by: {case['driver_name'] if case else '—'}\n"
         f"Note: {solution}",
         reply_markup=None
     )
@@ -387,7 +387,7 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"✅ *Solve Case*\n\n"
-        f"Driver: {case['driver_name']} — {case['group_name']}\n"
+        f"Reported by: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
         "Type your reason for closing (or /cancel):",
         parse_mode="Markdown",
@@ -417,7 +417,7 @@ async def cb_close_receive_reason(update: Update, ctx: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(
         f"Confirm closing?\n\n"
         f"Group: {case['group_name']}\n"
-        f"Driver: {case['driver_name']}\n"
+        f"Reported by: {case['driver_name']}\n"
         f"Reason: {reason}",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Yes, close", callback_data=f"close_confirm|{case_id}"),
@@ -447,7 +447,7 @@ async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"✅ Case closed!\n\n"
         f"Group: {case['group_name'] if case else '—'}\n"
-        f"Driver: {case['driver_name'] if case else '—'}\n"
+        f"Reported by: {case['driver_name'] if case else '—'}\n"
         f"Reason: {reason}",
         reply_markup=None
     )
@@ -535,7 +535,7 @@ async def cb_done_pick(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"Closing case:\n\n"
         f"Group: {case['group_name']}\n"
-        f"Driver: {case['driver_name']}\n\n"
+        f"Reported by: {case['driver_name']}\n\n"
         "Type your solution (or /cancel to go back):",
         reply_markup=None
     )

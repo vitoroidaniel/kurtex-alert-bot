@@ -115,7 +115,7 @@ def _build_report(d: dict) -> str:
         f"*Current Location:* {_esc(d.get('location', '—'))}",
     ]
 
-    if vtype in ("trailer", "reefer"):
+    if vtype == "reefer":
         lines += [
             "",
             f"*Setpoint:* {_esc(d.get('setpoint', '—'))}",
@@ -126,7 +126,7 @@ def _build_report(d: dict) -> str:
     if d.get("comments"):
         lines += ["", f"*Comments:* {_esc(d.get('comments'))}"]
 
-    lines += ["", f"*Handled by:* {_esc(d.get('handler', '—'))}"]
+    lines += ["", f"*Reported by:* {_esc(d.get('handler', '—'))}"]
     return "\n".join(lines)
 
 
@@ -162,13 +162,13 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"📋 *Report*\n\n"
-        f"Driver: {case['driver_name']} — {case['group_name']}\n"
+        f"Reported by: {case['driver_name']} — {case['group_name']}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
         "Select vehicle type:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
-            InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
+            InlineKeyboardButton("🚚 Trailer", callback_data="rpt_type|trailer"),
             InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
         ]])
     )
@@ -186,7 +186,7 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if report_handler:
         ctx.user_data["report"]["handler"] = report_handler
     unit_prompt = "Truck number:" if vtype == "truck" else "Trailer number:"
-    label = {"truck": "🚛 Truck", "trailer": "🚜 Trailer", "reefer": "❄️ Reefer"}[vtype]
+    label = {"truck": "🚛 Truck", "trailer": "🚚 Trailer", "reefer": "❄️ Reefer"}[vtype]
     await query.edit_message_text(
         f"Type: *{label}*\n\n{unit_prompt}",
         parse_mode=ParseMode.MARKDOWN, reply_markup=None
@@ -579,8 +579,8 @@ async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return CONFIRM
 
 def get_report_conversation():
-    text_only    = filters.TEXT & ~filters.COMMAND
-    media_filter = filters.PHOTO | filters.VIDEO | filters.Document.ALL
+    private_text = filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND
+    private_media = filters.ChatType.PRIVATE & (filters.PHOTO | filters.VIDEO | filters.Document.ALL)
 
     return ConversationHandler(
         entry_points=[
@@ -589,28 +589,28 @@ def get_report_conversation():
         ],
         states={
             ASK_TYPE:          [CallbackQueryHandler(cb_type,          pattern=r'^rpt_type\|')],
-            ASK_UNIT:          [MessageHandler(text_only,              recv_unit)],
-            ASK_DRIVER:        [MessageHandler(text_only,              recv_driver)],
-            ASK_ISSUE:         [MessageHandler(text_only,              recv_issue)],
+            ASK_UNIT:          [MessageHandler(private_text,           recv_unit)],
+            ASK_DRIVER:        [MessageHandler(private_text,           recv_driver)],
+            ASK_ISSUE:         [MessageHandler(private_text,           recv_issue)],
             ASK_LOAD:          [
                                 CallbackQueryHandler(cb_loadtype,      pattern=r'^rpt_loadtype\|'),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$'),
-                                MessageHandler(text_only,              recv_load),
+                                MessageHandler(private_text,           recv_load),
                                ],
-            ASK_PICKUP:        [MessageHandler(text_only,              recv_pickup),
+            ASK_PICKUP:        [MessageHandler(private_text,           recv_pickup),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
-            ASK_DELIVERY:      [MessageHandler(text_only,              recv_delivery),
+            ASK_DELIVERY:      [MessageHandler(private_text,           recv_delivery),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
-            ASK_LOCATION:      [MessageHandler(text_only,              recv_location),
+            ASK_LOCATION:      [MessageHandler(private_text,           recv_location),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
-            ASK_SETPOINT:      [MessageHandler(text_only,              recv_setpoint),
+            ASK_SETPOINT:      [MessageHandler(private_text,           recv_setpoint),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
-            ASK_CURRENT_TEMP:  [MessageHandler(text_only,              recv_current_temp),
+            ASK_CURRENT_TEMP:  [MessageHandler(private_text,           recv_current_temp),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
             ASK_TEMP_RECORDER: [CallbackQueryHandler(cb_temp_recorder, pattern=r'^rpt_temprec\|')],
-            ASK_COMMENTS:      [MessageHandler(text_only,              recv_comments),
+            ASK_COMMENTS:      [MessageHandler(private_text,           recv_comments),
                                 CallbackQueryHandler(cb_skip,          pattern=r'^rpt_skip$')],
-            ASK_MEDIA:         [MessageHandler(media_filter,           recv_media),
+            ASK_MEDIA:         [MessageHandler(private_media,          recv_media),
                                 CallbackQueryHandler(cb_media_done,    pattern=r'^rpt_mediadone$')],
             ASK_PRIORITY:      [CallbackQueryHandler(cb_priority,      pattern=r'^rpt_priority\|')],
             CONFIRM:           [
@@ -622,7 +622,7 @@ def get_report_conversation():
                                 CallbackQueryHandler(cb_edit_back,       pattern=r'^rpt_edit_back$'),
                                ],
             ASK_EDIT_VALUE:    [
-                                MessageHandler(text_only,                recv_edit_value),
+                                MessageHandler(private_text,             recv_edit_value),
                                 CallbackQueryHandler(cb_edit_val_button, pattern=r'^rpt_editval\|'),
                                ],
         },
