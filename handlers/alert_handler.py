@@ -15,7 +15,7 @@ from storage import case_store
 
 logger = logging.getLogger(__name__)
 
-TRIGGER_WORDS = ['#maintenance', '#repairs', "repair"]
+TRIGGER_WORDS = ['#maintenance', '#repairs', "#repair"]
 
 # Minimum seconds between alerts from the same driver (prevents spam)
 COOLDOWN_SECONDS = 10
@@ -91,7 +91,7 @@ class AlertHandler:
 
         dm_text = (
             "\U0001f514 You have been mentioned in *" + chat_title + "*\n\n"
-            "\U0001f464 *Driver:* " + driver_name + "\n"
+            "\U0001f464 *Reported by:* " + driver_name + "\n"
             "\U0001f4dd *Issue:* " + text[:200]
         )
 
@@ -308,9 +308,8 @@ class AlertHandler:
             report = (
                 f"✅ *Case Assigned*\n\n"
                 f"📌 *Group:* {record.get('group_name', '—')}\n"
-                f"👤 *Driver:* {record.get('driver_name', '—')}\n"
-                f"🙋 *Handler:* {name}\n"
-                f"⏱ *Response:* {secs // 60}m {secs % 60}s\n"
+                f"👤 *Reported by:* {record.get('driver_name', '—')}\n"
+                f"🙋 *Handled by:* {name}\n"
                 f"📝 {record.get('text', '(no details)')}"
             )
             try:
@@ -370,7 +369,7 @@ class AlertHandler:
                 case_text = (
                     f"📋 *Active Case*\n\n"
                     f"📌 *Group:* {saved_record.get('group_name', '—')}\n"
-                    f"👤 *Driver:* {saved_record.get('driver_name', '—')}\n"
+                    f"👤 *Repoted by:* {saved_record.get('driver_name', '—')}\n"
                     f"📝 *Issue:* {(saved_record.get('text') or '—')[:200]}"
                 )
                 case_kb = InlineKeyboardMarkup([[
