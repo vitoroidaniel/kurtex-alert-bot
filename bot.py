@@ -196,7 +196,17 @@ def main():
     app.add_handler(get_report_conversation())
 
     # ── Trigger word detection ────────────────────────────────────────────────
-    trigger_pattern = '|'.join(TRIGGER_WORDS).replace('#', r'\#')
+    import re as _re
+    def _build_trigger_pattern(words):
+        parts = []
+        for w in words:
+            if w.startswith('#'):
+                parts.append(_re.escape(w))                          # hashtags match literally
+            else:
+                parts.append(r'\b' + _re.escape(w) + r'\b')         # plain words need boundaries
+        return '|'.join(parts)
+
+    trigger_pattern = _build_trigger_pattern(TRIGGER_WORDS)
     app.add_handler(MessageHandler(
         filters.ChatType.GROUPS &
         (filters.TEXT | filters.PHOTO) &
