@@ -106,7 +106,7 @@ def _build_report(d: dict) -> str:
         f"Priority: *{p['level']}*",
         "",
         unit_line,
-        f"*Driver:* {_esc(d.get('driver', '—'))}",
+f"*Reported by:* {_esc(d.get('driver', '—'))}",
         f"*Issue:* {_esc(d.get('issue', '—'))}",
         "",
         f"*JBS/Broker Load:* {_esc(d.get('load', '—'))}",
@@ -196,7 +196,7 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def recv_unit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["unit_number"] = update.message.text.strip()
-    await update.message.reply_text("Driver name:")
+    await update.message.reply_text("Reported by name:")
     return ASK_DRIVER
 
 
@@ -246,7 +246,7 @@ async def recv_delivery(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["location"] = update.message.text.strip()
     vtype = ctx.user_data["report"].get("vehicle_type", "truck")
-    if vtype in ("trailer", "reefer"):
+    if vtype == "reefer":
         await update.message.reply_text("Setpoint temperature (e.g. -10°C):", reply_markup=SKIP_KB)
         return ASK_SETPOINT
     await update.message.reply_text("Comments:", reply_markup=SKIP_KB)
@@ -342,7 +342,7 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif "location" not in report:
         report["location"] = "—"
         vtype = report.get("vehicle_type", "truck")
-        if vtype in ("trailer", "reefer"):
+        if vtype == "reefer":
             await query.edit_message_text("Setpoint temperature:", reply_markup=SKIP_KB)
             return ASK_SETPOINT
         report["comments"] = None
