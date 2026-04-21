@@ -251,8 +251,15 @@ class AlertHandler:
         lock = self._get_lock(alert_id)
         async with lock:
             if record["taken_by"] is not None:
-                return False
-            record["taken_by"] = (admin.id, name)
+                # This is a reassignment — previous agent loses the case
+                prev_agent_id = record["taken_by"][0] if record["taken_by"] else None
+                record["taken_by"] = (admin.id, name)
+                record["_prev_agent_id"] = prev_agent_id
+            else:
+                record["taken_by"] = (admin.id, name)
+                record["_prev_agent_id"] = None
+
+        prev_agent_id = record.pop("_prev_agent_id", None)
 
         for aid, mids in record["recipients"].items():
             for mid in mids:
@@ -268,11 +275,25 @@ class AlertHandler:
                 except TelegramError:
                     pass
 
+        # Reassign: update case owner — removes from old agent, appears for new agent
         assign_case(
             case_id=alert_id, agent_id=admin.id,
             agent_name=name, agent_username=admin.username,
         )
         self._persist()
+
+        # Notify previous agent their case was taken over
+        if prev_agent_id and prev_agent_id != admin.id:
+            try:
+                await ctx.bot.send_message(
+                    prev_agent_id,
+                    f"🔁 *Case taken over by {name}*\n\n"
+                    f"The case you reassigned has been accepted.\n"
+                    f"It has been removed from your active cases.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            except TelegramError:
+                pass
 
         from config import config as cfg
         from shifts import MAIN_ADMIN_ID
@@ -284,8 +305,9 @@ class AlertHandler:
             if created_at and created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=timezone.utc)
             secs = int((datetime.now(timezone.utc) - created_at).total_seconds()) if created_at else 0
+            action = "Reassigned" if prev_agent_id else "Assigned"
             report_text = (
-                f"✅ *Case Assigned*\n\n"
+                f"✅ *Case {action}*\n\n"
                 f"📌 *Group:* {record.get('group_name', '—')}\n"
                 f"👤 *Reported by:* {record.get('driver_name', '—')}\n"
                 f"🙋 *Handled by:* {name}\n"
@@ -336,9 +358,10 @@ class AlertHandler:
             return
 
         if action in ("assign", "assignrpt"):
-            if record["taken_by"] is not None:
+            # Block only if this exact agent already owns it
+            if record["taken_by"] is not None and record["taken_by"][0] == admin.id:
                 await query.edit_message_text(
-                    f"✅ Already assigned to {record['taken_by'][1]}.\nNo action needed.",
+                    "✅ You already have this case. Use /mycases to manage it.",
                     reply_markup=None,
                 )
                 return
@@ -377,21 +400,40 @@ class AlertHandler:
         admin = update.effective_user
         name  = f"{admin.first_name} {admin.last_name or ''}".strip()
 
+        # Find the alert_id from the case_id in the button that triggered this
+        case_id   = query.data.replace("reassign_", "")
+        alert_id  = case_id  # alert_id == case_id throughout this bot
+        record    = self._alerts.get(alert_id)
+
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text(
-            f"🔁 *{name}* marked this for reassignment. Escalating to all admins...",
+            f"🔁 *{name}* marked this for reassignment. Notifying other agents...",
             parse_mode=ParseMode.MARKDOWN,
         )
 
         original = query.message.caption or query.message.text or ""
+        dm_text  = (
+            f"🔁 *Reassign Request* — {name} needs someone to take over:\n\n"
+            f"{original[:300]}"
+        )
+
+        short_id = self._register_alert(alert_id)
+        kb       = self._make_kb(short_id)
+
         for a in get_all_admins():
             if a["id"] == admin.id:
                 continue
             try:
-                await ctx.bot.send_message(
-                    a["id"],
-                    f"🔁 *Escalation* — {name} needs someone to take over:\n\n{original}",
+                sent = await ctx.bot.send_message(
+                    a["id"], dm_text,
                     parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=kb,
                 )
+                # Track so assignment can clean up these messages too
+                if record is not None:
+                    record["recipients"].setdefault(a["id"], []).append(sent.message_id)
             except TelegramError:
                 pass
+
+        if record is not None:
+            self._persist()
