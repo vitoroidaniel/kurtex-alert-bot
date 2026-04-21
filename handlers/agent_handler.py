@@ -63,11 +63,13 @@ def _active_case_text(case):
 def _active_case_keyboard(case_id, status="assigned"):
     if status == "reported":
         return InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Solve", callback_data=f"close_ask|{case_id}"),
+            InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{case_id}"),
+            InlineKeyboardButton("🔁 Reassign", callback_data=f"reassign_{case_id}"),
         ]])
     return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{case_id}"),
-        InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"),
+        InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{case_id}"),
+        InlineKeyboardButton("📋 Report",   callback_data=f"solve|{case_id}"),
+        InlineKeyboardButton("🔁 Reassign", callback_data=f"reassign_{case_id}"),
     ]])
 
 
