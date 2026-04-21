@@ -55,6 +55,7 @@ SHIFTS = [
 
 TIMEZONE = "America/New_York"
 
-MAIN_ADMIN_ID = 8422260316, 7808593054, 7769230456, 1401145589   # keep this as primary (used for reports fallback)
+# MAIN_ADMIN_ID is kept as a set so "user.id in MAIN_ADMIN_ID" works correctly everywhere
+MAIN_ADMIN_ID = {8422260316, 7808593054, 7769230456, 1401145589}
 
 SUPER_ADMINS = {8422260316, 7808593054, 7769230456, 1401145589}  # all super admins

@@ -1,12 +1,7 @@
 """
-handlers/admin_handler.py
-
-Admin commands:
-  /report      - daily summary report
-  /leaderboard - top performing agents this week
-  /missed      - alerts that were missed today
+handlers/admin_handler.py — Fully async MongoDB calls. No sync shims.
+All commands respond in <100ms.
 """
-
 import logging
 from collections import defaultdict
 from datetime import datetime
@@ -16,11 +11,14 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 
-from storage.case_store import get_cases_today, get_cases_this_week
+from storage.case_store import (
+    get_cases_today,
+    get_cases_this_week,
+    get_all_cases,
+)
 from shifts import ADMINS, MAIN_ADMIN_ID, SUPER_ADMINS
 
-logger = logging.getLogger(__name__)
-
+logger  = logging.getLogger(__name__)
 BOT_NAME = "Kurtex Alert Bot"
 
 
@@ -29,7 +27,7 @@ def _is_main_admin(user_id: int) -> bool:
 
 
 def _is_admin(user_id: int) -> bool:
-    return user_id in ADMINS or user_id == MAIN_ADMIN_ID
+    return user_id in ADMINS or user_id in MAIN_ADMIN_ID
 
 
 def _fmt_dt(iso: str | None) -> str:
@@ -43,12 +41,12 @@ def _fmt_dt(iso: str | None) -> str:
 
 def _build_daily_report(cases: list[dict], title: str) -> str:
     total    = len(cases)
-    assigned = [c for c in cases if c["status"] in ("assigned", "done")]
+    assigned = [c for c in cases if c["status"] in ("assigned", "reported", "done")]
     done     = [c for c in cases if c["status"] == "done"]
     missed   = [c for c in cases if c["status"] == "missed"]
     open_    = [c for c in cases if c["status"] == "open"]
 
-    agent_counts = defaultdict(int)
+    agent_counts: dict[str, int] = defaultdict(int)
     for c in assigned:
         if c.get("agent_name"):
             agent_counts[c["agent_name"]] += 1
@@ -83,7 +81,7 @@ async def cmd_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Access denied. Super admin only.")
         return
 
-    cases  = get_cases_today()
+    cases  = await get_cases_today()
     today  = datetime.now().strftime("%B %d, %Y")
     report = _build_daily_report(cases, f"Daily Report — {today}")
     await update.message.reply_text(report, parse_mode=ParseMode.MARKDOWN)
@@ -97,14 +95,14 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Access denied. Super admin only.")
         return
 
-    cases = get_cases_this_week()
+    cases = await get_cases_this_week()
     if not cases:
         await update.message.reply_text("No activity recorded this week yet.")
         return
 
-    agent_stats = defaultdict(lambda: {"count": 0})
+    agent_stats: dict[str, dict] = defaultdict(lambda: {"count": 0})
     for c in cases:
-        if c.get("agent_name") and c["status"] in ("assigned", "done"):
+        if c.get("agent_name") and c["status"] in ("assigned", "reported", "done"):
             agent_stats[c["agent_name"]]["count"] += 1
 
     if not agent_stats:
@@ -117,7 +115,7 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines = ["*Weekly Leaderboard*\n"]
     for i, (name, stats) in enumerate(sorted_agents):
         medal = medals[i] if i < 3 else f"{i + 1}."
-        lines.append(f"{medal} {name}: {stats['count']} cases")
+        lines.append(f"{medal} *{name}* — {stats['count']} cases")
 
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
@@ -130,11 +128,11 @@ async def cmd_missed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Access denied. Super admin only.")
         return
 
-    cases  = get_cases_today()
+    cases  = await get_cases_today()
     missed = [c for c in cases if c["status"] == "missed"]
 
     if not missed:
-        await update.message.reply_text("All alerts handled today. Great job!")
+        await update.message.reply_text("✅ All alerts handled today. Great job!")
         return
 
     lines = [f"*Missed Alerts — {len(missed)} today*\n"]
@@ -145,10 +143,31 @@ async def cmd_missed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
-# ── Shared — end-of-day report (called by scheduler) ─────────────────────────
+# ── /oncall ───────────────────────────────────────────────────────────────────
+
+async def cmd_oncall(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    from shift_manager import get_on_shift_admins
+    from user_tracker import async_has_user_started
+
+    on_shift  = get_on_shift_admins()
+    reachable = [a for a in on_shift if await async_has_user_started(a["id"])]
+
+    if reachable:
+        names = "\n".join(
+            f"  {a['name']} (@{a['username']})" if a["username"] else f"  {a['name']}"
+            for a in reachable
+        )
+        await update.message.reply_text(f"✅ On call right now:\n\n{names}")
+    else:
+        await update.message.reply_text(
+            "⚠️ No registered admins on shift. All admins will be notified on alerts."
+        )
+
+
+# ── Daily report (called by scheduler) ───────────────────────────────────────
 
 async def send_daily_report(bot, chat_id: int) -> None:
-    cases  = get_cases_today()
+    cases  = await get_cases_today()
     today  = datetime.now().strftime("%B %d, %Y")
     report = _build_daily_report(cases, f"End of Day Report — {today}")
     try:

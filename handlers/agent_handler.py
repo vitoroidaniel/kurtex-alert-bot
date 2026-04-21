@@ -1,8 +1,5 @@
 """
 handlers/agent_handler.py
-
-/mycases      - active cases with Report + Close buttons
-/casehistory  - closed cases (paginated)
 """
 
 import asyncio
@@ -12,7 +9,7 @@ from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler, CallbackQueryHandler,
-    CommandHandler, MessageHandler, filters
+    CommandHandler, MessageHandler, filters,
 )
 from telegram.error import TelegramError
 
@@ -25,6 +22,12 @@ from storage.case_store import (
 )
 from shifts import ADMINS
 
+logger         = logging.getLogger(__name__)
+CASES_PER_PAGE = 5
+# State constants kept for ConversationHandler compat (no active states used)
+AWAITING_SOLUTION     = 1
+AWAITING_CLOSE_REASON = 2
+
 
 def _busy_agents(ctx) -> set:
     if "busy_agents" not in ctx.bot_data:
@@ -32,30 +35,25 @@ def _busy_agents(ctx) -> set:
     return ctx.bot_data["busy_agents"]
 
 
-logger = logging.getLogger(__name__)
-
-CASES_PER_PAGE    = 5
-AWAITING_SOLUTION = 1
+def _is_admin(user_id):
+    return user_id in ADMINS
 
 
 def _fmt_dt(iso):
     if not iso:
         return "—"
     try:
-        dt = datetime.fromisoformat(iso).astimezone()
-        return dt.strftime("%b %d %H:%M")
+        return datetime.fromisoformat(iso).astimezone().strftime("%b %d %H:%M")
     except Exception:
         return iso[:16]
 
 
-def _is_admin(user_id):
-    return user_id in ADMINS
-
-
 def _active_case_text(case):
-    badge = "📋 *Reported Case*" if case.get("status") == "reported" else "📋 *Active Case*"
+    badge    = "📋 *Reported Case*" if case.get("status") == "reported" else "📋 *Active Case*"
+    opened   = _fmt_dt(case.get("opened_at"))
     return (
         f"{badge}\n\n"
+        f"⏱ *Opened:* {opened}\n"
         f"📌 *Group:* {case['group_name']}\n"
         f"👤 *Reported by:* {case['driver_name']}\n"
         f"📝 *Issue:* {(case.get('description') or '—')[:200]}"
@@ -63,14 +61,13 @@ def _active_case_text(case):
 
 
 def _active_case_keyboard(case_id, status="assigned"):
-    if status == "reported":
-        return InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Solve", callback_data=f"close_ask|{case_id}"),
-        ]])
-    return InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{case_id}"),
-        InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"),
-    ]])
+    row = [
+        InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{case_id}"),
+        InlineKeyboardButton("🔁 Reassign", callback_data=f"reassign_{case_id}"),
+    ]
+    if status != "reported":
+        row.insert(1, InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"))
+    return InlineKeyboardMarkup([row])
 
 
 async def _delete_after(bot, chat_id, message_id, seconds):
@@ -89,19 +86,47 @@ async def cmd_mycases(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Not authorized.")
         return
 
-    all_cases   = get_all_cases_for_agent(user.id)
+    all_cases   = await get_all_cases_for_agent(user.id)
     active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
 
     if not active_only:
-        await update.message.reply_text("No active cases. You are free!")
+        await update.message.reply_text("No active cases. You are free! ✅")
         return
 
     for case in active_only:
         await update.message.reply_text(
             _active_case_text(case),
             parse_mode="Markdown",
-            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
         )
+
+
+# ── /mystats ──────────────────────────────────────────────────────────────────
+
+async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not _is_admin(user.id):
+        await update.message.reply_text("Not authorized.")
+        return
+
+    from datetime import timezone, timedelta
+    now       = datetime.now(timezone.utc)
+    today_str = now.date().isoformat()
+    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
+
+    all_cases  = await get_all_cases_for_agent(user.id)
+    today      = [c for c in all_cases if (c.get("assigned_at") or "").startswith(today_str)]
+    this_week  = [c for c in all_cases if (c.get("assigned_at") or "") >= week_start]
+    done_all   = [c for c in all_cases if c["status"] == "done"]
+    done_week  = [c for c in this_week if c["status"] == "done"]
+
+    text = (
+        f"📊 *Your Stats*\n\n"
+        f"Today:      {len(today)} assigned  |  {len([c for c in today if c['status']=='done'])} closed\n"
+        f"This week:  {len(this_week)} assigned  |  {len(done_week)} closed\n"
+        f"All time:   {len(all_cases)} total  |  {len(done_all)} closed"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 # ── /casehistory ──────────────────────────────────────────────────────────────
@@ -112,7 +137,7 @@ async def cmd_casehistory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Not authorized.")
         return
 
-    all_cases   = list(reversed(get_all_cases_for_agent(user.id)))
+    all_cases   = await get_all_cases_for_agent(user.id)
     closed_only = [c for c in all_cases if c["status"] == "done"]
 
     if not closed_only:
@@ -125,7 +150,7 @@ async def cmd_casehistory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
     if cases is None:
-        all_cases = list(reversed(get_all_cases_for_agent(agent_id)))
+        all_cases = await get_all_cases_for_agent(agent_id)
         cases     = [c for c in all_cases if c["status"] == "done"]
 
     total        = len(cases)
@@ -133,13 +158,12 @@ async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
     end          = min(start + CASES_PER_PAGE, total)
     batch        = cases[start:end]
     is_last_page = end >= total
-    chat_id      = agent_id
 
     async def _send(text, reply_markup=None):
         if hasattr(target, "reply_text"):
             sent = await target.reply_text(text, reply_markup=reply_markup)
         else:
-            sent = await target.get_bot().send_message(chat_id, text, reply_markup=reply_markup)
+            sent = await target.get_bot().send_message(agent_id, text, reply_markup=reply_markup)
         if ctx and "history_msg_ids" in ctx.user_data:
             ctx.user_data["history_msg_ids"].append(sent.message_id)
         return sent
@@ -157,9 +181,9 @@ async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
         nav = []
         if i == len(batch) - 1:
             if page > 0:
-                nav.append(InlineKeyboardButton("Prev", callback_data=f"histpage|{page - 1}"))
+                nav.append(InlineKeyboardButton("← Prev", callback_data=f"histpage|{page - 1}"))
             if end < total:
-                nav.append(InlineKeyboardButton("Next", callback_data=f"histpage|{page + 1}"))
+                nav.append(InlineKeyboardButton("Next →", callback_data=f"histpage|{page + 1}"))
         kb = InlineKeyboardMarkup([nav]) if nav else None
         await _send(text, reply_markup=kb)
 
@@ -167,7 +191,7 @@ async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
     footer      = f"Page {page + 1} of {total_pages}  ({total} closed)"
     if is_last_page:
         delete_kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🗑 Delete history from chat", callback_data="hist_delete_chat")
+            InlineKeyboardButton("🗑 Clear from chat", callback_data="hist_delete_chat"),
         ]])
         await _send(footer, reply_markup=delete_kb)
     else:
@@ -179,7 +203,7 @@ async def cb_histpage(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     page     = int(query.data.split("|")[1])
     agent_id = query.from_user.id
-    all_cases   = list(reversed(get_all_cases_for_agent(agent_id)))
+    all_cases   = await get_all_cases_for_agent(agent_id)
     closed_only = [c for c in all_cases if c["status"] == "done"]
     if "history_msg_ids" not in ctx.user_data:
         ctx.user_data["history_msg_ids"] = []
@@ -199,33 +223,29 @@ async def cb_hist_delete_chat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             pass
 
 
-# ── Solve (Report) flow — starts report conversation ─────────────────────────
+# ── Solve (close with note) ───────────────────────────────────────────────────
 
 async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query   = update.callback_query
     await query.answer()
     case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
+    case    = await get_case(case_id)
 
     if not case or case["status"] not in ("assigned", "reported"):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
-    # Block if already solving another case
     existing = ctx.user_data.get("solving_case_id")
     if existing and existing != case_id:
-        existing_case = get_case(existing)
+        existing_case = await get_case(existing)
         if existing_case and existing_case["status"] in ("assigned", "reported"):
-            await query.answer(
-                "Finish your current case first before opening another.",
-                show_alert=True
-            )
+            await query.answer("Finish your current case first.", show_alert=True)
             return ConversationHandler.END
 
     ctx.user_data.pop("pending_solution", None)
     ctx.user_data["solving_case_id"] = case_id
 
-    user = update.effective_user
+    user         = update.effective_user
     handler_name = f"{user.first_name} {user.last_name or ''}".strip()
     ctx.user_data["report_case_id"] = case_id
     ctx.user_data["report_handler"] = handler_name
@@ -239,102 +259,146 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
-            InlineKeyboardButton("🚜 Trailer", callback_data="rpt_type|trailer"),
+            InlineKeyboardButton("🚚 Trailer", callback_data="rpt_type|trailer"),
             InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
-        ]])
+        ]]),
     )
     return ConversationHandler.END
 
 
-# ── Close flow — NO reason required, popup confirmation ──────────────────────
+async def cb_solve_receive_solution(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    # Legacy fallback — should not be reached in normal flow
+    await update.message.reply_text("Use /mycases to manage your cases.")
+    return ConversationHandler.END
+
+
+# stubs kept so bot.py callback registrations don't break
+async def cb_solve_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Use /mycases to manage your cases.", reply_markup=None)
+
+
+async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query   = update.callback_query
+    await query.answer()
+    ctx.user_data.pop("solving_case_id", None)
+    case_id = query.data.split("|")[1]
+    case    = await get_case(case_id)
+    if case and case["status"] in ("assigned", "reported"):
+        await query.edit_message_text(
+            _active_case_text(case), parse_mode="Markdown",
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
+        )
+    else:
+        await query.edit_message_text("Case not found.", reply_markup=None)
+
+
+async def cmd_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.pop("solving_case_id", None)
+    ctx.user_data.pop("report_case_id", None)
+    ctx.user_data.pop("report_handler", None)
+    _busy_agents(ctx).discard(update.effective_user.id)
+    await update.message.reply_text("Cancelled. Use /mycases to see your cases.")
+    return ConversationHandler.END
+
+
+# ── Close — show details + buttons, no text input ────────────────────────────
 
 async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Show inline confirm/cancel buttons directly on the case message — no text input needed."""
+    """Tap ✅ Solve → shows case details with Close / Cancel buttons. No note required."""
     query   = update.callback_query
+    await query.answer()
     case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
+    case    = await get_case(case_id)
 
     if not case or case["status"] not in ("assigned", "reported"):
-        await query.answer("This case is no longer active.", show_alert=True)
-        await query.edit_message_reply_markup(reply_markup=None)
+        await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
-    # Popup confirmation — shows as an alert dialog on the phone
-    await query.answer()
-
-    # Replace buttons on THIS message only with Confirm / Cancel
-    await query.edit_message_reply_markup(
+    await query.edit_message_text(
+        f"📋 *Close Case*\n\n"
+        f"📌 *Group:* {case['group_name']}\n"
+        f"👤 *Driver:* {case['driver_name']}\n"
+        f"📝 *Issue:* {(case.get('description') or '—')[:200]}",
+        parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Yes, close", callback_data=f"close_confirm|{case_id}"),
-            InlineKeyboardButton("❌ Cancel",     callback_data=f"close_cancel|{case_id}"),
-        ]])
+            InlineKeyboardButton("✅ Close",  callback_data=f"close_confirm|{case_id}"),
+            InlineKeyboardButton("❌ Cancel", callback_data=f"close_cancel|{case_id}"),
+        ]]),
     )
+    return ConversationHandler.END
+
+
+async def cb_close_receive_reason(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    # Not used — kept so ConversationHandler doesn't error
+    await update.message.reply_text("Use /mycases to manage your cases.")
     return ConversationHandler.END
 
 
 async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query   = update.callback_query
-    await query.answer("✅ Case closed!", show_alert=True)   # popup on phone
-    case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
-
-    if not case or case["status"] not in ("assigned", "reported"):
-        await query.edit_message_text("Case is no longer active.", reply_markup=None)
-        return
-
-    close_case(case_id, notes="Closed by agent")
-    case = get_case(case_id)
-
-    # Edit THIS message to show closed state, then delete after a few seconds
-    await query.edit_message_text(
-        f"✅ *Case closed!*\n\n"
-        f"Group: {case['group_name'] if case else '—'}\n"
-        f"Reported by: {case['driver_name'] if case else '—'}",
-        parse_mode="Markdown",
-        reply_markup=None
-    )
-    asyncio.create_task(
-        _delete_after(query.bot, query.message.chat_id, query.message.message_id, 5)
-    )
-
-    # After deletion, refresh remaining active cases — send new messages for each
-    async def _show_remaining():
-        await asyncio.sleep(5)
-        agent_id    = update.effective_user.id
-        all_cases   = get_all_cases_for_agent(agent_id)
-        active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
-        if active_only:
-            for c in active_only:
-                try:
-                    await query.bot.send_message(
-                        agent_id, _active_case_text(c),
-                        parse_mode="Markdown",
-                        reply_markup=_active_case_keyboard(c["id"], c.get("status", "assigned"))
-                    )
-                except TelegramError:
-                    pass
-        else:
-            try:
-                await query.bot.send_message(agent_id, "✅ No more active cases. You are free!")
-            except TelegramError:
-                pass
-
-    asyncio.create_task(_show_remaining())
-
-
-async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Restore original buttons on the case message."""
+    """Tap ✅ Close → closes instantly, no note, no confirmation."""
     query   = update.callback_query
     await query.answer()
     case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
+    case    = await get_case(case_id)
 
+    if not case or case["status"] not in ("assigned", "reported"):
+        await query.edit_message_text("This case is no longer active.", reply_markup=None)
+        return
+
+    await close_case(case_id, notes=None)
+    await query.edit_message_text(
+        f"✅ *Case closed!*\n\n"
+        f"Group: {case['group_name']}\n"
+        f"Driver: {case['driver_name']}",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+    asyncio.create_task(_show_remaining_after(update.effective_user.id, 0))
+
+
+async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query   = update.callback_query
+    await query.answer()
+    ctx.user_data.pop("solving_case_id", None)
+    case_id = query.data.split("|")[1]
+    case    = await get_case(case_id)
     if case and case["status"] in ("assigned", "reported"):
-        await query.edit_message_reply_markup(
-            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
+        await query.edit_message_text(
+            _active_case_text(case), parse_mode="Markdown",
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
         )
     else:
         await query.edit_message_text("Case not found.", reply_markup=None)
+
+
+_bot_ref = None  # set in bot.py after app.build()
+
+
+async def _show_remaining_after(agent_id: int, delay: int = 0):
+    if delay:
+        await asyncio.sleep(delay)
+    bot = _bot_ref
+    if not bot:
+        return
+    all_cases   = await get_all_cases_for_agent(agent_id)
+    active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
+    if active_only:
+        for c in active_only:
+            try:
+                await bot.send_message(
+                    agent_id, _active_case_text(c),
+                    parse_mode="Markdown",
+                    reply_markup=_active_case_keyboard(c["id"], c.get("status", "assigned")),
+                )
+            except TelegramError:
+                pass
+    else:
+        try:
+            await bot.send_message(agent_id, "✅ No more active cases. You are free!")
+        except TelegramError:
+            pass
 
 
 # ── /done ─────────────────────────────────────────────────────────────────────
@@ -345,7 +409,7 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Not authorized.")
         return
 
-    today_cases  = get_cases_for_agent_today(user.id)
+    today_cases  = await get_cases_for_agent_today(user.id)
     closed_today = [c for c in today_cases if c["status"] == "done"]
 
     if not closed_today:
@@ -367,134 +431,27 @@ async def cb_done_pick(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query   = update.callback_query
     await query.answer()
     case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
+    case    = await get_case(case_id)
 
     if not case:
         await query.edit_message_text("Case not found.", reply_markup=None)
         return ConversationHandler.END
 
-    ctx.user_data["solving_case_id"] = case_id
     await query.edit_message_text(
-        f"Closing case:\n\n"
-        f"Group: {case['group_name']}\n"
-        f"Reported by: {case['driver_name']}\n\n"
-        "Type your solution (or /cancel to go back):",
-        reply_markup=None
-    )
-    return AWAITING_SOLUTION
-
-
-async def cb_solve_receive_solution(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    solution = update.message.text.strip()
-
-    if not solution or len(solution) < 3:
-        await update.message.reply_text(
-            "⚠️ A resolution note is required.\n\nPlease describe what was done:"
-        )
-        return AWAITING_SOLUTION
-
-    case_id = ctx.user_data.get("solving_case_id")
-    case    = get_case(case_id) if case_id else None
-
-    if not case:
-        await update.message.reply_text("Something went wrong. Try /mycases again.")
-        ctx.user_data.pop("solving_case_id", None)
-        return ConversationHandler.END
-
-    ctx.user_data["pending_solution"] = solution
-
-    await update.message.reply_text(
-        f"Confirm closing this case?\n\n"
-        f"Group: {case['group_name']}\n"
-        f"Reported by: {case['driver_name']}\n"
-        f"Note: {solution}",
+        f"📋 *Close Case*\n\n"
+        f"📌 *Group:* {case['group_name']}\n"
+        f"👤 *Driver:* {case['driver_name']}\n"
+        f"📝 *Issue:* {(case.get('description') or '—')[:200]}",
+        parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Yes, close it", callback_data=f"solve_confirm|{case_id}"),
-            InlineKeyboardButton("❌ Cancel",        callback_data=f"solve_cancel|{case_id}"),
-        ]])
+            InlineKeyboardButton("✅ Close",  callback_data=f"close_confirm|{case_id}"),
+            InlineKeyboardButton("❌ Cancel", callback_data=f"close_cancel|{case_id}"),
+        ]]),
     )
     return ConversationHandler.END
 
 
-async def cb_solve_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query    = update.callback_query
-    await query.answer()
-    case_id  = query.data.split("|")[1]
-    solution = ctx.user_data.pop("pending_solution", None)
-    ctx.user_data.pop("solving_case_id", None)
-
-    if not solution:
-        await query.edit_message_text(
-            "⚠️ No resolution note found. Use /mycases and try again.",
-            reply_markup=None
-        )
-        return
-
-    close_case(case_id, notes=solution)
-    case = get_case(case_id)
-
-    await query.edit_message_text(
-        f"✅ Case closed!\n\n"
-        f"Group: {case['group_name'] if case else '—'}\n"
-        f"Reported by: {case['driver_name'] if case else '—'}\n"
-        f"Note: {solution}",
-        reply_markup=None
-    )
-    asyncio.create_task(_delete_after(query.bot, query.message.chat_id, query.message.message_id, 6))
-
-    async def _show_remaining():
-        await asyncio.sleep(6)
-        agent_id    = update.effective_user.id
-        all_cases   = get_all_cases_for_agent(agent_id)
-        active_only = [c for c in all_cases if c["status"] in ("assigned", "reported")]
-        if active_only:
-            for c in active_only:
-                try:
-                    await query.bot.send_message(
-                        agent_id, _active_case_text(c),
-                        parse_mode="Markdown",
-                        reply_markup=_active_case_keyboard(c["id"], c.get("status", "assigned"))
-                    )
-                except TelegramError:
-                    pass
-        else:
-            try:
-                await query.bot.send_message(agent_id, "✅ No more active cases. You are free!")
-            except TelegramError:
-                pass
-
-    asyncio.create_task(_show_remaining())
-
-
-async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query   = update.callback_query
-    await query.answer()
-    ctx.user_data.pop("pending_solution", None)
-    ctx.user_data.pop("solving_case_id", None)
-    case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
-
-    if case and case["status"] in ("assigned", "reported"):
-        await query.edit_message_text(
-            _active_case_text(case),
-            parse_mode="Markdown",
-            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
-        )
-    else:
-        await query.edit_message_text("Case not found.", reply_markup=None)
-
-
-async def cmd_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data.pop("solving_case_id", None)
-    ctx.user_data.pop("pending_solution", None)
-    ctx.user_data.pop("report_case_id", None)
-    ctx.user_data.pop("report_handler", None)
-    _busy_agents(ctx).discard(update.effective_user.id)
-    await update.message.reply_text("Cancelled. Use /mycases to see your cases.")
-    return ConversationHandler.END
-
-
-# ── Backward compat stubs ─────────────────────────────────────────────────────
+# ── Backward-compat stubs ─────────────────────────────────────────────────────
 
 async def cb_delete_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -513,10 +470,11 @@ async def cb_delete_keep(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query   = update.callback_query
     await query.answer()
     case_id = query.data.split("|")[1]
-    case    = get_case(case_id)
+    case    = await get_case(case_id)
     if case and case["status"] in ("assigned", "reported"):
-        await query.edit_message_reply_markup(
-            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned"))
+        await query.edit_message_text(
+            _active_case_text(case), parse_mode="Markdown",
+            reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
         )
     else:
         await query.edit_message_text("Case not found.", reply_markup=None)
@@ -527,14 +485,10 @@ async def cb_delete_keep(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 def get_solve_conversation():
     return ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(cb_done_pick,   pattern=r'^done_pick\|'),
-            CallbackQueryHandler(cb_close_ask,   pattern=r'^close_ask\|'),
+            CallbackQueryHandler(cb_done_pick, pattern=r'^done_pick\|'),
+            CallbackQueryHandler(cb_close_ask, pattern=r'^close_ask\|'),
         ],
-        states={
-            AWAITING_SOLUTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, cb_solve_receive_solution)
-            ],
-        },
+        states={},
         fallbacks=[CommandHandler("cancel", cmd_solve_cancel)],
         per_message=False,
         allow_reentry=True,

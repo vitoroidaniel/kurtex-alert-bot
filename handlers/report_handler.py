@@ -37,14 +37,11 @@ logger = logging.getLogger(__name__)
 
 SKIP_KB = InlineKeyboardMarkup([[InlineKeyboardButton("Skip", callback_data="rpt_skip")]])
 
-LOAD_TYPE_KB = InlineKeyboardMarkup([
-    [
-        InlineKeyboardButton("JBS Load",    callback_data="rpt_loadtype|jbs"),
-        InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
-        InlineKeyboardButton("Empty",       callback_data="rpt_loadtype|empty"),
-    ],
-    [InlineKeyboardButton("Skip",           callback_data="rpt_skip")],
-])
+LOAD_TYPE_KB = InlineKeyboardMarkup([[
+    InlineKeyboardButton("JBS Load",    callback_data="rpt_loadtype|jbs"),
+    InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
+    InlineKeyboardButton("Empty",       callback_data="rpt_loadtype|empty"),
+]])
 
 VTYPE_LABELS = {
     "truck":   "Truck",
@@ -98,15 +95,12 @@ def _build_report(d: dict) -> str:
     priority_key = d.get("priority", "low")
     p            = PRIORITY_META.get(priority_key, PRIORITY_META["low"])
     unit         = d.get("unit_number", "")
+    load         = d.get("load", "")
 
     if vtype == "truck":
         unit_line = f"*Truck:* {_esc(unit)}" if unit else "*Truck:* —"
     else:
         unit_line = f"*Trailer:* {_esc(unit)}" if unit else "*Trailer:* —"
-
-    load_val  = d.get("load", "—")
-    is_empty  = (load_val or "").strip().lower() == "empty"
-    load_label = load_val if load_val and load_val != "—" else "—"
 
     lines = [
         f"{p['icon']} *Case Report — {VTYPE_LABELS.get(vtype, vtype.title())}*",
@@ -117,16 +111,18 @@ def _build_report(d: dict) -> str:
         "",
         f"*Issue:* {_esc(d.get('issue', '—'))}",
         "",
-        f"*Load:* {_esc(load_label)}",
     ]
 
-    if not is_empty:
-        lines += [
-            f"*Pick up Location/Time:* {_esc(d.get('pickup', '—'))}",
-            f"*Delivery Location/Time:* {_esc(d.get('delivery', '—'))}",
-        ]
-
-    lines.append(f"*Current Location:* {_esc(d.get('location', '—'))}")
+    # Load label — just "JBS Load" or "Broker Load" or "Empty", no colon, no "Load:" prefix
+    # Empty only shows Current Location
+    if load and load != "—":
+        lines.append(f"*{_esc(load)}*")
+        if load.lower() != "empty":
+            lines.append(f"Pick up Location/Time: {_esc(d.get('pickup', '—'))}")
+            lines.append(f"Delivery Location/Time: {_esc(d.get('delivery', '—'))}")
+        lines.append(f"Current Location: {_esc(d.get('location', '—'))}")
+    else:
+        lines.append(f"Current Location: {_esc(d.get('location', '—'))}")
 
     if vtype == "reefer":
         lines += [
@@ -229,26 +225,25 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     ltype = query.data.split("|")[1]
-    if ltype == "jbs":
-        label = "JBS Load"
-    elif ltype == "broker":
-        label = "Broker Load"
-    else:
-        label = "Empty"
+    label_map = {"jbs": "JBS Load", "broker": "Broker Load", "empty": "Empty"}
+    label = label_map.get(ltype, ltype.title())
     ctx.user_data["report"]["load"] = label
-    if label == "Empty":
-        ctx.user_data["report"]["pickup"] = "—"
+
+    if ltype == "empty":
+        # Empty — no PU or Delivery, jump straight to current location
+        ctx.user_data["report"]["pickup"]   = "—"
         ctx.user_data["report"]["delivery"] = "—"
         await query.edit_message_text(
-            f"Load: *{label}*\n\nCurrent Location:",
+            f"*{label}*\n\nCurrent Location:",
             parse_mode=ParseMode.MARKDOWN, reply_markup=SKIP_KB
         )
         return ASK_LOCATION
-    await query.edit_message_text(
-        f"Load: *{label}*\n\nPick up Location / Time:",
-        parse_mode=ParseMode.MARKDOWN, reply_markup=SKIP_KB
-    )
-    return ASK_PICKUP
+    else:
+        await query.edit_message_text(
+            f"*{label}*\n\nPick up Location / Time:",
+            parse_mode=ParseMode.MARKDOWN, reply_markup=SKIP_KB
+        )
+        return ASK_PICKUP
 
 
 async def recv_load(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -275,6 +270,7 @@ async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if vtype == "reefer":
         await update.message.reply_text("Setpoint temperature (e.g. -10°C):", reply_markup=SKIP_KB)
         return ASK_SETPOINT
+    # truck/trailer — skip straight to comments, no temp questions
     await update.message.reply_text("Comments:", reply_markup=SKIP_KB)
     return ASK_COMMENTS
 
@@ -352,18 +348,11 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query  = update.callback_query
     await query.answer()
     report = ctx.user_data.get("report", {})
+    vtype  = report.get("vehicle_type", "truck")
 
-    if "load" not in report:
-        report["load"] = "—"
-        await query.edit_message_text("Pick up Location / Time:", reply_markup=SKIP_KB)
-        return ASK_PICKUP
-    elif "pickup" not in report:
+    # Step order: pickup → delivery → location → (reefer only: setpoint → current_temp → temp_recorder) → comments → media
+    if "pickup" not in report:
         report["pickup"] = "—"
-        # If Empty load, also skip delivery
-        if (report.get("load") or "").strip().lower() == "empty":
-            report["delivery"] = "—"
-            await query.edit_message_text("Current Location:", reply_markup=SKIP_KB)
-            return ASK_LOCATION
         await query.edit_message_text("Delivery Location / Time:", reply_markup=SKIP_KB)
         return ASK_DELIVERY
     elif "delivery" not in report:
@@ -372,38 +361,17 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return ASK_LOCATION
     elif "location" not in report:
         report["location"] = "—"
-        vtype = report.get("vehicle_type", "truck")
         if vtype == "reefer":
             await query.edit_message_text("Setpoint temperature:", reply_markup=SKIP_KB)
             return ASK_SETPOINT
-        report["comments"] = None
-        await query.edit_message_text(
-            "Send photo(s) or video(s), or press Done:",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done (no media)", callback_data="rpt_mediadone")]])
-        )
-        return ASK_MEDIA
-    elif "setpoint" not in report:
-        vtype = report.get("vehicle_type", "truck")
-        if vtype != "reefer":
-            # Truck/Trailer never ask for temperature — jump to comments
-            report["comments"] = None
-            await query.edit_message_text(
-                "Send photo(s) or video(s), or press Done:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done (no media)", callback_data="rpt_mediadone")]])
-            )
-            return ASK_MEDIA
+        # truck / trailer — straight to comments, never ask temp
+        await query.edit_message_text("Comments:", reply_markup=SKIP_KB)
+        return ASK_COMMENTS
+    elif vtype == "reefer" and "setpoint" not in report:
         report["setpoint"] = "—"
         await query.edit_message_text("Current temperature:", reply_markup=SKIP_KB)
         return ASK_CURRENT_TEMP
-    elif "current_temp" not in report:
-        vtype = report.get("vehicle_type", "truck")
-        if vtype != "reefer":
-            report["comments"] = None
-            await query.edit_message_text(
-                "Send photo(s) or video(s), or press Done:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done (no media)", callback_data="rpt_mediadone")]])
-            )
-            return ASK_MEDIA
+    elif vtype == "reefer" and "current_temp" not in report:
         report["current_temp"] = "—"
         await query.edit_message_text(
             "Temp recorder: Y or N?",
@@ -590,6 +558,13 @@ async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "current_temp": "Enter new current temperature:", "temp_recorder": "Temp recorder: Y or N?",
         "comments": "Enter new comments:", "priority": "Select new priority:",
     }
+    if field == "load":
+        await query.edit_message_text("Select load type:", reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("JBS Load",    callback_data="rpt_editval|JBS Load"),
+            InlineKeyboardButton("Broker Load", callback_data="rpt_editval|Broker Load"),
+            InlineKeyboardButton("Empty",       callback_data="rpt_editval|Empty"),
+        ]]))
+        return ASK_EDIT_VALUE
     if field == "temp_recorder":
         await query.edit_message_text(prompts[field], reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton("Y", callback_data="rpt_editval|Y"),
