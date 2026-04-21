@@ -6,18 +6,16 @@ All times are US Eastern Time (ET).
 from datetime import time
 
 ADMINS = {
-    1401145589: {"name": "Ionut",   "username": "ionut_ci0banu"},
     1128711004: {"name": "Victor",  "username": "vmitrea"},
     503960467:  {"name": "Max",     "username": "ZavalniiMaxim"},
     1095527903: {"name": "Daniel",  "username": "Storm33S"},
-    790341145:  {"name": "Sasa AH", "username": "Sasha5639"},
     1373070156: {"name": "Anton",   "username": "AntonOgl"},
     8422260316: {"name": "Alex",    "username": "alexrepairs"},
     7769230456: {"name": "Andrei",  "username": "Andrei_Cr05"},
     7808593054: {"name": "Petru",   "username": "Petru S"},
     6054170642: {"name": "Ion",   "username": "Ion AH"},
     8755804962: {"name": "Andrei",   "username": "Andrei"},
-    6855707802: {"name": "Mihai AH",   "username": "Mihai AH"},
+    6855707802: {"name": "Mihai AH",   "username": "maintenancetag"},
 }
 
 ALL_IDS = list(ADMINS.keys())
