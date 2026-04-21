@@ -227,6 +227,9 @@ def load_active_alerts() -> dict:
 # ── async shims (called with await in some handlers) ─────────────────────────
 # These are thin wrappers so handlers that use `await` still work fine.
 
+async def async_get_active_case_for_agent(agent_id):
+    return get_active_case_for_agent(agent_id)
+
 async def async_create_case(case_id, driver_name, driver_username, group_name, description):
     return create_case(case_id, driver_name, driver_username, group_name, description)
 
