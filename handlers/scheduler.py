@@ -36,11 +36,11 @@ async def job_escalation_check(ctx) -> None:
     if not alert_handler:
         return
 
-    now       = datetime.now(timezone.utc)
-    cutoff    = timedelta(minutes=ESCALATION_MINUTES)
-    to_remove = []
+    now    = datetime.now(timezone.utc)
+    cutoff = timedelta(minutes=ESCALATION_MINUTES)
 
     for alert_id, record in list(alert_handler._alerts.items()):
+        # Skip already-assigned alerts
         if record.get("taken_by"):
             continue
 
@@ -60,27 +60,35 @@ async def job_escalation_check(ctx) -> None:
         description = record.get("text", "")
         age_str     = f"{int(age.total_seconds() // 60)}m"
 
+        # Re-register short_id in case it aged out of the map
+        short_id = alert_handler._register_alert(alert_id)
+        kb       = alert_handler._make_kb(short_id)
+
         msg = (
-            f"\U0001f514 *Unassigned Alert — {age_str} old*\n\n"
+            f"\U0001f6a8 *REMINDER — Unassigned Alert ({age_str} old)*\n\n"
             f"\U0001f4cc *Group:* {group_name}\n"
             f"\U0001f464 *Driver:* {driver_name}\n"
             f"\U0001f4dd {description[:200]}\n\n"
-            "No one has taken this yet. Please respond!"
+            "\u26a0\ufe0f Nobody has accepted this yet. Please take it now!"
         )
 
         all_admins = get_all_admins()
         for admin in all_admins:
             try:
-                await ctx.bot.send_message(admin["id"], msg, parse_mode="Markdown")
+                sent = await ctx.bot.send_message(
+                    admin["id"], msg,
+                    parse_mode="Markdown",
+                    reply_markup=kb,
+                )
+                # Track new reminder message so it can be cleaned up on assignment
+                record["recipients"].setdefault(admin["id"], []).append(sent.message_id)
             except Exception as e:
                 logger.warning(f"Escalation DM failed for {admin['id']}: {e}")
 
+        # Mark missed in DB for stats, but DO NOT remove from _alerts —
+        # the alert stays alive until someone actually accepts it.
         mark_missed(alert_id)
-        to_remove.append(alert_id)
-        logger.info(f"Alert {alert_id} escalated and marked missed after {age_str}")
-
-    for alert_id in to_remove:
-        alert_handler._alerts.pop(alert_id, None)
+        logger.info(f"Alert {alert_id} reminder sent after {age_str} (still unassigned)")
 
 
 def register_jobs(app: Application) -> None:

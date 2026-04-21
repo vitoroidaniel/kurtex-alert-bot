@@ -334,7 +334,7 @@ class AlertHandler:
         alert_id, record = self._resolve(short_id)
 
         if not record:
-            await query.edit_message_text("⚠️ This alert is no longer active (already assigned or cancelled).", reply_markup=None)
+            await query.edit_message_text("⚠️ Alert expired.", reply_markup=None)
             return
 
         if action == "ignore":
