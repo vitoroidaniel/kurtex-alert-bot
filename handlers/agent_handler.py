@@ -14,11 +14,11 @@ from telegram.ext import (
 from telegram.error import TelegramError
 
 from storage.case_store import (
-    get_active_case_for_agent,
-    get_cases_for_agent_today,
-    get_all_cases_for_agent,
-    close_case,
-    get_case,
+    async_get_active_case_for_agent  as get_active_case_for_agent,
+    async_get_cases_for_agent_today  as get_cases_for_agent_today,
+    async_get_all_cases_for_agent    as get_all_cases_for_agent,
+    async_close_case                 as close_case,
+    async_get_case                   as get_case,
 )
 from shifts import ADMINS
 
@@ -61,13 +61,14 @@ def _active_case_text(case):
 
 
 def _active_case_keyboard(case_id, status="assigned"):
-    row = [
-        InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{case_id}"),
-        InlineKeyboardButton("🔁 Reassign", callback_data=f"reassign_{case_id}"),
-    ]
-    if status != "reported":
-        row.insert(1, InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"))
-    return InlineKeyboardMarkup([row])
+    if status == "reported":
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Solve", callback_data=f"close_ask|{case_id}"),
+        ]])
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{case_id}"),
+        InlineKeyboardButton("📋 Report", callback_data=f"solve|{case_id}"),
+    ]])
 
 
 async def _delete_after(bot, chat_id, message_id, seconds):

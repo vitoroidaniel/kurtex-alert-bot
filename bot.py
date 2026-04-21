@@ -27,7 +27,7 @@ from handlers.agent_handler import (
     cb_histpage, cb_hist_delete_chat, get_solve_conversation,
 )
 from handlers.admin_handler import (
-    cmd_report, cmd_leaderboard, cmd_missed, cmd_oncall, _is_main_admin,
+    cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin,
 )
 from handlers.scheduler import register_jobs
 from user_tracker import async_has_user_started, async_mark_user_started
@@ -90,7 +90,6 @@ async def post_init(application: Application) -> None:
     base_commands = [
         ("start",       "Register with Kurtex Alert Bot"),
         ("shifts",      "Current shift roster"),
-        ("oncall",      "Who is reachable right now"),
         ("mycases",     "Your active cases"),
         ("done",        "Today's closed cases"),
         ("casehistory", "Full closed case history"),
@@ -142,22 +141,15 @@ async def cmd_shifts(update: Update, ctx):
 
     if not on_shift:
         await update.message.reply_text(
-            f"*Shift: {shift_name}*\n\nNo agents scheduled.", parse_mode="Markdown"
+            f"Shift: {shift_name}\n\nNo agents scheduled. All admins will be notified."
         )
         return
 
-    lines = []
-    for a in on_shift:
-        started = await async_has_user_started(a["id"])
-        tag     = "🟢" if started else "🔴"
-        uname   = f" (@{a['username']})" if a["username"] else ""
-        lines.append(f"  {tag} {a['name']}{uname}")
-
-    await update.message.reply_text(
-        f"*Shift: {shift_name}*\n\n" + "\n".join(lines) +
-        "\n\n_🟢 registered  🔴 not started bot_",
-        parse_mode="Markdown",
+    names = "\n".join(
+        f"  {a['name']} (@{a['username']})" if a["username"] else f"  {a['name']}"
+        for a in on_shift
     )
+    await update.message.reply_text(f"Shift: {shift_name}\n\nOn duty:\n{names}")
 
 
 @with_typing
@@ -176,7 +168,6 @@ async def cmd_help(update: Update, ctx):
         "/done — Today's closed cases\n"
         "/casehistory — Full history\n"
         "/mystats — Your stats\n"
-        "/oncall — Who is reachable now\n"
         "/shifts — Shift roster\n"
     )
     if is_super:
@@ -249,7 +240,6 @@ def main():
     private = filters.ChatType.PRIVATE
     app.add_handler(CommandHandler("start",       cmd_start,       filters=private))
     app.add_handler(CommandHandler("shifts",      cmd_shifts,      filters=private))
-    app.add_handler(CommandHandler("oncall",      cmd_oncall,      filters=private))
     app.add_handler(CommandHandler("help",        cmd_help,        filters=private))
     app.add_handler(CommandHandler("done",        cmd_done,        filters=private))
     app.add_handler(CommandHandler("mycases",     cmd_mycases,     filters=private))

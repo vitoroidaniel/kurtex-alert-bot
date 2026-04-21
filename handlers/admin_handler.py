@@ -12,8 +12,8 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 
 from storage.case_store import (
-    get_cases_today,
-    get_cases_this_week,
+    async_get_cases_today     as get_cases_today,
+    async_get_cases_this_week as get_cases_this_week,
     get_all_cases,
 )
 from shifts import ADMINS, MAIN_ADMIN_ID, SUPER_ADMINS
@@ -141,27 +141,6 @@ async def cmd_missed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append(f"   {c['group_name']}")
 
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
-
-
-# ── /oncall ───────────────────────────────────────────────────────────────────
-
-async def cmd_oncall(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    from shift_manager import get_on_shift_admins
-    from user_tracker import async_has_user_started
-
-    on_shift  = get_on_shift_admins()
-    reachable = [a for a in on_shift if await async_has_user_started(a["id"])]
-
-    if reachable:
-        names = "\n".join(
-            f"  {a['name']} (@{a['username']})" if a["username"] else f"  {a['name']}"
-            for a in reachable
-        )
-        await update.message.reply_text(f"✅ On call right now:\n\n{names}")
-    else:
-        await update.message.reply_text(
-            "⚠️ No registered admins on shift. All admins will be notified on alerts."
-        )
 
 
 # ── Daily report (called by scheduler) ───────────────────────────────────────
