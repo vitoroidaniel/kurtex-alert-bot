@@ -17,14 +17,10 @@ from storage.case_store import (
     get_all_cases,
 )
 from storage.user_store import (
-
-def _esc(t: str) -> str:
-    """Escape Markdown v1 special chars in dynamic content."""
-    return str(t).replace("_", "\_").replace("*", "\*").replace("`", "\`").replace("[", "\[")
-
     get_all_users, get_user, add_user, remove_user, edit_role,
     has_role, VALID_ROLES,
 )
+
 
 logger   = logging.getLogger(__name__)
 BOT_NAME = "Kurtex Alert Bot"
@@ -380,3 +376,8 @@ async def cb_addrole(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"✅ {icon} *{_esc(name)}* ({handle}) added as *{role}*.",
         parse_mode=ParseMode.MARKDOWN,
     )
+
+
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
