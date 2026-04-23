@@ -246,7 +246,7 @@ def api_export():
     cases  = load_cases()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID","Driver","Driver Username","Group","Agent","Status","Opened","Assigned","Closed","Response (s)","Resolution (s)","Description","Notes"])
+    writer.writerow(["ID","Reported By","Reporter Username","Group","Assigned To","Status","Opened","Assigned","Closed","Response (s)","Resolution (s)","Description","Notes"])
     for c in sorted(cases, key=lambda x: x.get("opened_at",""), reverse=True):
         writer.writerow([
             c["id"][:8],
@@ -504,7 +504,7 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="page active" id="page-overview">
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
-      <div class="card"><h3>🏆 Top Agents Today</h3><div id="lb-overview"></div></div>
+      <div class="card"><h3>🏆 Top Assigned Today</h3><div id="lb-overview"></div></div>
       <div class="card"><h3>📡 Top Groups</h3><div id="groups-overview"></div></div>
     </div>
     <div class="section">
@@ -515,7 +515,7 @@ td{padding:10px 14px;vertical-align:middle}
 
   <!-- Cases -->
   <div class="page" id="page-cases">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="cases-search" placeholder="Search driver, group, agent..." oninput="onSearch()"></div>
+    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch()"></div>
     <div class="section">
       <div class="section-header">
         <div class="section-title">All Cases</div>
@@ -551,7 +551,7 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="page" id="page-leaderboard">
     <div class="two-col">
       <div class="card">
-        <h3>🏆 Agent Leaderboard</h3>
+        <h3>🏆 Leaderboard</h3>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
           <button class="toggle-btn" onclick="setLbPeriod('week',this)">Week</button>
@@ -648,7 +648,7 @@ function statusBadge(s) {
 function caseTable(cases) {
   if (!cases.length) return '<div class="loading">No cases found.</div>';
   return `<table><thead><tr>
-    <th>Driver</th><th>Group</th><th>Agent</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>
+    <th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>
   </tr></thead><tbody>${cases.map(c=>`<tr onclick="openCase('${c.full_id}')">
     <td><b>${c.driver}</b></td>
     <td style="color:var(--muted)">${c.group}</td>
@@ -679,7 +679,7 @@ async function loadStats() {
     const t = stats.today;
     document.getElementById('stat-grid').innerHTML = `
       <div class="stat-card"><div class="stat-label">Today Total</div><div class="stat-value accent">${t.total}</div></div>
-      <div class="stat-card"><div class="stat-label">Assigned</div><div class="stat-value yellow">${t.assigned}</div></div>
+      <div class="stat-card"><div class="stat-label">Assigned To</div><div class="stat-value yellow">${t.assigned}</div></div>
       <div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value green">${t.done}</div></div>
       <div class="stat-card"><div class="stat-label">Missed</div><div class="stat-value red">${t.missed}</div></div>
       <div class="stat-card"><div class="stat-label">Reassigned</div><div class="stat-value purple">${stats.reassigned_count}</div></div>
@@ -760,9 +760,9 @@ async function openCase(caseId) {
     document.getElementById('modal-body').innerHTML = `
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">${statusBadge(c.status)}</div></div>
-        <div class="detail-item"><div class="detail-label">Agent</div><div class="detail-val">${c.agent}</div></div>
+        <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">${c.agent}</div></div>
         <div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">${c.group}</div></div>
-        <div class="detail-item"><div class="detail-label">Driver</div><div class="detail-val">${c.driver}</div></div>
+        <div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">${c.driver}</div></div>
         <div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">${c.opened}</div></div>
         <div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">${c.assigned_at||'—'}</div></div>
         <div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">${c.response}</div></div>
