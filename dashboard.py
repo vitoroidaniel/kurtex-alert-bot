@@ -389,6 +389,23 @@ for(let i=0;i<18;i++){
   d.style.cssText=`width:${s}px;height:${s}px;left:${Math.random()*100}%;background:hsl(${240+Math.random()*40},70%,70%);animation-duration:${8+Math.random()*12}s;animation-delay:${Math.random()*8}s`;
   p.appendChild(d);
 }
+async function refresh() {
+  await loadStats();
+  if (currentPage==='overview') {
+    const r = await fetch('/api/cases?filter=today');
+    const cases = await r.json();
+    document.getElementById('recent-table').innerHTML = caseTable(cases.slice(0,10));
+  } else if (currentPage==='cases') loadCases();
+  else if (currentPage==='missed') loadMissed();
+  else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='my_profile') loadMyProfile();
+  else if (currentPage==='agents') loadAgents();
+  document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
+}
+
+refresh();
+setInterval(refresh, 10000);
+
 </script>
 </body>
 </html>"""
@@ -748,23 +765,6 @@ td{padding:9px 12px;vertical-align:middle}
     </div>
   </div>
 
-        <div class="calendar-wrap">
-          <div class="cal-header">
-            <button class="cal-nav" onclick="calPrev()"><i class="ph ph-caret-left"></i></button>
-            <div class="cal-title" id="cal-title"></div>
-            <button class="cal-nav" onclick="calNext()"><i class="ph ph-caret-right"></i></button>
-          </div>
-          <div class="cal-grid" id="cal-grid"></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-title"><i class="ph ph-clipboard-text"></i><span id="cal-cases-title">Select a day</span></div>
-        <div id="cal-day-stats" style="margin-bottom:10px"></div>
-      </div>
-    </div>
-    <div class="table-wrap"><div class="table-scroll" id="cal-table"><div class="loading" style="padding:20px">Select a day to view cases.</div></div></div>
-  </div>
-
   <!-- Missed -->
   <div class="page" id="page-missed">
     <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
@@ -919,7 +919,6 @@ function showPage(page) {
   document.getElementById('page-title').textContent = titles[page];
   currentPage = page;
   closeSidebar();
-  if (page === 'calendar') renderCalendar();
   refresh();
 }
 
@@ -1260,6 +1259,23 @@ function printReport() {
   window.print();
   document.title = orig;
 }
+
+async function refresh() {
+  await loadStats();
+  if (currentPage==='overview') {
+    const r = await fetch('/api/cases?filter=today');
+    const cases = await r.json();
+    document.getElementById('recent-table').innerHTML = caseTable(cases.slice(0,10));
+  } else if (currentPage==='cases') loadCases();
+  else if (currentPage==='missed') loadMissed();
+  else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='my_profile') loadMyProfile();
+  else if (currentPage==='agents') loadAgents();
+  document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
+}
+
+refresh();
+setInterval(refresh, 10000);
 
 </script>
 </body>
