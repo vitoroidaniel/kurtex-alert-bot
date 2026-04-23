@@ -17,6 +17,11 @@ from storage.case_store import (
     get_all_cases,
 )
 from storage.user_store import (
+
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\_").replace("*", "\*").replace("`", "\`").replace("[", "\[")
+
     get_all_users, get_user, add_user, remove_user, edit_role,
     has_role, VALID_ROLES,
 )
@@ -121,7 +126,7 @@ async def cmd_leaderboard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines  = ["*Weekly Leaderboard*\n"]
     for i, (name, stats) in enumerate(sorted_agents):
         medal = medals[i] if i < 3 else f"{i + 1}."
-        lines.append(f"{medal} *{name}* — {stats['count']} cases")
+        lines.append(f"{medal} *{_esc(name)}* — {stats['count']} cases")
 
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
@@ -183,7 +188,7 @@ async def cmd_adduser(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     role = args[2].lower()
     if add_user(uid, name, "", role):
         await update.message.reply_text(
-            f"✅ Added *{name}* (ID: `{uid}`) as *{role}*.",
+            f"✅ Added *{_esc(name)}* (ID: `{uid}`) as *{role}*.",
             parse_mode=ParseMode.MARKDOWN,
         )
     else:
@@ -214,7 +219,7 @@ async def cmd_removeuser(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if remove_user(uid):
         name = existing["name"] if existing else str(uid)
         await update.message.reply_text(
-            f"✅ *{name}* (ID: `{uid}`) removed.", parse_mode=ParseMode.MARKDOWN
+            f"✅ *{_esc(name)}* (ID: `{uid}`) removed.", parse_mode=ParseMode.MARKDOWN
         )
     else:
         await update.message.reply_text(
@@ -340,7 +345,7 @@ async def handle_forward(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ])
 
     await msg.reply_text(
-        f"👤 *{name}* ({handle})\n\nSelect a role for this user:{status_line}",
+        f"👤 *{_esc(name)}* ({handle})\n\nSelect a role for this user:{status_line}",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=keyboard,
     )
@@ -372,6 +377,6 @@ async def cb_addrole(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     icon       = role_icons.get(role, "•")
 
     await query.edit_message_text(
-        f"✅ {icon} *{name}* ({handle}) added as *{role}*.",
+        f"✅ {icon} *{_esc(name)}* ({handle}) added as *{role}*.",
         parse_mode=ParseMode.MARKDOWN,
     )
