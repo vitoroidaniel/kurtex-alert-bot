@@ -23,6 +23,11 @@ from storage.case_store import (
 )
 from storage.user_store import is_authorized
 
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\_").replace("*", "\*").replace("`", "\`").replace("[", "\[")
+
+
 logger           = logging.getLogger(__name__)
 TRIGGER_WORDS    = ['#maintenance', '#repairs', '#repair']
 COOLDOWN_SECONDS = 10
@@ -269,7 +274,7 @@ class AlertHandler:
                     else:
                         await ctx.bot.edit_message_text(
                             chat_id=aid, message_id=mid,
-                            text=f"✅ Case assigned to {name}.\nNo action needed.",
+                            text=f"✅ Case assigned to {_esc(name)}.\nNo action needed.",
                             reply_markup=None,
                         )
                 except TelegramError:
@@ -287,7 +292,7 @@ class AlertHandler:
             try:
                 await ctx.bot.send_message(
                     prev_agent_id,
-                    f"🔁 *Case taken over by {name}*\n\n"
+                    f"🔁 *Case taken over by {_esc(name)}*\n\n"
                     f"The case you reassigned has been accepted.\n"
                     f"It has been removed from your active cases.",
                     parse_mode=ParseMode.MARKDOWN,
@@ -310,7 +315,7 @@ class AlertHandler:
                 f"✅ *Case {action}*\n\n"
                 f"📌 *Group:* {record.get('group_name', '—')}\n"
                 f"👤 *Reported by:* {record.get('driver_name', '—')}\n"
-                f"🙋 *Handled by:* {name}\n"
+                f"🙋 *Handled by:* {_esc(name)}\n"
                 f"⏱ *Response:* {secs}s\n"
                 f"📝 {record.get('text', '(no details)')[:200]}"
             )
@@ -407,13 +412,13 @@ class AlertHandler:
 
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text(
-            f"🔁 *{name}* marked this for reassignment. Notifying other agents...",
+            f"🔁 *{_esc(name)}* marked this for reassignment. Notifying other agents...",
             parse_mode=ParseMode.MARKDOWN,
         )
 
         original = query.message.caption or query.message.text or ""
         dm_text  = (
-            f"🔁 *Reassign Request* — {name} needs someone to take over:\n\n"
+            f"🔁 *Reassign Request* — {_esc(name)} needs someone to take over:\n\n"
             f"{original[:300]}"
         )
 
