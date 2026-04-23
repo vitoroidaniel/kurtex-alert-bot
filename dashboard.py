@@ -51,7 +51,10 @@ def month_start_str():
 
 def fmt_dt(iso):
     if not iso: return "—"
-    try: return datetime.fromisoformat(iso).astimezone().strftime("%b %d %H:%M")
+    try:
+        import zoneinfo
+        et = zoneinfo.ZoneInfo("America/New_York")
+        return datetime.fromisoformat(iso).astimezone(et).strftime("%b %d %H:%M")
     except: return str(iso)[:16]
 
 def fmt_secs(secs):
