@@ -48,15 +48,19 @@ def _fmt_dt(iso):
         return iso[:16]
 
 
+def _esc(t: str) -> str:
+    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
+
 def _active_case_text(case):
     badge    = "📋 *Reported Case*" if case.get("status") == "reported" else "📋 *Active Case*"
     opened   = _fmt_dt(case.get("opened_at"))
     return (
         f"{badge}\n\n"
         f"⏱ *Opened:* {opened}\n"
-        f"📌 *Group:* {case['group_name']}\n"
-        f"👤 *Reported by:* {case['driver_name']}\n"
-        f"📝 *Issue:* {(case.get('description') or '—')[:200]}"
+        f"📌 *Group:* {_esc(case['group_name'])}\n"
+        f"👤 *Reported by:* {_esc(case['driver_name'])}\n"
+        f"📝 *Issue:* {_esc((case.get('description') or '—')[:200])}"
     )
 
 
