@@ -34,6 +34,7 @@ from handlers.admin_handler import (
     handle_forward, cb_addrole,
 )
 from handlers.scheduler import register_jobs
+from dashboard import start_dashboard_thread
 from storage.user_store import (
     is_authorized, bootstrap_developer, migrate_from_shifts,
     has_role,
@@ -361,6 +362,7 @@ def main():
 
     register_jobs(app)
 
+    start_dashboard_thread()
     logger.info(f"Starting {BOT_NAME}...")
     app.run_polling(drop_pending_updates=True)
 
