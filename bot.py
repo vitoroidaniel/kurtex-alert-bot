@@ -26,6 +26,7 @@ from handlers.agent_handler import (
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
     cb_close_confirm, cb_close_cancel,
     cb_histpage, cb_hist_delete_chat, get_solve_conversation,
+    cb_solve_start, cb_close_ask,
 )
 from handlers.admin_handler import (
     cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin,
@@ -346,6 +347,8 @@ def main():
     app.add_handler(CallbackQueryHandler(alert_h.handle_assignment,  pattern=r'^(assign|assignrpt|ignore)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,    pattern=r'^reassign_'))
     app.add_handler(CallbackQueryHandler(cb_done_pick,               pattern=r'^done_pick\|'))
+    app.add_handler(CallbackQueryHandler(cb_solve_start,             pattern=r'^solve\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_ask,               pattern=r'^close_ask\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,           pattern=r'^solve_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_cancel,            pattern=r'^solve_cancel\|'))
     app.add_handler(CallbackQueryHandler(cb_close_confirm,           pattern=r'^close_confirm\|'))
