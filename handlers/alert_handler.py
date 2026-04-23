@@ -286,6 +286,14 @@ class AlertHandler:
             case_id=alert_id, agent_id=admin.id,
             agent_name=name, agent_username=admin.username,
         )
+        if prev_agent_id:
+            from storage.case_store import get_case, _load, _save, CASES_FILE
+            cases = _load(CASES_FILE)
+            for c in cases:
+                if c["id"] == alert_id:
+                    c["reassigned"] = True
+                    break
+            _save(CASES_FILE, cases)
         self._persist()
 
         # Notify previous agent their case was taken over
