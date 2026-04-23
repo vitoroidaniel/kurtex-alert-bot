@@ -323,7 +323,7 @@ LOGIN_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,""" + FAVICON.replace('\n','').replace("'","%27") + """">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚛</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -360,9 +360,7 @@ h1{color:#fff;font-size:24px;font-weight:800;margin-bottom:8px;letter-spacing:-.
   <div class="particles" id="particles"></div>
 </div>
 <div class="card">
-  <div class="logo-ring" style="padding:0;overflow:hidden;">
-    <img src="https://img.icons8.com/fluency/96/delivery-truck.png" style="width:100%;height:100%;object-fit:cover;">
-  </div>
+  <div class="logo-ring">🚛</div>
   <div class="badge"><div class="badge-dot"></div> Live Dashboard</div>
   <h1>Kurtex Dashboard</h1>
   <p class="sub">Truck Maintenance Command Center</p>
@@ -400,9 +398,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,""" + FAVICON.replace('\n','').replace("'","%27") + """">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚛</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
 <style>
 :root{
   --bg:#f4f4f8;--surface:#fff;--surface2:#f0f0f4;--surface3:#e8e8ee;
@@ -513,7 +511,6 @@ nav{flex:1}
 .bar-wrap{flex:1.5;height:4px;background:var(--surface3);border-radius:2px;margin:0 6px}
 .bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .5s}
 .medal{font-size:14px;flex-shrink:0;width:20px}
-.agent-link{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 
 /* Section */
 .section{margin-bottom:20px}
@@ -526,23 +523,6 @@ nav{flex:1}
 .search-wrap input:focus{border-color:var(--accent)}
 .search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px}
 
-/* Calendar */
-.calendar-wrap{margin-bottom:16px}
-.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.cal-nav{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);font-size:14px;transition:all .15s}
-.cal-nav:hover{background:var(--surface3)}
-.cal-title{font-size:13px;font-weight:700}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-.cal-day-name{font-size:9px;font-weight:600;color:var(--muted);text-align:center;padding:4px 0;text-transform:uppercase}
-.cal-day{aspect-ratio:1;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;position:relative;color:var(--text)}
-.cal-day:hover{background:var(--surface2)}
-.cal-day.has-cases::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
-.cal-day.selected{background:var(--accent);color:#fff}
-.cal-day.selected::after{background:rgba(255,255,255,.7)}
-.cal-day.today{font-weight:700;color:var(--accent)}
-.cal-day.today.selected{color:#fff}
-.cal-day.empty{cursor:default}
-.cal-day.other-month{color:var(--muted2)}
 
 /* Table */
 .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
@@ -687,29 +667,28 @@ td{padding:9px 12px;vertical-align:middle}
 <!-- Mobile header -->
 <div class="mobile-header">
   <div class="mobile-logo">
-    <div class="logo-icon" style="overflow:hidden;padding:0;"><img src="https://img.icons8.com/fluency/48/delivery-truck.png" style="width:100%;height:100%;object-fit:cover;border-radius:9px;"></div>
+    <div class="logo-icon">🚛</div>
     Kurtex
   </div>
-  <div onclick="toggleSidebar()" class="hamburger"><i data-lucide="menu"></i></div>
+  <div onclick="toggleSidebar()" class="hamburger"><i class="ph ph-list"></i></div>
 </div>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <div class="layout">
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <div class="logo-icon" style="overflow:hidden;padding:0;"><img src="https://img.icons8.com/fluency/48/delivery-truck.png" style="width:100%;height:100%;object-fit:cover;border-radius:9px;"></div>
+    <div class="logo-icon">🚛</div>
     <div class="logo-text"><h2>Kurtex</h2><small>Alert Dashboard</small></div>
   </div>
   <nav>
-    <div class="nav-item active" onclick="showPage('overview')"><i data-lucide="layout-dashboard"></i> Overview</div>
-    <div class="nav-item" onclick="showPage('cases')"><i data-lucide="clipboard-list"></i> Cases</div>
-    <div class="nav-item" onclick="showPage('calendar')"><i data-lucide="calendar"></i> Calendar</div>
-    <div class="nav-item" onclick="showPage('missed')"><i data-lucide="alert-triangle"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
-    <div class="nav-item" onclick="showPage('reassigned')"><i data-lucide="refresh-cw"></i> Reassigned</div>
-    <div class="nav-item" onclick="showPage('leaderboard')"><i data-lucide="trophy"></i> Leaderboard</div>
-    <div class="nav-item" onclick="showPage('analytics')"><i data-lucide="bar-chart-2"></i> Analytics</div>
-    <div class="nav-item" onclick="showPage('my_profile')"><i data-lucide="user"></i> My Profile</div>
-    {% if is_manager %}<div class="nav-item" onclick="showPage('agents')"><i data-lucide="users"></i> Agents</div>{% endif %}
+    <div class="nav-item active" onclick="showPage('overview')"><i class="ph ph-squares-four"></i> Overview</div>
+    <div class="nav-item" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
+    <div class="nav-item" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
+    <div class="nav-item" onclick="showPage('reassigned')"><i class="ph ph-arrows-clockwise"></i> Reassigned</div>
+    <div class="nav-item" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
+    <div class="nav-item" onclick="showPage('analytics')"><i class="ph ph-chart-bar"></i> Analytics</div>
+    <div class="nav-item" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
+    {% if is_manager %}<div class="nav-item" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
   </nav>
   <div class="sidebar-footer">
     <div class="user-chip">
@@ -717,8 +696,8 @@ td{padding:9px 12px;vertical-align:middle}
       {% else %}<div class="user-avatar-init">{{ user.first_name[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">Manager</div></div>
     </div>
-    <button class="theme-btn" onclick="toggleTheme()"><i data-lucide="sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
-    <button class="logout-btn" onclick="window.location='/logout'"><i data-lucide="log-out"></i> Sign out</button>
+    <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
+    <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Sign out</button>
   </div>
 </aside>
 
@@ -726,9 +705,9 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="topbar">
     <h1 id="page-title">Overview</h1>
     <div class="topbar-right">
-      <button class="badge-btn" onclick="openReport()"><i data-lucide="file-text"></i> Report</button>
-      <button class="badge-btn" onclick="window.print()"><i data-lucide="printer"></i> Print</button>
-      <a class="badge-btn" href="/api/export"><i data-lucide="download"></i> Export CSV</a>
+      <button class="badge-btn" onclick="openReport()"><i class="ph ph-file-text"></i> Report</button>
+      <button class="badge-btn" onclick="window.print()"><i class="ph ph-printer"></i> Print</button>
+      <a class="badge-btn" href="/api/export"><i class="ph ph-download-simple"></i> Export CSV</a>
       <div class="badge-btn"><div class="dot"></div><span id="last-update">Loading...</span></div>
     </div>
   </div>
@@ -737,8 +716,8 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page active" id="page-overview">
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
-      <div class="card"><div class="card-title"><i data-lucide="trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i data-lucide="radio-tower"></i>Top Groups</div><div id="groups-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Top Groups</div><div id="groups-overview"></div></div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent Cases</div></div>
@@ -748,37 +727,38 @@ td{padding:9px 12px;vertical-align:middle}
 
   <!-- Cases -->
   <div class="page" id="page-cases">
-    <div class="search-wrap"><i data-lucide="search"></i><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
+    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
     <div class="section">
       <div class="section-header">
         <div class="section-title">All Cases</div>
-        <div class="filter-tabs">
-          <button class="tab-btn active" onclick="setCaseFilter('today',this)">Today</button>
-          <button class="tab-btn" onclick="setCaseFilter('week',this)">This Week</button>
-          <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
-          <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="filter-tabs">
+            <button class="tab-btn active" onclick="setCaseFilter('today',this)">Today</button>
+            <button class="tab-btn" onclick="setCaseFilter('week',this)">This Week</button>
+            <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
+            <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer" onchange="setCaseDateFilter(this.value)">
+            <button class="tab-btn" id="cases-date-clear" onclick="clearDateFilter()" style="display:none;padding:5px 8px">✕</button>
+          </div>
         </div>
       </div>
       <div class="table-wrap"><div class="table-scroll" id="cases-table"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
 
-  <!-- Calendar -->
-  <div class="page" id="page-calendar">
-    <div class="two-col">
-      <div class="card">
-        <div class="card-title"><i data-lucide="calendar"></i>Select Day</div>
         <div class="calendar-wrap">
           <div class="cal-header">
-            <button class="cal-nav" onclick="calPrev()"><i data-lucide="chevron-left"></i></button>
+            <button class="cal-nav" onclick="calPrev()"><i class="ph ph-caret-left"></i></button>
             <div class="cal-title" id="cal-title"></div>
-            <button class="cal-nav" onclick="calNext()"><i data-lucide="chevron-right"></i></button>
+            <button class="cal-nav" onclick="calNext()"><i class="ph ph-caret-right"></i></button>
           </div>
           <div class="cal-grid" id="cal-grid"></div>
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><i data-lucide="clipboard-list"></i><span id="cal-cases-title">Select a day</span></div>
+        <div class="card-title"><i class="ph ph-clipboard-text"></i><span id="cal-cases-title">Select a day</span></div>
         <div id="cal-day-stats" style="margin-bottom:10px"></div>
       </div>
     </div>
@@ -787,7 +767,7 @@ td{padding:9px 12px;vertical-align:middle}
 
   <!-- Missed -->
   <div class="page" id="page-missed">
-    <div class="search-wrap"><i data-lucide="search"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
+    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
     <div class="section">
       <div class="section-header"><div class="section-title">Missed Cases</div></div>
       <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
@@ -806,7 +786,7 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page" id="page-leaderboard">
     <div class="two-col">
       <div class="card">
-        <div class="card-title"><i data-lucide="trophy"></i>Agent Leaderboard</div>
+        <div class="card-title"><i class="ph ph-trophy"></i>Agent Leaderboard</div>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
           <button class="toggle-btn" onclick="setLbPeriod('week',this)">Week</button>
@@ -814,7 +794,7 @@ td{padding:9px 12px;vertical-align:middle}
         </div>
         <div id="leaderboard-full"></div>
       </div>
-      <div class="card"><div class="card-title"><i data-lucide="radio-tower"></i>Cases by Group</div><div id="group-bars-lb"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Cases by Group</div><div id="group-bars-lb"></div></div>
     </div>
   </div>
 
@@ -822,14 +802,14 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page" id="page-analytics">
     <div class="two-col">
       <div class="card">
-        <div class="card-title"><i data-lucide="bar-chart-2"></i>Period Summary</div>
+        <div class="card-title"><i class="ph ph-chart-bar"></i>Period Summary</div>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setAnalyticsPeriod('week',this)">Week</button>
           <button class="toggle-btn" onclick="setAnalyticsPeriod('month',this)">Month</button>
         </div>
         <div class="stats-list" id="analytics-stats"></div>
       </div>
-      <div class="card"><div class="card-title"><i data-lucide="hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
     </div>
   </div>
 
@@ -848,7 +828,7 @@ td{padding:9px 12px;vertical-align:middle}
 <!-- Case Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
 <div class="modal" id="modal-content">
-  <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
+  <button class="modal-close" onclick="closeModal()"><i class="ph ph-x"></i></button>
   <h2 id="modal-title">Case Detail</h2>
   <div id="modal-body"><div class="loading">Loading...</div></div>
 </div>
@@ -859,13 +839,13 @@ td{padding:9px 12px;vertical-align:middle}
 <div class="report-modal-overlay" id="report-modal-overlay" onclick="closeReportOutside(event)">
 <div class="report-modal" id="report-modal">
   <div class="report-header">
-    <h2><i data-lucide="file-text"></i>Report</h2>
+    <h2><i class="ph ph-file-text"></i>Report</h2>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="report-tabs">
         <button class="report-tab active" onclick="setReportTab('today',this)">Today</button>
         <button class="report-tab" onclick="setReportTab('custom',this)">Custom</button>
       </div>
-      <button class="report-close" onclick="closeReport()"><i data-lucide="x"></i></button>
+      <button class="report-close" onclick="closeReport()"><i class="ph ph-x"></i></button>
     </div>
   </div>
   <div class="report-body">
@@ -886,14 +866,14 @@ td{padding:9px 12px;vertical-align:middle}
   </div>
   <div class="report-footer">
     <span class="ts" id="report-ts"></span>
-    <button class="print-report-btn" onclick="printReport()"><i data-lucide="printer"></i> Print Report</button>
+    <button class="print-report-btn" onclick="printReport()"><i class="ph ph-printer"></i> Print Report</button>
   </div>
 </div>
 </div>
 <!-- Agent Modal -->
 <div class="modal-overlay" id="agent-modal-overlay" onclick="closeAgentModalOutside(event)">
 <div class="modal" id="agent-modal-content">
-  <button class="modal-close" onclick="closeAgentModal()"><i data-lucide="x"></i></button>
+  <button class="modal-close" onclick="closeAgentModal()"><i class="ph ph-x"></i></button>
   <h2 id="agent-modal-title">Agent Profile</h2>
   <div id="agent-modal-body"><div class="loading">Loading...</div></div>
 </div>
@@ -906,15 +886,16 @@ let currentPage = 'overview';
 let lbPeriod = 'day';
 let analyticsPeriod = 'week';
 let searchTimers = {};
+let currentDateFilter = '';
 const medals = ['🥇','🥈','🥉'];
-const pages = ['overview','cases','calendar','missed','reassigned','leaderboard','analytics','my_profile','agents'];
-const titles = {overview:'Overview',cases:'Cases',calendar:'Calendar',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',my_profile:'My Profile',agents:'Agent Profiles'};
+const pages = ['overview','cases','missed','reassigned','leaderboard','analytics','my_profile','agents'];
+const titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',my_profile:'My Profile',agents:'Agent Profiles'};
 
 // Theme
 let isDark = localStorage.getItem('theme') === 'dark';
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  document.getElementById('theme-icon').className = isDark ? 'lucide-moon' : 'lucide-sun';
+  document.getElementById('theme-icon').className = isDark ? 'ph ph-moon' : 'ph ph-sun';
   document.getElementById('theme-label').textContent = isDark ? 'Dark Mode' : 'Light Mode';
 }
 function toggleTheme() { isDark = !isDark; localStorage.setItem('theme', isDark?'dark':'light'); applyTheme(); }
@@ -977,13 +958,13 @@ function statusBadge(s) {
 }
 
 function caseTable(cases) {
-  if (!cases || !cases.length) return '<div class="empty-state"><i data-lucide="inbox"></i>No cases found</div>';
+  if (!cases || !cases.length) return '<div class="empty-state"><i class="ph ph-inbox"></i>No cases found</div>';
   return `<table><thead><tr>
     <th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>
   </tr></thead><tbody>${cases.map(c=>`<tr onclick="openCase('${c.full_id}')">
     <td><b>${c.driver}</b></td>
     <td style="color:var(--muted)">${c.group}</td>
-    <td>${c.agent === '—' ? '<span style="color:var(--muted)">—</span>' : c.agent}</td>
+    <td style="color:var(--text)">${c.agent}</td>
     <td>${statusBadge(c.status)}${c.reassigned?'<span class="reassign-badge">reassigned</span>':''}</td>
     <td style="color:var(--muted);font-size:11px">${c.opened}</td>
     <td style="font-size:11px">${c.response}</td>
@@ -991,12 +972,12 @@ function caseTable(cases) {
   </tr>`).join('')}</tbody></table>`;
 }
 
-function listRows(items, maxCount, clickable) {
+function listRows(items, maxCount) {
   if (!items||!items.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
   return items.map((item,i)=>`
     <div class="list-row">
       <span class="medal">${medals[i]||((i+1)+'.')}</span>
-      <span class="list-name ${clickable?'agent-link':''}" ${clickable?`onclick="openAgent('${item.name}')"`:''}>${item.name}</span>
+      <span class="list-name "list-name">${item.name}</span>
       <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(item.count/(maxCount||1)*100)}%"></div></div>
       <span class="list-count">${item.count}</span>
     </div>`).join('');
@@ -1022,14 +1003,14 @@ async function loadStats() {
       b.textContent = t.missed; b.style.display = '';
     }
     const lb = stats.leaderboard_day.slice(0,5);
-    document.getElementById('lb-overview').innerHTML = listRows(lb, lb[0]?.count||1, true);
+    document.getElementById('lb-overview').innerHTML = listRows(lb, lb[0]?.count||1);
     const grps = stats.top_groups;
-    document.getElementById('groups-overview').innerHTML = listRows(grps, grps[0]?.count||1, false);
+    document.getElementById('groups-overview').innerHTML = listRows(grps, grps[0]?.count||1);
     renderLeaderboard(); renderAnalytics();
     document.getElementById('word-cloud').innerHTML = stats.top_words.length
       ? `<div class="word-grid">${stats.top_words.map(w=>`<span class="word-tag">${w.word} <b>${w.count}</b></span>`).join('')}</div>`
       : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>';
-    document.getElementById('group-bars-lb').innerHTML = listRows(grps, grps[0]?.count||1, false);
+    document.getElementById('group-bars-lb').innerHTML = listRows(grps, grps[0]?.count||1);
   } catch(e){console.error(e);}
 }
 
@@ -1037,7 +1018,7 @@ function renderLeaderboard() {
   if (!stats.leaderboard_day) return;
   const lb = stats['leaderboard_'+lbPeriod] || [];
   document.getElementById('leaderboard-full').innerHTML = lb.length
-    ? lb.map((a,i)=>`<div class="list-row"><span class="medal">${medals[i]||((i+1)+'.')}</span><span class="list-name agent-link" onclick="openAgent('${a.name}')">${a.name}</span><span class="list-count">${a.count} cases</span></div>`).join('')
+    ? lb.map((a,i)=>`<div class="list-row"><span class="medal">${medals[i]||((i+1)+'.')}</span><span class="list-name">${a.name}</span><span class="list-count">${a.count} cases</span></div>`).join('')
     : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>';
 }
 
@@ -1059,7 +1040,10 @@ async function loadCases() {
   const search = document.getElementById('cases-search')?.value||'';
   document.getElementById('cases-table').innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const r = await fetch(`/api/cases?filter=${currentFilter}&search=${encodeURIComponent(search)}`);
+    const url = currentFilter === '__date__'
+      ? `/api/cases?date=${currentDateFilter}&search=${encodeURIComponent(search)}`
+      : `/api/cases?filter=${currentFilter}&search=${encodeURIComponent(search)}`;
+    const r = await fetch(url);
     const cases = await r.json();
     document.getElementById('cases-table').innerHTML = caseTable(cases);
   } catch(e){console.error(e);}
@@ -1082,93 +1066,7 @@ async function loadReassigned() {
   } catch(e){console.error(e);}
 }
 
-// ── Calendar ──────────────────────────────────────────────────────────────────
-let calYear = new Date().getFullYear();
-let calMonth = new Date().getMonth();
-let calSelectedDate = null;
-let caseDates = new Set();
 
-async function loadCaseDates() {
-  try {
-    const r = await fetch('/api/cases?filter=all');
-    const cases = await r.json();
-    caseDates = new Set(cases.map(c => c.opened_raw).filter(Boolean));
-  } catch(e){}
-}
-
-function renderCalendar() {
-  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  document.getElementById('cal-title').textContent = `${months[calMonth]} ${calYear}`;
-  const grid = document.getElementById('cal-grid');
-  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const todayStr = new Date().toISOString().slice(0,10);
-  let html = days.map(d=>`<div class="cal-day-name">${d}</div>`).join('');
-  const first = new Date(calYear, calMonth, 1);
-  let startDay = first.getDay() - 1; if (startDay < 0) startDay = 6;
-  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const prevDays = new Date(calYear, calMonth, 0).getDate();
-  for (let i = startDay-1; i >= 0; i--) {
-    html += `<div class="cal-day other-month empty">${prevDays-i}</div>`;
-  }
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const isToday = dateStr === todayStr;
-    const isSelected = dateStr === calSelectedDate;
-    const hasCases = caseDates.has(dateStr);
-    html += `<div class="cal-day${isToday?' today':''}${isSelected?' selected':''}${hasCases?' has-cases':''}" onclick="selectCalDay('${dateStr}')">${d}</div>`;
-  }
-  grid.innerHTML = html;
-}
-
-async function selectCalDay(date) {
-  calSelectedDate = date;
-  renderCalendar();
-  document.getElementById('cal-cases-title').textContent = `Cases on ${date}`;
-  document.getElementById('cal-table').innerHTML = '<div class="loading" style="padding:20px">Loading...</div>';
-  try {
-    const r = await fetch(`/api/cases?date=${date}`);
-    const cases = await r.json();
-    const t = cases.length; const done = cases.filter(c=>c.status==='done').length;
-    const missed = cases.filter(c=>c.status==='missed').length;
-    document.getElementById('cal-day-stats').innerHTML = t ? `
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <span class="status-badge s-open" style="font-size:11px">${t} total</span>
-        <span class="status-badge s-done" style="font-size:11px">${done} resolved</span>
-        ${missed?`<span class="status-badge s-missed" style="font-size:11px">${missed} missed</span>`:''}
-      </div>` : '';
-    document.getElementById('cal-table').innerHTML = caseTable(cases);
-  } catch(e){}
-}
-
-function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
-function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
-
-// ── Case modal ────────────────────────────────────────────────────────────────
-function buildTimeline(c) {
-  const steps = [
-    {key:'open', label:'Open', time: c.opened},
-    {key:'assigned', label:'Assigned', time: c.assigned_at},
-    {key:'reported', label:'Reported', time: c.status==='reported'||c.status==='done'?'✓':''},
-    {key:'done', label:'Resolved', time: c.closed},
-  ];
-  const order = ['open','assigned','reported','done'];
-  const statusIdx = order.indexOf(c.status === 'missed' ? 'open' : c.status);
-  let html = '<div class="timeline">';
-  steps.forEach((s,i) => {
-    const isDone = i < statusIdx;
-    const isActive = i === statusIdx || (c.status === 'missed' && i === 0);
-    const afterDone = i < statusIdx;
-    html += `<div class="tl-step${afterDone?' done-step':''}">
-      <div class="tl-dot${isActive?' active':isDone?' done':''}">
-        ${isDone?'<i data-lucide="check" style="font-size:10px"></i>':isActive?'<i data-lucide="circle" style="font-size:10px"></i>':(i+1)}
-      </div>
-      <div class="tl-label">${s.label}</div>
-      <div class="tl-time">${s.time&&s.time!=='—'?s.time:''}</div>
-    </div>`;
-  });
-  html += '</div>';
-  return html;
-}
 
 async function openCase(caseId) {
   document.getElementById('modal-overlay').classList.add('open');
@@ -1182,7 +1080,7 @@ async function openCase(caseId) {
       ${buildTimeline(c)}
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">${statusBadge(c.status)}</div></div>
-        <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val ${c.agent!=='—'?'agent-link':''}" ${c.agent!=='—'?`onclick="closeModal();openAgent('${c.agent}')"`:''}>${c.agent}</div></div>
+        <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">${c.agent}</div></div>
         <div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">${c.driver}</div></div>
         <div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">${c.group}</div></div>
         <div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">${c.opened}</div></div>
@@ -1194,68 +1092,11 @@ async function openCase(caseId) {
       ${c.full_notes?`<div class="notes-box"><span class="box-label">📋 Report / Notes</span><p class="box-text">${c.full_notes}</p></div>`:''}
     `;
   } catch(e){document.getElementById('modal-body').innerHTML='<div class="loading">Error loading case.</div>';}
-  if(window.lucide) lucide.createIcons();
-}
+  }
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 function closeModalOutside(e) { if(e.target.id==='modal-overlay') closeModal(); }
 
-// ── Agent profile ─────────────────────────────────────────────────────────────
-async function openAgent(name) {
-  document.getElementById('agent-modal-overlay').classList.add('open');
-  document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading...</div>';
-  document.getElementById('agent-modal-title').textContent = name;
-  try {
-    const r = await fetch('/api/agent/'+encodeURIComponent(name));
-    const a = await r.json();
-    document.getElementById('agent-modal-body').innerHTML = `
-      <div class="agent-stats">
-        <div class="agent-stat"><div class="agent-stat-val">${a.total}</div><div class="agent-stat-label">Total</div></div>
-        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">${a.done}</div><div class="agent-stat-label">Resolved</div></div>
-        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">${a.missed}</div><div class="agent-stat-label">Missed</div></div>
-        <div class="agent-stat"><div class="agent-stat-val">${a.rate}%</div><div class="agent-stat-label">Rate</div></div>
-      </div>
-      <div style="margin-bottom:12px;font-size:12px;color:var(--muted)">Avg response: <b style="color:var(--text)">${a.avg_resp}</b></div>
-      <div style="font-size:12px;font-weight:700;margin-bottom:8px">Recent Cases</div>
-      ${caseTable(a.recent)}
-    `;
-  } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
-  if(window.lucide) lucide.createIcons();
-}
-
-function closeAgentModal() { document.getElementById('agent-modal-overlay').classList.remove('open'); }
-function closeAgentModalOutside(e) { if(e.target.id==='agent-modal-overlay') closeAgentModal(); }
-
-// ── Refresh ───────────────────────────────────────────────────────────────────
-async function refresh() {
-  await loadStats();
-  if (currentPage==='overview') {
-    const r = await fetch('/api/cases?filter=today');
-    const cases = await r.json();
-    document.getElementById('recent-table').innerHTML = caseTable(cases.slice(0,10));
-  } else if (currentPage==='cases') loadCases();
-  else if (currentPage==='missed') loadMissed();
-  else if (currentPage==='reassigned') loadReassigned();
-  else if (currentPage==='calendar') { await loadCaseDates(); renderCalendar(); }
-  else if (currentPage==='my_profile') loadMyProfile();
-  else if (currentPage==='agents') loadAgents();
-  document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
-  if(window.lucide) lucide.createIcons();
-}
-
-loadCaseDates();
-refresh();
-setInterval(refresh, 10000);
-if(window.lucide){lucide.createIcons();}
-document.addEventListener("DOMContentLoaded", ()=>{ if(window.lucide) lucide.createIcons(); });
-
-// ── Report ────────────────────────────────────────────────────────────────────
-let reportTab = 'today';
-
-function openReport() {
-  document.getElementById('report-modal-overlay').classList.add('open');
-  generateReport();
-}
 function closeReport() { document.getElementById('report-modal-overlay').classList.remove('open'); }
 function closeReportOutside(e) { if(e.target.id==='report-modal-overlay') closeReport(); }
 
@@ -1335,7 +1176,7 @@ async function loadMyProfile() {
           </div>
         </div>
         <div class="card">
-          <div class="card-title"><i data-lucide="calendar"></i>Period Breakdown</div>
+          <div class="card-title"><i class="ph ph-calendar"></i>Period Breakdown</div>
           <div class="stats-list">
             <div class="row"><span>Today assigned</span><span class="val">${p.today_total}</span></div>
             <div class="row"><span>Today resolved</span><span class="val" style="color:var(--green)">${p.today_done}</span></div>
@@ -1348,8 +1189,7 @@ async function loadMyProfile() {
       <div class="section-title" style="margin-bottom:10px">Recent Cases</div>
       <div class="table-wrap"><div class="table-scroll">${caseTable(p.recent)}</div></div>
     `;
-    if(window.lucide) lucide.createIcons();
-  } catch(e) { document.getElementById('my-profile-content').innerHTML = '<div class="loading">Error loading profile.</div>'; }
+      } catch(e) { document.getElementById('my-profile-content').innerHTML = '<div class="loading">Error loading profile.</div>'; }
 }
 
 // ── Agents (manager only) ─────────────────────────────────────────────────────
@@ -1359,7 +1199,7 @@ async function loadAgents() {
     const r = await fetch('/api/agents');
     if (r.status === 403) { document.getElementById('agents-content').innerHTML = '<div class="loading">Access denied.</div>'; return; }
     const agents = await r.json();
-    if (!agents.length) { document.getElementById('agents-content').innerHTML = '<div class="empty-state"><i data-lucide="users"></i>No agents yet</div>'; return; }
+    if (!agents.length) { document.getElementById('agents-content').innerHTML = '<div class="empty-state"><i class="ph ph-users"></i>No agents yet</div>'; return; }
     document.getElementById('agents-content').innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
         ${agents.map(a=>`
@@ -1390,8 +1230,7 @@ async function loadAgents() {
         `).join('')}
       </div>
     `;
-    if(window.lucide) lucide.createIcons();
-  } catch(e) { document.getElementById('agents-content').innerHTML = '<div class="loading">Error.</div>'; }
+      } catch(e) { document.getElementById('agents-content').innerHTML = '<div class="loading">Error.</div>'; }
 }
 
 async function openAgentModal(name) {
@@ -1412,8 +1251,7 @@ async function openAgentModal(name) {
       <div style="font-size:12px;font-weight:700;margin-bottom:8px">Recent Cases</div>
       ${caseTable(a.recent)}
     `;
-    if(window.lucide) lucide.createIcons();
-  } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
+      } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
 }
 
 function printReport() {
