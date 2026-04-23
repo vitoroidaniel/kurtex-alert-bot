@@ -15,9 +15,10 @@ from shifts import MAIN_ADMIN_ID, SUPER_ADMINS
 from storage.case_store import mark_missed
 from handlers.admin_handler import send_daily_report
 
+
 def _esc(t: str) -> str:
     """Escape Markdown v1 special chars in dynamic content."""
-    return str(t).replace("_", "\_").replace("*", "\*").replace("`", "\`").replace("[", "\[")
+    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
 
 
 logger = logging.getLogger(__name__)
