@@ -13,6 +13,12 @@ from telegram.error import TelegramError
 from config import config
 from shift_manager import MAIN_ADMIN_ID
 
+
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
+
 logger = logging.getLogger(__name__)
 
 (
