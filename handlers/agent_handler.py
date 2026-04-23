@@ -179,11 +179,11 @@ async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
         num  = start + i + 1
         text = (
             f"Case {num}\n\n"
-            f"Group: {case['group_name']}\n"
-            f"Reported by: {case['driver_name']}\n"
+            f"Group: {_esc(case['group_name'])}\n"
+            f"Reported by: {_esc(case['driver_name'])}\n"
             f"Issue: {(case.get('description') or '')[:80]}\n"
             f"Closed: {_fmt_dt(case.get('closed_at'))}"
-            + (f"\nNote: {case['notes']}" if case.get("notes") else "")
+            + (f"\nNote: {_esc(case['notes'])}" if case.get("notes") else "")
         )
         nav = []
         if i == len(batch) - 1:
@@ -260,7 +260,7 @@ async def cb_solve_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"📋 *Report*\n\n"
-        f"Reported by: {case['driver_name']} — {case['group_name']}\n"
+        f"Reported by: {_esc(case['driver_name'])} — {_esc(case['group_name'])}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
         "Select vehicle type:",
         parse_mode="Markdown",
@@ -325,8 +325,8 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"📋 *Close Case*\n\n"
-        f"📌 *Group:* {case['group_name']}\n"
-        f"👤 *Driver:* {case['driver_name']}\n"
+        f"📌 *Group:* {_esc(case['group_name'])}\n"
+        f"👤 *Driver:* {_esc(case['driver_name'])}\n"
         f"📝 *Issue:* {(case.get('description') or '—')[:200]}",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
@@ -357,8 +357,8 @@ async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await close_case(case_id, notes=None)
     await query.edit_message_text(
         f"✅ *Case closed!*\n\n"
-        f"Group: {case['group_name']}\n"
-        f"Driver: {case['driver_name']}",
+        f"Group: {_esc(case['group_name'])}\n"
+        f"Driver: {_esc(case['driver_name'])}",
         parse_mode="Markdown",
         reply_markup=None,
     )
@@ -446,8 +446,8 @@ async def cb_done_pick(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"📋 *Close Case*\n\n"
-        f"📌 *Group:* {case['group_name']}\n"
-        f"👤 *Driver:* {case['driver_name']}\n"
+        f"📌 *Group:* {_esc(case['group_name'])}\n"
+        f"👤 *Driver:* {_esc(case['driver_name'])}\n"
         f"📝 *Issue:* {(case.get('description') or '—')[:200]}",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([[
