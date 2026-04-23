@@ -1,10 +1,11 @@
 """
 Kurtex Alert Bot — Truck Maintenance Command Center
-Volume-backed JSON storage (/data/), no external database required.
+Dynamic user management via Telegram commands + forward-to-add flow.
 """
 
 import asyncio
 import logging
+import os
 import signal
 
 from telegram import Update
@@ -16,7 +17,7 @@ from telegram.ext import (
 )
 
 from config import config
-from shifts import ADMINS, MAIN_ADMIN_ID, SUPER_ADMINS
+from shifts import ADMINS, SUPER_ADMINS
 from handlers.alert_handler import AlertHandler, TRIGGER_WORDS
 from handlers.report_handler import get_report_conversation
 from handlers.agent_handler import (
@@ -28,9 +29,14 @@ from handlers.agent_handler import (
 )
 from handlers.admin_handler import (
     cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin,
+    cmd_adduser, cmd_removeuser, cmd_editrole, cmd_listusers,
+    handle_forward, cb_addrole,
 )
 from handlers.scheduler import register_jobs
-from user_tracker import async_has_user_started, async_mark_user_started
+from storage.user_store import (
+    is_authorized, bootstrap_developer, migrate_from_shifts,
+    has_role,
+)
 
 BOT_NAME    = "Kurtex Alert Bot"
 BOT_TAGLINE = "Truck Maintenance Command Center"
@@ -63,12 +69,16 @@ async def auth_middleware(update: Update, ctx):
     if not user:
         return
     chat = update.effective_chat
+
+    # Allow group messages through (alert triggers, etc.)
     if chat and chat.type in ("group", "supergroup"):
         msg = update.effective_message
         if msg and msg.text and msg.text.startswith("/"):
             raise ApplicationHandlerStop
         return
-    if user.id not in ADMINS and user.id not in MAIN_ADMIN_ID:
+
+    # Private chat — must be in user_store
+    if not is_authorized(user.id):
         if update.message:
             await update.message.reply_text(
                 "⛔ You are not authorized to use this bot.\n"
@@ -81,6 +91,17 @@ async def auth_middleware(update: Update, ctx):
 
 async def post_init(application: Application) -> None:
     from telegram import BotCommandScopeChat
+
+    # ── Migrate existing hardcoded admins on first boot ──
+    migrate_from_shifts(ADMINS, SUPER_ADMINS)
+
+    # ── Bootstrap developer from env var ──
+    dev_id_str = os.getenv("DEVELOPER_ID", "").strip()
+    if dev_id_str:
+        try:
+            bootstrap_developer(int(dev_id_str), os.getenv("DEVELOPER_NAME", "Developer"))
+        except ValueError:
+            logger.warning(f"DEVELOPER_ID is not a valid integer: {dev_id_str!r}")
 
     # Reload unassigned alerts from disk so admins can still accept after restart
     alert_h = application.bot_data.get("alert_handler")
@@ -96,20 +117,29 @@ async def post_init(application: Application) -> None:
         ("mystats",     "Your performance stats"),
         ("help",        "Commands and help"),
     ]
-    super_commands = base_commands + [
+    manager_commands = base_commands + [
         ("report",      "Daily summary"),
         ("leaderboard", "Weekly top performers"),
         ("missed",      "Unhandled alerts today"),
+        ("listusers",   "List all users and roles"),
+        ("adduser",     "Add user by ID"),
+        ("removeuser",  "Remove a user"),
+        ("editrole",    "Change a user's role"),
     ]
 
     await application.bot.set_my_commands(base_commands)
-    for admin_id in SUPER_ADMINS:
-        try:
-            await application.bot.set_my_commands(
-                super_commands, scope=BotCommandScopeChat(chat_id=admin_id)
-            )
-        except Exception as e:
-            logger.warning(f"Could not set commands for {admin_id}: {e}")
+
+    # Set extended command list for developer + super_admin
+    from storage.user_store import get_all_users
+    for uid_str, u in get_all_users().items():
+        if u["role"] in ("developer", "super_admin"):
+            try:
+                await application.bot.set_my_commands(
+                    manager_commands,
+                    scope=BotCommandScopeChat(chat_id=int(uid_str)),
+                )
+            except Exception as e:
+                logger.warning(f"Could not set commands for {uid_str}: {e}")
 
     me = await application.bot.get_me()
     logger.info(f"{BOT_NAME} started as @{me.username}")
@@ -119,14 +149,26 @@ async def post_init(application: Application) -> None:
 
 @with_typing
 async def cmd_start(update: Update, ctx):
-    user = update.effective_user
-    if await async_has_user_started(user.id):
-        await update.message.reply_text("✅ Already registered.\n\nUse /help to see all commands.")
-        return
-    await async_mark_user_started(user.id)
+    """
+    /start now just welcomes the user.
+    If they're already in user_store (added by forward or /adduser), they're good.
+    If not in store but reached here (shouldn't happen due to auth_middleware),
+    we auto-add them as agent so they don't get locked out.
+    """
+    from storage.user_store import get_user, add_user
+    user    = update.effective_user
+    stored  = get_user(user.id)
+
+    if not stored:
+        # Edge case: user somehow bypassed auth — auto-register as agent
+        name = f"{user.first_name} {user.last_name or ''}".strip()
+        add_user(user.id, name, user.username or "", "agent")
+        stored = get_user(user.id)
+
+    role = stored["role"] if stored else "agent"
     await update.message.reply_text(
         f"👋 Welcome to *{BOT_NAME}!*\n\n_{BOT_TAGLINE}_\n\n"
-        "You are now registered and will receive alerts during your shift.\n\n"
+        f"You're registered as *{role}*.\n\n"
         "/shifts — See who is on duty\n"
         "/help — All commands",
         parse_mode="Markdown",
@@ -156,6 +198,7 @@ async def cmd_shifts(update: Update, ctx):
 async def cmd_help(update: Update, ctx):
     user     = update.effective_user
     is_super = _is_main_admin(user.id)
+    is_dev   = has_role(user.id, "developer")
     words    = "  ".join(TRIGGER_WORDS)
 
     text = (
@@ -172,10 +215,24 @@ async def cmd_help(update: Update, ctx):
     )
     if is_super:
         text += (
-            "\n*Super admin commands:*\n"
+            "\n*Admin commands:*\n"
             "/report — Daily summary\n"
             "/leaderboard — Weekly top performers\n"
             "/missed — Unhandled alerts\n"
+            "/listusers — All users and roles\n"
+            "/adduser — Add user by ID and role\n"
+            "/removeuser — Remove a user\n"
+            "/editrole — Change a user's role\n"
+            "\n💡 *Tip:* Forward any message from a user to add them quickly.\n"
+        )
+    if is_dev and not is_super:
+        text += (
+            "\n*Developer commands:*\n"
+            "/listusers — All users and roles\n"
+            "/adduser — Add user by ID and role\n"
+            "/removeuser — Remove a user\n"
+            "/editrole — Change a user's role\n"
+            "\n💡 *Tip:* Forward any message from a user to add them quickly.\n"
         )
     await update.message.reply_text(text, parse_mode="Markdown")
 
@@ -238,6 +295,8 @@ def main():
     app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
 
     private = filters.ChatType.PRIVATE
+
+    # ── Core commands ──
     app.add_handler(CommandHandler("start",       cmd_start,       filters=private))
     app.add_handler(CommandHandler("shifts",      cmd_shifts,      filters=private))
     app.add_handler(CommandHandler("help",        cmd_help,        filters=private))
@@ -245,9 +304,23 @@ def main():
     app.add_handler(CommandHandler("mycases",     cmd_mycases,     filters=private))
     app.add_handler(CommandHandler("casehistory", cmd_casehistory, filters=private))
     app.add_handler(CommandHandler("mystats",     cmd_mystats,     filters=private))
+
+    # ── Admin report commands ──
     app.add_handler(CommandHandler("report",      cmd_report,      filters=private))
     app.add_handler(CommandHandler("leaderboard", cmd_leaderboard, filters=private))
     app.add_handler(CommandHandler("missed",      cmd_missed,      filters=private))
+
+    # ── User management commands ──
+    app.add_handler(CommandHandler("adduser",    cmd_adduser,    filters=private))
+    app.add_handler(CommandHandler("removeuser", cmd_removeuser, filters=private))
+    app.add_handler(CommandHandler("editrole",   cmd_editrole,   filters=private))
+    app.add_handler(CommandHandler("listusers",  cmd_listusers,  filters=private))
+
+    # ── Forward-to-add: catches forwarded messages in private chat ──
+    app.add_handler(MessageHandler(private & filters.FORWARDED, handle_forward))
+
+    # ── Role selection callback (from forward flow) ──
+    app.add_handler(CallbackQueryHandler(cb_addrole, pattern=r"^addrole\|"))
 
     app.add_handler(get_solve_conversation())
     app.add_handler(get_report_conversation())

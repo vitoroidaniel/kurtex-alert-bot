@@ -21,7 +21,7 @@ from storage.case_store import (
     save_active_alerts, load_active_alerts,
     set_report_msg_id,
 )
-from shifts import ADMINS
+from storage.user_store import is_authorized
 
 logger           = logging.getLogger(__name__)
 TRIGGER_WORDS    = ['#maintenance', '#repairs', '#repair']
@@ -327,7 +327,7 @@ class AlertHandler:
         await query.answer()
         admin  = update.effective_user
 
-        if admin.id not in ADMINS:
+        if not is_authorized(admin.id):
             await query.answer("Not authorized.", show_alert=True)
             return
 

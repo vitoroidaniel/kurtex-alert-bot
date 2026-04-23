@@ -1,60 +1,54 @@
 """
 shift_manager.py - Returns which admins are currently on shift.
+Now reads users dynamically from user_store instead of hardcoded shifts.py.
 """
 
 from datetime import datetime, time
 import zoneinfo
-from shifts import ADMINS, SHIFTS, TIMEZONE, MAIN_ADMIN_ID
+from shifts import SHIFTS, TIMEZONE
+
+
+def _get_all_alert_users() -> list[dict]:
+    """Pull alert-eligible users (super_admin + agent) from dynamic store."""
+    from storage.user_store import get_all_user_dicts
+    return [u for u in get_all_user_dicts() if u["role"] in ("super_admin", "agent")]
 
 
 def get_on_shift_admins() -> list[dict]:
-    """Returns list of admins currently on shift."""
+    """Returns list of alert-eligible users currently on shift."""
     try:
         tz = zoneinfo.ZoneInfo(TIMEZONE)
     except Exception:
         tz = zoneinfo.ZoneInfo("America/New_York")
 
     now      = datetime.now(tz)
-    weekday  = now.weekday()   # 0=Mon, 6=Sun
+    weekday  = now.weekday()
     now_time = now.time().replace(second=0, microsecond=0)
 
-    on_shift_ids = set()
-
+    in_shift = False
     for shift in SHIFTS:
         if weekday not in shift["days"]:
             continue
-
         s = shift["start"]
         e = shift["end"]
-
-        # Handle overnight shifts (e.g. 22:00 -> 06:00)
         if s <= e:
-            in_shift = s <= now_time < e
+            if s <= now_time < e:
+                in_shift = True
+                break
         else:
-            in_shift = now_time >= s or now_time < e
+            if now_time >= s or now_time < e:
+                in_shift = True
+                break
 
-        if in_shift:
-            for uid in shift["admins"]:
-                on_shift_ids.add(uid)
+    if not in_shift:
+        return []
 
-    result = []
-    for uid in on_shift_ids:
-        info = ADMINS.get(uid, {})
-        result.append({
-            "id":       uid,
-            "name":     info.get("name", f"Admin {uid}"),
-            "username": info.get("username", ""),
-        })
-
-    return result
+    return _get_all_alert_users()
 
 
 def get_all_admins() -> list[dict]:
-    """Returns all admins regardless of shift."""
-    return [
-        {"id": uid, "name": info["name"], "username": info.get("username", "")}
-        for uid, info in ADMINS.items()
-    ]
+    """Returns all alert-eligible users regardless of shift (fallback)."""
+    return _get_all_alert_users()
 
 
 def get_current_shift_name() -> str:
