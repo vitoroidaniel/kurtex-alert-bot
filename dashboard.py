@@ -262,7 +262,7 @@ def api_cases():
     cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:200]
     return jsonify([serialize_case(c) for c in cases])
 
-@app.route("/api/case/<case_id>")
+@app.route("/api/case/<path:case_id>")
 def api_case_detail(case_id):
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     for c in load_cases():
@@ -276,7 +276,7 @@ def api_case_detail(case_id):
             })
     return jsonify({"error":"not found"}), 404
 
-@app.route("/api/agent/<agent_name>")
+@app.route("/api/agent/<path:agent_name>")
 def api_agent(agent_name):
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     cases = [c for c in load_cases() if c.get("agent_name") == agent_name]
