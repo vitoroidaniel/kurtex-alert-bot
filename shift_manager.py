@@ -5,7 +5,7 @@ Now reads users dynamically from user_store instead of hardcoded shifts.py.
 
 from datetime import datetime, time
 import zoneinfo
-from shifts import SHIFTS, TIMEZONE
+from shifts import SHIFTS, TIMEZONE, MAIN_ADMIN_ID
 
 
 def _get_all_alert_users() -> list[dict]:
