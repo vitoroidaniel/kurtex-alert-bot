@@ -79,8 +79,17 @@ def telegram_auth():
     data = dict(request.args)
     if not data.get("hash"): return redirect("/login?error=missing")
     if verify_telegram_login(data):
-        session["user"] = {"id": data.get("id"), "first_name": data.get("first_name",""),
-                           "username": data.get("username",""), "photo_url": data.get("photo_url","")}
+        user_id = int(data.get("id", 0))
+        role = "agent"
+        try:
+            from storage.user_store import get_user
+            u = get_user(user_id)
+            if u: role = u.get("role", "agent")
+        except Exception:
+            pass
+        session["user"] = {"id": user_id, "first_name": data.get("first_name",""),
+                           "username": data.get("username",""), "photo_url": data.get("photo_url",""),
+                           "role": role}
         return redirect("/")
     return redirect("/login?error=invalid")
 
@@ -139,6 +148,64 @@ def api_report():
         "top_drivers": [{"name":n,"count":v} for n,v in driver_counts.most_common(5)],
         "missed_cases": [serialize_case(c) for c in missed_list[:20]],
     })
+
+
+@app.route("/api/my_profile")
+def api_my_profile():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    user = session["user"]
+    name = user.get("first_name","")
+    username = user.get("username","")
+    cases = load_cases()
+    # Match by agent_name (first_name) or agent_username
+    my_cases = [c for c in cases if
+                c.get("agent_name","").lower() == name.lower() or
+                (username and c.get("agent_username","") == username)]
+    today = today_str(); wk = week_start_str()
+    today_cases = [c for c in my_cases if c.get("opened_at","").startswith(today)]
+    week_cases  = [c for c in my_cases if c.get("opened_at","") >= wk]
+    total = len(my_cases); done = sum(1 for c in my_cases if c["status"]=="done")
+    missed = sum(1 for c in my_cases if c["status"]=="missed")
+    rt = [c["response_secs"] for c in my_cases if c.get("response_secs")]
+    avg = int(sum(rt)/len(rt)) if rt else 0
+    recent = sorted(my_cases, key=lambda c: c.get("opened_at",""), reverse=True)[:10]
+    return jsonify({
+        "name": name, "username": username, "role": user.get("role","agent"),
+        "total": total, "done": done, "missed": missed,
+        "avg_resp": fmt_secs(avg),
+        "rate": round(done/total*100) if total else 0,
+        "today_total": len(today_cases),
+        "today_done": sum(1 for c in today_cases if c["status"]=="done"),
+        "week_total": len(week_cases),
+        "week_done": sum(1 for c in week_cases if c["status"]=="done"),
+        "recent": [serialize_case(c) for c in recent],
+    })
+
+@app.route("/api/agents")
+def api_agents():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if session["user"].get("role","agent") not in ("developer","super_admin"):
+        return jsonify({"error":"forbidden"}), 403
+    cases = load_cases()
+    from storage.user_store import get_all_user_dicts
+    try:
+        users = [u for u in get_all_user_dicts() if u["role"] == "agent"]
+    except Exception:
+        users = []
+    result = []
+    for u in users:
+        name = u["name"]
+        agent_cases = [c for c in cases if c.get("agent_name","").lower() == name.lower()]
+        total = len(agent_cases); done = sum(1 for c in agent_cases if c["status"]=="done")
+        missed = sum(1 for c in agent_cases if c["status"]=="missed")
+        rt = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
+        avg = int(sum(rt)/len(rt)) if rt else 0
+        result.append({"name": name, "username": u.get("username",""),
+                       "total": total, "done": done, "missed": missed,
+                       "avg_resp": fmt_secs(avg),
+                       "rate": round(done/total*100) if total else 0})
+    result.sort(key=lambda x: -x["total"])
+    return jsonify(result)
 
 @app.route("/logout")
 def logout():
@@ -293,14 +360,8 @@ h1{color:#fff;font-size:24px;font-weight:800;margin-bottom:8px;letter-spacing:-.
   <div class="particles" id="particles"></div>
 </div>
 <div class="card">
-  <div class="logo-ring">
-    <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 24h3v3H3zm24 0h3v3h-3z" fill="white"/>
-      <rect x="2" y="13" width="18" height="12" rx="2.5" fill="white"/>
-      <path d="M20 17h6l3.5 4.5V24H20z" fill="white"/>
-      <circle cx="7" cy="26" r="2.5" fill="#6366f1"/>
-      <circle cx="27" cy="26" r="2.5" fill="#6366f1"/>
-    </svg>
+  <div class="logo-ring" style="padding:0;overflow:hidden;">
+    <img src="https://img.icons8.com/fluency/96/delivery-truck.png" style="width:100%;height:100%;object-fit:cover;">
   </div>
   <div class="badge"><div class="badge-dot"></div> Live Dashboard</div>
   <h1>Kurtex Dashboard</h1>
@@ -341,7 +402,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <title>Kurtex Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,""" + FAVICON.replace('\n','').replace("'","%27") + """">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.441.0/font/lucide.min.css">
+<script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.min.js"></script>
 <style>
 :root{
   --bg:#f4f4f8;--surface:#fff;--surface2:#f0f0f4;--surface3:#e8e8ee;
@@ -626,27 +687,29 @@ td{padding:9px 12px;vertical-align:middle}
 <!-- Mobile header -->
 <div class="mobile-header">
   <div class="mobile-logo">
-    <div class="logo-icon"><svg viewBox="0 0 36 36" fill="none"><path d="M3 24h3v3H3zm24 0h3v3h-3z" fill="white"/><rect x="2" y="13" width="18" height="12" rx="2.5" fill="white"/><path d="M20 17h6l3.5 4.5V24H20z" fill="white"/><circle cx="7" cy="26" r="2.5" fill="#6366f1"/><circle cx="27" cy="26" r="2.5" fill="#6366f1"/></svg></div>
+    <div class="logo-icon" style="overflow:hidden;padding:0;"><img src="https://img.icons8.com/fluency/48/delivery-truck.png" style="width:100%;height:100%;object-fit:cover;border-radius:9px;"></div>
     Kurtex
   </div>
-  <div onclick="toggleSidebar()" class="hamburger"><i class="lucide-menu"></i></div>
+  <div onclick="toggleSidebar()" class="hamburger"><i data-lucide="menu"></i></div>
 </div>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <div class="layout">
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <div class="logo-icon"><svg viewBox="0 0 36 36" fill="none"><path d="M3 24h3v3H3zm24 0h3v3h-3z" fill="white"/><rect x="2" y="13" width="18" height="12" rx="2.5" fill="white"/><path d="M20 17h6l3.5 4.5V24H20z" fill="white"/><circle cx="7" cy="26" r="2.5" fill="#6366f1"/><circle cx="27" cy="26" r="2.5" fill="#6366f1"/></svg></div>
+    <div class="logo-icon" style="overflow:hidden;padding:0;"><img src="https://img.icons8.com/fluency/48/delivery-truck.png" style="width:100%;height:100%;object-fit:cover;border-radius:9px;"></div>
     <div class="logo-text"><h2>Kurtex</h2><small>Alert Dashboard</small></div>
   </div>
   <nav>
-    <div class="nav-item active" onclick="showPage('overview')"><i class="lucide-layout-dashboard"></i> Overview</div>
-    <div class="nav-item" onclick="showPage('cases')"><i class="lucide-clipboard-list"></i> Cases</div>
-    <div class="nav-item" onclick="showPage('calendar')"><i class="lucide-calendar"></i> Calendar</div>
-    <div class="nav-item" onclick="showPage('missed')"><i class="lucide-alert-triangle"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
-    <div class="nav-item" onclick="showPage('reassigned')"><i class="lucide-refresh-cw"></i> Reassigned</div>
-    <div class="nav-item" onclick="showPage('leaderboard')"><i class="lucide-trophy"></i> Leaderboard</div>
-    <div class="nav-item" onclick="showPage('analytics')"><i class="lucide-bar-chart-2"></i> Analytics</div>
+    <div class="nav-item active" onclick="showPage('overview')"><i data-lucide="layout-dashboard"></i> Overview</div>
+    <div class="nav-item" onclick="showPage('cases')"><i data-lucide="clipboard-list"></i> Cases</div>
+    <div class="nav-item" onclick="showPage('calendar')"><i data-lucide="calendar"></i> Calendar</div>
+    <div class="nav-item" onclick="showPage('missed')"><i data-lucide="alert-triangle"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
+    <div class="nav-item" onclick="showPage('reassigned')"><i data-lucide="refresh-cw"></i> Reassigned</div>
+    <div class="nav-item" onclick="showPage('leaderboard')"><i data-lucide="trophy"></i> Leaderboard</div>
+    <div class="nav-item" onclick="showPage('analytics')"><i data-lucide="bar-chart-2"></i> Analytics</div>
+    <div class="nav-item" onclick="showPage('my_profile')"><i data-lucide="user"></i> My Profile</div>
+    {% if is_manager %}<div class="nav-item" onclick="showPage('agents')"><i data-lucide="users"></i> Agents</div>{% endif %}
   </nav>
   <div class="sidebar-footer">
     <div class="user-chip">
@@ -654,8 +717,8 @@ td{padding:9px 12px;vertical-align:middle}
       {% else %}<div class="user-avatar-init">{{ user.first_name[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">Manager</div></div>
     </div>
-    <button class="theme-btn" onclick="toggleTheme()"><i class="lucide-sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
-    <button class="logout-btn" onclick="window.location='/logout'"><i class="lucide-log-out"></i> Sign out</button>
+    <button class="theme-btn" onclick="toggleTheme()"><i data-lucide="sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
+    <button class="logout-btn" onclick="window.location='/logout'"><i data-lucide="log-out"></i> Sign out</button>
   </div>
 </aside>
 
@@ -663,9 +726,9 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="topbar">
     <h1 id="page-title">Overview</h1>
     <div class="topbar-right">
-      <button class="badge-btn" onclick="openReport()"><i class="lucide-file-text"></i> Report</button>
-      <button class="badge-btn" onclick="window.print()"><i class="lucide-printer"></i> Print</button>
-      <a class="badge-btn" href="/api/export"><i class="lucide-download"></i> Export CSV</a>
+      <button class="badge-btn" onclick="openReport()"><i data-lucide="file-text"></i> Report</button>
+      <button class="badge-btn" onclick="window.print()"><i data-lucide="printer"></i> Print</button>
+      <a class="badge-btn" href="/api/export"><i data-lucide="download"></i> Export CSV</a>
       <div class="badge-btn"><div class="dot"></div><span id="last-update">Loading...</span></div>
     </div>
   </div>
@@ -674,8 +737,8 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page active" id="page-overview">
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
-      <div class="card"><div class="card-title"><i class="lucide-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="lucide-radio-tower"></i>Top Groups</div><div id="groups-overview"></div></div>
+      <div class="card"><div class="card-title"><i data-lucide="trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
+      <div class="card"><div class="card-title"><i data-lucide="radio-tower"></i>Top Groups</div><div id="groups-overview"></div></div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent Cases</div></div>
@@ -685,7 +748,7 @@ td{padding:9px 12px;vertical-align:middle}
 
   <!-- Cases -->
   <div class="page" id="page-cases">
-    <div class="search-wrap"><i class="lucide-search"></i><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
+    <div class="search-wrap"><i data-lucide="search"></i><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
     <div class="section">
       <div class="section-header">
         <div class="section-title">All Cases</div>
@@ -704,18 +767,18 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page" id="page-calendar">
     <div class="two-col">
       <div class="card">
-        <div class="card-title"><i class="lucide-calendar"></i>Select Day</div>
+        <div class="card-title"><i data-lucide="calendar"></i>Select Day</div>
         <div class="calendar-wrap">
           <div class="cal-header">
-            <button class="cal-nav" onclick="calPrev()"><i class="lucide-chevron-left"></i></button>
+            <button class="cal-nav" onclick="calPrev()"><i data-lucide="chevron-left"></i></button>
             <div class="cal-title" id="cal-title"></div>
-            <button class="cal-nav" onclick="calNext()"><i class="lucide-chevron-right"></i></button>
+            <button class="cal-nav" onclick="calNext()"><i data-lucide="chevron-right"></i></button>
           </div>
           <div class="cal-grid" id="cal-grid"></div>
         </div>
       </div>
       <div class="card">
-        <div class="card-title"><i class="lucide-clipboard-list"></i><span id="cal-cases-title">Select a day</span></div>
+        <div class="card-title"><i data-lucide="clipboard-list"></i><span id="cal-cases-title">Select a day</span></div>
         <div id="cal-day-stats" style="margin-bottom:10px"></div>
       </div>
     </div>
@@ -724,7 +787,7 @@ td{padding:9px 12px;vertical-align:middle}
 
   <!-- Missed -->
   <div class="page" id="page-missed">
-    <div class="search-wrap"><i class="lucide-search"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
+    <div class="search-wrap"><i data-lucide="search"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
     <div class="section">
       <div class="section-header"><div class="section-title">Missed Cases</div></div>
       <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
@@ -743,7 +806,7 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page" id="page-leaderboard">
     <div class="two-col">
       <div class="card">
-        <div class="card-title"><i class="lucide-trophy"></i>Agent Leaderboard</div>
+        <div class="card-title"><i data-lucide="trophy"></i>Agent Leaderboard</div>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
           <button class="toggle-btn" onclick="setLbPeriod('week',this)">Week</button>
@@ -751,7 +814,7 @@ td{padding:9px 12px;vertical-align:middle}
         </div>
         <div id="leaderboard-full"></div>
       </div>
-      <div class="card"><div class="card-title"><i class="lucide-radio-tower"></i>Cases by Group</div><div id="group-bars-lb"></div></div>
+      <div class="card"><div class="card-title"><i data-lucide="radio-tower"></i>Cases by Group</div><div id="group-bars-lb"></div></div>
     </div>
   </div>
 
@@ -759,15 +822,25 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page" id="page-analytics">
     <div class="two-col">
       <div class="card">
-        <div class="card-title"><i class="lucide-bar-chart-2"></i>Period Summary</div>
+        <div class="card-title"><i data-lucide="bar-chart-2"></i>Period Summary</div>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setAnalyticsPeriod('week',this)">Week</button>
           <button class="toggle-btn" onclick="setAnalyticsPeriod('month',this)">Month</button>
         </div>
         <div class="stats-list" id="analytics-stats"></div>
       </div>
-      <div class="card"><div class="card-title"><i class="lucide-hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
+      <div class="card"><div class="card-title"><i data-lucide="hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
     </div>
+  </div>
+
+  <!-- My Profile -->
+  <div class="page" id="page-my_profile">
+    <div id="my-profile-content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Agent Profiles (manager only) -->
+  <div class="page" id="page-agents">
+    <div id="agents-content"><div class="loading">Loading...</div></div>
   </div>
 </main>
 </div>
@@ -775,7 +848,7 @@ td{padding:9px 12px;vertical-align:middle}
 <!-- Case Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
 <div class="modal" id="modal-content">
-  <button class="modal-close" onclick="closeModal()"><i class="lucide-x"></i></button>
+  <button class="modal-close" onclick="closeModal()"><i data-lucide="x"></i></button>
   <h2 id="modal-title">Case Detail</h2>
   <div id="modal-body"><div class="loading">Loading...</div></div>
 </div>
@@ -786,13 +859,13 @@ td{padding:9px 12px;vertical-align:middle}
 <div class="report-modal-overlay" id="report-modal-overlay" onclick="closeReportOutside(event)">
 <div class="report-modal" id="report-modal">
   <div class="report-header">
-    <h2><i class="lucide-file-text"></i>Report</h2>
+    <h2><i data-lucide="file-text"></i>Report</h2>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="report-tabs">
         <button class="report-tab active" onclick="setReportTab('today',this)">Today</button>
         <button class="report-tab" onclick="setReportTab('custom',this)">Custom</button>
       </div>
-      <button class="report-close" onclick="closeReport()"><i class="lucide-x"></i></button>
+      <button class="report-close" onclick="closeReport()"><i data-lucide="x"></i></button>
     </div>
   </div>
   <div class="report-body">
@@ -813,14 +886,14 @@ td{padding:9px 12px;vertical-align:middle}
   </div>
   <div class="report-footer">
     <span class="ts" id="report-ts"></span>
-    <button class="print-report-btn" onclick="printReport()"><i class="lucide-printer"></i> Print Report</button>
+    <button class="print-report-btn" onclick="printReport()"><i data-lucide="printer"></i> Print Report</button>
   </div>
 </div>
 </div>
 <!-- Agent Modal -->
 <div class="modal-overlay" id="agent-modal-overlay" onclick="closeAgentModalOutside(event)">
 <div class="modal" id="agent-modal-content">
-  <button class="modal-close" onclick="closeAgentModal()"><i class="lucide-x"></i></button>
+  <button class="modal-close" onclick="closeAgentModal()"><i data-lucide="x"></i></button>
   <h2 id="agent-modal-title">Agent Profile</h2>
   <div id="agent-modal-body"><div class="loading">Loading...</div></div>
 </div>
@@ -834,8 +907,8 @@ let lbPeriod = 'day';
 let analyticsPeriod = 'week';
 let searchTimers = {};
 const medals = ['🥇','🥈','🥉'];
-const pages = ['overview','cases','calendar','missed','reassigned','leaderboard','analytics'];
-const titles = {overview:'Overview',cases:'Cases',calendar:'Calendar',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics'};
+const pages = ['overview','cases','calendar','missed','reassigned','leaderboard','analytics','my_profile','agents'];
+const titles = {overview:'Overview',cases:'Cases',calendar:'Calendar',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',my_profile:'My Profile',agents:'Agent Profiles'};
 
 // Theme
 let isDark = localStorage.getItem('theme') === 'dark';
@@ -904,13 +977,13 @@ function statusBadge(s) {
 }
 
 function caseTable(cases) {
-  if (!cases || !cases.length) return '<div class="empty-state"><i class="lucide-inbox"></i>No cases found</div>';
+  if (!cases || !cases.length) return '<div class="empty-state"><i data-lucide="inbox"></i>No cases found</div>';
   return `<table><thead><tr>
     <th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>
   </tr></thead><tbody>${cases.map(c=>`<tr onclick="openCase('${c.full_id}')">
     <td><b>${c.driver}</b></td>
     <td style="color:var(--muted)">${c.group}</td>
-    <td>${c.agent === '—' ? '<span style="color:var(--muted)">—</span>' : `<span class="agent-link" onclick="event.stopPropagation();openAgent('${c.agent}')">${c.agent}</span>`}</td>
+    <td>${c.agent === '—' ? '<span style="color:var(--muted)">—</span>' : c.agent}</td>
     <td>${statusBadge(c.status)}${c.reassigned?'<span class="reassign-badge">reassigned</span>':''}</td>
     <td style="color:var(--muted);font-size:11px">${c.opened}</td>
     <td style="font-size:11px">${c.response}</td>
@@ -1087,7 +1160,7 @@ function buildTimeline(c) {
     const afterDone = i < statusIdx;
     html += `<div class="tl-step${afterDone?' done-step':''}">
       <div class="tl-dot${isActive?' active':isDone?' done':''}">
-        ${isDone?'<i class="lucide-check" style="font-size:10px"></i>':isActive?'<i class="lucide-circle" style="font-size:10px"></i>':(i+1)}
+        ${isDone?'<i data-lucide="check" style="font-size:10px"></i>':isActive?'<i data-lucide="circle" style="font-size:10px"></i>':(i+1)}
       </div>
       <div class="tl-label">${s.label}</div>
       <div class="tl-time">${s.time&&s.time!=='—'?s.time:''}</div>
@@ -1121,6 +1194,7 @@ async function openCase(caseId) {
       ${c.full_notes?`<div class="notes-box"><span class="box-label">📋 Report / Notes</span><p class="box-text">${c.full_notes}</p></div>`:''}
     `;
   } catch(e){document.getElementById('modal-body').innerHTML='<div class="loading">Error loading case.</div>';}
+  if(window.lucide) lucide.createIcons();
 }
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
@@ -1146,6 +1220,7 @@ async function openAgent(name) {
       ${caseTable(a.recent)}
     `;
   } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
+  if(window.lucide) lucide.createIcons();
 }
 
 function closeAgentModal() { document.getElementById('agent-modal-overlay').classList.remove('open'); }
@@ -1162,12 +1237,17 @@ async function refresh() {
   else if (currentPage==='missed') loadMissed();
   else if (currentPage==='reassigned') loadReassigned();
   else if (currentPage==='calendar') { await loadCaseDates(); renderCalendar(); }
+  else if (currentPage==='my_profile') loadMyProfile();
+  else if (currentPage==='agents') loadAgents();
   document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
+  if(window.lucide) lucide.createIcons();
 }
 
 loadCaseDates();
 refresh();
 setInterval(refresh, 10000);
+if(window.lucide){lucide.createIcons();}
+document.addEventListener("DOMContentLoaded", ()=>{ if(window.lucide) lucide.createIcons(); });
 
 // ── Report ────────────────────────────────────────────────────────────────────
 let reportTab = 'today';
@@ -1230,6 +1310,112 @@ async function generateReport() {
   } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; }
 }
 
+
+// ── My Profile ────────────────────────────────────────────────────────────────
+async function loadMyProfile() {
+  document.getElementById('my-profile-content').innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/my_profile');
+    const p = await r.json();
+    document.getElementById('my-profile-content').innerHTML = `
+      <div class="two-col" style="margin-bottom:16px">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+            <div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">${p.name[0]}</div>
+            <div>
+              <div style="font-size:17px;font-weight:700">${p.name}</div>
+              <div style="font-size:12px;color:var(--muted)">${p.username ? '@'+p.username : ''} · <span style="color:var(--accent)">${p.role}</span></div>
+            </div>
+          </div>
+          <div class="report-stat-grid">
+            <div class="report-stat"><div class="report-stat-val v-accent">${p.total}</div><div class="report-stat-label">All Time</div></div>
+            <div class="report-stat"><div class="report-stat-val v-green">${p.done}</div><div class="report-stat-label">Resolved</div></div>
+            <div class="report-stat"><div class="report-stat-val v-red">${p.missed}</div><div class="report-stat-label">Missed</div></div>
+            <div class="report-stat"><div class="report-stat-val v-accent">${p.rate}%</div><div class="report-stat-label">Rate</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><i data-lucide="calendar"></i>Period Breakdown</div>
+          <div class="stats-list">
+            <div class="row"><span>Today assigned</span><span class="val">${p.today_total}</span></div>
+            <div class="row"><span>Today resolved</span><span class="val" style="color:var(--green)">${p.today_done}</span></div>
+            <div class="row"><span>This week assigned</span><span class="val">${p.week_total}</span></div>
+            <div class="row"><span>This week resolved</span><span class="val" style="color:var(--green)">${p.week_done}</span></div>
+            <div class="row"><span>Avg response</span><span class="val">${p.avg_resp}</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="section-title" style="margin-bottom:10px">Recent Cases</div>
+      <div class="table-wrap"><div class="table-scroll">${caseTable(p.recent)}</div></div>
+    `;
+    if(window.lucide) lucide.createIcons();
+  } catch(e) { document.getElementById('my-profile-content').innerHTML = '<div class="loading">Error loading profile.</div>'; }
+}
+
+// ── Agents (manager only) ─────────────────────────────────────────────────────
+async function loadAgents() {
+  document.getElementById('agents-content').innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/agents');
+    if (r.status === 403) { document.getElementById('agents-content').innerHTML = '<div class="loading">Access denied.</div>'; return; }
+    const agents = await r.json();
+    if (!agents.length) { document.getElementById('agents-content').innerHTML = '<div class="empty-state"><i data-lucide="users"></i>No agents yet</div>'; return; }
+    document.getElementById('agents-content').innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
+        ${agents.map(a=>`
+          <div class="card" style="cursor:pointer" onclick="openAgentModal('${a.name}')">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">${a.name[0]}</div>
+              <div>
+                <div style="font-size:13px;font-weight:700">${a.name}</div>
+                <div style="font-size:11px;color:var(--muted)">${a.username?'@'+a.username:''}</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
+              <div style="background:var(--surface2);border-radius:7px;padding:6px">
+                <div style="font-size:16px;font-weight:800;color:var(--accent)">${a.total}</div>
+                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:7px;padding:6px">
+                <div style="font-size:16px;font-weight:800;color:var(--green)">${a.done}</div>
+                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:7px;padding:6px">
+                <div style="font-size:16px;font-weight:800;color:var(--accent)">${a.rate}%</div>
+                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div>
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">Avg: ${a.avg_resp}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    if(window.lucide) lucide.createIcons();
+  } catch(e) { document.getElementById('agents-content').innerHTML = '<div class="loading">Error.</div>'; }
+}
+
+async function openAgentModal(name) {
+  document.getElementById('agent-modal-overlay').classList.add('open');
+  document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('agent-modal-title').textContent = name;
+  try {
+    const r = await fetch('/api/agent/'+encodeURIComponent(name));
+    const a = await r.json();
+    document.getElementById('agent-modal-body').innerHTML = `
+      <div class="agent-stats">
+        <div class="agent-stat"><div class="agent-stat-val v-accent">${a.total}</div><div class="agent-stat-label">Total</div></div>
+        <div class="agent-stat"><div class="agent-stat-val v-green">${a.done}</div><div class="agent-stat-label">Resolved</div></div>
+        <div class="agent-stat"><div class="agent-stat-val v-red">${a.missed}</div><div class="agent-stat-label">Missed</div></div>
+        <div class="agent-stat"><div class="agent-stat-val">${a.rate}%</div><div class="agent-stat-label">Rate</div></div>
+      </div>
+      <div style="margin-bottom:12px;font-size:12px;color:var(--muted)">Avg response: <b style="color:var(--text)">${a.avg_resp}</b></div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px">Recent Cases</div>
+      ${caseTable(a.recent)}
+    `;
+    if(window.lucide) lucide.createIcons();
+  } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
+}
+
 function printReport() {
   const orig = document.title;
   document.title = 'Kurtex Report — ' + new Date().toLocaleDateString();
@@ -1248,7 +1434,10 @@ def login():
 @app.route("/")
 def index():
     if not session.get("user"): return redirect("/login")
-    return render_template_string(DASHBOARD_HTML, user=session["user"])
+    user = session["user"]
+    role = user.get("role","agent")
+    is_manager = role in ("developer","super_admin")
+    return render_template_string(DASHBOARD_HTML, user=user, is_manager=is_manager)
 
 def run_dashboard():
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
