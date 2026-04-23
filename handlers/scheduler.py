@@ -15,6 +15,11 @@ from shifts import MAIN_ADMIN_ID, SUPER_ADMINS
 from storage.case_store import mark_missed
 from handlers.admin_handler import send_daily_report
 
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\_").replace("*", "\*").replace("`", "\`").replace("[", "\[")
+
+
 logger = logging.getLogger(__name__)
 
 ESCALATION_FIRST_MINUTES  = 10
@@ -80,8 +85,8 @@ async def job_escalation_check(ctx) -> None:
 
         msg = (
             f"🔔 *Unassigned Alert — {age_str} old* (reminder {count + 1}/{ESCALATION_MAX_ROUNDS})\n\n"
-            f"📌 *Group:* {group_name}\n"
-            f"👤 *Driver:* {driver_name}\n"
+            f"📌 *Group:* {_esc(group_name)}\n"
+            f"👤 *Driver:* {_esc(driver_name)}\n"
             f"📝 {description[:200]}\n\n"
             "⚠️ *Please respond!*"
         )
