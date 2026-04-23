@@ -171,7 +171,7 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"📋 *Report*\n\n"
-        f"Reported by: {case['driver_name']} — {case['group_name']}\n"
+        f"Reported by: {_esc(case['driver_name'])} — {_esc(case['group_name'])}\n"
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
         "Select vehicle type:",
         parse_mode="Markdown",
