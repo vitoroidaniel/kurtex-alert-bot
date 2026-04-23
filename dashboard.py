@@ -1,16 +1,10 @@
 """
-dashboard.py — Kurtex Alert Bot Web Dashboard
-Light theme, Telegram login, auto-refresh, CSV export, search, reassigned tab.
+dashboard.py — Kurtex Alert Bot Web Dashboard v2
+Mobile responsive, Lucide icons, calendar, dark/light toggle,
+case timeline, print report, agent profile, login reworked.
 """
 
-import csv
-import hashlib
-import hmac
-import io
-import json
-import logging
-import os
-import time
+import csv, hashlib, hmac, io, json, logging, os, re, time
 from collections import Counter
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -19,7 +13,6 @@ from threading import Thread
 from flask import Flask, jsonify, render_template_string, request, session, redirect, Response
 
 logger = logging.getLogger(__name__)
-
 app = Flask(__name__)
 app.secret_key = os.getenv("DASHBOARD_SECRET", "kurtex-dashboard-secret-change-me")
 
@@ -27,8 +20,7 @@ DATA_DIR       = Path(os.getenv("DATA_DIR", "/app/data"))
 BOT_TOKEN      = os.getenv("BOT_TOKEN", "")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
 
-
-def verify_telegram_login(data: dict) -> bool:
+def verify_telegram_login(data):
     check_hash = data.pop("hash", "")
     data_check = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
     secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
@@ -38,456 +30,632 @@ def verify_telegram_login(data: dict) -> bool:
         return False
     return hmac.compare_digest(computed, check_hash)
 
-
-def get_bot_username() -> str:
+def get_bot_username():
     return os.getenv("BOT_USERNAME", "")
 
-
-def load_cases() -> list:
+def load_cases():
     f = DATA_DIR / "cases.json"
-    if not f.exists():
-        return []
-    try:
-        return json.loads(f.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    if not f.exists(): return []
+    try: return json.loads(f.read_text(encoding="utf-8"))
+    except: return []
 
-
-def today_str() -> str:
+def today_str():
     return datetime.now(timezone.utc).date().isoformat()
 
-
-def week_start_str() -> str:
+def week_start_str():
     now = datetime.now(timezone.utc)
     return (now - timedelta(days=now.weekday())).date().isoformat()
 
-
-def month_start_str() -> str:
-    now = datetime.now(timezone.utc)
-    return now.date().replace(day=1).isoformat()
-
+def month_start_str():
+    return datetime.now(timezone.utc).date().replace(day=1).isoformat()
 
 def fmt_dt(iso):
-    if not iso:
-        return "—"
-    try:
-        return datetime.fromisoformat(iso).astimezone().strftime("%b %d %H:%M")
-    except Exception:
-        return str(iso)[:16]
-
+    if not iso: return "—"
+    try: return datetime.fromisoformat(iso).astimezone().strftime("%b %d %H:%M")
+    except: return str(iso)[:16]
 
 def fmt_secs(secs):
-    if secs is None:
-        return "—"
+    if secs is None: return "—"
     secs = int(secs)
-    if secs < 60:
-        return f"{secs}s"
-    if secs < 3600:
-        return f"{secs//60}m {secs%60}s"
+    if secs < 60: return f"{secs}s"
+    if secs < 3600: return f"{secs//60}m {secs%60}s"
     return f"{secs//3600}h {(secs%3600)//60}m"
-
 
 def serialize_case(c):
     return {
-        "id":          c["id"][:8],
-        "full_id":     c["id"],
-        "driver":      c.get("driver_name", "—"),
-        "group":       c.get("group_name", "—"),
-        "agent":       c.get("agent_name") or "—",
-        "status":      c.get("status", "open"),
-        "opened":      fmt_dt(c.get("opened_at")),
-        "closed":      fmt_dt(c.get("closed_at")),
-        "response":    fmt_secs(c.get("response_secs")),
+        "id": c["id"][:8], "full_id": c["id"],
+        "driver": c.get("driver_name","—"), "group": c.get("group_name","—"),
+        "agent": c.get("agent_name") or "—", "status": c.get("status","open"),
+        "opened": fmt_dt(c.get("opened_at")), "closed": fmt_dt(c.get("closed_at")),
+        "opened_raw": (c.get("opened_at") or "")[:10],
+        "response": fmt_secs(c.get("response_secs")),
         "description": (c.get("description") or "")[:200],
-        "notes":       c.get("notes") or "",
-        "reassigned":  bool(c.get("reassigned")),
+        "notes": c.get("notes") or "", "reassigned": bool(c.get("reassigned")),
     }
 
-
 # ── Auth ──────────────────────────────────────────────────────────────────────
-
 @app.route("/auth/telegram")
 def telegram_auth():
     data = dict(request.args)
-    if not data.get("hash"):
-        return redirect("/login?error=missing")
+    if not data.get("hash"): return redirect("/login?error=missing")
     if verify_telegram_login(data):
-        session["user"] = {
-            "id":         data.get("id"),
-            "first_name": data.get("first_name", ""),
-            "username":   data.get("username", ""),
-            "photo_url":  data.get("photo_url", ""),
-        }
+        session["user"] = {"id": data.get("id"), "first_name": data.get("first_name",""),
+                           "username": data.get("username",""), "photo_url": data.get("photo_url","")}
         return redirect("/")
     return redirect("/login?error=invalid")
 
+
+@app.route("/api/report")
+def api_report():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    period = request.args.get("period", "today")
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    cases = load_cases()
+
+    if period == "today":
+        label = "Today — " + datetime.now().strftime("%B %d, %Y")
+        cases = [c for c in cases if c.get("opened_at","").startswith(today_str())]
+    elif period == "week":
+        label = "This Week"
+        cases = [c for c in cases if c.get("opened_at","") >= week_start_str()]
+    elif period == "month":
+        label = "This Month"
+        cases = [c for c in cases if c.get("opened_at","") >= month_start_str()]
+    elif period == "custom" and date_from:
+        dt = date_to or today_str()
+        label = f"{date_from} → {dt}"
+        cases = [c for c in cases if date_from <= c.get("opened_at","")[:10] <= dt]
+    else:
+        label = "All Time"
+
+    total = len(cases)
+    done = sum(1 for c in cases if c["status"] == "done")
+    missed_list = [c for c in cases if c["status"] == "missed"]
+    assigned = sum(1 for c in cases if c["status"] in ("assigned","reported","done"))
+    open_cases = sum(1 for c in cases if c["status"] == "open")
+    rt = [c["response_secs"] for c in cases if c.get("response_secs")]
+    avg_resp = int(sum(rt)/len(rt)) if rt else 0
+    res_t = [c["resolution_secs"] for c in cases if c.get("resolution_secs")]
+    avg_res = int(sum(res_t)/len(res_t)) if res_t else 0
+
+    agent_counts = Counter(c["agent_name"] for c in cases if c.get("agent_name") and c["status"] in ("assigned","reported","done"))
+    group_counts = Counter(c.get("group_name","Unknown") for c in cases)
+    driver_counts = Counter(c.get("driver_name","Unknown") for c in cases)
+
+    return jsonify({
+        "label": label,
+        "period": period,
+        "total": total,
+        "done": done,
+        "missed": len(missed_list),
+        "assigned": assigned,
+        "open": open_cases,
+        "avg_resp": fmt_secs(avg_resp),
+        "avg_res": fmt_secs(avg_res),
+        "rate": round(done/total*100) if total else 0,
+        "leaderboard": [{"name":n,"count":v} for n,v in agent_counts.most_common(10)],
+        "top_groups": [{"name":n,"count":v} for n,v in group_counts.most_common(5)],
+        "top_drivers": [{"name":n,"count":v} for n,v in driver_counts.most_common(5)],
+        "missed_cases": [serialize_case(c) for c in missed_list[:20]],
+    })
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
-
 # ── API ───────────────────────────────────────────────────────────────────────
-
 @app.route("/api/stats")
 def api_stats():
-    if not session.get("user"):
-        return jsonify({"error": "unauthorized"}), 401
-
-    cases    = load_cases()
-    today    = today_str()
-    wk_start = week_start_str()
-    mo_start = month_start_str()
-
-    today_cases = [c for c in cases if c.get("opened_at", "").startswith(today)]
-    week_cases  = [c for c in cases if c.get("opened_at", "") >= wk_start]
-    month_cases = [c for c in cases if c.get("opened_at", "") >= mo_start]
-
-    from collections import Counter as C
-    status_today = C(c["status"] for c in today_cases)
-
-    def leaderboard(case_list):
-        counts = C(
-            c["agent_name"] for c in case_list
-            if c.get("agent_name") and c["status"] in ("assigned", "reported", "done")
-        )
-        return [{"name": n, "count": v} for n, v in counts.most_common(10)]
-
-    # Top groups
-    group_counts = C(c.get("group_name", "Unknown") for c in cases)
-
-    # Only # keywords
-    all_desc = " ".join(c.get("description", "") for c in cases).lower()
-    import re
-    hashtags = re.findall(r'#\w+', all_desc)
-    top_words = [{"word": w, "count": c} for w, c in C(hashtags).most_common(15)]
-
-    resp_times = [c["response_secs"] for c in cases if c.get("response_secs")]
-    avg_resp   = int(sum(resp_times) / len(resp_times)) if resp_times else 0
-
-    reassigned_count = sum(1 for c in cases if c.get("reassigned"))
-
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    cases = load_cases()
+    today = today_str(); wk = week_start_str(); mo = month_start_str()
+    tc = [c for c in cases if c.get("opened_at","").startswith(today)]
+    wc = [c for c in cases if c.get("opened_at","") >= wk]
+    mc = [c for c in cases if c.get("opened_at","") >= mo]
+    st = Counter(c["status"] for c in tc)
+    def lb(lst):
+        cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c["status"] in ("assigned","reported","done"))
+        return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
+    grps = Counter(c.get("group_name","Unknown") for c in cases)
+    hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in cases).lower())
+    rt = [c["response_secs"] for c in cases if c.get("response_secs")]
+    avg = int(sum(rt)/len(rt)) if rt else 0
     return jsonify({
-        "today": {
-            "total":    len(today_cases),
-            "open":     status_today.get("open", 0),
-            "assigned": status_today.get("assigned", 0) + status_today.get("reported", 0),
-            "done":     status_today.get("done", 0),
-            "missed":   status_today.get("missed", 0),
-        },
-        "week":  {"total": len(week_cases),  "done": sum(1 for c in week_cases  if c["status"]=="done"), "missed": sum(1 for c in week_cases  if c["status"]=="missed")},
-        "month": {"total": len(month_cases), "done": sum(1 for c in month_cases if c["status"]=="done"), "missed": sum(1 for c in month_cases if c["status"]=="missed")},
-        "all_time": {"total": len(cases), "done": sum(1 for c in cases if c["status"]=="done"), "avg_resp": fmt_secs(avg_resp)},
-        "leaderboard_day":   leaderboard(today_cases),
-        "leaderboard_week":  leaderboard(week_cases),
-        "leaderboard_month": leaderboard(month_cases),
-        "top_groups":        [{"name": n, "count": c} for n, c in group_counts.most_common(5)],
-        "top_words":         top_words,
-        "reassigned_count":  reassigned_count,
+        "today": {"total":len(tc),"open":st.get("open",0),"assigned":st.get("assigned",0)+st.get("reported",0),"done":st.get("done",0),"missed":st.get("missed",0)},
+        "week":  {"total":len(wc),"done":sum(1 for c in wc if c["status"]=="done"),"missed":sum(1 for c in wc if c["status"]=="missed")},
+        "month": {"total":len(mc),"done":sum(1 for c in mc if c["status"]=="done"),"missed":sum(1 for c in mc if c["status"]=="missed")},
+        "all_time": {"total":len(cases),"done":sum(1 for c in cases if c["status"]=="done"),"avg_resp":fmt_secs(avg)},
+        "leaderboard_day": lb(tc), "leaderboard_week": lb(wc), "leaderboard_month": lb(mc),
+        "top_groups": [{"name":n,"count":v} for n,v in grps.most_common(5)],
+        "top_words": [{"word":w,"count":v} for w,v in Counter(hashtags).most_common(15)],
+        "reassigned_count": sum(1 for c in cases if c.get("reassigned")),
     })
-
 
 @app.route("/api/cases")
 def api_cases():
-    if not session.get("user"):
-        return jsonify({"error": "unauthorized"}), 401
-
-    filter_type = request.args.get("filter", "today")
-    search      = request.args.get("search", "").lower().strip()
-    cases       = load_cases()
-
-    if filter_type == "today":
-        cases = [c for c in cases if c.get("opened_at", "").startswith(today_str())]
-    elif filter_type == "week":
-        cases = [c for c in cases if c.get("opened_at", "") >= week_start_str()]
-    elif filter_type == "missed":
-        cases = [c for c in cases if c["status"] == "missed"]
-    elif filter_type == "active":
-        cases = [c for c in cases if c["status"] in ("open", "assigned", "reported")]
-    elif filter_type == "reassigned":
-        cases = [c for c in cases if c.get("reassigned")]
-
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    f = request.args.get("filter","today")
+    search = request.args.get("search","").lower().strip()
+    date_filter = request.args.get("date","").strip()
+    cases = load_cases()
+    if date_filter:
+        cases = [c for c in cases if c.get("opened_at","").startswith(date_filter)]
+    elif f == "today":   cases = [c for c in cases if c.get("opened_at","").startswith(today_str())]
+    elif f == "week":    cases = [c for c in cases if c.get("opened_at","") >= week_start_str()]
+    elif f == "missed":  cases = [c for c in cases if c["status"] == "missed"]
+    elif f == "active":  cases = [c for c in cases if c["status"] in ("open","assigned","reported")]
+    elif f == "reassigned": cases = [c for c in cases if c.get("reassigned")]
     if search:
-        cases = [
-            c for c in cases
-            if search in (c.get("driver_name") or "").lower()
-            or search in (c.get("group_name") or "").lower()
-            or search in (c.get("agent_name") or "").lower()
-            or search in (c.get("description") or "").lower()
-        ]
-
-    cases = sorted(cases, key=lambda c: c.get("opened_at", ""), reverse=True)[:200]
+        cases = [c for c in cases if search in (c.get("driver_name") or "").lower()
+                 or search in (c.get("group_name") or "").lower()
+                 or search in (c.get("agent_name") or "").lower()
+                 or search in (c.get("description") or "").lower()]
+    cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:200]
     return jsonify([serialize_case(c) for c in cases])
-
 
 @app.route("/api/case/<case_id>")
 def api_case_detail(case_id):
-    if not session.get("user"):
-        return jsonify({"error": "unauthorized"}), 401
-    cases = load_cases()
-    for c in cases:
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    for c in load_cases():
         if c["id"].startswith(case_id) or c["id"] == case_id:
             return jsonify(serialize_case(c) | {
-                "full_description": c.get("description", ""),
-                "full_notes":       c.get("notes", ""),
-                "agent_username":   c.get("agent_username", ""),
-                "driver_username":  c.get("driver_username", ""),
-                "assigned_at":      fmt_dt(c.get("assigned_at")),
-                "resolution_secs":  fmt_secs(c.get("resolution_secs")),
+                "full_description": c.get("description",""), "full_notes": c.get("notes",""),
+                "agent_username": c.get("agent_username",""), "driver_username": c.get("driver_username",""),
+                "assigned_at": fmt_dt(c.get("assigned_at")), "resolution_secs": fmt_secs(c.get("resolution_secs")),
+                "opened_at_raw": c.get("opened_at",""), "assigned_at_raw": c.get("assigned_at",""),
+                "closed_at_raw": c.get("closed_at",""),
             })
-    return jsonify({"error": "not found"}), 404
+    return jsonify({"error":"not found"}), 404
 
+@app.route("/api/agent/<agent_name>")
+def api_agent(agent_name):
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    cases = [c for c in load_cases() if c.get("agent_name") == agent_name]
+    total = len(cases); done = sum(1 for c in cases if c["status"]=="done")
+    missed = sum(1 for c in cases if c["status"]=="missed")
+    rt = [c["response_secs"] for c in cases if c.get("response_secs")]
+    avg = int(sum(rt)/len(rt)) if rt else 0
+    recent = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:10]
+    return jsonify({"name":agent_name,"total":total,"done":done,"missed":missed,
+                    "avg_resp":fmt_secs(avg),"rate": round(done/total*100) if total else 0,
+                    "recent":[serialize_case(c) for c in recent]})
 
 @app.route("/api/export")
 def api_export():
-    if not session.get("user"):
-        return jsonify({"error": "unauthorized"}), 401
-    cases  = load_cases()
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["ID","Reported By","Reporter Username","Group","Assigned To","Status","Opened","Assigned","Closed","Response (s)","Resolution (s)","Description","Notes"])
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    cases = load_cases()
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["ID","Reported By","Reporter Username","Group","Assigned To","Status","Opened","Assigned","Closed","Response (s)","Resolution (s)","Description","Notes"])
     for c in sorted(cases, key=lambda x: x.get("opened_at",""), reverse=True):
-        writer.writerow([
-            c["id"][:8],
-            c.get("driver_name",""),
-            c.get("driver_username",""),
-            c.get("group_name",""),
-            c.get("agent_name",""),
-            c.get("status",""),
-            c.get("opened_at","")[:16],
-            c.get("assigned_at","")[:16] if c.get("assigned_at") else "",
-            c.get("closed_at","")[:16] if c.get("closed_at") else "",
-            c.get("response_secs",""),
-            c.get("resolution_secs",""),
-            c.get("description",""),
-            c.get("notes",""),
-        ])
-    output.seek(0)
+        w.writerow([c["id"][:8],c.get("driver_name",""),c.get("driver_username",""),c.get("group_name",""),
+                    c.get("agent_name",""),c.get("status",""),
+                    (c.get("opened_at","") or "")[:16],(c.get("assigned_at","") or "")[:16],
+                    (c.get("closed_at","") or "")[:16],c.get("response_secs",""),
+                    c.get("resolution_secs",""),c.get("description",""),c.get("notes","")])
+    out.seek(0)
     today = datetime.now().strftime("%Y-%m-%d")
-    return Response(
-        output.getvalue(),
-        mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=kurtex-cases-{today}.csv"}
-    )
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=kurtex-{today}.csv"})
 
+# ── HTML ──────────────────────────────────────────────────────────────────────
 
-# ── Pages ─────────────────────────────────────────────────────────────────────
+FAVICON = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
+<rect width='32' height='32' rx='8' fill='#6366f1'/>
+<path d='M4 20h2v2H4zm22 0h2v2h-2z' fill='white'/>
+<rect x='3' y='12' width='16' height='10' rx='2' fill='white'/>
+<path d='M19 15h5l3 4v3h-8z' fill='white'/>
+<circle cx='7' cy='22' r='2' fill='#6366f1'/>
+<circle cx='24' cy='22' r='2' fill='#6366f1'/>
+</svg>"""
 
 LOGIN_HTML = """<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,""" + FAVICON.replace('\n','').replace("'","%27") + """">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f4f5;position:relative;overflow:hidden}
-.bg{position:absolute;inset:0;background:url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80')center/cover no-repeat;opacity:0.12;filter:grayscale(20%)}
-.card{position:relative;background:#fff;border:1px solid #e4e4e7;border-radius:20px;padding:48px 40px;text-align:center;width:100%;max-width:380px;box-shadow:0 4px 32px rgba(0,0,0,0.08)}
-.logo{font-size:36px;margin-bottom:10px}
-h1{color:#18181b;font-size:22px;font-weight:700;margin-bottom:6px}
-p{color:#71717a;font-size:14px;margin-bottom:32px}
-.error{color:#ef4444;font-size:13px;margin-bottom:16px}
+body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0a0a0f}
+.bg-video{position:fixed;inset:0;z-index:0}
+.bg-img{position:absolute;inset:0;background:url('https://images.unsplash.com/photo-1473445730015-841f29a9490b?auto=format&fit=crop&w=1920&q=80')center/cover;opacity:.25;filter:grayscale(30%)}
+.bg-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(10,10,15,.95) 0%,rgba(20,15,40,.85) 50%,rgba(10,10,15,.95) 100%)}
+.particles{position:absolute;inset:0;overflow:hidden}
+.particle{position:absolute;border-radius:50%;animation:float linear infinite;opacity:.4}
+@keyframes float{0%{transform:translateY(100vh) rotate(0deg);opacity:0}10%{opacity:.4}90%{opacity:.4}100%{transform:translateY(-100px) rotate(720deg);opacity:0}}
+.card{position:relative;z-index:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:48px 40px;text-align:center;width:100%;max-width:400px;backdrop-filter:blur(20px)}
+.logo-ring{width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 0 40px rgba(99,102,241,.4)}
+.logo-ring svg{width:36px;height:36px}
+h1{color:#fff;font-size:24px;font-weight:800;margin-bottom:8px;letter-spacing:-.3px}
+.sub{color:rgba(255,255,255,.45);font-size:14px;margin-bottom:8px}
+.divider{display:flex;align-items:center;gap:12px;margin:28px 0}
+.divider-line{flex:1;height:1px;background:rgba(255,255,255,.08)}
+.divider span{font-size:11px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.08em}
 .tg-wrap{display:flex;justify-content:center}
+.features{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:28px}
+.feat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px;text-align:left}
+.feat-icon{font-size:16px;margin-bottom:4px}
+.feat-text{font-size:11px;color:rgba(255,255,255,.5);font-weight:500}
+.error{color:#f87171;font-size:13px;margin-bottom:16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px 12px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:4px 12px;font-size:11px;color:#a5b4fc;margin-bottom:20px}
+.badge-dot{width:6px;height:6px;border-radius:50%;background:#6366f1;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 </style>
 </head>
 <body>
-<div class="bg"></div>
+<div class="bg-video">
+  <div class="bg-img"></div>
+  <div class="bg-overlay"></div>
+  <div class="particles" id="particles"></div>
+</div>
 <div class="card">
-  <div class="logo">🚛</div>
+  <div class="logo-ring">
+    <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3 24h3v3H3zm24 0h3v3h-3z" fill="white"/>
+      <rect x="2" y="13" width="18" height="12" rx="2.5" fill="white"/>
+      <path d="M20 17h6l3.5 4.5V24H20z" fill="white"/>
+      <circle cx="7" cy="26" r="2.5" fill="#6366f1"/>
+      <circle cx="27" cy="26" r="2.5" fill="#6366f1"/>
+    </svg>
+  </div>
+  <div class="badge"><div class="badge-dot"></div> Live Dashboard</div>
   <h1>Kurtex Dashboard</h1>
-  <p>Truck Maintenance Command Center</p>
-  {% if error %}<div class="error">Authentication failed. Try again.</div>{% endif %}
+  <p class="sub">Truck Maintenance Command Center</p>
+  {% if error %}<div class="error">Authentication failed. Please try again.</div>{% endif %}
+  <div class="divider"><div class="divider-line"></div><span>Sign in with</span><div class="divider-line"></div></div>
   <div class="tg-wrap">
     <script async src="https://telegram.org/js/telegram-widget.js?22"
       data-telegram-login="{{ bot_username }}"
-      data-size="large"
+      data-size="large" data-radius="10"
       data-auth-url="/auth/telegram"
       data-request-access="write"></script>
   </div>
+  <div class="features">
+    <div class="feat"><div class="feat-icon">📊</div><div class="feat-text">Live Overview</div></div>
+    <div class="feat"><div class="feat-icon">🏆</div><div class="feat-text">Leaderboards</div></div>
+    <div class="feat"><div class="feat-icon">📅</div><div class="feat-text">Calendar View</div></div>
+    <div class="feat"><div class="feat-icon">⬇️</div><div class="feat-text">CSV Export</div></div>
+  </div>
 </div>
+<script>
+const p = document.getElementById('particles');
+for(let i=0;i<18;i++){
+  const d = document.createElement('div');
+  d.className='particle';
+  const s = Math.random()*6+3;
+  d.style.cssText=`width:${s}px;height:${s}px;left:${Math.random()*100}%;background:hsl(${240+Math.random()*40},70%,70%);animation-duration:${8+Math.random()*12}s;animation-delay:${Math.random()*8}s`;
+  p.appendChild(d);
+}
+</script>
 </body>
 </html>"""
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,""" + FAVICON.replace('\n','').replace("'","%27") + """">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lucide-static@0.441.0/font/lucide.min.css">
 <style>
 :root{
-  --bg:#f8f8fa;--surface:#fff;--surface2:#f4f4f6;
-  --border:#e4e4e7;--border2:#d4d4d8;
-  --text:#18181b;--muted:#71717a;--muted2:#a1a1aa;
-  --accent:#6366f1;--accent-light:rgba(99,102,241,0.08);
-  --green:#16a34a;--green-bg:rgba(22,163,74,0.08);
-  --red:#dc2626;--red-bg:rgba(220,38,38,0.08);
-  --yellow:#ca8a04;--yellow-bg:rgba(202,138,4,0.08);
-  --blue:#2563eb;--blue-bg:rgba(37,99,235,0.08);
-  --purple:#7c3aed;--purple-bg:rgba(124,58,237,0.08);
+  --bg:#f4f4f8;--surface:#fff;--surface2:#f0f0f4;--surface3:#e8e8ee;
+  --border:#e2e2e8;--border2:#d0d0da;
+  --text:#18181b;--muted:#6b7280;--muted2:#9ca3af;
+  --accent:#6366f1;--accent-bg:rgba(99,102,241,.08);--accent-border:rgba(99,102,241,.2);
+  --green:#16a34a;--green-bg:rgba(22,163,74,.08);
+  --red:#dc2626;--red-bg:rgba(220,38,38,.08);
+  --yellow:#ca8a04;--yellow-bg:rgba(202,138,4,.08);
+  --blue:#2563eb;--blue-bg:rgba(37,99,235,.08);
+  --purple:#7c3aed;--purple-bg:rgba(124,58,237,.08);
+  --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
 }
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.hero-bg{position:fixed;inset:0;z-index:0;background:url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80')center/cover no-repeat;opacity:0.03;pointer-events:none}
+[data-theme="dark"]{
+  --bg:#0f0f14;--surface:#18181f;--surface2:#1e1e26;--surface3:#25252f;
+  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
+  --text:#f0f0f5;--muted:#8b8b9e;--muted2:#5a5a6e;
+  --accent:#818cf8;--accent-bg:rgba(129,140,248,.1);--accent-border:rgba(129,140,248,.25);
+  --green:#4ade80;--green-bg:rgba(74,222,128,.08);
+  --red:#f87171;--red-bg:rgba(248,113,113,.08);
+  --yellow:#fbbf24;--yellow-bg:rgba(251,191,36,.08);
+  --blue:#60a5fa;--blue-bg:rgba(96,165,250,.08);
+  --purple:#c084fc;--purple-bg:rgba(192,132,252,.08);
+  --shadow:0 1px 4px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.2);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+.hero-bg{position:fixed;inset:0;z-index:0;background:url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80')center/cover no-repeat;opacity:.03;pointer-events:none}
 .layout{position:relative;z-index:1;display:flex;min-height:100vh}
 
-/* Sidebar */
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:24px 14px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column}
-.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:28px;padding:0 8px}
-.sidebar-logo span{font-size:22px}
-.sidebar-logo h2{font-size:14px;font-weight:700;color:var(--text)}
-.sidebar-logo small{font-size:10px;color:var(--muted);display:block}
-nav a{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;color:var(--muted);font-size:13px;font-weight:500;text-decoration:none;margin-bottom:2px;cursor:pointer;transition:all .15s}
-nav a:hover{background:var(--surface2);color:var(--text)}
-nav a.active{background:var(--accent-light);color:var(--accent)}
-.nav-icon{font-size:15px;width:18px;text-align:center}
-.sidebar-footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--border)}
-.user-chip{display:flex;align-items:center;gap:8px;padding:6px 8px}
-.user-chip img{width:28px;height:28px;border-radius:50%;border:1px solid var(--border)}
-.user-chip-name{font-size:12px;font-weight:600}
-.user-chip-role{font-size:10px;color:var(--muted)}
-.logout-btn{width:100%;margin-top:6px;padding:7px;background:var(--red-bg);border:1px solid rgba(220,38,38,0.15);color:var(--red);border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
-.logout-btn:hover{background:rgba(220,38,38,0.14)}
+/* ── Sidebar ── */
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;transition:transform .25s,background .2s;z-index:50}
+.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:0 8px}
+.logo-icon{width:32px;height:32px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-icon svg{width:18px;height:18px;fill:white}
+.logo-text h2{font-size:14px;font-weight:700}
+.logo-text small{font-size:10px;color:var(--muted)}
+nav{flex:1}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;margin-bottom:2px;position:relative;text-decoration:none}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--accent-bg);color:var(--accent)}
+.nav-item i{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;min-width:18px;text-align:center}
+.sidebar-footer{padding-top:14px;border-top:1px solid var(--border)}
+.user-chip{display:flex;align-items:center;gap:8px;padding:8px 8px;border-radius:10px;background:var(--surface2);margin-bottom:8px}
+.user-avatar{width:30px;height:30px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;object-fit:cover}
+.user-avatar-init{width:30px;height:30px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0}
+.user-name{font-size:12px;font-weight:600}
+.user-role{font-size:10px;color:var(--muted)}
+.theme-btn{width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;font-family:inherit;display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.theme-btn:hover{color:var(--text);border-color:var(--border2)}
+.logout-btn{width:100%;padding:7px;background:var(--red-bg);border:1px solid rgba(220,38,38,.15);color:var(--red);border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
+.logout-btn:hover{background:rgba(220,38,38,.14)}
+
+/* Mobile header */
+.mobile-header{display:none;position:sticky;top:0;z-index:40;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;align-items:center;justify-content:space-between}
+.mobile-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.mobile-logo .logo-icon{width:28px;height:28px;border-radius:7px}
+.hamburger{background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49}
 
 /* Main */
-.main{flex:1;padding:24px 28px;overflow-x:hidden}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:12px;flex-wrap:wrap}
-.topbar h1{font-size:20px;font-weight:700}
-.topbar-right{display:flex;align-items:center;gap:10px}
-.refresh-badge{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;color:var(--muted)}
-.dot{width:6px;height:6px;border-radius:50%;background:#16a34a;animation:pulse 2s infinite}
+.main{flex:1;padding:22px 24px;overflow-x:hidden;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:10px;flex-wrap:wrap}
+.topbar h1{font-size:18px;font-weight:700}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge-btn{display:flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;font-family:inherit;font-weight:500}
+.badge-btn:hover{border-color:var(--border2);color:var(--text)}
+.badge-btn i{font-size:13px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.export-btn{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:500;color:var(--text);cursor:pointer;text-decoration:none;transition:all .15s}
-.export-btn:hover{background:var(--surface2);border-color:var(--border2)}
-
-/* Search */
-.search-wrap{position:relative;margin-bottom:18px}
-.search-wrap input{width:100%;padding:9px 14px 9px 36px;background:var(--surface);border:1px solid var(--border);border-radius:9px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border .15s}
-.search-wrap input:focus{border-color:var(--accent)}
-.search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px}
 
 /* Stats */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:22px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
-.stat-label{font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.stat-value{font-size:28px;font-weight:800;line-height:1}
-.stat-value.green{color:var(--green)}
-.stat-value.red{color:var(--red)}
-.stat-value.blue{color:var(--blue)}
-.stat-value.yellow{color:var(--yellow)}
-.stat-value.accent{color:var(--accent)}
-.stat-value.purple{color:var(--purple)}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.stat-label{font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.stat-value{font-size:26px;font-weight:800;line-height:1}
+.v-accent{color:var(--accent)}.v-green{color:var(--green)}.v-red{color:var(--red)}
+.v-yellow{color:var(--yellow)}.v-blue{color:var(--blue)}.v-purple{color:var(--purple)}
+.v-sm{font-size:17px!important;margin-top:4px}
 
 /* Two col */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px}
-@media(max-width:900px){.two-col{grid-template-columns:1fr}}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+@media(max-width:768px){.two-col{grid-template-columns:1fr}}
 
-/* Cards */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
-.card h3{font-size:13px;font-weight:700;margin-bottom:14px;color:var(--text)}
+/* Card */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.card-title{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.card-title i{font-size:14px;color:var(--accent)}
 
-/* Toggle tabs */
-.toggle-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:14px}
-.toggle-btn{flex:1;padding:5px 10px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
-.toggle-btn.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,0.08)}
-
-/* List rows */
-.list-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
-.list-row:last-child{border-bottom:none}
-.list-name{font-size:12px;font-weight:500;flex:1;color:var(--text)}
-.list-count{font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-light);padding:2px 9px;border-radius:20px}
-.bar-wrap{flex:1.5;height:4px;background:var(--surface2);border-radius:2px;margin:0 8px}
-.bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .5s}
-.medal{font-size:15px}
+/* Toggle */
+.toggle-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:12px}
+.toggle-btn{flex:1;padding:5px 8px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
+.toggle-btn.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
 
 /* Filter tabs */
 .filter-tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab-btn{padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
+.tab-btn{padding:5px 11px;border-radius:7px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
 .tab-btn:hover{color:var(--text);border-color:var(--border2)}
 .tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
 
+/* List */
+.list-row{display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border)}
+.list-row:last-child{border-bottom:none}
+.list-name{font-size:12px;font-weight:500;flex:1;color:var(--text)}
+.list-count{font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-bg);padding:2px 9px;border-radius:20px;flex-shrink:0}
+.bar-wrap{flex:1.5;height:4px;background:var(--surface3);border-radius:2px;margin:0 6px}
+.bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .5s}
+.medal{font-size:14px;flex-shrink:0;width:20px}
+.agent-link{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+
+/* Section */
+.section{margin-bottom:20px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
+.section-title{font-size:13px;font-weight:700}
+
+/* Search */
+.search-wrap{position:relative;margin-bottom:14px}
+.search-wrap input{width:100%;padding:9px 14px 9px 38px;background:var(--surface);border:1px solid var(--border);border-radius:9px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border .15s}
+.search-wrap input:focus{border-color:var(--accent)}
+.search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px}
+
+/* Calendar */
+.calendar-wrap{margin-bottom:16px}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cal-nav{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);font-size:14px;transition:all .15s}
+.cal-nav:hover{background:var(--surface3)}
+.cal-title{font-size:13px;font-weight:700}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-day-name{font-size:9px;font-weight:600;color:var(--muted);text-align:center;padding:4px 0;text-transform:uppercase}
+.cal-day{aspect-ratio:1;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;position:relative;color:var(--text)}
+.cal-day:hover{background:var(--surface2)}
+.cal-day.has-cases::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.cal-day.selected{background:var(--accent);color:#fff}
+.cal-day.selected::after{background:rgba(255,255,255,.7)}
+.cal-day.today{font-weight:700;color:var(--accent)}
+.cal-day.today.selected{color:#fff}
+.cal-day.empty{cursor:default}
+.cal-day.other-month{color:var(--muted2)}
+
 /* Table */
-.section{margin-bottom:22px}
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
-.section-title{font-size:14px;font-weight:700}
-.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-table{width:100%;border-collapse:collapse;font-size:12px}
-thead th{padding:10px 14px;text-align:left;color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);background:var(--surface2)}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:600px}
+thead th{padding:9px 12px;text-align:left;color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap}
 tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:pointer}
 tbody tr:last-child{border-bottom:none}
 tbody tr:hover{background:var(--surface2)}
-td{padding:10px 14px;vertical-align:middle}
-.status-badge{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase}
-.status-open{background:var(--blue-bg);color:var(--blue)}
-.status-assigned{background:var(--yellow-bg);color:var(--yellow)}
-.status-reported{background:var(--purple-bg);color:var(--purple)}
-.status-done{background:var(--green-bg);color:var(--green)}
-.status-missed{background:var(--red-bg);color:var(--red)}
-.desc-cell{max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
-.reassign-badge{display:inline-flex;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;background:var(--purple-bg);color:var(--purple)}
+td{padding:9px 12px;vertical-align:middle}
+.status-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap}
+.s-open{background:var(--blue-bg);color:var(--blue)}
+.s-assigned{background:var(--yellow-bg);color:var(--yellow)}
+.s-reported{background:var(--purple-bg);color:var(--purple)}
+.s-done{background:var(--green-bg);color:var(--green)}
+.s-missed{background:var(--red-bg);color:var(--red)}
+.reassign-badge{display:inline-flex;padding:2px 6px;border-radius:20px;font-size:10px;font-weight:700;background:var(--purple-bg);color:var(--purple);margin-left:4px}
+.desc-cell{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 
 /* Word tags */
 .word-grid{display:flex;flex-wrap:wrap;gap:7px}
-.word-tag{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;background:var(--accent-light);color:var(--accent);border:1px solid rgba(99,102,241,0.15)}
+.word-tag{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border)}
 
 /* Week stats */
-.week-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
-.week-row:last-child{border-bottom:none}
-.week-val{font-weight:700}
+.stats-list .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.stats-list .row:last-child{border-bottom:none}
+.stats-list .val{font-weight:700}
 
 /* Modal */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:100;align-items:center;justify-content:center}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:560px;width:90%;max-height:80vh;overflow-y:auto;position:relative}
-.modal-close{position:absolute;top:16px;right:16px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
-.modal h2{font-size:16px;font-weight:700;margin-bottom:16px;padding-right:36px}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:580px;width:100%;max-height:85vh;overflow-y:auto;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
+.modal-close{position:absolute;top:14px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .15s}
+.modal-close:hover{background:var(--surface3)}
+.modal h2{font-size:16px;font-weight:700;margin-bottom:16px;padding-right:40px}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+@media(max-width:480px){.detail-grid{grid-template-columns:1fr}}
 .detail-item{background:var(--surface2);border-radius:8px;padding:10px 12px}
 .detail-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
-.detail-val{font-size:13px;font-weight:600;color:var(--text)}
-.detail-desc{background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:12px}
-.detail-desc label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px}
-.detail-desc p{font-size:13px;color:var(--text);line-height:1.5}
-.notes-box{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px}
-.notes-box label{font-size:10px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px}
-.notes-box p{font-size:13px;color:#78350f;line-height:1.5}
+.detail-val{font-size:13px;font-weight:600}
+.desc-box,.notes-box{border-radius:8px;padding:12px;margin-bottom:10px}
+.desc-box{background:var(--surface2)}
+.notes-box{background:#fffbeb;border:1px solid #fde68a}
+[data-theme="dark"] .notes-box{background:rgba(251,191,36,.06);border-color:rgba(251,191,36,.2)}
+.box-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px;color:var(--muted)}
+.notes-box .box-label{color:#92400e}
+[data-theme="dark"] .notes-box .box-label{color:var(--yellow)}
+.box-text{font-size:13px;line-height:1.6;color:var(--text)}
+.notes-box .box-text{color:#78350f}
+[data-theme="dark"] .notes-box .box-text{color:var(--yellow)}
 
-.loading{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+/* Timeline */
+.timeline{display:flex;align-items:center;gap:0;margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:10px}
+.tl-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
+.tl-step:not(:last-child)::after{content:'';position:absolute;top:12px;left:calc(50% + 12px);width:calc(100% - 24px);height:2px;background:var(--border)}
+.tl-step.done-step::after{background:var(--accent)}
+.tl-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid var(--border);background:var(--surface);z-index:1;position:relative}
+.tl-dot.active{border-color:var(--accent);background:var(--accent);color:#fff}
+.tl-dot.done{border-color:var(--green);background:var(--green);color:#fff}
+.tl-label{font-size:9px;color:var(--muted);margin-top:5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.tl-time{font-size:9px;color:var(--muted2);margin-top:2px}
+
+/* Agent profile modal */
+.agent-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+@media(max-width:480px){.agent-stats{grid-template-columns:repeat(2,1fr)}}
+.agent-stat{background:var(--surface2);border-radius:8px;padding:10px;text-align:center}
+.agent-stat-val{font-size:22px;font-weight:800;color:var(--accent)}
+.agent-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+
+/* Print */
+@media print{
+  .sidebar,.mobile-header,.topbar-right,.modal-overlay{display:none!important}
+  .main{padding:0}
+  .hero-bg{display:none}
+  body{background:white;color:black}
+  .stat-card,.card,.table-wrap{box-shadow:none;border:1px solid #ddd}
+}
+
+
+/* Report modal */
+.report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
+.report-modal-overlay.open{display:flex}
+.report-modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;margin:auto;position:relative}
+.report-header{padding:20px 24px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.report-header h2{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.report-header h2 i{color:var(--accent);font-size:16px}
+.report-tabs{display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px}
+.report-tab{padding:5px 16px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s}
+.report-tab.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.report-close{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;flex-shrink:0}
+.report-body{padding:20px 24px}
+.report-period-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.report-period-bar select,.report-period-bar input{padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text);font-family:inherit;outline:none}
+.report-period-bar select:focus,.report-period-bar input:focus{border-color:var(--accent)}
+.report-generate-btn{padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.report-generate-btn:hover{opacity:.9}
+.report-title{font-size:18px;font-weight:800;margin-bottom:4px}
+.report-subtitle{font-size:12px;color:var(--muted);margin-bottom:18px}
+.report-stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:18px}
+.report-stat{background:var(--surface2);border-radius:10px;padding:12px;text-align:center}
+.report-stat-val{font-size:24px;font-weight:800;line-height:1}
+.report-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+.report-section{margin-bottom:16px}
+.report-section h3{font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.report-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.report-row:last-child{border-bottom:none}
+.report-row .name{flex:1;font-weight:500}
+.report-row .count{font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px}
+.report-footer{padding:12px 24px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.report-footer .ts{font-size:11px;color:var(--muted)}
+.print-report-btn{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.print-report-btn:hover{opacity:.9}
+@media print{
+  body > *:not(.report-modal-overlay){display:none!important}
+  .report-modal-overlay{position:static!important;background:none!important;display:block!important;padding:0!important}
+  .report-modal{box-shadow:none!important;border:none!important;max-width:100%!important}
+  .report-close,.report-footer .print-report-btn,.report-tabs,.report-header .badge-btn,.report-period-bar{display:none!important}
+  .report-header{border-bottom:1px solid #ddd!important}
+}
+.loading{text-align:center;padding:28px;color:var(--muted);font-size:13px}
 .page{display:none}
 .page.active{display:block}
+.empty-state{text-align:center;padding:40px;color:var(--muted)}
+.empty-state i{font-size:32px;display:block;margin-bottom:8px;opacity:.4}
+
+/* Responsive */
+@media(max-width:768px){
+  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay.open{display:block}
+  .mobile-header{display:flex}
+  .main{padding:14px 14px 24px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .topbar{margin-bottom:14px}
+  .topbar h1{font-size:16px}
+}
 </style>
 </head>
 <body>
 <div class="hero-bg"></div>
-<div class="layout">
 
-<aside class="sidebar">
+<!-- Mobile header -->
+<div class="mobile-header">
+  <div class="mobile-logo">
+    <div class="logo-icon"><svg viewBox="0 0 36 36" fill="none"><path d="M3 24h3v3H3zm24 0h3v3h-3z" fill="white"/><rect x="2" y="13" width="18" height="12" rx="2.5" fill="white"/><path d="M20 17h6l3.5 4.5V24H20z" fill="white"/><circle cx="7" cy="26" r="2.5" fill="#6366f1"/><circle cx="27" cy="26" r="2.5" fill="#6366f1"/></svg></div>
+    Kurtex
+  </div>
+  <div onclick="toggleSidebar()" class="hamburger"><i class="lucide-menu"></i></div>
+</div>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<div class="layout">
+<aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <span>🚛</span>
-    <div><h2>Kurtex</h2><small>Alert Dashboard</small></div>
+    <div class="logo-icon"><svg viewBox="0 0 36 36" fill="none"><path d="M3 24h3v3H3zm24 0h3v3h-3z" fill="white"/><rect x="2" y="13" width="18" height="12" rx="2.5" fill="white"/><path d="M20 17h6l3.5 4.5V24H20z" fill="white"/><circle cx="7" cy="26" r="2.5" fill="#6366f1"/><circle cx="27" cy="26" r="2.5" fill="#6366f1"/></svg></div>
+    <div class="logo-text"><h2>Kurtex</h2><small>Alert Dashboard</small></div>
   </div>
   <nav>
-    <a class="active" onclick="showPage('overview')"><span class="nav-icon">📊</span> Overview</a>
-    <a onclick="showPage('cases')"><span class="nav-icon">📋</span> Cases</a>
-    <a onclick="showPage('missed')"><span class="nav-icon">⚠️</span> Missed</a>
-    <a onclick="showPage('reassigned')"><span class="nav-icon">🔁</span> Reassigned</a>
-    <a onclick="showPage('leaderboard')"><span class="nav-icon">🏆</span> Leaderboard</a>
-    <a onclick="showPage('analytics')"><span class="nav-icon">🔍</span> Analytics</a>
+    <div class="nav-item active" onclick="showPage('overview')"><i class="lucide-layout-dashboard"></i> Overview</div>
+    <div class="nav-item" onclick="showPage('cases')"><i class="lucide-clipboard-list"></i> Cases</div>
+    <div class="nav-item" onclick="showPage('calendar')"><i class="lucide-calendar"></i> Calendar</div>
+    <div class="nav-item" onclick="showPage('missed')"><i class="lucide-alert-triangle"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
+    <div class="nav-item" onclick="showPage('reassigned')"><i class="lucide-refresh-cw"></i> Reassigned</div>
+    <div class="nav-item" onclick="showPage('leaderboard')"><i class="lucide-trophy"></i> Leaderboard</div>
+    <div class="nav-item" onclick="showPage('analytics')"><i class="lucide-bar-chart-2"></i> Analytics</div>
   </nav>
   <div class="sidebar-footer">
     <div class="user-chip">
-      {% if user.photo_url %}
-      <img src="{{ user.photo_url }}" alt="">
-      {% else %}
-      <div style="width:28px;height:28px;border-radius:50%;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--accent);font-weight:700;flex-shrink:0">{{ user.first_name[0] }}</div>
-      {% endif %}
-      <div><div class="user-chip-name">{{ user.first_name }}</div><div class="user-chip-role">Manager</div></div>
+      {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
+      {% else %}<div class="user-avatar-init">{{ user.first_name[0] }}</div>{% endif %}
+      <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">Manager</div></div>
     </div>
-    <button class="logout-btn" onclick="window.location='/logout'">Sign out</button>
+    <button class="theme-btn" onclick="toggleTheme()"><i class="lucide-sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
+    <button class="logout-btn" onclick="window.location='/logout'"><i class="lucide-log-out"></i> Sign out</button>
   </div>
 </aside>
 
@@ -495,8 +663,10 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="topbar">
     <h1 id="page-title">Overview</h1>
     <div class="topbar-right">
-      <a class="export-btn" href="/api/export">⬇ Export CSV</a>
-      <div class="refresh-badge"><div class="dot"></div><span id="last-update">Loading...</span></div>
+      <button class="badge-btn" onclick="openReport()"><i class="lucide-file-text"></i> Report</button>
+      <button class="badge-btn" onclick="window.print()"><i class="lucide-printer"></i> Print</button>
+      <a class="badge-btn" href="/api/export"><i class="lucide-download"></i> Export CSV</a>
+      <div class="badge-btn"><div class="dot"></div><span id="last-update">Loading...</span></div>
     </div>
   </div>
 
@@ -504,18 +674,18 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="page active" id="page-overview">
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
-      <div class="card"><h3>🏆 Top Assigned Today</h3><div id="lb-overview"></div></div>
-      <div class="card"><h3>📡 Top Groups</h3><div id="groups-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="lucide-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="lucide-radio-tower"></i>Top Groups</div><div id="groups-overview"></div></div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent Cases</div></div>
-      <div class="table-wrap" id="recent-table"><div class="loading">Loading...</div></div>
+      <div class="table-wrap"><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
 
   <!-- Cases -->
   <div class="page" id="page-cases">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch()"></div>
+    <div class="search-wrap"><i class="lucide-search"></i><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
     <div class="section">
       <div class="section-header">
         <div class="section-title">All Cases</div>
@@ -526,16 +696,38 @@ td{padding:10px 14px;vertical-align:middle}
           <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
         </div>
       </div>
-      <div class="table-wrap" id="cases-table"><div class="loading">Loading...</div></div>
+      <div class="table-wrap"><div class="table-scroll" id="cases-table"><div class="loading">Loading...</div></div></div>
     </div>
+  </div>
+
+  <!-- Calendar -->
+  <div class="page" id="page-calendar">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="lucide-calendar"></i>Select Day</div>
+        <div class="calendar-wrap">
+          <div class="cal-header">
+            <button class="cal-nav" onclick="calPrev()"><i class="lucide-chevron-left"></i></button>
+            <div class="cal-title" id="cal-title"></div>
+            <button class="cal-nav" onclick="calNext()"><i class="lucide-chevron-right"></i></button>
+          </div>
+          <div class="cal-grid" id="cal-grid"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="lucide-clipboard-list"></i><span id="cal-cases-title">Select a day</span></div>
+        <div id="cal-day-stats" style="margin-bottom:10px"></div>
+      </div>
+    </div>
+    <div class="table-wrap"><div class="table-scroll" id="cal-table"><div class="loading" style="padding:20px">Select a day to view cases.</div></div></div>
   </div>
 
   <!-- Missed -->
   <div class="page" id="page-missed">
-    <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="missed-search" placeholder="Search..." oninput="onSearchMissed()"></div>
+    <div class="search-wrap"><i class="lucide-search"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
     <div class="section">
       <div class="section-header"><div class="section-title">Missed Cases</div></div>
-      <div class="table-wrap" id="missed-table"><div class="loading">Loading...</div></div>
+      <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
 
@@ -543,7 +735,7 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="page" id="page-reassigned">
     <div class="section">
       <div class="section-header"><div class="section-title">Reassigned Cases</div></div>
-      <div class="table-wrap" id="reassigned-table"><div class="loading">Loading...</div></div>
+      <div class="table-wrap"><div class="table-scroll" id="reassigned-table"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
 
@@ -551,7 +743,7 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="page" id="page-leaderboard">
     <div class="two-col">
       <div class="card">
-        <h3>🏆 Leaderboard</h3>
+        <div class="card-title"><i class="lucide-trophy"></i>Agent Leaderboard</div>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
           <button class="toggle-btn" onclick="setLbPeriod('week',this)">Week</button>
@@ -559,7 +751,7 @@ td{padding:10px 14px;vertical-align:middle}
         </div>
         <div id="leaderboard-full"></div>
       </div>
-      <div class="card"><h3>📡 Cases by Group</h3><div id="group-bars-lb"></div></div>
+      <div class="card"><div class="card-title"><i class="lucide-radio-tower"></i>Cases by Group</div><div id="group-bars-lb"></div></div>
     </div>
   </div>
 
@@ -567,26 +759,71 @@ td{padding:10px 14px;vertical-align:middle}
   <div class="page" id="page-analytics">
     <div class="two-col">
       <div class="card">
-        <h3>📊 Period Summary</h3>
+        <div class="card-title"><i class="lucide-bar-chart-2"></i>Period Summary</div>
         <div class="toggle-tabs">
           <button class="toggle-btn active" onclick="setAnalyticsPeriod('week',this)">Week</button>
           <button class="toggle-btn" onclick="setAnalyticsPeriod('month',this)">Month</button>
         </div>
-        <div id="analytics-stats"></div>
+        <div class="stats-list" id="analytics-stats"></div>
       </div>
-      <div class="card"><h3># Top Issue Keywords</h3><div id="word-cloud"></div></div>
+      <div class="card"><div class="card-title"><i class="lucide-hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
     </div>
   </div>
 </main>
 </div>
 
-<!-- Case Detail Modal -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal" id="modal-content">
-    <button class="modal-close" onclick="closeModalBtn()">✕</button>
-    <h2 id="modal-title">Case Detail</h2>
-    <div id="modal-body"><div class="loading">Loading...</div></div>
+<!-- Case Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
+<div class="modal" id="modal-content">
+  <button class="modal-close" onclick="closeModal()"><i class="lucide-x"></i></button>
+  <h2 id="modal-title">Case Detail</h2>
+  <div id="modal-body"><div class="loading">Loading...</div></div>
+</div>
+</div>
+
+
+<!-- Report Modal -->
+<div class="report-modal-overlay" id="report-modal-overlay" onclick="closeReportOutside(event)">
+<div class="report-modal" id="report-modal">
+  <div class="report-header">
+    <h2><i class="lucide-file-text"></i>Report</h2>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="report-tabs">
+        <button class="report-tab active" onclick="setReportTab('today',this)">Today</button>
+        <button class="report-tab" onclick="setReportTab('custom',this)">Custom</button>
+      </div>
+      <button class="report-close" onclick="closeReport()"><i class="lucide-x"></i></button>
+    </div>
   </div>
+  <div class="report-body">
+    <div id="report-period-bar" style="display:none" class="report-period-bar">
+      <select id="report-period-select" onchange="toggleCustomDates()">
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="custom">Custom Range</option>
+      </select>
+      <div id="custom-date-inputs" style="display:none;align-items:center;gap:6px">
+        <input type="date" id="report-date-from">
+        <span style="color:var(--muted);font-size:12px">to</span>
+        <input type="date" id="report-date-to">
+      </div>
+      <button class="report-generate-btn" onclick="generateReport()">Generate</button>
+    </div>
+    <div id="report-content"><div class="loading">Loading report...</div></div>
+  </div>
+  <div class="report-footer">
+    <span class="ts" id="report-ts"></span>
+    <button class="print-report-btn" onclick="printReport()"><i class="lucide-printer"></i> Print Report</button>
+  </div>
+</div>
+</div>
+<!-- Agent Modal -->
+<div class="modal-overlay" id="agent-modal-overlay" onclick="closeAgentModalOutside(event)">
+<div class="modal" id="agent-modal-content">
+  <button class="modal-close" onclick="closeAgentModal()"><i class="lucide-x"></i></button>
+  <h2 id="agent-modal-title">Agent Profile</h2>
+  <div id="agent-modal-body"><div class="loading">Loading...</div></div>
+</div>
 </div>
 
 <script>
@@ -595,18 +832,40 @@ let currentFilter = 'today';
 let currentPage = 'overview';
 let lbPeriod = 'day';
 let analyticsPeriod = 'week';
-let searchTimer = null;
+let searchTimers = {};
 const medals = ['🥇','🥈','🥉'];
-const pages = ['overview','cases','missed','reassigned','leaderboard','analytics'];
-const titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics'};
+const pages = ['overview','cases','calendar','missed','reassigned','leaderboard','analytics'];
+const titles = {overview:'Overview',cases:'Cases',calendar:'Calendar',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics'};
+
+// Theme
+let isDark = localStorage.getItem('theme') === 'dark';
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  document.getElementById('theme-icon').className = isDark ? 'lucide-moon' : 'lucide-sun';
+  document.getElementById('theme-label').textContent = isDark ? 'Dark Mode' : 'Light Mode';
+}
+function toggleTheme() { isDark = !isDark; localStorage.setItem('theme', isDark?'dark':'light'); applyTheme(); }
+applyTheme();
+
+// Sidebar mobile
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebar-overlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+}
 
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(a=>a.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
-  document.querySelectorAll('nav a')[pages.indexOf(page)].classList.add('active');
+  document.querySelectorAll('.nav-item')[pages.indexOf(page)].classList.add('active');
   document.getElementById('page-title').textContent = titles[page];
   currentPage = page;
+  closeSidebar();
+  if (page === 'calendar') renderCalendar();
   refresh();
 }
 
@@ -631,41 +890,40 @@ function setAnalyticsPeriod(p, btn) {
   renderAnalytics();
 }
 
-function onSearch() {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadCases, 300);
-}
-
-function onSearchMissed() {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadMissed, 300);
+function onSearch(type) {
+  clearTimeout(searchTimers[type]);
+  searchTimers[type] = setTimeout(() => {
+    if (type === 'cases') loadCases();
+    else if (type === 'missed') loadMissed();
+  }, 300);
 }
 
 function statusBadge(s) {
-  return `<span class="status-badge status-${s}">${s}</span>`;
+  const map = {open:'s-open',assigned:'s-assigned',reported:'s-reported',done:'s-done',missed:'s-missed'};
+  return `<span class="status-badge ${map[s]||'s-open'}">${s}</span>`;
 }
 
 function caseTable(cases) {
-  if (!cases.length) return '<div class="loading">No cases found.</div>';
+  if (!cases || !cases.length) return '<div class="empty-state"><i class="lucide-inbox"></i>No cases found</div>';
   return `<table><thead><tr>
     <th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>
   </tr></thead><tbody>${cases.map(c=>`<tr onclick="openCase('${c.full_id}')">
     <td><b>${c.driver}</b></td>
     <td style="color:var(--muted)">${c.group}</td>
-    <td>${c.agent}</td>
-    <td>${statusBadge(c.status)}${c.reassigned?' <span class="reassign-badge">reassigned</span>':''}</td>
+    <td>${c.agent === '—' ? '<span style="color:var(--muted)">—</span>' : `<span class="agent-link" onclick="event.stopPropagation();openAgent('${c.agent}')">${c.agent}</span>`}</td>
+    <td>${statusBadge(c.status)}${c.reassigned?'<span class="reassign-badge">reassigned</span>':''}</td>
     <td style="color:var(--muted);font-size:11px">${c.opened}</td>
     <td style="font-size:11px">${c.response}</td>
     <td class="desc-cell">${c.description}</td>
   </tr>`).join('')}</tbody></table>`;
 }
 
-function listRows(items, maxCount) {
+function listRows(items, maxCount, clickable) {
   if (!items||!items.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
   return items.map((item,i)=>`
     <div class="list-row">
       <span class="medal">${medals[i]||((i+1)+'.')}</span>
-      <span class="list-name">${item.name}</span>
+      <span class="list-name ${clickable?'agent-link':''}" ${clickable?`onclick="openAgent('${item.name}')"`:''}>${item.name}</span>
       <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(item.count/(maxCount||1)*100)}%"></div></div>
       <span class="list-count">${item.count}</span>
     </div>`).join('');
@@ -678,33 +936,35 @@ async function loadStats() {
     stats = await r.json();
     const t = stats.today;
     document.getElementById('stat-grid').innerHTML = `
-      <div class="stat-card"><div class="stat-label">Today Total</div><div class="stat-value accent">${t.total}</div></div>
-      <div class="stat-card"><div class="stat-label">Assigned To</div><div class="stat-value yellow">${t.assigned}</div></div>
-      <div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value green">${t.done}</div></div>
-      <div class="stat-card"><div class="stat-label">Missed</div><div class="stat-value red">${t.missed}</div></div>
-      <div class="stat-card"><div class="stat-label">Reassigned</div><div class="stat-value purple">${stats.reassigned_count}</div></div>
-      <div class="stat-card"><div class="stat-label">Avg Response</div><div class="stat-value" style="font-size:18px;margin-top:4px">${stats.all_time.avg_resp}</div></div>
+      <div class="stat-card"><div class="stat-label">Today Total</div><div class="stat-value v-accent">${t.total}</div></div>
+      <div class="stat-card"><div class="stat-label">Assigned To</div><div class="stat-value v-yellow">${t.assigned}</div></div>
+      <div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value v-green">${t.done}</div></div>
+      <div class="stat-card"><div class="stat-label">Missed</div><div class="stat-value v-red">${t.missed}</div></div>
+      <div class="stat-card"><div class="stat-label">Reassigned</div><div class="stat-value v-purple">${stats.reassigned_count}</div></div>
+      <div class="stat-card"><div class="stat-label">Avg Response</div><div class="stat-value v-sm">${stats.all_time.avg_resp}</div></div>
     `;
+    // missed badge
+    if (t.missed > 0) {
+      const b = document.getElementById('missed-badge');
+      b.textContent = t.missed; b.style.display = '';
+    }
     const lb = stats.leaderboard_day.slice(0,5);
-    document.getElementById('lb-overview').innerHTML = listRows(lb, lb[0]?.count||1);
+    document.getElementById('lb-overview').innerHTML = listRows(lb, lb[0]?.count||1, true);
     const grps = stats.top_groups;
-    document.getElementById('groups-overview').innerHTML = listRows(grps, grps[0]?.count||1);
-    renderLeaderboard();
-    renderAnalytics();
+    document.getElementById('groups-overview').innerHTML = listRows(grps, grps[0]?.count||1, false);
+    renderLeaderboard(); renderAnalytics();
     document.getElementById('word-cloud').innerHTML = stats.top_words.length
       ? `<div class="word-grid">${stats.top_words.map(w=>`<span class="word-tag">${w.word} <b>${w.count}</b></span>`).join('')}</div>`
       : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>';
-    const grpBars = stats.top_groups;
-    document.getElementById('group-bars-lb').innerHTML = listRows(grpBars, grpBars[0]?.count||1);
+    document.getElementById('group-bars-lb').innerHTML = listRows(grps, grps[0]?.count||1, false);
   } catch(e){console.error(e);}
 }
 
 function renderLeaderboard() {
   if (!stats.leaderboard_day) return;
-  const key = 'leaderboard_'+lbPeriod;
-  const lb = stats[key] || [];
+  const lb = stats['leaderboard_'+lbPeriod] || [];
   document.getElementById('leaderboard-full').innerHTML = lb.length
-    ? lb.map((a,i)=>`<div class="list-row"><span class="medal">${medals[i]||((i+1)+'.')}</span><span class="list-name">${a.name}</span><span class="list-count">${a.count} cases</span></div>`).join('')
+    ? lb.map((a,i)=>`<div class="list-row"><span class="medal">${medals[i]||((i+1)+'.')}</span><span class="list-name agent-link" onclick="openAgent('${a.name}')">${a.name}</span><span class="list-count">${a.count} cases</span></div>`).join('')
     : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>';
 }
 
@@ -713,20 +973,20 @@ function renderAnalytics() {
   const d = analyticsPeriod==='week' ? stats.week : stats.month;
   const rate = d.total ? Math.round(d.done/d.total*100) : 0;
   document.getElementById('analytics-stats').innerHTML = `
-    <div class="week-row"><span>Total Cases</span><span class="week-val">${d.total}</span></div>
-    <div class="week-row"><span>Resolved</span><span class="week-val" style="color:var(--green)">${d.done}</span></div>
-    <div class="week-row"><span>Missed</span><span class="week-val" style="color:var(--red)">${d.missed}</span></div>
-    <div class="week-row"><span>Resolution Rate</span><span class="week-val">${rate}%</span></div>
-    <div class="week-row"><span>All Time Total</span><span class="week-val">${stats.all_time.total}</span></div>
+    <div class="row"><span>Total Cases</span><span class="val">${d.total}</span></div>
+    <div class="row"><span>Resolved</span><span class="val" style="color:var(--green)">${d.done}</span></div>
+    <div class="row"><span>Missed</span><span class="val" style="color:var(--red)">${d.missed}</span></div>
+    <div class="row"><span>Resolution Rate</span><span class="val">${rate}%</span></div>
+    <div class="row"><span>All Time Total</span><span class="val">${stats.all_time.total}</span></div>
+    <div class="row"><span>Avg Response</span><span class="val">${stats.all_time.avg_resp}</span></div>
   `;
 }
 
 async function loadCases() {
   const search = document.getElementById('cases-search')?.value||'';
-  const f = currentFilter;
+  document.getElementById('cases-table').innerHTML = '<div class="loading">Loading...</div>';
   try {
-    const r = await fetch(`/api/cases?filter=${f}&search=${encodeURIComponent(search)}`);
-    if (r.status===401){window.location='/login';return;}
+    const r = await fetch(`/api/cases?filter=${currentFilter}&search=${encodeURIComponent(search)}`);
     const cases = await r.json();
     document.getElementById('cases-table').innerHTML = caseTable(cases);
   } catch(e){console.error(e);}
@@ -749,38 +1009,149 @@ async function loadReassigned() {
   } catch(e){console.error(e);}
 }
 
+// ── Calendar ──────────────────────────────────────────────────────────────────
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+let calSelectedDate = null;
+let caseDates = new Set();
+
+async function loadCaseDates() {
+  try {
+    const r = await fetch('/api/cases?filter=all');
+    const cases = await r.json();
+    caseDates = new Set(cases.map(c => c.opened_raw).filter(Boolean));
+  } catch(e){}
+}
+
+function renderCalendar() {
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('cal-title').textContent = `${months[calMonth]} ${calYear}`;
+  const grid = document.getElementById('cal-grid');
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const todayStr = new Date().toISOString().slice(0,10);
+  let html = days.map(d=>`<div class="cal-day-name">${d}</div>`).join('');
+  const first = new Date(calYear, calMonth, 1);
+  let startDay = first.getDay() - 1; if (startDay < 0) startDay = 6;
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+  for (let i = startDay-1; i >= 0; i--) {
+    html += `<div class="cal-day other-month empty">${prevDays-i}</div>`;
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === calSelectedDate;
+    const hasCases = caseDates.has(dateStr);
+    html += `<div class="cal-day${isToday?' today':''}${isSelected?' selected':''}${hasCases?' has-cases':''}" onclick="selectCalDay('${dateStr}')">${d}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function selectCalDay(date) {
+  calSelectedDate = date;
+  renderCalendar();
+  document.getElementById('cal-cases-title').textContent = `Cases on ${date}`;
+  document.getElementById('cal-table').innerHTML = '<div class="loading" style="padding:20px">Loading...</div>';
+  try {
+    const r = await fetch(`/api/cases?date=${date}`);
+    const cases = await r.json();
+    const t = cases.length; const done = cases.filter(c=>c.status==='done').length;
+    const missed = cases.filter(c=>c.status==='missed').length;
+    document.getElementById('cal-day-stats').innerHTML = t ? `
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="status-badge s-open" style="font-size:11px">${t} total</span>
+        <span class="status-badge s-done" style="font-size:11px">${done} resolved</span>
+        ${missed?`<span class="status-badge s-missed" style="font-size:11px">${missed} missed</span>`:''}
+      </div>` : '';
+    document.getElementById('cal-table').innerHTML = caseTable(cases);
+  } catch(e){}
+}
+
+function calPrev() { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+function calNext() { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); }
+
+// ── Case modal ────────────────────────────────────────────────────────────────
+function buildTimeline(c) {
+  const steps = [
+    {key:'open', label:'Open', time: c.opened},
+    {key:'assigned', label:'Assigned', time: c.assigned_at},
+    {key:'reported', label:'Reported', time: c.status==='reported'||c.status==='done'?'✓':''},
+    {key:'done', label:'Resolved', time: c.closed},
+  ];
+  const order = ['open','assigned','reported','done'];
+  const statusIdx = order.indexOf(c.status === 'missed' ? 'open' : c.status);
+  let html = '<div class="timeline">';
+  steps.forEach((s,i) => {
+    const isDone = i < statusIdx;
+    const isActive = i === statusIdx || (c.status === 'missed' && i === 0);
+    const afterDone = i < statusIdx;
+    html += `<div class="tl-step${afterDone?' done-step':''}">
+      <div class="tl-dot${isActive?' active':isDone?' done':''}">
+        ${isDone?'<i class="lucide-check" style="font-size:10px"></i>':isActive?'<i class="lucide-circle" style="font-size:10px"></i>':(i+1)}
+      </div>
+      <div class="tl-label">${s.label}</div>
+      <div class="tl-time">${s.time&&s.time!=='—'?s.time:''}</div>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
 async function openCase(caseId) {
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('modal-body').innerHTML = '<div class="loading">Loading...</div>';
-  document.getElementById('modal-title').textContent = 'Case #'+caseId.slice(0,8);
+  document.getElementById('modal-title').textContent = 'Loading...';
   try {
     const r = await fetch('/api/case/'+caseId);
     const c = await r.json();
-    document.getElementById('modal-title').textContent = `Case — ${c.driver}`;
+    document.getElementById('modal-title').textContent = `${c.driver} — ${c.group}`;
     document.getElementById('modal-body').innerHTML = `
+      ${buildTimeline(c)}
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">${statusBadge(c.status)}</div></div>
-        <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">${c.agent}</div></div>
-        <div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">${c.group}</div></div>
+        <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val ${c.agent!=='—'?'agent-link':''}" ${c.agent!=='—'?`onclick="closeModal();openAgent('${c.agent}')"`:''}>${c.agent}</div></div>
         <div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">${c.driver}</div></div>
+        <div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">${c.group}</div></div>
         <div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">${c.opened}</div></div>
         <div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">${c.assigned_at||'—'}</div></div>
         <div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">${c.response}</div></div>
         <div class="detail-item"><div class="detail-label">Resolution Time</div><div class="detail-val">${c.resolution_secs||'—'}</div></div>
       </div>
-      ${c.full_description?`<div class="detail-desc"><label>Issue Description</label><p>${c.full_description}</p></div>`:''}
-      ${c.full_notes?`<div class="notes-box"><label>📋 Report / Notes</label><p>${c.full_notes}</p></div>`:''}
+      ${c.full_description?`<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">${c.full_description}</p></div>`:''}
+      ${c.full_notes?`<div class="notes-box"><span class="box-label">📋 Report / Notes</span><p class="box-text">${c.full_notes}</p></div>`:''}
     `;
   } catch(e){document.getElementById('modal-body').innerHTML='<div class="loading">Error loading case.</div>';}
 }
 
-function closeModal(e) {
-  if (e.target.id==='modal-overlay') closeModalBtn();
-}
-function closeModalBtn() {
-  document.getElementById('modal-overlay').classList.remove('open');
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalOutside(e) { if(e.target.id==='modal-overlay') closeModal(); }
+
+// ── Agent profile ─────────────────────────────────────────────────────────────
+async function openAgent(name) {
+  document.getElementById('agent-modal-overlay').classList.add('open');
+  document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('agent-modal-title').textContent = name;
+  try {
+    const r = await fetch('/api/agent/'+encodeURIComponent(name));
+    const a = await r.json();
+    document.getElementById('agent-modal-body').innerHTML = `
+      <div class="agent-stats">
+        <div class="agent-stat"><div class="agent-stat-val">${a.total}</div><div class="agent-stat-label">Total</div></div>
+        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">${a.done}</div><div class="agent-stat-label">Resolved</div></div>
+        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">${a.missed}</div><div class="agent-stat-label">Missed</div></div>
+        <div class="agent-stat"><div class="agent-stat-val">${a.rate}%</div><div class="agent-stat-label">Rate</div></div>
+      </div>
+      <div style="margin-bottom:12px;font-size:12px;color:var(--muted)">Avg response: <b style="color:var(--text)">${a.avg_resp}</b></div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:8px">Recent Cases</div>
+      ${caseTable(a.recent)}
+    `;
+  } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
 }
 
+function closeAgentModal() { document.getElementById('agent-modal-overlay').classList.remove('open'); }
+function closeAgentModalOutside(e) { if(e.target.id==='agent-modal-overlay') closeAgentModal(); }
+
+// ── Refresh ───────────────────────────────────────────────────────────────────
 async function refresh() {
   await loadStats();
   if (currentPage==='overview') {
@@ -790,40 +1161,102 @@ async function refresh() {
   } else if (currentPage==='cases') loadCases();
   else if (currentPage==='missed') loadMissed();
   else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='calendar') { await loadCaseDates(); renderCalendar(); }
   document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
 }
 
+loadCaseDates();
 refresh();
 setInterval(refresh, 10000);
+
+// ── Report ────────────────────────────────────────────────────────────────────
+let reportTab = 'today';
+
+function openReport() {
+  document.getElementById('report-modal-overlay').classList.add('open');
+  generateReport();
+}
+function closeReport() { document.getElementById('report-modal-overlay').classList.remove('open'); }
+function closeReportOutside(e) { if(e.target.id==='report-modal-overlay') closeReport(); }
+
+function setReportTab(tab, btn) {
+  reportTab = tab;
+  document.querySelectorAll('.report-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('report-period-bar').style.display = tab === 'custom' ? 'flex' : 'none';
+  if (tab === 'today') generateReport();
+}
+
+function toggleCustomDates() {
+  const v = document.getElementById('report-period-select').value;
+  document.getElementById('custom-date-inputs').style.display = v === 'custom' ? 'flex' : 'none';
+}
+
+async function generateReport() {
+  document.getElementById('report-content').innerHTML = '<div class="loading">Generating report...</div>';
+  let url = '/api/report?period=today';
+  if (reportTab === 'custom') {
+    const period = document.getElementById('report-period-select').value;
+    if (period === 'custom') {
+      const from = document.getElementById('report-date-from').value;
+      const to = document.getElementById('report-date-to').value;
+      if (!from) { document.getElementById('report-content').innerHTML = '<div class="loading">Please select a start date.</div>'; return; }
+      url = `/api/report?period=custom&from=${from}&to=${to||from}`;
+    } else {
+      url = `/api/report?period=${period}`;
+    }
+  }
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    const medals = ['🥇','🥈','🥉'];
+    const now = new Date().toLocaleString();
+    document.getElementById('report-ts').textContent = 'Generated ' + now;
+    document.getElementById('report-content').innerHTML = `
+      <div class="report-title">${d.label}</div>
+      <div class="report-subtitle">Kurtex Alert Bot — Truck Maintenance Command Center</div>
+      <div class="report-stat-grid">
+        <div class="report-stat"><div class="report-stat-val v-accent">${d.total}</div><div class="report-stat-label">Total</div></div>
+        <div class="report-stat"><div class="report-stat-val v-green">${d.done}</div><div class="report-stat-label">Resolved</div></div>
+        <div class="report-stat"><div class="report-stat-val v-red">${d.missed}</div><div class="report-stat-label">Missed</div></div>
+        <div class="report-stat"><div class="report-stat-val v-yellow">${d.assigned}</div><div class="report-stat-label">Assigned</div></div>
+        <div class="report-stat"><div class="report-stat-val" style="font-size:16px;margin-top:4px">${d.avg_resp}</div><div class="report-stat-label">Avg Response</div></div>
+        <div class="report-stat"><div class="report-stat-val v-accent">${d.rate}%</div><div class="report-stat-label">Rate</div></div>
+      </div>
+      ${d.leaderboard.length ? `<div class="report-section"><h3>Agent Activity</h3>${d.leaderboard.map((a,i)=>`<div class="report-row"><span class="medal">${medals[i]||(i+1)+'.'}</span><span class="name">${a.name}</span><span class="count">${a.count} cases</span></div>`).join('')}</div>` : ''}
+      ${d.top_groups.length ? `<div class="report-section"><h3>Top Groups</h3>${d.top_groups.map((g,i)=>`<div class="report-row"><span class="medal">${medals[i]||(i+1)+'.'}</span><span class="name">${g.name}</span><span class="count">${g.count}</span></div>`).join('')}</div>` : ''}
+      ${d.missed_cases.length ? `<div class="report-section"><h3>Missed Cases (${d.missed})</h3>${d.missed_cases.map(c=>`<div class="report-row"><span class="name">${c.driver}</span><span style="color:var(--muted);font-size:11px;margin-right:8px">${c.group}</span><span style="color:var(--muted);font-size:11px">${c.opened}</span></div>`).join('')}</div>` : ''}
+    `;
+  } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; }
+}
+
+function printReport() {
+  const orig = document.title;
+  document.title = 'Kurtex Report — ' + new Date().toLocaleDateString();
+  window.print();
+  document.title = orig;
+}
+
 </script>
 </body>
 </html>"""
 
-
 @app.route("/login")
 def login():
-    error = request.args.get("error")
-    return render_template_string(LOGIN_HTML, bot_username=get_bot_username(), error=error)
-
+    return render_template_string(LOGIN_HTML, bot_username=get_bot_username(), error=request.args.get("error"))
 
 @app.route("/")
 def index():
-    if not session.get("user"):
-        return redirect("/login")
+    if not session.get("user"): return redirect("/login")
     return render_template_string(DASHBOARD_HTML, user=session["user"])
 
-
 def run_dashboard():
-    log = logging.getLogger("werkzeug")
-    log.setLevel(logging.ERROR)
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
     app.run(host="0.0.0.0", port=DASHBOARD_PORT, debug=False, use_reloader=False)
 
-
 def start_dashboard_thread():
-    t = Thread(target=run_dashboard, daemon=True)
-    t.start()
+    Thread(target=run_dashboard, daemon=True).start()
     logger.info(f"Dashboard started on port {DASHBOARD_PORT}")
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
