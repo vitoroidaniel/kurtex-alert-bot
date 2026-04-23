@@ -22,6 +22,12 @@ from storage.case_store import (
 )
 from shifts import ADMINS
 
+
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
+
 logger         = logging.getLogger(__name__)
 CASES_PER_PAGE = 5
 # State constants kept for ConversationHandler compat (no active states used)
@@ -46,10 +52,6 @@ def _fmt_dt(iso):
         return datetime.fromisoformat(iso).astimezone().strftime("%b %d %H:%M")
     except Exception:
         return iso[:16]
-
-
-def _esc(t: str) -> str:
-    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
 
 
 def _active_case_text(case):
