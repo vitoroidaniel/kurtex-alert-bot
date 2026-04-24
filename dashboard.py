@@ -265,8 +265,9 @@ def api_cases():
     cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:200]
     return jsonify([serialize_case(c) for c in cases])
 
-@app.route("/api/case/<path:case_id>")
-def api_case_detail(case_id):
+@app.route("/api/case")
+def api_case_detail():
+    case_id = request.args.get("id","")
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     for c in load_cases():
         if c["id"].startswith(case_id) or c["id"] == case_id:
@@ -279,8 +280,9 @@ def api_case_detail(case_id):
             })
     return jsonify({"error":"not found"}), 404
 
-@app.route("/api/agent/<path:agent_name>")
-def api_agent(agent_name):
+@app.route("/api/agent")
+def api_agent():
+    agent_name = request.args.get("name","")
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     cases = [c for c in load_cases() if c.get("agent_name") == agent_name]
     total = len(cases); done = sum(1 for c in cases if c["status"]=="done")
@@ -1075,7 +1077,7 @@ async function openCase(caseId) {
   document.getElementById('modal-body').innerHTML = '<div class="loading">Loading...</div>';
   document.getElementById('modal-title').textContent = 'Loading...';
   try {
-    const r = await fetch('/api/case/'+caseId);
+    const r = await fetch('/api/case?id='+encodeURIComponent(caseId));
     const c = await r.json();
     document.getElementById('modal-title').textContent = `${c.driver} — ${c.group}`;
     document.getElementById('modal-body').innerHTML = `
@@ -1240,7 +1242,7 @@ async function openAgentModal(name) {
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading...</div>';
   document.getElementById('agent-modal-title').textContent = name;
   try {
-    const r = await fetch('/api/agent/'+encodeURIComponent(name));
+    const r = await fetch('/api/agent?name='+encodeURIComponent(name));
     const a = await r.json();
     document.getElementById('agent-modal-body').innerHTML = `
       <div class="agent-stats">
