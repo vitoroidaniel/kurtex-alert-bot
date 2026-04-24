@@ -1530,8 +1530,11 @@ async function openAgentModal(name) {
     if (a.recent && a.recent.length) {
       a.recent.forEach(function(c) {
         const cid = c.full_id || '';
-        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(function(){openCase(\'' + cid + '\')},200)">'
+                rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(function(){openCase(' + JSON.stringify(cid) + ')},200)">'
           + '<td style="padding:8px 10px;font-weight:500">' + (c.driver||'—') + '</td>'
+          + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
+          + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
+          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
           + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
           + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
           + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
