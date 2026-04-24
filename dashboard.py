@@ -254,35 +254,41 @@ def api_agents():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     if session["user"].get("role","agent") not in ("developer","super_admin"):
         return jsonify({"error":"forbidden"}), 403
-    cases = load_cases()
-    from storage.user_store import get_all_user_dicts
     try:
-        users = [u for u in get_all_user_dicts() if u["role"] == "agent"]
-    except Exception:
-        users = []
-    result = []
-    for u in users:
-        name = u["name"]
-        uname = u.get("username","").lower()
-        agent_cases = [c for c in cases if 
-                       c.get("agent_name","").lower() == name.lower() or
-                       (uname and c.get("agent_username","").lower() == uname)]
-        total = len(agent_cases); done = sum(1 for c in agent_cases if c["status"]=="done")
-        missed = sum(1 for c in agent_cases if c["status"]=="missed")
-        rt = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
-        avg = int(sum(rt)/len(rt)) if rt else 0
-        result.append({
-            "name":     name,
-            "username": u.get("username",""),
-            "total":    total,
-            "done":     done,
-            "missed":   missed,
-            "avg_resp": fmt_secs(avg),
-            "rate":     round(done/total*100) if total else 0,
-            "open":     sum(1 for c in agent_cases if c.get("status") in ("open","assigned","reported")),
-        })
-    result.sort(key=lambda x: -x["total"])
-    return jsonify(result)
+        cases = load_cases()
+        try:
+            from storage.user_store import get_all_user_dicts
+            users = [u for u in get_all_user_dicts() if u["role"] in ("agent","super_admin")]
+        except Exception as e:
+            logger.error(f"get_all_user_dicts error: {e}")
+            users = []
+        result = []
+        for u in users:
+            name  = u["name"]
+            uname = u.get("username","").lower()
+            agent_cases = [c for c in cases if
+                           c.get("agent_name","").lower() == name.lower() or
+                           (uname and c.get("agent_username","").lower() == uname)]
+            total  = len(agent_cases)
+            done   = sum(1 for c in agent_cases if c["status"] == "done")
+            missed = sum(1 for c in agent_cases if c["status"] == "missed")
+            rt     = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
+            avg    = int(sum(rt)/len(rt)) if rt else 0
+            result.append({
+                "name":     name,
+                "username": u.get("username",""),
+                "total":    total,
+                "done":     done,
+                "missed":   missed,
+                "avg_resp": fmt_secs(avg),
+                "rate":     round(done/total*100) if total else 0,
+                "open":     sum(1 for c in agent_cases if c.get("status") in ("open","assigned","reported")),
+            })
+        result.sort(key=lambda x: -x["total"])
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"api_agents error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/logout")
 def logout():
@@ -760,7 +766,7 @@ td{padding:9px 12px;vertical-align:middle}
 /* Responsive */
 @media(max-width:768px){
   /* Sidebar becomes drawer */
-  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);z-index:50;width:240px}
+  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);z-index:50;width:240px;transition:transform .25s}
   .sidebar.open{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,.15)}
   .sidebar-overlay.open{display:block}
   .mobile-header{display:flex}
@@ -1270,6 +1276,60 @@ function toggleCustomDates() {
   document.getElementById('custom-date-inputs').style.display = v === 'custom' ? 'flex' : 'none';
 }
 
+
+function buildTimeline(c) {
+  const steps = [
+    {label:'Open',     time: c.opened},
+    {label:'Assigned', time: c.assigned_at||''},
+    {label:'Reported', time: ''},
+    {label:'Resolved', time: c.closed||''},
+  ];
+  const order = ['open','assigned','reported','done','missed'];
+  const si = Math.max(0, order.indexOf(c.status));
+  let html = '<div class="timeline">';
+  steps.forEach((s,i) => {
+    const isDone   = i < si;
+    const isActive = i === si || (c.status === 'missed' && i === 0);
+    const afterDone = i < si;
+    const dotClass = isDone ? 'done' : isActive ? 'active' : '';
+    html += `<div class="tl-step${afterDone?' done-step':''}">
+      <div class="tl-dot ${dotClass}">${isDone?'✓':i+1}</div>
+      <div class="tl-label">${s.label}</div>
+      <div class="tl-time">${s.time&&s.time!=='—'?s.time:''}</div>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function openReport() {
+  document.getElementById('report-modal-overlay').classList.add('open');
+  reportTab = 'today';
+  document.querySelectorAll('.report-tab').forEach((b,i)=>b.classList.toggle('active',i===0));
+  document.getElementById('report-period-bar').style.display = 'none';
+  generateReport();
+}
+
+function closeReport() { 
+  document.getElementById('report-modal-overlay').classList.remove('open'); 
+}
+
+function closeReportOutside(e) { 
+  if(e.target.id==='report-modal-overlay') closeReport(); 
+}
+
+function setReportTab(tab, btn) {
+  reportTab = tab;
+  document.querySelectorAll('.report-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('report-period-bar').style.display = tab === 'custom' ? 'flex' : 'none';
+  if (tab === 'today') generateReport();
+}
+
+function toggleCustomDates() {
+  const v = document.getElementById('report-period-select').value;
+  document.getElementById('custom-date-inputs').style.display = v === 'custom' ? 'flex' : 'none';
+}
 async function generateReport() {
   document.getElementById('report-content').innerHTML = '<div class="loading">Generating report...</div>';
   let url = '/api/report?period=today';
