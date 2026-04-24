@@ -66,6 +66,11 @@ def fmt_secs(secs):
     if secs < 3600: return f"{secs//60}m {secs%60}s"
     return f"{secs//3600}h {(secs%3600)//60}m"
 
+TESTING_GROUPS = {"testing", "test", "tests"}
+
+def is_testing(c):
+    return (c.get("group_name") or "").lower().strip() in TESTING_GROUPS
+
 def serialize_case(c):
     try:
         return {
@@ -127,16 +132,18 @@ def api_stats():
     try:
         cases = load_cases()
         today = today_str(); wk = week_start_str(); mo = month_start_str()
-        tc = [c for c in cases if (c.get("opened_at") or "").startswith(today)]
-        wc = [c for c in cases if (c.get("opened_at") or "") >= wk]
-        mc = [c for c in cases if (c.get("opened_at") or "") >= mo]
+        real = [c for c in cases if not is_testing(c)]
+        tc = [c for c in real if (c.get("opened_at") or "").startswith(today)]
+        wc = [c for c in real if (c.get("opened_at") or "") >= wk]
+        mc = [c for c in real if (c.get("opened_at") or "") >= mo]
         st = Counter(c.get("status","open") for c in tc)
+
         def lb(lst):
             cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
             return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
-        grps = Counter(c.get("group_name","Unknown") for c in cases)
-        hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in cases).lower())
-        rt = [c["response_secs"] for c in cases if c.get("response_secs")]
+        grps = Counter(c.get("group_name","Unknown") for c in real)
+        hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in real).lower())
+        rt = [c["response_secs"] for c in real if c.get("response_secs")]
         avg = int(sum(rt)/len(rt)) if rt else 0
         return jsonify({
             "today": {"total":len(tc),"open":st.get("open",0),"assigned":st.get("assigned",0)+st.get("reported",0),"done":st.get("done",0),"missed":st.get("missed",0)},
@@ -161,13 +168,19 @@ def api_cases():
         search = request.args.get("search","").lower().strip()
         date_filter = request.args.get("date","").strip()
         cases = load_cases()
+        if f != "testing":
+            cases = [c for c in cases if not is_testing(c)]
         if date_filter:
             cases = [c for c in cases if (c.get("opened_at") or "").startswith(date_filter)]
-        elif f == "today":   cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
-        elif f == "week":    cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
-        elif f == "missed":  cases = [c for c in cases if c.get("status") == "missed"]
-        elif f == "active":  cases = [c for c in cases if c.get("status") in ("open","assigned","reported")]
+        elif f == "today":    cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
+        elif f == "week":     cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
+        elif f == "missed":   cases = [c for c in cases if c.get("status") == "missed"]
+        elif f == "active":   cases = [c for c in cases if c.get("status") in ("open","assigned","reported")]
         elif f == "reassigned": cases = [c for c in cases if c.get("reassigned")]
+        elif f == "testing":  cases = [c for c in cases if is_testing(c)]
+        status_f = request.args.get("status","").strip().lower()
+        if status_f:
+            cases = [c for c in cases if (c.get("status") or "").lower() == status_f]
         if search:
             cases = [c for c in cases if
                      search in (c.get("driver_name") or "").lower() or
@@ -829,6 +842,7 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="nav-item" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
     <div class="nav-item" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     <div class="nav-item" onclick="showPage('reassigned')"><i class="ph ph-arrows-clockwise"></i> Reassigned</div>
+    <div class="nav-item" onclick="showPage('testing')"><i class="ph ph-flask"></i> Testing</div>
     <div class="nav-item" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
     <div class="nav-item" onclick="showPage('analytics')"><i class="ph ph-chart-bar"></i> Analytics</div>
     <div class="nav-item" onclick="showPage('fleet')"><i class="ph ph-truck"></i> Fleet Stats</div>
@@ -901,6 +915,16 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="section">
       <div class="section-header"><div class="section-title">Reassigned Cases</div></div>
       <div class="table-wrap"><div class="table-scroll" id="reassigned-table"><div class="loading">Loading...</div></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-testing">
+    <div style="background:var(--yellow-bg);border:1px solid var(--yellow);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--yellow)">
+      <b>Testing Group</b> — These cases are excluded from all statistics and reports.
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Testing Cases</div></div>
+      <div class="table-wrap"><div class="table-scroll" id="testing-table"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
 
@@ -1012,8 +1036,8 @@ var reportTab = 'today';
 var currentDateFilter = '';
 var searchTimers = {};
 var isDark = localStorage.getItem('kurtex-theme') === 'dark';
-var pages = ['overview','cases','missed','reassigned','leaderboard','analytics','fleet','my_profile','agents'];
-var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',fleet:'Fleet Stats',my_profile:'My Profile',agents:'Agent Profiles'};
+var pages = ['overview','cases','missed','reassigned','testing','leaderboard','analytics','fleet','my_profile','agents'];
+var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',testing:'Testing',leaderboard:'Leaderboard',analytics:'Analytics',fleet:'Fleet Stats',my_profile:'My Profile',agents:'Agent Profiles'};
 var medals = ['🥇','🥈','🥉'];
 
 // ── Theme ──────────────────────────────────────────────────────────────────
@@ -1243,9 +1267,10 @@ async function loadCases() {
   el.innerHTML = '<div class="loading">Loading...</div>';
   try {
     var search = (document.getElementById('cases-search')||{}).value||'';
+    var statusF = (document.getElementById('status-filter')||{}).value||'';
     var url = currentFilter === '__date__'
-      ? '/api/cases?date='+currentDateFilter+'&search='+encodeURIComponent(search)
-      : '/api/cases?filter='+currentFilter+'&search='+encodeURIComponent(search);
+      ? '/api/cases?date='+currentDateFilter+'&search='+encodeURIComponent(search)+'&status='+statusF
+      : '/api/cases?filter='+currentFilter+'&search='+encodeURIComponent(search)+'&status='+statusF;
     var r = await fetch(url);
     if (!r.ok) return;
     var cases = await r.json();
@@ -1269,6 +1294,16 @@ async function loadReassigned() {
   if (!el) return;
   try {
     var r = await fetch('/api/cases?filter=reassigned');
+    if (!r.ok) return;
+    el.innerHTML = caseTable(await r.json());
+  } catch(e) { console.error(e); }
+}
+
+async function loadTesting() {
+  var el = document.getElementById('testing-table');
+  if (!el) return;
+  try {
+    var r = await fetch('/api/cases?filter=testing');
     if (!r.ok) return;
     el.innerHTML = caseTable(await r.json());
   } catch(e) { console.error(e); }
@@ -1624,6 +1659,7 @@ async function refresh() {
   } else if (currentPage==='cases') loadCases();
   else if (currentPage==='missed') loadMissed();
   else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='testing') loadTesting();
   else if (currentPage==='fleet') loadFleet();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
