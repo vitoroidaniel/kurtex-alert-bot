@@ -569,6 +569,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <title>Kurtex Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#FAF8F5;--surface:#FFFFFF;--surface2:#F3EFE8;--surface3:#EBE5DA;
@@ -607,6 +608,16 @@ nav{flex:1}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
 .nav-item.active{background:var(--accent-bg);color:var(--accent)}
 .nav-item i{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.nav-group{margin-bottom:2px}
+.nav-group-header{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:9px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.nav-group-header:hover{background:var(--surface2);color:var(--text)}
+.nav-group-header span{display:flex;align-items:center;gap:9px}
+.nav-group-header i.ph-chart-bar,.nav-group-header i.ph-truck{font-size:15px}
+.nav-caret{font-size:12px;transition:transform .2s;flex-shrink:0}
+.nav-caret.open{transform:rotate(180deg)}
+.nav-group-items{overflow:hidden;max-height:0;transition:max-height .25s ease}
+.nav-group-items.open{max-height:200px}
+.nav-sub{padding-left:28px!important;font-size:12px!important}
 .nav-badge{margin-left:auto;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px}
 .sidebar-footer{padding-top:14px;border-top:1px solid var(--border)}
 .user-chip{display:flex;align-items:center;gap:8px;padding:8px;border-radius:10px;background:var(--surface2);margin-bottom:8px}
@@ -850,8 +861,32 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="nav-item" onclick="showPage('reassigned')"><i class="ph ph-arrows-clockwise"></i> Reassigned</div>
     <div class="nav-item" onclick="showPage('testing')"><i class="ph ph-flask"></i> Testing</div>
     <div class="nav-item" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
-    <div class="nav-item" onclick="showPage('analytics')"><i class="ph ph-chart-bar"></i> Analytics</div>
-    <div class="nav-item" onclick="showPage('fleet')"><i class="ph ph-truck"></i> Fleet Stats</div>
+
+    <!-- Analytics group -->
+    <div class="nav-group">
+      <div class="nav-group-header" onclick="toggleGroup('group-analytics')">
+        <span><i class="ph ph-chart-bar"></i> Analytics</span>
+        <i class="ph ph-caret-down nav-caret" id="caret-group-analytics"></i>
+      </div>
+      <div class="nav-group-items" id="group-analytics">
+        <div class="nav-item nav-sub" onclick="showPage('trends')"><i class="ph ph-trend-up"></i> Trends</div>
+        <div class="nav-item nav-sub" onclick="showPage('heatmap')"><i class="ph ph-squares-four"></i> Heatmap</div>
+        <div class="nav-item nav-sub" onclick="showPage('comparison')"><i class="ph ph-arrows-left-right"></i> Comparison</div>
+      </div>
+    </div>
+
+    <!-- Fleet group -->
+    <div class="nav-group">
+      <div class="nav-group-header" onclick="toggleGroup('group-fleet')">
+        <span><i class="ph ph-truck"></i> Fleet</span>
+        <i class="ph ph-caret-down nav-caret" id="caret-group-fleet"></i>
+      </div>
+      <div class="nav-group-items" id="group-fleet">
+        <div class="nav-item nav-sub" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
+        <div class="nav-item nav-sub" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Intelligence</div>
+      </div>
+    </div>
+
     <div class="nav-item" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
     {% if is_manager %}<div class="nav-item" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
   </nav>
@@ -971,6 +1006,41 @@ td{padding:9px 12px;vertical-align:middle}
     <div id="my-profile-content"><div class="loading">Loading...</div></div>
   </div>
 
+  <!-- Trends -->
+  <div class="page" id="page-trends">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="toggle-tabs" style="margin-bottom:0">
+        <button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7 Days</button>
+        <button class="toggle-btn" onclick="setTrendPeriod(30,this)">30 Days</button>
+        <button class="toggle-btn" onclick="setTrendPeriod(90,this)">90 Days</button>
+      </div>
+    </div>
+    <div class="two-col" style="margin-bottom:16px">
+      <div class="card"><div class="card-title"><i class="ph ph-chart-line"></i> Cases Over Time</div><canvas id="trend-cases-chart" height="180"></canvas></div>
+      <div class="card"><div class="card-title"><i class="ph ph-timer"></i> Avg Response Time</div><canvas id="trend-resp-chart" height="180"></canvas></div>
+    </div>
+    <div class="card"><div class="card-title"><i class="ph ph-chart-bar"></i> Daily Breakdown</div><canvas id="trend-bar-chart" height="120"></canvas></div>
+  </div>
+
+  <!-- Heatmap -->
+  <div class="page" id="page-heatmap">
+    <div class="card">
+      <div class="card-title"><i class="ph ph-squares-four"></i> Cases by Day & Hour (Eastern Time)</div>
+      <div id="heatmap-container" style="overflow-x:auto"></div>
+    </div>
+  </div>
+
+  <!-- Comparison -->
+  <div class="page" id="page-comparison">
+    <div id="comparison-content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Fleet Intelligence -->
+  <div class="page" id="page-fleet_intel">
+    <div id="fleet-intel-content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
     <div id="agents-content"><div class="loading">Loading...</div></div>
   </div>
@@ -1054,8 +1124,8 @@ var reportTab = 'today';
 var currentDateFilter = '';
 var searchTimers = {};
 var isDark = localStorage.getItem('kurtex-theme') === 'dark';
-var pages = ['overview','cases','missed','reassigned','testing','leaderboard','analytics','fleet','my_profile','agents'];
-var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',testing:'Testing',leaderboard:'Leaderboard',analytics:'Analytics',fleet:'Fleet Stats',my_profile:'My Profile',agents:'Agent Profiles'};
+var pages = ['overview','cases','missed','reassigned','testing','leaderboard','trends','heatmap','comparison','fleet','fleet_intel','my_profile','agents'];
+var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',testing:'Testing',leaderboard:'Leaderboard',trends:'Trends',heatmap:'Activity Heatmap',comparison:'Week Comparison',fleet:'Fleet Stats',fleet_intel:'Fleet Intelligence',my_profile:'My Profile',agents:'Agent Profiles'};
 var medals = ['🥇','🥈','🥉'];
 
 // ── Theme ──────────────────────────────────────────────────────────────────
@@ -1773,6 +1843,190 @@ function printReport() {
 }
 
 // ── Refresh ────────────────────────────────────────────────────────────────
+
+// ── Nav Groups ──────────────────────────────────────────────────────────────
+function toggleGroup(id) {
+  var el = document.getElementById(id);
+  var caret = document.getElementById('caret-' + id);
+  var open = el.classList.contains('open');
+  el.classList.toggle('open', !open);
+  if (caret) caret.classList.toggle('open', !open);
+}
+
+// ── Trends ───────────────────────────────────────────────────────────────────
+var trendPeriod = 30;
+var trendCharts = {};
+
+function setTrendPeriod(days, btn) {
+  trendPeriod = days;
+  document.querySelectorAll('#page-trends .toggle-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  loadTrends();
+}
+
+async function loadTrends() {
+  try {
+    var r = await fetch('/api/trends?period=' + trendPeriod);
+    if (!r.ok) return;
+    var d = await r.json();
+
+    // Destroy existing charts
+    Object.values(trendCharts).forEach(function(c){ if(c) c.destroy(); });
+    trendCharts = {};
+
+    var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    var green  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+    var red    = getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
+    var muted  = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+
+    // Cases over time
+    var ctx1 = document.getElementById('trend-cases-chart').getContext('2d');
+    trendCharts.cases = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: d.labels,
+        datasets: [
+          {label:'Total', data:d.totals, borderColor:accent, backgroundColor:accent+'22', fill:true, tension:.4, pointRadius:2},
+          {label:'Resolved', data:d.resolved, borderColor:green, backgroundColor:'transparent', tension:.4, pointRadius:2},
+          {label:'Missed', data:d.missed, borderColor:red, backgroundColor:'transparent', tension:.4, pointRadius:2},
+        ]
+      },
+      options: {responsive:true, plugins:{legend:{labels:{color:muted,font:{size:11}}}}, scales:{x:{ticks:{color:muted,font:{size:10},maxTicksLimit:10}},y:{ticks:{color:muted,font:{size:10}},beginAtZero:true}}}
+    });
+
+    // Avg response time
+    var ctx2 = document.getElementById('trend-resp-chart').getContext('2d');
+    trendCharts.resp = new Chart(ctx2, {
+      type: 'line',
+      data: {labels: d.labels, datasets: [{label:'Avg Resp (secs)', data:d.avg_resp, borderColor:accent, backgroundColor:accent+'22', fill:true, tension:.4, pointRadius:2}]},
+      options: {responsive:true, plugins:{legend:{labels:{color:muted,font:{size:11}}}}, scales:{x:{ticks:{color:muted,font:{size:10},maxTicksLimit:10}},y:{ticks:{color:muted,font:{size:10}},beginAtZero:true}}}
+    });
+
+    // Daily bar
+    var ctx3 = document.getElementById('trend-bar-chart').getContext('2d');
+    trendCharts.bar = new Chart(ctx3, {
+      type: 'bar',
+      data: {labels: d.labels, datasets: [
+        {label:'Total', data:d.totals, backgroundColor:accent+'88'},
+        {label:'Resolved', data:d.resolved, backgroundColor:green+'88'},
+        {label:'Missed', data:d.missed, backgroundColor:red+'88'},
+      ]},
+      options: {responsive:true, plugins:{legend:{labels:{color:muted,font:{size:11}}}}, scales:{x:{stacked:false,ticks:{color:muted,font:{size:10},maxTicksLimit:15}},y:{beginAtZero:true,ticks:{color:muted,font:{size:10}}}}}
+    });
+  } catch(e) { console.error('trends error:', e); }
+}
+
+// ── Heatmap ──────────────────────────────────────────────────────────────────
+async function loadHeatmap() {
+  var el = document.getElementById('heatmap-container');
+  el.innerHTML = '<div class="loading">Loading heatmap...</div>';
+  try {
+    var r = await fetch('/api/heatmap');
+    var d = await r.json();
+    var hours = [];
+    for (var i=0; i<24; i++) hours.push(i===0?'12am':i<12?i+'am':i===12?'12pm':(i-12)+'pm');
+    var html = '<table style="border-collapse:collapse;font-size:11px;width:100%"><thead><tr><th style="padding:4px 6px;color:var(--muted);text-align:left;width:32px"></th>';
+    hours.forEach(function(h){ html += '<th style="padding:2px 1px;color:var(--muted);font-weight:500;text-align:center;min-width:28px">'+h+'</th>'; });
+    html += '</tr></thead><tbody>';
+    d.days.forEach(function(day, di) {
+      html += '<tr><td style="padding:3px 6px;color:var(--muted);font-weight:600;white-space:nowrap">'+day+'</td>';
+      d.heatmap[di].forEach(function(val) {
+        var intensity = val / d.max;
+        var alpha = val === 0 ? 0.04 : 0.1 + intensity * 0.85;
+        var bg = 'rgba(193,123,63,' + alpha.toFixed(2) + ')';
+        var color = intensity > 0.5 ? '#fff' : 'var(--text)';
+        html += '<td style="padding:3px 1px;text-align:center"><div style="background:'+bg+';color:'+color+';border-radius:4px;padding:5px 2px;font-weight:'+(val>0?'600':'400')+'">'+( val>0?val:'')+'</div></td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="loading">Error loading heatmap.</div>'; }
+}
+
+// ── Comparison ───────────────────────────────────────────────────────────────
+async function loadComparison() {
+  var el = document.getElementById('comparison-content');
+  el.innerHTML = '<div class="loading">Loading comparison...</div>';
+  try {
+    var r = await fetch('/api/comparison');
+    var d = await r.json();
+    function deltaHtml(delta, label) {
+      if (!delta || delta.pct === 0) return '<span style="color:var(--muted);font-size:11px">—</span>';
+      var color = delta.up ? 'var(--green)' : 'var(--red)';
+      var arrow = delta.up ? '↑' : '↓';
+      return '<span style="color:'+color+';font-size:11px;font-weight:600">'+arrow+' '+delta.pct+'%</span>';
+    }
+    function compRow(label, thisVal, lastVal, delta, unit) {
+      unit = unit || '';
+      return '<tr style="border-bottom:1px solid var(--border)">'
+        + '<td style="padding:12px 14px;font-size:13px;font-weight:500;color:var(--muted)">'+label+'</td>'
+        + '<td style="padding:12px 14px;font-size:18px;font-weight:800;color:var(--text);text-align:center">'+thisVal+unit+'</td>'
+        + '<td style="padding:12px 14px;font-size:16px;font-weight:600;color:var(--muted2);text-align:center">'+lastVal+unit+'</td>'
+        + '<td style="padding:12px 14px;text-align:center">'+deltaHtml(delta)+'</td>'
+        + '</tr>';
+    }
+    el.innerHTML =
+      '<div class="card">'
+      + '<table style="width:100%;border-collapse:collapse">'
+      + '<thead><tr style="background:var(--surface2)">'
+      + '<th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Metric</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase">This Week</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Last Week</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Change</th>'
+      + '</tr></thead><tbody>'
+      + compRow('Total Cases', d.this_week.total, d.last_week.total, d.delta_total)
+      + compRow('Resolved', d.this_week.done, d.last_week.done, d.delta_done)
+      + compRow('Missed', d.this_week.missed, d.last_week.missed, d.delta_missed)
+      + compRow('Resolution Rate', d.this_week.rate, d.last_week.rate, d.delta_rate, '%')
+      + compRow('Avg Response', d.this_week.avg_resp, d.last_week.avg_resp, d.delta_resp)
+      + '</tbody></table></div>';
+  } catch(e) { el.innerHTML = '<div class="loading">Error.</div>'; }
+}
+
+// ── Fleet Intelligence ────────────────────────────────────────────────────────
+async function loadFleetIntel() {
+  var el = document.getElementById('fleet-intel-content');
+  el.innerHTML = '<div class="loading">Loading fleet intelligence...</div>';
+  try {
+    var r = await fetch('/api/fleet_intelligence');
+    var d = await r.json();
+    var unitsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
+      + (d.top_units.length ? d.top_units.map(function(u){
+          return '<tr>'
+            + '<td><b>'+u.unit+'</b></td>'
+            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+u.vtype+'</span></td>'
+            + '<td><b style="color:var(--accent)">'+u.total+'</b></td>'
+            + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+u.top_issue+'</td>'
+            + '<td style="color:var(--muted);font-size:11px">'+u.last_seen+'</td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No data yet — make reports through bot first</td></tr>')
+      + '</tbody></table></div></div>';
+
+    var driversHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Driver</th><th>Reports</th><th>Most Common Issue</th></tr></thead><tbody>'
+      + (d.top_drivers.length ? d.top_drivers.map(function(dr, i){
+          return '<tr>'
+            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+dr.name+'</b></td>'
+            + '<td><b style="color:var(--accent)">'+dr.total+'</b></td>'
+            + '<td style="color:var(--muted)">'+dr.top_issue+'</td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
+      + '</tbody></table></div></div>';
+
+    el.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
+      + '<div class="stat-card"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
+      + '<div class="stat-card"><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
+      + '</div>'
+      + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
+      + unitsHtml
+      + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
+      + driversHtml;
+  } catch(e) { el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
+}
+
 async function refresh() {
   await loadStats();
   if (currentPage==='overview') {
@@ -1789,6 +2043,10 @@ async function refresh() {
   else if (currentPage==='reassigned') loadReassigned();
   else if (currentPage==='testing') loadTesting();
   else if (currentPage==='fleet') loadFleet();
+  else if (currentPage==='trends') loadTrends();
+  else if (currentPage==='heatmap') loadHeatmap();
+  else if (currentPage==='comparison') loadComparison();
+  else if (currentPage==='fleet_intel') loadFleetIntel();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
   var lu = document.getElementById('last-update');
@@ -1800,6 +2058,137 @@ setInterval(refresh, 10000);
 </script>
 </body>
 </html>"""
+
+
+
+@app.route("/api/heatmap")
+def api_heatmap():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    try:
+        import zoneinfo
+        et = zoneinfo.ZoneInfo("America/New_York")
+        cases = [c for c in load_cases() if not is_testing(c)]
+        heatmap = [[0]*24 for _ in range(7)]  # [day][hour]
+        for c in cases:
+            if not c.get("opened_at"): continue
+            try:
+                dt = datetime.fromisoformat(c["opened_at"]).astimezone(et)
+                heatmap[dt.weekday()][dt.hour] += 1
+            except: pass
+        days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+        return jsonify({"heatmap": heatmap, "days": days, "max": max(max(r) for r in heatmap) or 1})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/trends")
+def api_trends():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    try:
+        import zoneinfo
+        et = zoneinfo.ZoneInfo("America/New_York")
+        cases = [c for c in load_cases() if not is_testing(c)]
+        period = request.args.get("period","30")
+        days = int(period)
+        from datetime import date, timedelta
+        today = date.today()
+        labels, totals, resolved, missed_arr, avg_resp_arr = [], [], [], [], []
+        for i in range(days-1, -1, -1):
+            d = today - timedelta(days=i)
+            ds = d.isoformat()
+            day_cases = [c for c in cases if (c.get("opened_at") or "").startswith(ds)]
+            rt = [c["response_secs"] for c in day_cases if c.get("response_secs")]
+            labels.append(d.strftime("%b %d"))
+            totals.append(len(day_cases))
+            resolved.append(sum(1 for c in day_cases if c.get("status")=="done"))
+            missed_arr.append(sum(1 for c in day_cases if c.get("status")=="missed"))
+            avg_resp_arr.append(int(sum(rt)/len(rt)) if rt else 0)
+        return jsonify({"labels":labels,"totals":totals,"resolved":resolved,"missed":missed_arr,"avg_resp":avg_resp_arr})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/comparison")
+def api_comparison():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    try:
+        from datetime import date, timedelta
+        cases = [c for c in load_cases() if not is_testing(c)]
+        today = date.today()
+        # This week vs last week
+        this_mon = today - timedelta(days=today.weekday())
+        last_mon = this_mon - timedelta(days=7)
+        last_sun = this_mon - timedelta(days=1)
+        def week_stats(start, end):
+            wc = [c for c in cases if start.isoformat() <= (c.get("opened_at") or "")[:10] <= end.isoformat()]
+            total = len(wc); done = sum(1 for c in wc if c.get("status")=="done")
+            missed = sum(1 for c in wc if c.get("status")=="missed")
+            rt = [c["response_secs"] for c in wc if c.get("response_secs")]
+            avg = int(sum(rt)/len(rt)) if rt else 0
+            rate = round(done/total*100) if total else 0
+            return {"total":total,"done":done,"missed":missed,"avg_resp":fmt_secs(avg),"avg_secs":avg,"rate":rate}
+        this_sun = today
+        tw = week_stats(this_mon, this_sun)
+        lw = week_stats(last_mon, last_sun)
+        def delta(a, b, reverse=False):
+            if b == 0: return {"pct": 0, "up": True}
+            pct = round((a-b)/b*100)
+            up = pct > 0 if not reverse else pct < 0
+            return {"pct": abs(pct), "up": up}
+        return jsonify({
+            "this_week": tw, "last_week": lw,
+            "delta_total":  delta(tw["total"], lw["total"]),
+            "delta_done":   delta(tw["done"], lw["done"]),
+            "delta_missed": delta(tw["missed"], lw["missed"], reverse=True),
+            "delta_rate":   delta(tw["rate"], lw["rate"]),
+            "delta_resp":   delta(tw["avg_secs"], lw["avg_secs"], reverse=True),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/fleet_intelligence")
+def api_fleet_intelligence():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    try:
+        all_cases = [c for c in load_cases() if not is_testing(c)]
+        reported = [c for c in all_cases if c.get("vehicle_type")]
+        # Top units with history
+        from collections import defaultdict
+        unit_data = defaultdict(lambda: {"cases":[], "vtype":""})
+        for c in reported:
+            unit = (c.get("unit_number") or "").strip()
+            if not unit: continue
+            unit_data[unit]["vtype"] = c.get("vehicle_type","")
+            unit_data[unit]["cases"].append(c)
+        top_units = []
+        for unit, data in unit_data.items():
+            cases = data["cases"]
+            total = len(cases)
+            issues = Counter((c.get("issue_text") or "")[:50] for c in cases if c.get("issue_text"))
+            top_issue = issues.most_common(1)[0][0] if issues else "—"
+            last_case = max(cases, key=lambda c: c.get("opened_at",""))
+            top_units.append({
+                "unit": unit, "vtype": data["vtype"], "total": total,
+                "top_issue": top_issue, "last_seen": fmt_dt(last_case.get("opened_at")),
+            })
+        top_units.sort(key=lambda x: -x["total"])
+        # Top drivers
+        driver_data = defaultdict(list)
+        for c in reported:
+            d = (c.get("report_driver") or "").strip()
+            if d: driver_data[d].append(c)
+        top_drivers = []
+        for name, cases in driver_data.items():
+            total = len(cases)
+            issues = Counter((c.get("issue_text") or "")[:50] for c in cases if c.get("issue_text"))
+            top_issue = issues.most_common(1)[0][0] if issues else "—"
+            top_drivers.append({"name": name, "total": total, "top_issue": top_issue})
+        top_drivers.sort(key=lambda x: -x["total"])
+        return jsonify({
+            "top_units": top_units[:20],
+            "top_drivers": top_drivers[:20],
+            "total_reports": len(reported),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/login")
