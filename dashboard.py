@@ -500,16 +500,21 @@ for(let i=0;i<18;i++){
 async function refresh() {
   await loadStats();
   if (currentPage==='overview') {
-    const r = await fetch('/api/cases?filter=today');
-    const cases = await r.json();
-    document.getElementById('recent-table').innerHTML = caseTable(cases.slice(0,10));
+    try {
+      const r = await fetch('/api/cases?filter=today');
+      if (r.ok) {
+        const cases = await r.json();
+        document.getElementById('recent-table').innerHTML = caseTable(cases.slice(0,10));
+      }
+    } catch(e) { console.error('overview cases error:', e); }
   } else if (currentPage==='cases') loadCases();
   else if (currentPage==='missed') loadMissed();
   else if (currentPage==='reassigned') loadReassigned();
   else if (currentPage==='fleet') loadFleet();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
-  document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
+  const el = document.getElementById('last-update');
+  if (el) el.textContent = 'Updated '+new Date().toLocaleTimeString();
 }
 
 refresh();
@@ -1567,24 +1572,6 @@ function printReport() {
   window.print();
   document.title = orig;
 }
-
-async function refresh() {
-  await loadStats();
-  if (currentPage==='overview') {
-    const r = await fetch('/api/cases?filter=today');
-    const cases = await r.json();
-    document.getElementById('recent-table').innerHTML = caseTable(cases.slice(0,10));
-  } else if (currentPage==='cases') loadCases();
-  else if (currentPage==='missed') loadMissed();
-  else if (currentPage==='reassigned') loadReassigned();
-  else if (currentPage==='fleet') loadFleet();
-  else if (currentPage==='my_profile') loadMyProfile();
-  else if (currentPage==='agents') loadAgents();
-  document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
-}
-
-refresh();
-setInterval(refresh, 10000);
 
 </script>
 </body>
