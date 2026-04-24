@@ -1540,7 +1540,7 @@ async function viewFullReport(caseIdOrEl) {
 
     html += '<div style="margin-bottom:16px">';
     if (vtypeLabel && c.unit_number) html += rpt(vtypeLabel, c.unit_number);
-    html += rpt('Driver', c.report_driver || c.driver);
+    html += rpt('Reported by', c.report_driver || c.driver);
     html += rpt('Issue', c.issue_text || c.full_description);
     html += '</div>';
 
@@ -1571,8 +1571,7 @@ async function viewFullReport(caseIdOrEl) {
         + '<div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:13px;line-height:1.6">'+c.comments+'</div></div>';
     }
 
-    // Assigned by
-    html += rpt('Reported by', c.agent);
+    html += rpt('Handled by', c.agent);
 
     document.getElementById('report-view-body').innerHTML = html;
   } catch(e) {
