@@ -1459,7 +1459,7 @@ async function openCase(el) {
       + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+c.full_description+'</p></div>' : '')
       + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+c.full_notes+'</p></div>' : '')
       + ((c.status === 'reported' || c.status === 'done') && c.full_notes && c.full_notes !== 'case reported'
-        ? '<div style="margin-top:14px;text-align:center"><button onclick="viewFullReport(\''+c.full_id+'\')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"><i class=\"ph ph-file-text\"></i> View Full Report</button></div>'
+        ? '<div style="margin-top:14px;text-align:center"><button data-id="' + c.full_id + '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
         : '');
   } catch(e) {
     console.error('openCase error:', e);
