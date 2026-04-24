@@ -98,59 +98,6 @@ def telegram_auth():
 
 
 
-@app.route("/api/fleet")
-def api_fleet():
-    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
-    cases = [c for c in load_cases() if c.get("vehicle_type")]  # only reported cases
-    
-    total = len(cases)
-    truck_count   = sum(1 for c in cases if c.get("vehicle_type") == "truck")
-    trailer_count = sum(1 for c in cases if c.get("vehicle_type") == "trailer")
-    reefer_count  = sum(1 for c in cases if c.get("vehicle_type") == "reefer")
-
-    # Top units (truck/trailer numbers)
-    unit_counts = Counter(
-        (c.get("unit_number","").strip(), c.get("vehicle_type",""))
-        for c in cases if c.get("unit_number","").strip()
-    )
-    top_units = [{"unit": u, "vtype": vt, "count": cnt}
-                 for (u, vt), cnt in unit_counts.most_common(10)]
-
-    # Top drivers from reports
-    driver_counts = Counter(
-        c.get("report_driver","").strip()
-        for c in cases if c.get("report_driver","").strip()
-    )
-    top_drivers = [{"unit": n, "vtype": "", "count": cnt}
-                   for n, cnt in driver_counts.most_common(10)]
-
-    # Top issues
-    issue_counts = Counter(
-        c.get("issue_text","").strip()[:40]
-        for c in cases if c.get("issue_text","").strip()
-    )
-    top_issues = [{"unit": iss, "vtype": "", "count": cnt}
-                  for iss, cnt in issue_counts.most_common(8)]
-
-    # Load types
-    load_counts = Counter(
-        c.get("load_type","").strip()
-        for c in cases if c.get("load_type","").strip()
-    )
-    load_types = [{"unit": lt, "vtype": "", "count": cnt}
-                  for lt, cnt in load_counts.most_common(6)]
-
-    return jsonify({
-        "total_reports": total,
-        "truck_count": truck_count,
-        "trailer_count": trailer_count,
-        "reefer_count": reefer_count,
-        "top_units": top_units,
-        "top_drivers": top_drivers,
-        "top_issues": top_issues,
-        "load_types": load_types,
-    })
-
 @app.route("/api/report")
 def api_report():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
