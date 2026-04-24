@@ -409,27 +409,43 @@ LOGIN_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0a0a0f}
-.bg{position:fixed;inset:0;background:url('https://images.unsplash.com/photo-1473445730015-841f29a9490b?auto=format&fit=crop&w=1920&q=80')center/cover;opacity:.2;filter:grayscale(30%)}
-.overlay{position:fixed;inset:0;background:linear-gradient(135deg,rgba(10,10,15,.95),rgba(20,15,40,.85))}
-.card{position:relative;z-index:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:24px;padding:48px 40px;text-align:center;width:100%;max-width:400px;backdrop-filter:blur(20px)}
-.logo{width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px}
-h1{color:#fff;font-size:24px;font-weight:800;margin-bottom:6px}
-.sub{color:rgba(255,255,255,.45);font-size:14px;margin-bottom:28px}
-.divider{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-.divider-line{flex:1;height:1px;background:rgba(255,255,255,.1)}
-.divider span{font-size:11px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.08em}
+body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f8f8fa}
+.bg-slide{position:fixed;inset:0;transition:opacity 1.5s ease-in-out;background-size:cover;background-position:center}
+.bg-slide.active{opacity:1}
+.bg-slide.inactive{opacity:0}
+.overlay{position:fixed;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.82) 0%,rgba(240,240,255,.75) 100%);backdrop-filter:blur(2px)}
+.card{position:relative;z-index:1;background:rgba(255,255,255,.9);border:1px solid rgba(99,102,241,.15);border-radius:28px;padding:48px 40px;text-align:center;width:100%;max-width:420px;box-shadow:0 8px 40px rgba(99,102,241,.12),0 2px 8px rgba(0,0,0,.06)}
+.logo{width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px;box-shadow:0 4px 20px rgba(99,102,241,.35)}
+h1{color:#18181b;font-size:24px;font-weight:800;margin-bottom:6px;letter-spacing:-.3px}
+.sub{color:#71717a;font-size:14px;margin-bottom:28px}
+.features{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:28px}
+.feat{background:#f4f4f8;border:1px solid #e4e4e7;border-radius:10px;padding:10px 12px;text-align:left;display:flex;align-items:center;gap:8px}
+.feat-icon{font-size:16px}
+.feat-text{font-size:11px;color:#52525b;font-weight:500}
+.divider{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.divider-line{flex:1;height:1px;background:#e4e4e7}
+.divider span{font-size:11px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.08em}
 .tg-wrap{display:flex;justify-content:center}
-.error{color:#f87171;font-size:13px;margin-bottom:16px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px 12px}
+.error{color:#dc2626;font-size:13px;margin-bottom:16px;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);border-radius:8px;padding:8px 12px}
+.photo-credit{position:fixed;bottom:12px;right:16px;font-size:10px;color:rgba(0,0,0,.35);z-index:2}
+@media(max-width:480px){.card{margin:16px;padding:36px 24px}}
 </style>
 </head><body>
-<div class="bg"></div><div class="overlay"></div>
+<div id="bg1" class="bg-slide active"></div>
+<div id="bg2" class="bg-slide inactive"></div>
+<div class="overlay"></div>
 <div class="card">
   <div class="logo">🚛</div>
   <h1>Kurtex Dashboard</h1>
   <p class="sub">Truck Maintenance Command Center</p>
+  <div class="features">
+    <div class="feat"><span class="feat-icon">📊</span><span class="feat-text">Live Overview</span></div>
+    <div class="feat"><span class="feat-icon">🏆</span><span class="feat-text">Leaderboards</span></div>
+    <div class="feat"><span class="feat-icon">📋</span><span class="feat-text">Case Tracking</span></div>
+    <div class="feat"><span class="feat-icon">🚛</span><span class="feat-text">Fleet Stats</span></div>
+  </div>
   {% if error %}<div class="error">Authentication failed. Please try again.</div>{% endif %}
-  <div class="divider"><div class="divider-line"></div><span>Sign in with</span><div class="divider-line"></div></div>
+  <div class="divider"><div class="divider-line"></div><span>Sign in with Telegram</span><div class="divider-line"></div></div>
   <div class="tg-wrap">
     <script async src="https://telegram.org/js/telegram-widget.js?22"
       data-telegram-login="{{ bot_username }}"
@@ -438,6 +454,43 @@ h1{color:#fff;font-size:24px;font-weight:800;margin-bottom:6px}
       data-request-access="write"></script>
   </div>
 </div>
+<div class="photo-credit" id="photo-credit">Photo: Unsplash</div>
+<script>
+var photos = [
+  {url:'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Truck'},
+  {url:'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Highway'},
+  {url:'https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Road'},
+  {url:'https://images.unsplash.com/photo-1616432043562-3671ea2e5242?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Logistics'},
+  {url:'https://images.unsplash.com/photo-1473445730015-841f29a9490b?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Truck Night'},
+];
+var current = 0;
+var bg1 = document.getElementById('bg1');
+var bg2 = document.getElementById('bg2');
+var credit = document.getElementById('photo-credit');
+var activeBg = bg1;
+var inactiveBg = bg2;
+
+function loadPhoto(idx) {
+  var p = photos[idx % photos.length];
+  inactiveBg.style.backgroundImage = 'url(' + p.url + ')';
+  setTimeout(function() {
+    inactiveBg.className = 'bg-slide active';
+    activeBg.className = 'bg-slide inactive';
+    credit.textContent = p.credit;
+    var tmp = activeBg; activeBg = inactiveBg; inactiveBg = tmp;
+  }, 100);
+}
+
+// Set first photo immediately
+bg1.style.backgroundImage = 'url(' + photos[0].url + ')';
+credit.textContent = photos[0].credit;
+
+// Rotate every 5 seconds
+setInterval(function() {
+  current = (current + 1) % photos.length;
+  loadPhoto(current);
+}, 5000);
+</script>
 </body></html>"""
 
 
@@ -476,7 +529,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .hero-bg{position:fixed;inset:0;z-index:0;background:url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80')center/cover;opacity:.03;pointer-events:none}
 .layout{position:relative;z-index:1;display:flex;min-height:100vh}
 
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s}
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
 .sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:0 8px}
 .logo-icon{width:32px;height:32px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .logo-text h2{font-size:14px;font-weight:700}
@@ -496,10 +549,10 @@ nav{flex:1}
 .theme-btn{width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;margin-bottom:6px;transition:all .15s}
 .logout-btn{width:100%;padding:7px;background:var(--red-bg);border:1px solid rgba(220,38,38,.15);color:var(--red);border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
 
-.mobile-header{display:none;position:sticky;top:0;z-index:40;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;align-items:center;justify-content:space-between}
+.mobile-header{display:none;position:sticky;top:0;z-index:60;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;align-items:center;justify-content:space-between}
 .mobile-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
 .hamburger{background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:48}
 
 .main{flex:1;padding:22px 24px;overflow-x:hidden;min-width:0}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:10px;flex-wrap:wrap}
@@ -896,7 +949,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   currentPage = page;
   closeSidebar();
-  refresh();
+  setTimeout(refresh, 50);
 }
 
 function setCaseFilter(f, btn) {
