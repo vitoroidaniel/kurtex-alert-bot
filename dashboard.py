@@ -1192,20 +1192,21 @@ async function loadAgents() {
     if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents found.</div>'; return; }
     var cards = agents.map(function(a) {
       var init = (a.name||'?')[0].toUpperCase();
-      return '<div class="card" style="cursor:pointer" onclick="openAgentModal(\'' + (a.name||'').replace(/'/g,"\\'") + '\')">'
+      return '<div class="card" style="cursor:pointer" data-agent="' + (a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
         + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">'+init+'</div>'
-        + '<div><div style="font-size:13px;font-weight:700">'+(a.name||'')+'</div><div style="font-size:11px;color:var(--muted)">'+(a.username?'@'+a.username:'No username')+'</div></div>'
+        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
+        + '<div><div style="font-size:13px;font-weight:700">' + (a.name||'') + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+a.username:'No username') + '</div></div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">'+(a.total||0)+'</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">'+(a.done||0)+'</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--red)">'+(a.missed||0)+'</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">'+(a.rate||0)+'%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--red)">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
         + '</div>'
-        + '<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Avg: '+(a.avg_resp||'—')+'</div>'
+        + '<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Avg: ' + (a.avg_resp||'—') + '</div>'
         + '</div>';
-    }).join('');
+    }).join('')
     el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">' + cards + '</div>';
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
 }
@@ -1252,7 +1253,8 @@ function openCase(el) {
 }
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
-async function openAgentModal(name) {
+async function openAgentModal(nameOrEl) {
+  var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
   document.getElementById('agent-modal-overlay').classList.add('open');
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
   document.getElementById('agent-modal-title').textContent = name;
