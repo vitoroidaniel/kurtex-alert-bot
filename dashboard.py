@@ -262,6 +262,15 @@ def api_agents():
         except Exception as e:
             logger.error(f"get_all_user_dicts error: {e}")
             users = []
+        # Fallback: if user_store returned nothing, build agent list from cases
+        if not users:
+            seen = {}
+            for c in cases:
+                name = c.get("agent_name","").strip()
+                uname = c.get("agent_username","").strip()
+                if name and name not in seen:
+                    seen[name] = {"name": name, "username": uname, "role": "agent"}
+            users = list(seen.values())
         result = []
         for u in users:
             name  = u["name"]
