@@ -936,6 +936,14 @@ td{padding:9px 12px;vertical-align:middle}
             <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
             <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
           </div>
+          <select id="status-filter" onchange="loadCases()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
+            <option value="">All Statuses</option>
+            <option value="open">🔵 Open</option>
+            <option value="assigned">🟡 Assigned</option>
+            <option value="reported">🟣 Reported</option>
+            <option value="done">🟢 Done</option>
+            <option value="missed">🔴 Missed</option>
+          </select>
           <input type="date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none" onchange="setCaseDateFilter(this.value)">
           <button class="tab-btn" id="cases-date-clear" onclick="clearDateFilter()" style="display:none">✕</button>
         </div>
