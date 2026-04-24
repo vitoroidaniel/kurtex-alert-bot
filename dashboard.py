@@ -1509,8 +1509,8 @@ async function loadAgents() {
 
 async function openAgentModal(name) {
   const overlay = document.getElementById('agent-modal-overlay');
-  const body = document.getElementById('agent-modal-body');
-  const title = document.getElementById('agent-modal-title');
+  const body    = document.getElementById('agent-modal-body');
+  const title   = document.getElementById('agent-modal-title');
   overlay.classList.add('open');
   body.innerHTML = '<div class="loading">Loading profile...</div>';
   title.textContent = name;
@@ -1519,37 +1519,42 @@ async function openAgentModal(name) {
     if (!r.ok) { body.innerHTML = '<div class="loading">Agent not found.</div>'; return; }
     const a = await r.json();
     const rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
-    body.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
-        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">${a.total}</div><div class="agent-stat-label">Total</div></div>
-        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">${a.done}</div><div class="agent-stat-label">Done</div></div>
-        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">${a.missed}</div><div class="agent-stat-label">Missed</div></div>
-        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">${rate}%</div><div class="agent-stat-label">Rate</div></div>
-      </div>
-      <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">
-        Avg response: <b>${a.avg_resp}</b>
-      </div>
-      ${a.recent && a.recent.length ? `
-        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>
-        <div style="overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">
-            <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
-              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>
-              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>
-              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>
-              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>
-            </tr></thead>
-            <tbody>${a.recent.map(c=>`
-              <tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(()=>openCase('${c.full_id}'),200)">
-                <td style="padding:8px 10px;font-weight:500">${c.driver}</td>
-                <td style="padding:8px 10px;color:var(--muted)">${c.group}</td>
-                <td style="padding:8px 10px">${statusBadge(c.status)}</td>
-                <td style="padding:8px 10px;color:var(--muted);font-size:11px">${c.opened}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>` : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No cases yet.</div>'}
-    `;
+
+    // Build rows separately to avoid nested template literal issues
+    let rows = '';
+    if (a.recent && a.recent.length) {
+      a.recent.forEach(function(c) {
+        const cid = c.full_id || '';
+        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(function(){openCase(\'' + cid + '\')},200)">'
+          + '<td style="padding:8px 10px;font-weight:500">' + (c.driver||'—') + '</td>'
+          + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
+          + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
+          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
+          + '</tr>';
+      });
+    }
+
+    const tableHtml = rows
+      ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
+        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
+        + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
+        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
+        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
+        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
+        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
+        + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No cases yet.</div>';
+
+    body.innerHTML =
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + a.total + '</div><div class="agent-stat-label">Total</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">' + a.done + '</div><div class="agent-stat-label">Done</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">' + a.missed + '</div><div class="agent-stat-label">Missed</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + rate + '%</div><div class="agent-stat-label">Rate</div></div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>' + a.avg_resp + '</b></div>'
+      + tableHtml;
+
   } catch(e) {
     console.error('Agent modal error:', e);
     body.innerHTML = '<div class="loading">Error loading profile.</div>';
