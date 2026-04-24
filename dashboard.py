@@ -2061,7 +2061,15 @@ async function refresh() {
   if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
-refresh();
+// Restore last visited page
+try {
+  var savedPage = localStorage.getItem('kurtex-page');
+  if (savedPage && pages.indexOf(savedPage) >= 0) {
+    showPage(savedPage);
+  } else {
+    refresh();
+  }
+} catch(e) { refresh(); }
 setInterval(refresh, 10000);
 </script>
 </body>
