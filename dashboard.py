@@ -980,6 +980,18 @@ td{padding:9px 12px;vertical-align:middle}
 </div>
 </div>
 
+<!-- Report Viewer Modal -->
+<div class="modal-overlay" id="report-view-overlay" style="z-index:500" onclick="if(event.target===this)closeReportView()">
+<div class="modal" style="max-width:640px">
+  <button class="modal-close" onclick="closeReportView()"><i class="ph ph-x"></i></button>
+  <h2 id="report-view-title">Case Report</h2>
+  <div id="report-view-body"><div class="loading">Loading...</div></div>
+  <div style="margin-top:16px;text-align:right">
+    <button onclick="printReportView()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px"><i class="ph ph-printer"></i> Print</button>
+  </div>
+</div>
+</div>
+
 <!-- Agent Modal -->
 <div class="modal-overlay" id="agent-modal-overlay" style="z-index:200" onclick="if(event.target===this)closeAgentModal()">
 <div class="modal">
@@ -1445,13 +1457,89 @@ async function openCase(el) {
       + '</div>'
       + extra
       + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+c.full_description+'</p></div>' : '')
-      + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+c.full_notes+'</p></div>' : '');
+      + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+c.full_notes+'</p></div>' : '')
+      + ((c.status === 'reported' || c.status === 'done') && c.full_notes && c.full_notes !== 'case reported'
+        ? '<div style="margin-top:14px;text-align:center"><button onclick="viewFullReport(\''+c.full_id+'\')" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"><i class=\"ph ph-file-text\"></i> View Full Report</button></div>'
+        : '');
   } catch(e) {
     console.error('openCase error:', e);
     document.getElementById('modal-body').innerHTML = '<div class="loading">Error loading case.</div>';
   }
 }
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+async function viewFullReport(caseId) {
+  document.getElementById('report-view-overlay').classList.add('open');
+  document.getElementById('report-view-body').innerHTML = '<div class="loading">Loading report...</div>';
+  try {
+    var r = await fetch('/api/case?id='+encodeURIComponent(caseId));
+    if (!r.ok) { document.getElementById('report-view-body').innerHTML = '<div class="loading">Error loading report.</div>'; return; }
+    var c = await r.json();
+    document.getElementById('report-view-title').textContent = 'Report — ' + (c.driver||'—') + ' / ' + (c.group||'—');
+
+    // case data loaded
+
+    // Parse the notes field which contains the bot report text
+    var notes = c.full_notes || '';
+    var isRealReport = notes && notes !== 'case reported';
+
+    // Build report rows from case data
+    var vtype = c.vehicle_type || '';
+    var unitLabel = vtype === 'truck' ? 'Truck' : vtype === 'trailer' ? 'Trailer' : vtype === 'reefer' ? 'Reefer' : 'Unit';
+
+    function row(label, val) {
+      if (!val || val === '—') return '';
+      return '<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="min-width:160px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+label+'</div>'
+        + '<div style="font-size:14px;font-weight:500;color:var(--text)">'+val+'</div>'
+        + '</div>';
+    }
+
+    // Priority icon
+    var priorityIcon = c.priority === 'critical' ? '🔴' : c.priority === 'high' ? '🟠' : c.priority === 'medium' ? '🟡' : '🟢';
+    var priorityLabel = c.priority ? (priorityIcon + ' ' + c.priority.charAt(0).toUpperCase() + c.priority.slice(1)) : '';
+
+    document.getElementById('report-view-body').innerHTML =
+      // Header
+      '<div style="background:linear-gradient(135deg,var(--accent),#8B4A1A);border-radius:12px;padding:18px 20px;margin-bottom:20px;color:#fff">'
+      + '<div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">'
+      + (vtype ? '🚛 Case Report — '+vtype.charAt(0).toUpperCase()+vtype.slice(1) : '📋 Case Report')
+      + '</div>'
+      + '<div style="font-size:18px;font-weight:800;line-height:1.2">'+(c.driver||'—')+'</div>'
+      + '<div style="font-size:13px;opacity:.8;margin-top:4px">'+(c.group||'—')+'</div>'
+      + (priorityLabel ? '<div style="margin-top:8px;background:rgba(255,255,255,.15);display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">'+priorityLabel+'</div>' : '')
+      + '</div>'
+
+      // Details
+      + '<div style="margin-bottom:16px">'
+      + (c.unit_number ? row(unitLabel+' #', c.unit_number) : '')
+      + row('Driver', c.report_driver || c.driver)
+      + row('Issue', c.issue_text || c.full_description)
+      + row('Load Type', c.load_type)
+      + row('Assigned To', c.agent)
+      + row('Date', c.opened)
+      + '</div>'
+
+      // Agent notes / report
+      + (isRealReport
+        ? '<div style="margin-top:4px">'
+          + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">Agent Report</div>'
+          + '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px;font-size:13px;line-height:1.8;white-space:pre-wrap;color:#5c4a00">'+notes+'</div>'
+          + '</div>'
+        : '');
+  } catch(e) {
+    document.getElementById('report-view-body').innerHTML = '<div class="loading">Error loading report.</div>';
+  }
+}
+
+function closeReportView() { document.getElementById('report-view-overlay').classList.remove('open'); }
+
+function printReportView() {
+  var orig = document.title;
+  document.title = document.getElementById('report-view-title').textContent;
+  window.print();
+  document.title = orig;
+}
 
 async function openAgentModal(nameOrEl) {
   var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
