@@ -273,11 +273,13 @@ def api_agents():
             users = list(seen.values())
         result = []
         for u in users:
-            name  = u["name"]
-            uname = u.get("username","").lower()
+            name  = (u.get("name") or "").strip()
+            if not name:
+                continue
+            uname = (u.get("username") or "").lower()
             agent_cases = [c for c in cases if
-                           c.get("agent_name","").lower() == name.lower() or
-                           (uname and c.get("agent_username","").lower() == uname)]
+                           (c.get("agent_name") or "").lower() == name.lower() or
+                           (uname and (c.get("agent_username") or "").lower() == uname)]
             total  = len(agent_cases)
             done   = sum(1 for c in agent_cases if c["status"] == "done")
             missed = sum(1 for c in agent_cases if c["status"] == "missed")
