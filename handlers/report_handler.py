@@ -476,9 +476,23 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ctx.bot_data["busy_agents"].discard(update.effective_user.id)
         if case_id:
             try:
-                from storage.case_store import report_case
+                from storage.case_store import report_case, _load, _save, CASES_FILE
                 report_case(case_id)
-                logger.info(f"Case {case_id} marked reported")
+                # Save all report fields to the case for dashboard analytics
+                report_data = ctx.user_data.get("report", {})
+                cases = _load(CASES_FILE)
+                for c in cases:
+                    if c["id"] == case_id:
+                        c["vehicle_type"]   = report_data.get("vehicle_type", "")
+                        c["unit_number"]    = report_data.get("unit_number", "")
+                        c["report_driver"]  = report_data.get("driver", "")
+                        c["issue_text"]     = report_data.get("issue", "")
+                        c["load_type"]      = report_data.get("load", "")
+                        c["location"]       = report_data.get("location", "")
+                        c["priority"]       = report_data.get("priority", "")
+                        break
+                _save(CASES_FILE, cases)
+                logger.info(f"Case {case_id} marked reported with report data saved")
             except Exception as e:
                 logger.error(f"Failed to mark case reported: {e}")
 
