@@ -591,7 +591,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 .hero-bg{position:fixed;inset:0;z-index:0;background:url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80')center/cover;opacity:.08;pointer-events:none}
 .layout{position:relative;z-index:1;display:flex;min-height:100vh}
 
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto;flex-shrink:0}
 .sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:0 8px}
 .logo-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo-text h2{font-size:14px;font-weight:700}
@@ -614,7 +614,7 @@ nav{flex:1}
 .mobile-header{display:none;position:sticky;top:0;z-index:60;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;align-items:center;justify-content:space-between}
 .mobile-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
 .hamburger{background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:48}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
 
 .main{flex:1;padding:22px 24px;overflow-x:hidden;min-width:0}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:10px;flex-wrap:wrap}
@@ -748,15 +748,15 @@ td{padding:9px 12px;vertical-align:middle}
 
 @media(max-width:768px){
   /* Sidebar drawer */
-  .sidebar{position:fixed;left:0;top:0;height:100%;transform:translateX(-100%);width:260px;z-index:100;box-shadow:4px 0 32px rgba(0,0,0,.2);overflow-y:auto}
-  .sidebar.open{transform:translateX(0)}
+  .sidebar{position:fixed;left:0;top:0;height:100%!important;transform:translateX(-100%);width:260px;z-index:100;box-shadow:4px 0 32px rgba(0,0,0,.2);overflow-y:auto}
+  .sidebar.open{transform:translateX(0)!important}
   .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
   .sidebar-overlay.open{display:block}
-  .mobile-header{display:flex;z-index:98}
+  .mobile-header{display:flex!important;z-index:101}
 
   /* Layout - sidebar hidden, full width content */
-  .layout{display:flex;flex-direction:column}
-  .main{padding:12px 12px 100px;width:100%;min-width:0}
+  .layout{display:block}
+  .main{padding:12px 12px 100px;width:100%;min-width:0;margin-left:0!important}
 
   /* Topbar */
   .topbar{flex-wrap:nowrap;gap:6px}
@@ -1086,6 +1086,11 @@ function closeSidebar() {
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 function showPage(page) {
+  // Always close sidebar first on mobile
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+  
   document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   document.querySelectorAll('.nav-item').forEach(function(a){a.classList.remove('active');});
   var pg = document.getElementById('page-'+page);
@@ -1096,7 +1101,6 @@ function showPage(page) {
   var titleEl = document.getElementById('page-title');
   if (titleEl) titleEl.textContent = titles[page] || page;
   currentPage = page;
-  closeSidebar();
   setTimeout(refresh, 50);
 }
 
@@ -1458,7 +1462,7 @@ async function openCase(el) {
       + extra
       + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+c.full_description+'</p></div>' : '')
       + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+c.full_notes+'</p></div>' : '')
-      + ((c.status === 'reported' || c.status === 'done') && c.full_notes && c.full_notes !== 'case reported'
+      + ((c.status === 'reported' || c.status === 'done')
         ? '<div style="margin-top:14px;text-align:center"><button data-id="' + c.full_id + '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
         : '');
   } catch(e) {
