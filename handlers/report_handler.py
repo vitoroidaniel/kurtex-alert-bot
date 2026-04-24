@@ -480,7 +480,9 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 report_case(case_id)
                 # Save all report fields to the case for dashboard analytics
                 report_data = ctx.user_data.get("report", {})
+                logger.info(f"Saving report data for case {case_id}: vtype={report_data.get('vehicle_type')}, unit={report_data.get('unit_number')}, issue={report_data.get('issue')}")
                 cases = _load(CASES_FILE)
+                found = False
                 for c in cases:
                     if c["id"] == case_id:
                         c["vehicle_type"]   = report_data.get("vehicle_type", "")
@@ -490,9 +492,19 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         c["load_type"]      = report_data.get("load", "")
                         c["location"]       = report_data.get("location", "")
                         c["priority"]       = report_data.get("priority", "")
+                        c["pickup"]         = report_data.get("pickup", "")
+                        c["delivery"]       = report_data.get("delivery", "")
+                        c["comments"]       = report_data.get("comments", "")
+                        c["setpoint"]       = report_data.get("setpoint", "")
+                        c["current_temp"]   = report_data.get("current_temp", "")
+                        c["temp_recorder"]  = report_data.get("temp_recorder", "")
+                        found = True
                         break
-                _save(CASES_FILE, cases)
-                logger.info(f"Case {case_id} marked reported with report data saved")
+                if found:
+                    _save(CASES_FILE, cases)
+                    logger.info(f"Case {case_id} fleet data saved: vtype={report_data.get('vehicle_type')}")
+                else:
+                    logger.warning(f"Case {case_id} not found in cases.json for fleet data save")
             except Exception as e:
                 logger.error(f"Failed to mark case reported: {e}")
 
