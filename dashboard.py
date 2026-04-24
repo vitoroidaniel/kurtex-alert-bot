@@ -954,25 +954,23 @@ function statusBadge(s) {
 }
 
 function caseTable(cases) {
-  if (!cases || !cases.length) return '<div class="empty-state">No cases found</div>';
-  var rows = '';
-  cases.forEach(function(c) {
-    var cid = c.full_id || '';
-    rows += '<tr onclick="openCase(\'' + cid.replace(/'/g,"\\'") + '\')">'
-      + '<td><b>' + (c.driver||'—') + '</b></td>'
-      + '<td style="color:var(--muted)">' + (c.group||'—') + '</td>'
-      + '<td>' + (c.agent||'—') + '</td>'
-      + '<td>' + statusBadge(c.status) + (c.reassigned ? '<span class="reassign-badge">reassigned</span>' : '') + '</td>'
-      + '<td style="color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
-      + '<td style="font-size:11px">' + (c.response||'—') + '</td>'
-      + '<td class="desc-cell">' + (c.description||'') + '</td>'
-      + '</tr>';
-  });
-  return '<table><thead><tr>'
-    + '<th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table>';
+  if (!cases || !cases.length) return "<div class=\"empty-state\">No cases found</div>";
+  var rows = cases.map(function(c) {
+    var cid = (c.full_id || "").replace(/"/g, "&quot;");
+    return "<tr onclick=\"openCase(&quot;" + cid + "&quot;)\">"
+      + "<td><b>" + (c.driver||"—") + "</b></td>"
+      + "<td style=\"color:var(--muted)\">" + (c.group||"—") + "</td>"
+      + "<td>" + (c.agent||"—") + "</td>"
+      + "<td>" + statusBadge(c.status) + (c.reassigned ? "<span class=\"reassign-badge\">reassigned</span>" : "") + "</td>"
+      + "<td style=\"color:var(--muted);font-size:11px\">" + (c.opened||"—") + "</td>"
+      + "<td style=\"font-size:11px\">" + (c.response||"—") + "</td>"
+      + "<td class=\"desc-cell\">" + (c.description||"") + "</td>"
+      + "</tr>";
+  }).join("");
+  return "<table><thead><tr>"
+    + "<th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>"
+    + "</tr></thead><tbody>" + rows + "</tbody></table>";
 }
-
 function listRows(items, maxCount) {
   if (!items || !items.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
   return items.map(function(item, i) {
@@ -1265,13 +1263,13 @@ async function openAgentModal(name) {
     var rows = '';
     if (a.recent && a.recent.length) {
       a.recent.forEach(function(c) {
-        var cid = (c.full_id||'').replace(/'/g,"\\'");
-        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();var id=\'' + cid + '\';setTimeout(function(){openCase(id);},200)">'
-          + '<td style="padding:8px 10px;font-weight:500">'+(c.driver||'—')+'</td>'
-          + '<td style="padding:8px 10px;color:var(--muted)">'+(c.group||'—')+'</td>'
-          + '<td style="padding:8px 10px">'+statusBadge(c.status)+'</td>'
-          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">'+(c.opened||'—')+'</td>'
-          + '</tr>';
+        var cid = (c.full_id || "").replace(/"/g, "&quot;");
+        rows += "<tr style=\"border-bottom:1px solid var(--border);cursor:pointer\" onclick=\"closeAgentModal();var id=&quot;" + cid + "&quot;;setTimeout(function(){openCase(id);},200)\">"
+          + "<td style=\"padding:8px 10px;font-weight:500\">" + (c.driver||"—") + "</td>"
+          + "<td style=\"padding:8px 10px;color:var(--muted)\">" + (c.group||"—") + "</td>"
+          + "<td style=\"padding:8px 10px\">" + statusBadge(c.status) + "</td>"
+          + "<td style=\"padding:8px 10px;color:var(--muted);font-size:11px\">" + (c.opened||"—") + "</td>"
+          + "</tr>";
       });
     }
     document.getElementById('agent-modal-body').innerHTML =
