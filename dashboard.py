@@ -97,6 +97,60 @@ def telegram_auth():
     return redirect("/login?error=invalid")
 
 
+
+@app.route("/api/fleet")
+def api_fleet():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    cases = [c for c in load_cases() if c.get("vehicle_type")]  # only reported cases
+    
+    total = len(cases)
+    truck_count   = sum(1 for c in cases if c.get("vehicle_type") == "truck")
+    trailer_count = sum(1 for c in cases if c.get("vehicle_type") == "trailer")
+    reefer_count  = sum(1 for c in cases if c.get("vehicle_type") == "reefer")
+
+    # Top units (truck/trailer numbers)
+    unit_counts = Counter(
+        (c.get("unit_number","").strip(), c.get("vehicle_type",""))
+        for c in cases if c.get("unit_number","").strip()
+    )
+    top_units = [{"unit": u, "vtype": vt, "count": cnt}
+                 for (u, vt), cnt in unit_counts.most_common(10)]
+
+    # Top drivers from reports
+    driver_counts = Counter(
+        c.get("report_driver","").strip()
+        for c in cases if c.get("report_driver","").strip()
+    )
+    top_drivers = [{"unit": n, "vtype": "", "count": cnt}
+                   for n, cnt in driver_counts.most_common(10)]
+
+    # Top issues
+    issue_counts = Counter(
+        c.get("issue_text","").strip()[:40]
+        for c in cases if c.get("issue_text","").strip()
+    )
+    top_issues = [{"unit": iss, "vtype": "", "count": cnt}
+                  for iss, cnt in issue_counts.most_common(8)]
+
+    # Load types
+    load_counts = Counter(
+        c.get("load_type","").strip()
+        for c in cases if c.get("load_type","").strip()
+    )
+    load_types = [{"unit": lt, "vtype": "", "count": cnt}
+                  for lt, cnt in load_counts.most_common(6)]
+
+    return jsonify({
+        "total_reports": total,
+        "truck_count": truck_count,
+        "trailer_count": trailer_count,
+        "reefer_count": reefer_count,
+        "top_units": top_units,
+        "top_drivers": top_drivers,
+        "top_issues": top_issues,
+        "load_types": load_types,
+    })
+
 @app.route("/api/report")
 def api_report():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
@@ -198,7 +252,10 @@ def api_agents():
     result = []
     for u in users:
         name = u["name"]
-        agent_cases = [c for c in cases if c.get("agent_name","").lower() == name.lower()]
+        uname = u.get("username","").lower()
+        agent_cases = [c for c in cases if 
+                       c.get("agent_name","").lower() == name.lower() or
+                       (uname and c.get("agent_username","").lower() == uname)]
         total = len(agent_cases); done = sum(1 for c in agent_cases if c["status"]=="done")
         missed = sum(1 for c in agent_cases if c["status"]=="missed")
         rt = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
@@ -267,18 +324,299 @@ def api_cases():
 
 @app.route("/api/case")
 def api_case_detail():
-    case_id = request.args.get("id","")
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    case_id = request.args.get("id","").strip()
+    if not case_id: return jsonify({"error":"no id"}), 400
     for c in load_cases():
-        if c["id"].startswith(case_id) or c["id"] == case_id:
-            return jsonify(serialize_case(c) | {
-                "full_description": c.get("description",""), "full_notes": c.get("notes",""),
-                "agent_username": c.get("agent_username",""), "driver_username": c.get("driver_username",""),
-                "assigned_at": fmt_dt(c.get("assigned_at")), "resolution_secs": fmt_secs(c.get("resolution_secs")),
-                "opened_at_raw": c.get("opened_at",""), "assigned_at_raw": c.get("assigned_at",""),
-                "closed_at_raw": c.get("closed_at",""),
+        if c["id"] == case_id or c["id"].startswith(case_id):
+            data = serialize_case(c)
+            data.update({
+                "full_description": c.get("description",""),
+                "full_notes":       c.get("notes","") or "",
+                "agent_username":   c.get("agent_username",""),
+                "driver_username":  c.get("driver_username",""),
+                "assigned_at":      fmt_dt(c.get("assigned_at")),
+                "resolution_secs":  fmt_secs(c.get("resolution_secs")),
+                "opened_at_raw":    c.get("opened_at",""),
+                "vehicle_type":     c.get("vehicle_type",""),
+                "unit_number":      c.get("unit_number",""),
+                "report_driver":    c.get("report_driver",""),
+                "issue_text":       c.get("issue_text",""),
+                "load_type":        c.get("load_type",""),
+                "priority":         c.get("priority",""),
             })
-    return jsonify({"error":"not found"}), 404
+            return jsonify(data)
+    return jsonify({"error":"not found","id":case_id}), 404
+
+@app.route("/api/agent")
+def api_agent():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    agent_name = request.args.get("name","").strip()
+    if not agent_name: return jsonify({"error":"no name"}), 400
+    cases = load_cases()
+    agent_cases = [c for c in cases if c.get("agent_name","").lower() == agent_name.lower()]
+    total = len(agent_cases)
+    done = sum(1 for c in agent_cases if c["status"]=="done")
+    missed = sum(1 for c in agent_cases if c["status"]=="missed")
+    rt = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
+    avg = int(sum(rt)/len(rt)) if rt else 0
+    recent = sorted(agent_cases, key=lambda c: c.get("opened_at",""), reverse=True)[:15]
+    return jsonify({
+        "name": agent_name, "total": total, "done": done, "missed": missed,
+        "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
+        "recent": [serialize_case(c) for c in recent],
+    })
+
+
+@app.route("/api/fleet")
+def api_fleet():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    cases = [c for c in load_cases() if c.get("vehicle_type")]  # only reported cases
+    
+    total = len(cases)
+    truck_count   = sum(1 for c in cases if c.get("vehicle_type") == "truck")
+    trailer_count = sum(1 for c in cases if c.get("vehicle_type") == "trailer")
+    reefer_count  = sum(1 for c in cases if c.get("vehicle_type") == "reefer")
+
+    # Top units (truck/trailer numbers)
+    unit_counts = Counter(
+        (c.get("unit_number","").strip(), c.get("vehicle_type",""))
+        for c in cases if c.get("unit_number","").strip()
+    )
+    top_units = [{"unit": u, "vtype": vt, "count": cnt}
+                 for (u, vt), cnt in unit_counts.most_common(10)]
+
+    # Top drivers from reports
+    driver_counts = Counter(
+        c.get("report_driver","").strip()
+        for c in cases if c.get("report_driver","").strip()
+    )
+    top_drivers = [{"unit": n, "vtype": "", "count": cnt}
+                   for n, cnt in driver_counts.most_common(10)]
+
+    # Top issues
+    issue_counts = Counter(
+        c.get("issue_text","").strip()[:40]
+        for c in cases if c.get("issue_text","").strip()
+    )
+    top_issues = [{"unit": iss, "vtype": "", "count": cnt}
+                  for iss, cnt in issue_counts.most_common(8)]
+
+    # Load types
+    load_counts = Counter(
+        c.get("load_type","").strip()
+        for c in cases if c.get("load_type","").strip()
+    )
+    load_types = [{"unit": lt, "vtype": "", "count": cnt}
+                  for lt, cnt in load_counts.most_common(6)]
+
+    return jsonify({
+        "total_reports": total,
+        "truck_count": truck_count,
+        "trailer_count": trailer_count,
+        "reefer_count": reefer_count,
+        "top_units": top_units,
+        "top_drivers": top_drivers,
+        "top_issues": top_issues,
+        "load_types": load_types,
+    })
+
+@app.route("/api/report")
+def api_report():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    period = request.args.get("period", "today")
+    date_from = request.args.get("from", "")
+    date_to = request.args.get("to", "")
+    cases = load_cases()
+
+    if period == "today":
+        label = "Today — " + datetime.now().strftime("%B %d, %Y")
+        cases = [c for c in cases if c.get("opened_at","").startswith(today_str())]
+    elif period == "week":
+        label = "This Week"
+        cases = [c for c in cases if c.get("opened_at","") >= week_start_str()]
+    elif period == "month":
+        label = "This Month"
+        cases = [c for c in cases if c.get("opened_at","") >= month_start_str()]
+    elif period == "custom" and date_from:
+        dt = date_to or today_str()
+        label = f"{date_from} → {dt}"
+        cases = [c for c in cases if date_from <= c.get("opened_at","")[:10] <= dt]
+    else:
+        label = "All Time"
+
+    total = len(cases)
+    done = sum(1 for c in cases if c["status"] == "done")
+    missed_list = [c for c in cases if c["status"] == "missed"]
+    assigned = sum(1 for c in cases if c["status"] in ("assigned","reported","done"))
+    open_cases = sum(1 for c in cases if c["status"] == "open")
+    rt = [c["response_secs"] for c in cases if c.get("response_secs")]
+    avg_resp = int(sum(rt)/len(rt)) if rt else 0
+    res_t = [c["resolution_secs"] for c in cases if c.get("resolution_secs")]
+    avg_res = int(sum(res_t)/len(res_t)) if res_t else 0
+
+    agent_counts = Counter(c["agent_name"] for c in cases if c.get("agent_name") and c["status"] in ("assigned","reported","done"))
+    group_counts = Counter(c.get("group_name","Unknown") for c in cases)
+    driver_counts = Counter(c.get("driver_name","Unknown") for c in cases)
+
+    return jsonify({
+        "label": label,
+        "period": period,
+        "total": total,
+        "done": done,
+        "missed": len(missed_list),
+        "assigned": assigned,
+        "open": open_cases,
+        "avg_resp": fmt_secs(avg_resp),
+        "avg_res": fmt_secs(avg_res),
+        "rate": round(done/total*100) if total else 0,
+        "leaderboard": [{"name":n,"count":v} for n,v in agent_counts.most_common(10)],
+        "top_groups": [{"name":n,"count":v} for n,v in group_counts.most_common(5)],
+        "top_drivers": [{"name":n,"count":v} for n,v in driver_counts.most_common(5)],
+        "missed_cases": [serialize_case(c) for c in missed_list[:20]],
+    })
+
+
+@app.route("/api/my_profile")
+def api_my_profile():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    user = session["user"]
+    name = user.get("first_name","")
+    username = user.get("username","")
+    cases = load_cases()
+    # Match by agent_name (first_name) or agent_username
+    my_cases = [c for c in cases if
+                c.get("agent_name","").lower() == name.lower() or
+                (username and c.get("agent_username","") == username)]
+    today = today_str(); wk = week_start_str()
+    today_cases = [c for c in my_cases if c.get("opened_at","").startswith(today)]
+    week_cases  = [c for c in my_cases if c.get("opened_at","") >= wk]
+    total = len(my_cases); done = sum(1 for c in my_cases if c["status"]=="done")
+    missed = sum(1 for c in my_cases if c["status"]=="missed")
+    rt = [c["response_secs"] for c in my_cases if c.get("response_secs")]
+    avg = int(sum(rt)/len(rt)) if rt else 0
+    recent = sorted(my_cases, key=lambda c: c.get("opened_at",""), reverse=True)[:10]
+    return jsonify({
+        "name": name, "username": username, "role": user.get("role","agent"),
+        "total": total, "done": done, "missed": missed,
+        "avg_resp": fmt_secs(avg),
+        "rate": round(done/total*100) if total else 0,
+        "today_total": len(today_cases),
+        "today_done": sum(1 for c in today_cases if c["status"]=="done"),
+        "week_total": len(week_cases),
+        "week_done": sum(1 for c in week_cases if c["status"]=="done"),
+        "recent": [serialize_case(c) for c in recent],
+    })
+
+@app.route("/api/agents")
+def api_agents():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if session["user"].get("role","agent") not in ("developer","super_admin"):
+        return jsonify({"error":"forbidden"}), 403
+    cases = load_cases()
+    from storage.user_store import get_all_user_dicts
+    try:
+        users = [u for u in get_all_user_dicts() if u["role"] == "agent"]
+    except Exception:
+        users = []
+    result = []
+    for u in users:
+        name = u["name"]
+        uname = u.get("username","").lower()
+        agent_cases = [c for c in cases if 
+                       c.get("agent_name","").lower() == name.lower() or
+                       (uname and c.get("agent_username","").lower() == uname)]
+        total = len(agent_cases); done = sum(1 for c in agent_cases if c["status"]=="done")
+        missed = sum(1 for c in agent_cases if c["status"]=="missed")
+        rt = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
+        avg = int(sum(rt)/len(rt)) if rt else 0
+        result.append({"name": name, "username": u.get("username",""),
+                       "total": total, "done": done, "missed": missed,
+                       "avg_resp": fmt_secs(avg),
+                       "rate": round(done/total*100) if total else 0})
+    result.sort(key=lambda x: -x["total"])
+    return jsonify(result)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect("/login")
+
+# ── API ───────────────────────────────────────────────────────────────────────
+@app.route("/api/stats")
+def api_stats():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    cases = load_cases()
+    today = today_str(); wk = week_start_str(); mo = month_start_str()
+    tc = [c for c in cases if c.get("opened_at","").startswith(today)]
+    wc = [c for c in cases if c.get("opened_at","") >= wk]
+    mc = [c for c in cases if c.get("opened_at","") >= mo]
+    st = Counter(c["status"] for c in tc)
+    def lb(lst):
+        cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c["status"] in ("assigned","reported","done"))
+        return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
+    grps = Counter(c.get("group_name","Unknown") for c in cases)
+    hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in cases).lower())
+    rt = [c["response_secs"] for c in cases if c.get("response_secs")]
+    avg = int(sum(rt)/len(rt)) if rt else 0
+    return jsonify({
+        "today": {"total":len(tc),"open":st.get("open",0),"assigned":st.get("assigned",0)+st.get("reported",0),"done":st.get("done",0),"missed":st.get("missed",0)},
+        "week":  {"total":len(wc),"done":sum(1 for c in wc if c["status"]=="done"),"missed":sum(1 for c in wc if c["status"]=="missed")},
+        "month": {"total":len(mc),"done":sum(1 for c in mc if c["status"]=="done"),"missed":sum(1 for c in mc if c["status"]=="missed")},
+        "all_time": {"total":len(cases),"done":sum(1 for c in cases if c["status"]=="done"),"avg_resp":fmt_secs(avg)},
+        "leaderboard_day": lb(tc), "leaderboard_week": lb(wc), "leaderboard_month": lb(mc),
+        "top_groups": [{"name":n,"count":v} for n,v in grps.most_common(5)],
+        "top_words": [{"word":w,"count":v} for w,v in Counter(hashtags).most_common(15)],
+        "reassigned_count": sum(1 for c in cases if c.get("reassigned")),
+    })
+
+@app.route("/api/cases")
+def api_cases():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    f = request.args.get("filter","today")
+    search = request.args.get("search","").lower().strip()
+    date_filter = request.args.get("date","").strip()
+    cases = load_cases()
+    if date_filter:
+        cases = [c for c in cases if c.get("opened_at","").startswith(date_filter)]
+    elif f == "today":   cases = [c for c in cases if c.get("opened_at","").startswith(today_str())]
+    elif f == "week":    cases = [c for c in cases if c.get("opened_at","") >= week_start_str()]
+    elif f == "missed":  cases = [c for c in cases if c["status"] == "missed"]
+    elif f == "active":  cases = [c for c in cases if c["status"] in ("open","assigned","reported")]
+    elif f == "reassigned": cases = [c for c in cases if c.get("reassigned")]
+    if search:
+        cases = [c for c in cases if search in (c.get("driver_name") or "").lower()
+                 or search in (c.get("group_name") or "").lower()
+                 or search in (c.get("agent_name") or "").lower()
+                 or search in (c.get("description") or "").lower()]
+    cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:200]
+    return jsonify([serialize_case(c) for c in cases])
+
+@app.route("/api/case")
+def api_case_detail():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    case_id = request.args.get("id","").strip()
+    if not case_id: return jsonify({"error":"no id"}), 400
+    for c in load_cases():
+        if c["id"] == case_id or c["id"].startswith(case_id):
+            data = serialize_case(c)
+            data.update({
+                "full_description": c.get("description",""),
+                "full_notes":       c.get("notes","") or "",
+                "agent_username":   c.get("agent_username",""),
+                "driver_username":  c.get("driver_username",""),
+                "assigned_at":      fmt_dt(c.get("assigned_at")),
+                "resolution_secs":  fmt_secs(c.get("resolution_secs")),
+                "opened_at_raw":    c.get("opened_at",""),
+                "vehicle_type":     c.get("vehicle_type",""),
+                "unit_number":      c.get("unit_number",""),
+                "report_driver":    c.get("report_driver",""),
+                "issue_text":       c.get("issue_text",""),
+                "load_type":        c.get("load_type",""),
+                "priority":         c.get("priority",""),
+            })
+            return jsonify(data)
+    return jsonify({"error":"not found","id":case_id}), 404
 
 @app.route("/api/agent")
 def api_agent():
@@ -403,6 +741,7 @@ async function refresh() {
   } else if (currentPage==='cases') loadCases();
   else if (currentPage==='missed') loadMissed();
   else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='fleet') loadFleet();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
   document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
@@ -574,9 +913,9 @@ td{padding:9px 12px;vertical-align:middle}
 .stats-list .val{font-weight:700}
 
 /* Modal */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:16px}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:580px;width:100%;max-height:85vh;overflow-y:auto;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
 .modal-close{position:absolute;top:14px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .15s}
 .modal-close:hover{background:var(--surface3)}
 .modal h2{font-size:16px;font-weight:700;margin-bottom:16px;padding-right:40px}
@@ -709,6 +1048,7 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="nav-item" onclick="showPage('reassigned')"><i class="ph ph-arrows-clockwise"></i> Reassigned</div>
     <div class="nav-item" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
     <div class="nav-item" onclick="showPage('analytics')"><i class="ph ph-chart-bar"></i> Analytics</div>
+    <div class="nav-item" onclick="showPage('fleet')"><i class="ph ph-truck"></i> Fleet Stats</div>
     <div class="nav-item" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
     {% if is_manager %}<div class="nav-item" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
   </nav>
@@ -823,6 +1163,11 @@ td{padding:9px 12px;vertical-align:middle}
     <div id="my-profile-content"><div class="loading">Loading...</div></div>
   </div>
 
+  <!-- Fleet Stats -->
+  <div class="page" id="page-fleet">
+    <div id="fleet-content"><div class="loading">Loading fleet stats...</div></div>
+  </div>
+
   <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
     <div id="agents-content"><div class="loading">Loading...</div></div>
@@ -876,7 +1221,7 @@ td{padding:9px 12px;vertical-align:middle}
 </div>
 </div>
 <!-- Agent Modal -->
-<div class="modal-overlay" id="agent-modal-overlay" onclick="closeAgentModalOutside(event)">
+<div class="modal-overlay" id="agent-modal-overlay" style="z-index:200" onclick="closeAgentModalOutside(event)">
 <div class="modal" id="agent-modal-content">
   <button class="modal-close" onclick="closeAgentModal()"><i class="ph ph-x"></i></button>
   <h2 id="agent-modal-title">Agent Profile</h2>
@@ -893,8 +1238,8 @@ let analyticsPeriod = 'week';
 let searchTimers = {};
 let currentDateFilter = '';
 const medals = ['🥇','🥈','🥉'];
-const pages = ['overview','cases','missed','reassigned','leaderboard','analytics','my_profile','agents'];
-const titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',my_profile:'My Profile',agents:'Agent Profiles'};
+const pages = ['overview','cases','missed','reassigned','leaderboard','analytics','fleet','my_profile','agents'];
+const titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',fleet:'Fleet Stats',my_profile:'My Profile',agents:'Agent Profiles'};
 
 // Theme
 let isDark = localStorage.getItem('theme') === 'dark';
@@ -1156,6 +1501,52 @@ async function generateReport() {
 }
 
 
+
+// ── Fleet Stats ───────────────────────────────────────────────────────────────
+async function loadFleet() {
+  document.getElementById('fleet-content').innerHTML = '<div class="loading">Loading fleet stats...</div>';
+  try {
+    const r = await fetch('/api/fleet');
+    if (r.status === 401) { window.location='/login'; return; }
+    const d = await r.json();
+    
+    function unitCard(title, items, colorVar) {
+      if (!items || !items.length) return `<div class="card"><div class="card-title">${title}</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>`;
+      const max = items[0].count || 1;
+      return `<div class="card">
+        <div class="card-title">${title}</div>
+        ${items.map((item,i)=>`
+          <div class="list-row">
+            <span class="medal">${['🥇','🥈','🥉'][i]||(i+1)+'.'}</span>
+            <span class="list-name">${item.unit} <span style="font-size:10px;color:var(--muted);font-weight:400">${item.vtype}</span></span>
+            <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(item.count/max*100)}%;background:${colorVar}"></div></div>
+            <span class="list-count">${item.count}</span>
+          </div>`).join('')}
+      </div>`;
+    }
+
+    document.getElementById('fleet-content').innerHTML = `
+      <div class="stat-grid" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">${d.total_reports}</div></div>
+        <div class="stat-card"><div class="stat-label">Trucks</div><div class="stat-value v-blue">${d.truck_count}</div></div>
+        <div class="stat-card"><div class="stat-label">Trailers</div><div class="stat-value v-yellow">${d.trailer_count}</div></div>
+        <div class="stat-card"><div class="stat-label">Reefers</div><div class="stat-value v-purple">${d.reefer_count}</div></div>
+      </div>
+      <div class="two-col" style="margin-bottom:16px">
+        ${unitCard('<i class="ph ph-truck"></i> Most Reported Units', d.top_units, 'var(--accent)')}
+        ${unitCard('<i class="ph ph-user"></i> Most Reported Drivers', d.top_drivers, 'var(--red)')}
+      </div>
+      <div class="two-col">
+        ${unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues, 'var(--yellow)')}
+        ${unitCard('<i class="ph ph-package"></i> Load Types', d.load_types, 'var(--green)')}
+      </div>
+    `;
+  } catch(e) { 
+    console.error(e);
+    document.getElementById('fleet-content').innerHTML = '<div class="loading">Error loading fleet stats.</div>'; 
+  }
+}
+
 // ── My Profile ────────────────────────────────────────────────────────────────
 async function loadMyProfile() {
   document.getElementById('my-profile-content').innerHTML = '<div class="loading">Loading...</div>';
@@ -1238,24 +1629,52 @@ async function loadAgents() {
 }
 
 async function openAgentModal(name) {
-  document.getElementById('agent-modal-overlay').classList.add('open');
-  document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading...</div>';
-  document.getElementById('agent-modal-title').textContent = name;
+  const overlay = document.getElementById('agent-modal-overlay');
+  const body = document.getElementById('agent-modal-body');
+  const title = document.getElementById('agent-modal-title');
+  overlay.classList.add('open');
+  body.innerHTML = '<div class="loading">Loading profile...</div>';
+  title.textContent = name;
   try {
     const r = await fetch('/api/agent?name='+encodeURIComponent(name));
+    if (!r.ok) { body.innerHTML = '<div class="loading">Agent not found.</div>'; return; }
     const a = await r.json();
-    document.getElementById('agent-modal-body').innerHTML = `
-      <div class="agent-stats">
-        <div class="agent-stat"><div class="agent-stat-val v-accent">${a.total}</div><div class="agent-stat-label">Total</div></div>
-        <div class="agent-stat"><div class="agent-stat-val v-green">${a.done}</div><div class="agent-stat-label">Resolved</div></div>
-        <div class="agent-stat"><div class="agent-stat-val v-red">${a.missed}</div><div class="agent-stat-label">Missed</div></div>
-        <div class="agent-stat"><div class="agent-stat-val">${a.rate}%</div><div class="agent-stat-label">Rate</div></div>
+    const rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
+    body.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">${a.total}</div><div class="agent-stat-label">Total</div></div>
+        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">${a.done}</div><div class="agent-stat-label">Done</div></div>
+        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">${a.missed}</div><div class="agent-stat-label">Missed</div></div>
+        <div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">${rate}%</div><div class="agent-stat-label">Rate</div></div>
       </div>
-      <div style="margin-bottom:12px;font-size:12px;color:var(--muted)">Avg response: <b style="color:var(--text)">${a.avg_resp}</b></div>
-      <div style="font-size:12px;font-weight:700;margin-bottom:8px">Recent Cases</div>
-      ${caseTable(a.recent)}
+      <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">
+        Avg response: <b>${a.avg_resp}</b>
+      </div>
+      ${a.recent && a.recent.length ? `
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">
+            <thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>
+              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>
+              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>
+              <th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>
+            </tr></thead>
+            <tbody>${a.recent.map(c=>`
+              <tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(()=>openCase('${c.full_id}'),200)">
+                <td style="padding:8px 10px;font-weight:500">${c.driver}</td>
+                <td style="padding:8px 10px;color:var(--muted)">${c.group}</td>
+                <td style="padding:8px 10px">${statusBadge(c.status)}</td>
+                <td style="padding:8px 10px;color:var(--muted);font-size:11px">${c.opened}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No cases yet.</div>'}
     `;
-      } catch(e){document.getElementById('agent-modal-body').innerHTML='<div class="loading">Error.</div>';}
+  } catch(e) {
+    console.error('Agent modal error:', e);
+    body.innerHTML = '<div class="loading">Error loading profile.</div>';
+  }
 }
 
 function printReport() {
@@ -1274,6 +1693,7 @@ async function refresh() {
   } else if (currentPage==='cases') loadCases();
   else if (currentPage==='missed') loadMissed();
   else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='fleet') loadFleet();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
   document.getElementById('last-update').textContent = 'Updated '+new Date().toLocaleTimeString();
