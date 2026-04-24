@@ -409,87 +409,136 @@ LOGIN_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f8f8fa}
-.bg-slide{position:fixed;inset:0;transition:opacity 1.5s ease-in-out;background-size:cover;background-position:center}
+body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1a1208}
+
+/* Background slides */
+.bg-slide{position:fixed;inset:0;transition:opacity 2s ease-in-out;background-size:cover;background-position:center;opacity:0}
 .bg-slide.active{opacity:1}
-.bg-slide.inactive{opacity:0}
-.overlay{position:fixed;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.82) 0%,rgba(240,240,255,.75) 100%);backdrop-filter:blur(2px)}
-.card{position:relative;z-index:1;background:rgba(255,255,255,.9);border:1px solid rgba(99,102,241,.15);border-radius:28px;padding:48px 40px;text-align:center;width:100%;max-width:420px;box-shadow:0 8px 40px rgba(99,102,241,.12),0 2px 8px rgba(0,0,0,.06)}
-.logo{width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px;box-shadow:0 4px 20px rgba(99,102,241,.35)}
-h1{color:#18181b;font-size:24px;font-weight:800;margin-bottom:6px;letter-spacing:-.3px}
-.sub{color:#71717a;font-size:14px;margin-bottom:28px}
-.features{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:28px}
-.feat{background:#f4f4f8;border:1px solid #e4e4e7;border-radius:10px;padding:10px 12px;text-align:left;display:flex;align-items:center;gap:8px}
-.feat-icon{font-size:16px}
-.feat-text{font-size:11px;color:#52525b;font-weight:500}
-.divider{display:flex;align-items:center;gap:12px;margin-bottom:20px}
-.divider-line{flex:1;height:1px;background:#e4e4e7}
-.divider span{font-size:11px;color:#a1a1aa;text-transform:uppercase;letter-spacing:.08em}
+
+/* Dark gradient overlay - left side darker for card, right shows photo */
+.overlay{position:fixed;inset:0;background:linear-gradient(105deg,rgba(20,14,6,.92) 0%,rgba(20,14,6,.75) 40%,rgba(20,14,6,.3) 70%,rgba(20,14,6,.1) 100%)}
+
+/* Card on left */
+.card{position:relative;z-index:1;width:100%;max-width:400px;margin-left:8vw}
+.card-inner{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:44px 36px;backdrop-filter:blur(16px)}
+
+.logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#C17B3F,#8B4A1A);display:flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:28px;box-shadow:0 4px 24px rgba(193,123,63,.5)}
+h1{color:#fff;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.4px;line-height:1.2}
+.tagline{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:28px}
+
+/* Stats strip */
+.stats{display:flex;gap:20px;margin-bottom:28px;padding:14px 16px;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.08)}
+.stat{text-align:center;flex:1}
+.stat-num{font-size:20px;font-weight:800;color:#D4904E}
+.stat-lbl{font-size:9px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+
+.divider{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.divider-line{flex:1;height:1px;background:rgba(255,255,255,.12)}
+.divider span{font-size:10px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}
 .tg-wrap{display:flex;justify-content:center}
-.error{color:#dc2626;font-size:13px;margin-bottom:16px;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);border-radius:8px;padding:8px 12px}
-.photo-credit{position:fixed;bottom:12px;right:16px;font-size:10px;color:rgba(0,0,0,.35);z-index:2}
-@media(max-width:480px){.card{margin:16px;padding:36px 24px}}
+
+.error{color:#F87171;font-size:12px;margin-bottom:14px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:8px 12px}
+
+/* Right side caption */
+.caption{position:fixed;bottom:40px;right:40px;z-index:2;text-align:right}
+.caption-title{font-size:22px;font-weight:700;color:rgba(255,255,255,.9);line-height:1.2}
+.caption-sub{font-size:12px;color:rgba(255,255,255,.45);margin-top:4px}
+
+/* Dots indicator */
+.dots{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:2;display:flex;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);transition:all .3s}
+.dot.active{background:#D4904E;width:20px;border-radius:3px}
+
+@media(max-width:768px){
+  .card{margin:0 16px}
+  .caption{display:none}
+}
 </style>
 </head><body>
 <div id="bg1" class="bg-slide active"></div>
-<div id="bg2" class="bg-slide inactive"></div>
+<div id="bg2" class="bg-slide"></div>
 <div class="overlay"></div>
+
 <div class="card">
-  <div class="logo">🚛</div>
-  <h1>Kurtex Dashboard</h1>
-  <p class="sub">Truck Maintenance Command Center</p>
-  <div class="features">
-    <div class="feat"><span class="feat-icon">📊</span><span class="feat-text">Live Overview</span></div>
-    <div class="feat"><span class="feat-icon">🏆</span><span class="feat-text">Leaderboards</span></div>
-    <div class="feat"><span class="feat-icon">📋</span><span class="feat-text">Case Tracking</span></div>
-    <div class="feat"><span class="feat-icon">🚛</span><span class="feat-text">Fleet Stats</span></div>
-  </div>
-  {% if error %}<div class="error">Authentication failed. Please try again.</div>{% endif %}
-  <div class="divider"><div class="divider-line"></div><span>Sign in with Telegram</span><div class="divider-line"></div></div>
-  <div class="tg-wrap">
-    <script async src="https://telegram.org/js/telegram-widget.js?22"
-      data-telegram-login="{{ bot_username }}"
-      data-size="large" data-radius="10"
-      data-auth-url="/auth/telegram"
-      data-request-access="write"></script>
+  <div class="card-inner">
+    <div class="logo">🚛</div>
+    <h1>Kurtex Dashboard</h1>
+    <p class="tagline">Truck Maintenance Command Center</p>
+    <div class="stats">
+      <div class="stat"><div class="stat-num">24/7</div><div class="stat-lbl">Monitoring</div></div>
+      <div class="stat"><div class="stat-num">Live</div><div class="stat-lbl">Updates</div></div>
+      <div class="stat"><div class="stat-num">100%</div><div class="stat-lbl">Secure</div></div>
+    </div>
+    {% if error %}<div class="error">Authentication failed. Please try again.</div>{% endif %}
+    <div class="divider"><div class="divider-line"></div><span>Sign in with Telegram</span><div class="divider-line"></div></div>
+    <div class="tg-wrap">
+      <script async src="https://telegram.org/js/telegram-widget.js?22"
+        data-telegram-login="{{ bot_username }}"
+        data-size="large" data-radius="10"
+        data-auth-url="/auth/telegram"
+        data-request-access="write"></script>
+    </div>
   </div>
 </div>
-<div class="photo-credit" id="photo-credit">Photo: Unsplash</div>
+
+<div class="caption" id="caption">
+  <div class="caption-title" id="caption-title">Fleet Management</div>
+  <div class="caption-sub" id="caption-sub">Photo: Unsplash</div>
+</div>
+<div class="dots" id="dots"></div>
+
 <script>
 var photos = [
-  {url:'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Truck'},
-  {url:'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Highway'},
-  {url:'https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Road'},
-  {url:'https://images.unsplash.com/photo-1616432043562-3671ea2e5242?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Logistics'},
-  {url:'https://images.unsplash.com/photo-1473445730015-841f29a9490b?w=1920&q=80&auto=format&fit=crop', credit:'Unsplash — Truck Night'},
+  {url:'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1920&q=80&auto=format&fit=crop',title:'Fleet Operations',sub:'Keep your trucks moving'},
+  {url:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=80&auto=format&fit=crop',title:'Route Management',sub:'Every mile tracked'},
+  {url:'https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=1920&q=80&auto=format&fit=crop',title:'Open Road',sub:'24/7 driver support'},
+  {url:'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1920&q=80&auto=format&fit=crop',title:'Highway Logistics',sub:'Nationwide coverage'},
+  {url:'https://images.unsplash.com/photo-1615799998603-7c6270a45196?w=1920&q=80&auto=format&fit=crop',title:'Maintenance Ready',sub:'Zero downtime goal'},
 ];
+
 var current = 0;
 var bg1 = document.getElementById('bg1');
 var bg2 = document.getElementById('bg2');
-var credit = document.getElementById('photo-credit');
-var activeBg = bg1;
-var inactiveBg = bg2;
+var activeBg = bg1, inactiveBg = bg2;
+var dotsEl = document.getElementById('dots');
 
-function loadPhoto(idx) {
-  var p = photos[idx % photos.length];
-  inactiveBg.style.backgroundImage = 'url(' + p.url + ')';
-  setTimeout(function() {
-    inactiveBg.className = 'bg-slide active';
-    activeBg.className = 'bg-slide inactive';
-    credit.textContent = p.credit;
-    var tmp = activeBg; activeBg = inactiveBg; inactiveBg = tmp;
-  }, 100);
+// Build dots
+photos.forEach(function(_, i) {
+  var d = document.createElement('div');
+  d.className = 'dot' + (i===0?' active':'');
+  d.id = 'dot-'+i;
+  dotsEl.appendChild(d);
+});
+
+function updateCaption(p) {
+  document.getElementById('caption-title').textContent = p.title;
+  document.getElementById('caption-sub').textContent = p.sub;
 }
 
-// Set first photo immediately
-bg1.style.backgroundImage = 'url(' + photos[0].url + ')';
-credit.textContent = photos[0].credit;
+function setDot(idx) {
+  document.querySelectorAll('.dot').forEach(function(d,i){ d.className='dot'+(i===idx?' active':''); });
+}
 
-// Rotate every 5 seconds
+function loadPhoto(idx) {
+  var p = photos[idx];
+  inactiveBg.style.backgroundImage = 'url('+p.url+')';
+  inactiveBg.style.opacity = '0';
+  setTimeout(function() {
+    inactiveBg.style.opacity = '1';
+    activeBg.style.opacity = '0';
+    var tmp = activeBg; activeBg = inactiveBg; inactiveBg = tmp;
+    updateCaption(p);
+    setDot(idx);
+  }, 50);
+}
+
+bg1.style.backgroundImage = 'url('+photos[0].url+')';
+updateCaption(photos[0]);
+
 setInterval(function() {
-  current = (current + 1) % photos.length;
+  current = (current+1) % photos.length;
   loadPhoto(current);
-}, 5000);
+}, 6000);
 </script>
 </body></html>"""
 
@@ -503,25 +552,25 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
 <style>
 :root{
-  --bg:#f4f4f8;--surface:#fff;--surface2:#f0f0f4;--surface3:#e8e8ee;
-  --border:#e2e2e8;--text:#18181b;--muted:#6b7280;--muted2:#9ca3af;
-  --accent:#6366f1;--accent-bg:rgba(99,102,241,.08);
-  --green:#16a34a;--green-bg:rgba(22,163,74,.08);
-  --red:#dc2626;--red-bg:rgba(220,38,38,.08);
-  --yellow:#ca8a04;--yellow-bg:rgba(202,138,4,.08);
-  --blue:#2563eb;--blue-bg:rgba(37,99,235,.08);
-  --purple:#7c3aed;--purple-bg:rgba(124,58,237,.08);
-  --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+  --bg:#FAF8F5;--surface:#FFFFFF;--surface2:#F3EFE8;--surface3:#EBE5DA;
+  --border:#E2D9CC;--text:#2C2416;--muted:#8C7B6B;--muted2:#B5A898;
+  --accent:#C17B3F;--accent-bg:rgba(193,123,63,.1);
+  --green:#3D7A4F;--green-bg:rgba(61,122,79,.08);
+  --red:#C0392B;--red-bg:rgba(192,57,43,.08);
+  --yellow:#C17B3F;--yellow-bg:rgba(193,123,63,.1);
+  --blue:#2E6EA6;--blue-bg:rgba(46,110,166,.08);
+  --purple:#7B5EA7;--purple-bg:rgba(123,94,167,.08);
+  --shadow:0 1px 4px rgba(44,36,22,.06),0 4px 16px rgba(44,36,22,.04);
 }
 [data-theme="dark"]{
-  --bg:#0f0f14;--surface:#18181f;--surface2:#1e1e26;--surface3:#25252f;
-  --border:rgba(255,255,255,.07);--text:#f0f0f5;--muted:#8b8b9e;--muted2:#5a5a6e;
-  --accent:#818cf8;--accent-bg:rgba(129,140,248,.1);
-  --green:#4ade80;--green-bg:rgba(74,222,128,.08);
-  --red:#f87171;--red-bg:rgba(248,113,113,.08);
-  --yellow:#fbbf24;--yellow-bg:rgba(251,191,36,.08);
-  --blue:#60a5fa;--blue-bg:rgba(96,165,250,.08);
-  --purple:#c084fc;--purple-bg:rgba(192,132,252,.08);
+  --bg:#1C1810;--surface:#241F15;--surface2:#2E271A;--surface3:#3A3020;
+  --border:rgba(255,255,255,.07);--text:#F5EFE6;--muted:#9C8E7E;--muted2:#6E6050;
+  --accent:#D4904E;--accent-bg:rgba(212,144,78,.12);
+  --green:#4CAF70;--green-bg:rgba(76,175,112,.08);
+  --red:#E05C4B;--red-bg:rgba(224,92,75,.08);
+  --yellow:#D4904E;--yellow-bg:rgba(212,144,78,.1);
+  --blue:#5B9BD5;--blue-bg:rgba(91,155,213,.08);
+  --purple:#A07CC5;--purple-bg:rgba(160,124,197,.08);
   --shadow:0 1px 4px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.2);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -531,7 +580,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 
 .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
 .sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:0 8px}
-.logo-icon{width:32px;height:32px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.logo-icon{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#A0622A);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .logo-text h2{font-size:14px;font-weight:700}
 .logo-text small{font-size:10px;color:var(--muted)}
 nav{flex:1}
@@ -1391,25 +1440,103 @@ async function generateReport() {
     if (!r.ok) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; return; }
     var d = await r.json();
     document.getElementById('report-ts').textContent = 'Generated ' + new Date().toLocaleString();
+    var now = new Date();
+    var dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    var timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    var rate = d.total ? Math.round(d.done/d.total*100) : 0;
+    var resRate = d.total ? Math.round((d.total-d.missed)/d.total*100) : 0;
     document.getElementById('report-content').innerHTML =
-      '<div style="font-size:18px;font-weight:800;margin-bottom:4px">'+d.label+'</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-bottom:18px">Kurtex Alert Bot — Truck Maintenance Command Center</div>'
-      + '<div class="report-stat-grid">'
-      + '<div class="report-stat"><div class="report-stat-val v-accent">'+d.total+'</div><div class="report-stat-label">Total</div></div>'
-      + '<div class="report-stat"><div class="report-stat-val v-green">'+d.done+'</div><div class="report-stat-label">Resolved</div></div>'
-      + '<div class="report-stat"><div class="report-stat-val v-red">'+d.missed+'</div><div class="report-stat-label">Missed</div></div>'
-      + '<div class="report-stat"><div class="report-stat-val v-accent">'+d.rate+'%</div><div class="report-stat-label">Rate</div></div>'
-      + '<div class="report-stat"><div class="report-stat-val" style="font-size:16px;margin-top:4px">'+d.avg_resp+'</div><div class="report-stat-label">Avg Resp</div></div>'
+      '<div style="border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:20px">'
+      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">'
+      + '<div>'
+      + '<div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.3px">'+d.label+'</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-top:3px">Kurtex Truck Maintenance — Operations Report</div>'
       + '</div>'
-      + (d.leaderboard.length ? '<div class="report-section"><h3>Agent Activity</h3>'
-        + d.leaderboard.map(function(a,i){return '<div class="report-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span><span class="rname">'+a.name+'</span><span class="rcount">'+a.count+' cases</span></div>';}).join('')
-        + '</div>' : '')
-      + (d.top_groups.length ? '<div class="report-section"><h3>Top Groups</h3>'
-        + d.top_groups.map(function(g,i){return '<div class="report-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span><span class="rname">'+g.name+'</span><span class="rcount">'+g.count+'</span></div>';}).join('')
-        + '</div>' : '')
-      + (d.missed_cases.length ? '<div class="report-section"><h3>Missed Cases ('+d.missed+')</h3>'
-        + d.missed_cases.map(function(c){return '<div class="report-row"><span class="rname">'+c.driver+'</span><span style="color:var(--muted);font-size:11px;margin-right:8px">'+c.group+'</span><span style="color:var(--muted);font-size:11px">'+c.opened+'</span></div>';}).join('')
-        + '</div>' : '');
+      + '<div style="text-align:right">'
+      + '<div style="font-size:11px;color:var(--muted)">Generated</div>'
+      + '<div style="font-size:12px;font-weight:600;color:var(--text)">'+dateStr+'</div>'
+      + '<div style="font-size:11px;color:var(--muted)">'+timeStr+'</div>'
+      + '</div></div></div>'
+
+      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+      + '<div style="font-size:28px;font-weight:800;color:var(--accent)">'+d.total+'</div>'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Alerts</div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+      + '<div style="font-size:28px;font-weight:800;color:var(--green)">'+d.done+'</div>'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Resolved</div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+      + '<div style="font-size:28px;font-weight:800;color:var(--red)">'+d.missed+'</div>'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Missed</div>'
+      + '</div>'
+      + '</div>'
+
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
+      + '<span style="font-size:12px;color:var(--muted);font-weight:500">Resolution Rate</span>'
+      + '<span style="font-size:18px;font-weight:800;color:'+(resRate>=80?'var(--green)':resRate>=60?'var(--yellow)':'var(--red)')+'">'+resRate+'%</span>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
+      + '<span style="font-size:12px;color:var(--muted);font-weight:500">Avg Response Time</span>'
+      + '<span style="font-size:18px;font-weight:800;color:var(--text)">'+d.avg_resp+'</span>'
+      + '</div>'
+      + '</div>'
+
+      + (d.leaderboard.length ? ''
+        + '<div style="margin-bottom:20px">'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Agent Performance</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        + '<thead><tr>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">#</th>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Agent</th>'
+        + '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Cases</th>'
+        + '</tr></thead><tbody>'
+        + d.leaderboard.map(function(a,i){
+            return '<tr style="border-top:1px solid var(--border)">'
+              + '<td style="padding:8px;font-weight:700;color:var(--muted);width:30px">'+(i+1)+'.</td>'
+              + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+a.name+'</td>'
+              + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+a.count+'</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table></div>'
+        : '')
+
+      + (d.top_groups.length ? ''
+        + '<div style="margin-bottom:20px">'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Most Active Groups</div>'
+        + d.top_groups.map(function(g,i){
+            var maxCount = d.top_groups[0].count;
+            var pct = Math.round(g.count/maxCount*100);
+            return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">'
+              + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+g.name+'</span>'
+              + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">'
+              + '<div style="height:100%;border-radius:3px;background:var(--accent);width:'+pct+'%"></div></div>'
+              + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+g.count+'</span>'
+              + '</div>';
+          }).join('')
+        + '</div>'
+        : '')
+
+      + (d.missed_cases.length ? ''
+        + '<div>'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts ('+d.missed+')</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead><tr>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Driver</th>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Time</th>'
+        + '</tr></thead><tbody>'
+        + d.missed_cases.map(function(c){
+            return '<tr style="border-top:1px solid var(--border)">'
+              + '<td style="padding:7px 8px;font-weight:500">'+c.driver+'</td>'
+              + '<td style="padding:7px 8px;color:var(--muted)">'+c.group+'</td>'
+              + '<td style="padding:7px 8px;color:var(--muted);font-size:11px">'+c.opened+'</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table></div>'
+        : '');
   } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error.</div>'; }
 }
 function printReport() {
