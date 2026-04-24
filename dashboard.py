@@ -65,16 +65,27 @@ def fmt_secs(secs):
     return f"{secs//3600}h {(secs%3600)//60}m"
 
 def serialize_case(c):
-    return {
-        "id": c["id"][:8], "full_id": c["id"],
-        "driver": c.get("driver_name","—"), "group": c.get("group_name","—"),
-        "agent": c.get("agent_name") or "—", "status": c.get("status","open"),
-        "opened": fmt_dt(c.get("opened_at")), "closed": fmt_dt(c.get("closed_at")),
-        "opened_raw": (c.get("opened_at") or "")[:10],
-        "response": fmt_secs(c.get("response_secs")),
-        "description": (c.get("description") or "")[:200],
-        "notes": c.get("notes") or "", "reassigned": bool(c.get("reassigned")),
-    }
+    try:
+        return {
+            "id":          (c.get("id") or "")[:8],
+            "full_id":     c.get("id") or "",
+            "driver":      c.get("driver_name") or "—",
+            "group":       c.get("group_name") or "—",
+            "agent":       c.get("agent_name") or "—",
+            "status":      c.get("status") or "open",
+            "opened":      fmt_dt(c.get("opened_at")),
+            "closed":      fmt_dt(c.get("closed_at")),
+            "opened_raw":  (c.get("opened_at") or "")[:10],
+            "response":    fmt_secs(c.get("response_secs")),
+            "description": (c.get("description") or "")[:200],
+            "notes":       c.get("notes") or "",
+            "reassigned":  bool(c.get("reassigned")),
+        }
+    except Exception as e:
+        logger.error(f"serialize_case error: {e} — case: {c.get('id','?')}")
+        return {"id":"?","full_id":"","driver":"—","group":"—","agent":"—",
+                "status":"open","opened":"—","closed":"—","opened_raw":"",
+                "response":"—","description":"","notes":"","reassigned":False}
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @app.route("/auth/telegram")
@@ -260,10 +271,16 @@ def api_agents():
         missed = sum(1 for c in agent_cases if c["status"]=="missed")
         rt = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
         avg = int(sum(rt)/len(rt)) if rt else 0
-        result.append({"name": name, "username": u.get("username",""),
-                       "total": total, "done": done, "missed": missed,
-                       "avg_resp": fmt_secs(avg),
-                       "rate": round(done/total*100) if total else 0})
+        result.append({
+            "name":     name,
+            "username": u.get("username",""),
+            "total":    total,
+            "done":     done,
+            "missed":   missed,
+            "avg_resp": fmt_secs(avg),
+            "rate":     round(done/total*100) if total else 0,
+            "open":     sum(1 for c in agent_cases if c.get("status") in ("open","assigned","reported")),
+        })
     result.sort(key=lambda x: -x["total"])
     return jsonify(result)
 
@@ -346,6 +363,7 @@ def api_case_detail():
                 "priority":         c.get("priority",""),
             })
             return jsonify(data)
+    logger.warning(f"Case not found: id={case_id!r}, total cases={len(load_cases())}")
     return jsonify({"error":"not found","id":case_id}), 404
 
 @app.route("/api/agent")
@@ -741,14 +759,71 @@ td{padding:9px 12px;vertical-align:middle}
 
 /* Responsive */
 @media(max-width:768px){
-  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
+  /* Sidebar becomes drawer */
+  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);z-index:50;width:240px}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,.15)}
   .sidebar-overlay.open{display:block}
   .mobile-header{display:flex}
-  .main{padding:14px 14px 24px}
+
+  /* Main content */
+  .main{padding:12px 12px 80px}
+  .layout{display:block}
+
+  /* Topbar */
+  .topbar{margin-bottom:12px;gap:8px}
+  .topbar h1{font-size:15px}
+  .topbar-right{gap:6px}
+  .badge-btn{padding:4px 9px;font-size:11px}
+  .badge-btn span{display:none}
+
+  /* Stats */
+  .stat-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat-value{font-size:22px}
+
+  /* Two col becomes one */
+  .two-col{grid-template-columns:1fr;gap:10px}
+
+  /* Table - horizontal scroll */
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:500px}
+
+  /* Filter tabs wrap */
+  .filter-tabs{gap:4px}
+  .tab-btn{padding:4px 9px;font-size:11px}
+
+  /* Section header stacks */
+  .section-header{flex-direction:column;align-items:flex-start;gap:8px}
+
+  /* Modal full screen on mobile */
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal{border-radius:16px 16px 0 0;max-height:92vh;max-width:100%;border-bottom:none}
+  .report-modal{border-radius:16px 16px 0 0;max-width:100%}
+  .report-modal-overlay{padding:0;align-items:flex-end}
+
+  /* Detail grid single col */
+  .detail-grid{grid-template-columns:1fr}
+  .agent-stats{grid-template-columns:repeat(2,1fr)}
+
+  /* Timeline compact */
+  .timeline{padding:10px 8px}
+  .tl-label{font-size:8px}
+  .tl-time{font-size:8px}
+
+  /* Search */
+  .search-wrap input{font-size:14px}
+
+  /* Cards */
+  .card{padding:14px}
+
+  /* Agent grid single col on small screens */
+  #agents-content > div{grid-template-columns:1fr!important}
+}
+
+@media(max-width:480px){
   .stat-grid{grid-template-columns:repeat(2,1fr)}
-  .topbar{margin-bottom:14px}
-  .topbar h1{font-size:16px}
+  .topbar-right .badge-btn:not(:last-child){display:none}
+  .detail-grid{grid-template-columns:1fr}
+  table{min-width:420px}
 }
 </style>
 </head>
@@ -1170,7 +1245,10 @@ async function openCase(caseId) {
       ${c.full_description?`<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">${c.full_description}</p></div>`:''}
       ${c.full_notes?`<div class="notes-box"><span class="box-label">📋 Report / Notes</span><p class="box-text">${c.full_notes}</p></div>`:''}
     `;
-  } catch(e){document.getElementById('modal-body').innerHTML='<div class="loading">Error loading case.</div>';}
+  } catch(e){
+    console.error('Case modal error:', e);
+    document.getElementById('modal-body').innerHTML='<div class="loading">Error loading case. Check console.</div>';
+  }
   }
 
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
@@ -1331,9 +1409,9 @@ async function loadAgents() {
           <div class="card" style="cursor:pointer" onclick="openAgentModal('${a.name}')">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
               <div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">${a.name[0]}</div>
-              <div>
-                <div style="font-size:13px;font-weight:700">${a.name}</div>
-                <div style="font-size:11px;color:var(--muted)">${a.username?'@'+a.username:''}</div>
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name}</div>
+                <div style="font-size:11px;color:var(--muted)">${a.username?'@'+a.username:'No username'}</div>
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
