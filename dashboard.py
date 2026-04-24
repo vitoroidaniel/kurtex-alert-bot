@@ -685,7 +685,7 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="user-chip">
       {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
       {% else %}<div class="user-avatar-init">{{ user.first_name[0] }}</div>{% endif %}
-      <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else 'Manager' }}</div></div>
+      <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
     </div>
     <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
     <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Sign out</button>
