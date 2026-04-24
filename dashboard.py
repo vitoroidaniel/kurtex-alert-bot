@@ -1212,7 +1212,7 @@ async function loadAgents() {
 }
 
 // ── Modals ─────────────────────────────────────────────────────────────────
-function openCase(el) {
+async function openCase(el) {
   var caseId = (typeof el === 'string') ? el : el.dataset.id;
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('modal-body').innerHTML = '<div class="loading">Loading...</div>';
