@@ -432,12 +432,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;al
 .overlay{position:fixed;inset:0;background:linear-gradient(105deg,rgba(20,14,6,.92) 0%,rgba(20,14,6,.75) 40%,rgba(20,14,6,.3) 70%,rgba(20,14,6,.1) 100%)}
 
 /* Card on left */
-.card{position:relative;z-index:1;width:100%;max-width:400px;margin-left:8vw}
+.card{position:relative;z-index:1;width:100%;max-width:400px;margin:0 auto}
 .card-inner{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:44px 36px;backdrop-filter:blur(16px)}
 
 .logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#C17B3F,#8B4A1A);display:flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:28px;box-shadow:0 4px 24px rgba(193,123,63,.5)}
-h1{color:#fff;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.4px;line-height:1.2}
-.tagline{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:28px}
+h1{color:#fff;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.4px;line-height:1.2;text-align:center}
+.tagline{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:28px;text-align:center}
 
 /* Stats strip */
 .stats{display:flex;gap:20px;margin-bottom:28px;padding:14px 16px;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.08)}
@@ -1468,7 +1468,8 @@ async function openCase(el) {
 }
 function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
-async function viewFullReport(caseId) {
+async function viewFullReport(caseIdOrEl) {
+  var caseId = (typeof caseIdOrEl === "string") ? caseIdOrEl : caseIdOrEl.dataset.id;
   document.getElementById('report-view-overlay').classList.add('open');
   document.getElementById('report-view-body').innerHTML = '<div class="loading">Loading report...</div>';
   try {
