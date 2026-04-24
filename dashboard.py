@@ -215,6 +215,12 @@ def api_case_detail():
                     "issue_text":       c.get("issue_text",""),
                     "load_type":        c.get("load_type",""),
                     "priority":         c.get("priority",""),
+                    "pickup":           c.get("pickup",""),
+                    "delivery":         c.get("delivery",""),
+                    "comments":         c.get("comments",""),
+                    "setpoint":         c.get("setpoint",""),
+                    "current_temp":     c.get("current_temp",""),
+                    "temp_recorder":    c.get("temp_recorder",""),
                 })
                 return jsonify(data)
         return jsonify({"error":"not found"}), 404
@@ -1504,34 +1510,71 @@ async function viewFullReport(caseIdOrEl) {
     var priorityIcon = c.priority === 'critical' ? '🔴' : c.priority === 'high' ? '🟠' : c.priority === 'medium' ? '🟡' : '🟢';
     var priorityLabel = c.priority ? (priorityIcon + ' ' + c.priority.charAt(0).toUpperCase() + c.priority.slice(1)) : '';
 
-    document.getElementById('report-view-body').innerHTML =
-      // Header
-      '<div style="background:linear-gradient(135deg,var(--accent),#8B4A1A);border-radius:12px;padding:18px 20px;margin-bottom:20px;color:#fff">'
-      + '<div style="font-size:11px;opacity:.7;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">'
-      + (vtype ? '🚛 Case Report — '+vtype.charAt(0).toUpperCase()+vtype.slice(1) : '📋 Case Report')
-      + '</div>'
-      + '<div style="font-size:18px;font-weight:800;line-height:1.2">'+(c.driver||'—')+'</div>'
-      + '<div style="font-size:13px;opacity:.8;margin-top:4px">'+(c.group||'—')+'</div>'
-      + (priorityLabel ? '<div style="margin-top:8px;background:rgba(255,255,255,.15);display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">'+priorityLabel+'</div>' : '')
-      + '</div>'
+    // Priority
+    var pIcons = {critical:'🔴',high:'🟠',medium:'🟡',low:'🟢'};
+    var pIcon = pIcons[c.priority] || '🟢';
+    var pText = c.priority ? c.priority.charAt(0).toUpperCase()+c.priority.slice(1) : 'Low';
 
-      // Details
-      + '<div style="margin-bottom:16px">'
-      + (c.unit_number ? row(unitLabel+' #', c.unit_number) : '')
-      + row('Driver', c.report_driver || c.driver)
-      + row('Issue', c.issue_text || c.full_description)
-      + row('Load Type', c.load_type)
-      + row('Assigned To', c.agent)
-      + row('Date', c.opened)
-      + '</div>'
+    // Unit label
+    var vtypeLabel = vtype === 'truck' ? 'Truck' : vtype === 'trailer' ? 'Trailer' : vtype === 'reefer' ? 'Reefer' : '';
 
-      // Agent notes / report
-      + (isRealReport
-        ? '<div style="margin-top:4px">'
-          + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">Agent Report</div>'
-          + '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px;font-size:13px;line-height:1.8;white-space:pre-wrap;color:#5c4a00">'+notes+'</div>'
-          + '</div>'
-        : '');
+    // Load section
+    var loadType = c.load_type || '';
+    var loadIsEmpty = loadType.toLowerCase() === 'empty';
+
+    function rpt(label, val) {
+      if (!val || val === '—') return '';
+      return '<div style="display:flex;gap:0;padding:9px 0;border-bottom:1px solid var(--border)">'
+        + '<span style="min-width:200px;font-size:13px;font-weight:600;color:var(--text);flex-shrink:0">'+label+':</span>'
+        + '<span style="font-size:13px;color:var(--text)">'+val+'</span>'
+        + '</div>';
+    }
+
+    var html = '<div style="background:linear-gradient(135deg,var(--accent),#8B4A1A);border-radius:12px;padding:16px 20px;margin-bottom:20px;color:#fff">'
+      + '<div style="font-size:11px;opacity:.65;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Case Report'+(vtypeLabel?' — '+vtypeLabel:'')+'</div>'
+      + '<div style="font-size:17px;font-weight:800">'+(c.driver||'—')+' / '+(c.group||'—')+'</div>'
+      + '<div style="margin-top:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.15);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600">'
+      + pIcon+' Priority: '+pText
+      + '</div>'
+      + '</div>';
+
+    html += '<div style="margin-bottom:16px">';
+    if (vtypeLabel && c.unit_number) html += rpt(vtypeLabel, c.unit_number);
+    html += rpt('Driver', c.report_driver || c.driver);
+    html += rpt('Issue', c.issue_text || c.full_description);
+    html += '</div>';
+
+    // Load section
+    if (loadType) {
+      html += '<div style="margin-bottom:16px">';
+      html += '<div style="padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;font-weight:700;color:var(--text)">'+loadType+'</div>';
+      if (!loadIsEmpty) {
+        html += rpt('Pick up Location/Time', c.pickup);
+        html += rpt('Delivery Location/Time', c.delivery);
+      }
+      html += rpt('Current Location', c.location);
+      html += '</div>';
+    }
+
+    // Reefer section
+    if (vtype === 'reefer') {
+      html += '<div style="margin-bottom:16px">';
+      html += rpt('Setpoint', c.setpoint);
+      html += rpt('Current temp', c.current_temp);
+      html += rpt('Temp recorder', c.temp_recorder);
+      html += '</div>';
+    }
+
+    // Comments
+    if (c.comments) {
+      html += '<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Comments</div>'
+        + '<div style="background:var(--surface2);border-radius:8px;padding:12px;font-size:13px;line-height:1.6">'+c.comments+'</div></div>';
+    }
+
+    // Assigned by
+    html += rpt('Reported by', c.agent);
+
+    document.getElementById('report-view-body').innerHTML = html;
   } catch(e) {
     document.getElementById('report-view-body').innerHTML = '<div class="loading">Error loading report.</div>';
   }
