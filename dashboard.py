@@ -238,7 +238,7 @@ def api_agent():
     agent_name = request.args.get("name","").strip()
     if not agent_name: return jsonify({"error":"no name"}), 400
     try:
-        cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower()]
+        cases = [c for c in load_cases() if not is_testing(c) and (c.get("agent_name") or "").lower() == agent_name.lower()]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
@@ -311,8 +311,9 @@ def api_my_profile():
         uname = user.get("username","")
         cases = load_cases()
         my_cases = [c for c in cases if
+                    not is_testing(c) and (
                     (c.get("agent_name") or "").lower() == name.lower() or
-                    (uname and (c.get("agent_username") or "") == uname)]
+                    (uname and (c.get("agent_username") or "") == uname))]
         today = today_str(); wk = week_start_str()
         tc = [c for c in my_cases if (c.get("opened_at") or "").startswith(today)]
         wc = [c for c in my_cases if (c.get("opened_at") or "") >= wk]
