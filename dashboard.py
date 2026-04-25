@@ -238,7 +238,7 @@ def api_agent():
     agent_name = request.args.get("name","").strip()
     if not agent_name: return jsonify({"error":"no name"}), 400
     try:
-        cases = [c for c in load_cases() if not is_testing(c) and (c.get("agent_name") or "").lower() == agent_name.lower()]
+        cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower()]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
@@ -311,9 +311,8 @@ def api_my_profile():
         uname = user.get("username","")
         cases = load_cases()
         my_cases = [c for c in cases if
-                    not is_testing(c) and (
                     (c.get("agent_name") or "").lower() == name.lower() or
-                    (uname and (c.get("agent_username") or "") == uname))]
+                    (uname and (c.get("agent_username") or "") == uname)]
         today = today_str(); wk = week_start_str()
         tc = [c for c in my_cases if (c.get("opened_at") or "").startswith(today)]
         wc = [c for c in my_cases if (c.get("opened_at") or "") >= wk]
@@ -1248,211 +1247,206 @@ async function loadAgents() {
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading agents.</div>'; return; }
     var agents = await r.json();
     if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents found.</div>'; return; }
-
-    var rows = agents.map(function(a, idx) {
+    var cards = agents.map(function(a) {
       var init = (a.name||'?')[0].toUpperCase();
-      var barW = Math.round((a.total / (agents[0].total||1)) * 100);
-      return '<div class="agent-row" id="agent-row-' + idx + '">'
-        + '<div class="agent-row-main" onclick="toggleAgentRow(' + idx + ')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-radius:12px;transition:background .15s;background:var(--surface)">'
-          + '<div style="width:36px;height:36px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--accent);flex-shrink:0">' + init + '</div>'
-          + '<div style="min-width:120px;width:160px;flex-shrink:0">'
-            + '<div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (a.name||'') + '</div>'
-            + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+a.username:'—') + '</div>'
-          + '</div>'
-          + '<div style="flex:1;display:flex;align-items:center;gap:8px;min-width:0">'
-            + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden">'
-              + '<div style="height:100%;background:var(--accent);border-radius:3px;width:' + barW + '%"></div>'
-            + '</div>'
-            + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:24px;text-align:right;flex-shrink:0">' + a.total + '</span>'
-          + '</div>'
-          + '<div style="display:flex;gap:6px;flex-shrink:0">'
-            + '<span style="background:var(--green-bg);color:var(--green);font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px">' + a.done + ' done</span>'
-            + (a.missed > 0 ? '<span style="background:var(--red-bg);color:var(--red);font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px">' + a.missed + ' missed</span>' : '')
-            + '<span style="background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;min-width:44px;text-align:center">' + a.rate + '%</span>'
-          + '</div>'
-          + '<div style="flex-shrink:0;font-size:11px;color:var(--muted);width:55px;text-align:right">' + a.avg_resp + '</div>'
-          + '<div style="flex-shrink:0;color:var(--muted);font-size:14px;margin-left:4px;transition:transform .2s" id="agent-caret-' + idx + '">▾</div>'
+      return '<div class="card" style="cursor:pointer" data-agent="' + (a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
+        + '<div><div style="font-size:13px;font-weight:700">' + (a.name||'') + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+a.username:'No username') + '</div></div>'
         + '</div>'
-        + '<div id="agent-expand-' + idx + '" style="display:none;padding:0 16px 14px;background:var(--surface);border-radius:0 0 12px 12px;border-top:1px solid var(--border)">'
-          + '<div id="agent-expand-content-' + idx + '" style="padding-top:12px"><div class="loading" style="padding:14px">Loading...</div></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--red)">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
         + '</div>'
-      + '</div>';
-    }).join('');
-
-    el.innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">'
-      + '<div style="display:flex;align-items:center;gap:12px;padding:6px 16px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:4px">'
-        + '<div style="width:36px;flex-shrink:0"></div>'
-        + '<div style="width:160px;flex-shrink:0">Agent</div>'
-        + '<div style="flex:1">Activity</div>'
-        + '<div style="flex-shrink:0">Stats</div>'
-        + '<div style="flex-shrink:0;width:55px;text-align:right">Avg Resp</div>'
-        + '<div style="flex-shrink:0;width:18px"></div>'
-      + '</div>'
-      + rows + '</div>';
-  } catch(e) { el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
+        + '<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Avg: ' + (a.avg_resp||'—') + '</div>'
+        + '</div>';
+    }).join('')
+    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">' + cards + '</div>';
+  } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
 }
 
-var agentExpandCache = {};
-
-async function toggleAgentRow(idx) {
-  var expand = document.getElementById('agent-expand-' + idx);
-  var caret  = document.getElementById('agent-caret-' + idx);
-  var content_el = document.getElementById('agent-expand-content-' + idx);
-  var row    = document.getElementById('agent-row-' + idx);
-  var isOpen = expand.style.display !== 'none';
-  if (isOpen) {
-    expand.style.display = 'none';
-    caret.style.transform = '';
-    row.querySelector('.agent-row-main').style.borderRadius = '12px';
-  } else {
-    expand.style.display = 'block';
-    caret.style.transform = 'rotate(180deg)';
-    row.querySelector('.agent-row-main').style.borderRadius = '12px 12px 0 0';
-    var agentName = row.querySelector('.agent-row-main > div:nth-child(2) > div:first-child').textContent;
-    if (!agentExpandCache[idx]) {
-      try {
-        var resp = await fetch('/api/agent?name=' + encodeURIComponent(agentName));
-        agentExpandCache[idx] = await resp.json();
-      } catch(e) { content_el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px">Error loading.</div>'; return; }
+// ── Modals ─────────────────────────────────────────────────────────────────
+async function openCase(el) {
+  var caseId = (typeof el === 'string') ? el : el.dataset.id;
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('modal-body').innerHTML = '<div class="loading">Loading...</div>';
+  document.getElementById('modal-title').textContent = 'Loading...';
+  try {
+    var r = await fetch('/api/case?id='+encodeURIComponent(caseId));
+    if (!r.ok) { document.getElementById('modal-body').innerHTML = '<div class="loading">Case not found.</div>'; return; }
+    var c = await r.json();
+    document.getElementById('modal-title').textContent = (c.driver||'—') + ' — ' + (c.group||'—');
+    var extra = '';
+    if (c.vehicle_type) {
+      extra += '<div class="detail-grid" style="margin-bottom:14px">'
+        + '<div class="detail-item"><div class="detail-label">Vehicle Type</div><div class="detail-val">'+(c.vehicle_type||'—')+'</div></div>'
+        + '<div class="detail-item"><div class="detail-label">Unit Number</div><div class="detail-val">'+(c.unit_number||'—')+'</div></div>'
+        + '<div class="detail-item"><div class="detail-label">Priority</div><div class="detail-val">'+(c.priority||'—')+'</div></div>'
+        + '<div class="detail-item"><div class="detail-label">Load Type</div><div class="detail-val">'+(c.load_type||'—')+'</div></div>'
+        + '</div>';
     }
-    var a = agentExpandCache[idx];
-    var recentRows = (a.recent||[]).map(function(c) {
-      return '<tr onclick="openCase(this.dataset.id)" data-id="' + (c.full_id||'') + '" style="cursor:pointer">'
-        + '<td><b>' + (c.driver||'—') + '</b></td>'
-        + '<td style="color:var(--muted)">' + (c.group||'—') + '</td>'
-        + '<td>' + statusBadge(c.status) + '</td>'
-        + '<td style="color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
-        + '<td style="font-size:11px">' + (c.response||'—') + '</td>'
-        + '</tr>';
-    }).join('');
-    content_el.innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">'
-        + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + a.total + '</div><div class="agent-stat-label">Total</div></div>'
-        + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">' + a.done + '</div><div class="agent-stat-label">Resolved</div></div>'
-        + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">' + a.missed + '</div><div class="agent-stat-label">Missed</div></div>'
-        + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + (a.total?Math.round(a.done/a.total*100):0) + '%</div><div class="agent-stat-label">Rate</div></div>'
+    document.getElementById('modal-body').innerHTML =
+      buildTimeline(c)
+      + '<div class="detail-grid">'
+      + '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">'+statusBadge(c.status)+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">'+(c.agent||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">'+(c.driver||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">'+(c.group||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">'+(c.opened||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">'+(c.assigned_at||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">'+(c.response||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Resolution Time</div><div class="detail-val">'+(c.resolution_secs||'—')+'</div></div>'
       + '</div>'
-      + '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Avg response: <b style="color:var(--text)">' + a.avg_resp + '</b></div>'
-      + (recentRows ? '<div class="table-wrap"><div class="table-scroll"><table>'
-        + '<thead><tr><th>Reported By</th><th>Group</th><th>Status</th><th>Opened</th><th>Response</th></tr></thead>'
-        + '<tbody>' + recentRows + '</tbody></table></div></div>'
-        : '<div style="color:var(--muted);font-size:13px">No cases yet.</div>');
+      + extra
+      + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+c.full_description+'</p></div>' : '')
+      + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+c.full_notes+'</p></div>' : '')
+      + ((c.status === 'reported' || c.status === 'done')
+        ? '<div style="margin-top:14px;text-align:center"><button data-id="' + c.full_id + '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
+        : '');
+  } catch(e) {
+    console.error('openCase error:', e);
+    document.getElementById('modal-body').innerHTML = '<div class="loading">Error loading case.</div>';
+  }
+}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+async function viewFullReport(caseIdOrEl) {
+  var caseId = (typeof caseIdOrEl === "string") ? caseIdOrEl : caseIdOrEl.dataset.id;
+  document.getElementById('report-view-overlay').classList.add('open');
+  document.getElementById('report-view-body').innerHTML = '<div class="loading">Loading report...</div>';
+  try {
+    var r = await fetch('/api/case?id='+encodeURIComponent(caseId));
+    if (!r.ok) { document.getElementById('report-view-body').innerHTML = '<div class="loading">Error loading report.</div>'; return; }
+    var c = await r.json();
+    document.getElementById('report-view-title').textContent = 'Report — ' + (c.driver||'—') + ' / ' + (c.group||'—');
+
+    // case data loaded
+
+    // Parse the notes field which contains the bot report text
+    var notes = c.full_notes || '';
+    var isRealReport = notes && notes !== 'case reported';
+
+    // Build report rows from case data
+    var vtype = c.vehicle_type || '';
+    var unitLabel = vtype === 'truck' ? 'Truck' : vtype === 'trailer' ? 'Trailer' : vtype === 'reefer' ? 'Reefer' : 'Unit';
+
+    function row(label, val) {
+      if (!val || val === '—') return '';
+      return '<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="min-width:160px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+label+'</div>'
+        + '<div style="font-size:14px;font-weight:500;color:var(--text)">'+val+'</div>'
+        + '</div>';
+    }
+
+    // Priority icon
+    var priorityIcon = c.priority === 'critical' ? '🔴' : c.priority === 'high' ? '🟠' : c.priority === 'medium' ? '🟡' : '🟢';
+    var priorityLabel = c.priority ? (priorityIcon + ' ' + c.priority.charAt(0).toUpperCase() + c.priority.slice(1)) : '';
+
+    // Priority
+    var pIcons = {critical:'🔴',high:'🟠',medium:'🟡',low:'🟢'};
+    var pIcon = pIcons[c.priority] || '🟢';
+    var pText = c.priority ? c.priority.charAt(0).toUpperCase()+c.priority.slice(1) : 'Low';
+
+    // Unit label
+    var vtypeLabel = vtype === 'truck' ? 'Truck' : vtype === 'trailer' ? 'Trailer' : vtype === 'reefer' ? 'Reefer' : '';
+
+    // Load section
+    var loadType = c.load_type || '';
+    var loadIsEmpty = loadType.toLowerCase() === 'empty';
+
+    function line(label, val) {
+      if (!val || val === '—') return '';
+      return '<div style="font-size:13px;margin-bottom:6px"><b>' + label + ':</b> ' + val + '</div>';
+    }
+
+    // Build report exactly like Telegram bot
+    var s = '<div style="font-size:15px;font-weight:700;margin-bottom:2px">'
+      + pIcon + ' Case Report';
+    if (vtypeLabel) s += ' — ' + vtypeLabel;
+    s += '</div>';
+    s += '<div style="font-size:13px;margin-bottom:16px">Priority: <b>' + pText + '</b></div>';
+
+    s += '<div style="margin-bottom:16px">';
+    if (vtypeLabel && c.unit_number) s += line(vtypeLabel, c.unit_number);
+    s += line('Reported by', c.report_driver || c.driver);
+    s += line('Issue', c.issue_text || c.full_description);
+    s += '</div>';
+
+    if (loadType) {
+      s += '<div style="margin-bottom:16px">';
+      s += line('JBS/Broker Load', loadType);
+      if (!loadIsEmpty) {
+        s += line('Pick up Location/Time', c.pickup);
+        s += line('Delivery Location/Time', c.delivery);
+      }
+      s += line('Current Location', c.location);
+      s += '</div>';
+    }
+
+    if (vtype === 'reefer') {
+      s += '<div style="margin-bottom:16px">';
+      s += line('Setpoint', c.setpoint);
+      s += line('Current temp', c.current_temp);
+      s += line('Temp recorder', c.temp_recorder);
+      s += '</div>';
+    }
+
+    if (c.comments) {
+      s += '<div style="margin-bottom:16px">' + line('Comments', c.comments) + '</div>';
+    }
+
+    s += line('Handled by', c.agent);
+
+    document.getElementById('report-view-body').innerHTML =
+      '<div style="background:var(--surface2);border-radius:12px;padding:18px 20px;font-family:inherit;line-height:1">' + s + '</div>';
+  } catch(e) {
+    document.getElementById('report-view-body').innerHTML = '<div class="loading">Error loading report.</div>';
   }
 }
 
+function closeReportView() { document.getElementById('report-view-overlay').classList.remove('open'); }
 
-async function loadMyProfile() {
-  document.getElementById('my-profile-content').innerHTML = '<div class="loading">Loading...</div>';
-  try {
-    const r = await fetch('/api/my_profile');
-    const p = await r.json();
-    document.getElementById('my-profile-content').innerHTML = `
-      <div class="two-col" style="margin-bottom:16px">
-        <div class="card">
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-            <div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">${p.name[0]}</div>
-            <div>
-              <div style="font-size:17px;font-weight:700">${p.name}</div>
-              <div style="font-size:12px;color:var(--muted)">${p.username ? '@'+p.username : ''} · <span style="color:var(--accent)">${p.role}</span></div>
-            </div>
-          </div>
-          <div class="report-stat-grid">
-            <div class="report-stat"><div class="report-stat-val v-accent">${p.total}</div><div class="report-stat-label">All Time</div></div>
-            <div class="report-stat"><div class="report-stat-val v-green">${p.done}</div><div class="report-stat-label">Resolved</div></div>
-            <div class="report-stat"><div class="report-stat-val v-red">${p.missed}</div><div class="report-stat-label">Missed</div></div>
-            <div class="report-stat"><div class="report-stat-val v-accent">${p.rate}%</div><div class="report-stat-label">Rate</div></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title"><i class="ph ph-calendar"></i>Period Breakdown</div>
-          <div class="stats-list">
-            <div class="row"><span>Today assigned</span><span class="val">${p.today_total}</span></div>
-            <div class="row"><span>Today resolved</span><span class="val" style="color:var(--green)">${p.today_done}</span></div>
-            <div class="row"><span>This week assigned</span><span class="val">${p.week_total}</span></div>
-            <div class="row"><span>This week resolved</span><span class="val" style="color:var(--green)">${p.week_done}</span></div>
-            <div class="row"><span>Avg response</span><span class="val">${p.avg_resp}</span></div>
-          </div>
-        </div>
-      </div>
-      <div class="section-title" style="margin-bottom:10px">Recent Cases</div>
-      <div class="table-wrap"><div class="table-scroll">${caseTable(p.recent)}</div></div>
-    `;
-      } catch(e) { document.getElementById('my-profile-content').innerHTML = '<div class="loading">Error loading profile.</div>'; }
+function printReportView() {
+  var orig = document.title;
+  document.title = document.getElementById('report-view-title').textContent;
+  window.print();
+  document.title = orig;
 }
 
-// ── Agents (manager only) ─────────────────────────────────────────────────────
-async function loadAgents() {
-  document.getElementById('agents-content').innerHTML = '<div class="loading">Loading...</div>';
+async function openAgentModal(nameOrEl) {
+  var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
+  document.getElementById('agent-modal-overlay').classList.add('open');
+  document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
+  document.getElementById('agent-modal-title').textContent = name;
   try {
-    const r = await fetch('/api/agents');
-    if (r.status === 403) { document.getElementById('agents-content').innerHTML = '<div class="loading">Access denied.</div>'; return; }
-    const agents = await r.json();
-    if (!agents.length) { document.getElementById('agents-content').innerHTML = '<div class="empty-state"><i class="ph ph-users"></i>No agents yet</div>'; return; }
-    document.getElementById('agents-content').innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
-        ${agents.map(a=>`
-          <div class="card" style="cursor:pointer" onclick="openAgentModal('${a.name}')">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-              <div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">${a.name[0]}</div>
-              <div style="min-width:0">
-                <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name}</div>
-                <div style="font-size:11px;color:var(--muted)">${a.username?'@'+a.username:'No username'}</div>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
-              <div style="background:var(--surface2);border-radius:7px;padding:6px">
-                <div style="font-size:16px;font-weight:800;color:var(--accent)">${a.total}</div>
-                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div>
-              </div>
-              <div style="background:var(--surface2);border-radius:7px;padding:6px">
-                <div style="font-size:16px;font-weight:800;color:var(--green)">${a.done}</div>
-                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div>
-              </div>
-              <div style="background:var(--surface2);border-radius:7px;padding:6px">
-                <div style="font-size:16px;font-weight:800;color:var(--accent)">${a.rate}%</div>
-                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div>
-              </div>
-            </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">Avg: ${a.avg_resp}</div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-      } catch(e) { document.getElementById('agents-content').innerHTML = '<div class="loading">Error.</div>'; }
-}
-
-async function openAgentModal(name) {
-  const overlay = document.getElementById('agent-modal-overlay');
-  const body    = document.getElementById('agent-modal-body');
-  const title   = document.getElementById('agent-modal-title');
-  overlay.classList.add('open');
-  body.innerHTML = '<div class="loading">Loading profile...</div>';
-  title.textContent = name;
-  try {
-    const r = await fetch('/api/agent?name='+encodeURIComponent(name));
-    if (!r.ok) { body.innerHTML = '<div class="loading">Agent not found.</div>'; return; }
-    const a = await r.json();
-    const rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
-
-    // Build rows separately to avoid nested template literal issues
-    let rows = '';
+    var r = await fetch('/api/agent?name='+encodeURIComponent(name));
+    if (!r.ok) { document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Agent not found.</div>'; return; }
+    var a = await r.json();
+    var rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
+    var rows = '';
     if (a.recent && a.recent.length) {
       a.recent.forEach(function(c) {
-        const cid = c.full_id || '';
-                rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(function(){openCase(' + JSON.stringify(cid) + ')},200)">'
+        var cid = c.full_id || '';
+        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" data-id="' + cid + '" onclick="closeAgentModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)">'
           + '<td style="padding:8px 10px;font-weight:500">' + (c.driver||'—') + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
-          + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
           + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
           + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
           + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
           + '</tr>';
       });
     }
-
-    const tableHtml = rows
-      ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
+    document.getElementById('agent-modal-body').innerHTML =
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.total+'</div><div class="agent-stat-label">Total</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+a.done+'</div><div class="agent-stat-label">Resolved</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+rate+'%</div><div class="agent-stat-label">Rate</div></div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
+      + (rows ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
         + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
         + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
@@ -1460,31 +1454,386 @@ async function openAgentModal(name) {
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
         + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No cases yet.</div>';
-
-    body.innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + a.total + '</div><div class="agent-stat-label">Total</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">' + a.done + '</div><div class="agent-stat-label">Done</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">' + a.missed + '</div><div class="agent-stat-label">Missed</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + rate + '%</div><div class="agent-stat-label">Rate</div></div>'
-      + '</div>'
-      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>' + a.avg_resp + '</b></div>'
-      + tableHtml;
-
+        : '<div style="color:var(--muted);font-size:13px">No cases yet.</div>');
   } catch(e) {
-    console.error('Agent modal error:', e);
-    body.innerHTML = '<div class="loading">Error loading profile.</div>';
+    console.error('agent modal error:', e);
+    document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Error loading profile.</div>';
   }
 }
+function closeAgentModal() { document.getElementById('agent-modal-overlay').classList.remove('open'); }
 
+// ── Report ─────────────────────────────────────────────────────────────────
+function openReport() {
+  document.getElementById('report-modal-overlay').classList.add('open');
+  reportTab = 'today';
+  document.querySelectorAll('.report-tab').forEach(function(b,i){b.classList.toggle('active',i===0);});
+  document.getElementById('report-period-bar').style.display = 'none';
+  generateReport();
+}
+function closeReport() { document.getElementById('report-modal-overlay').classList.remove('open'); }
+function setReportTab(tab, btn) {
+  reportTab = tab;
+  document.querySelectorAll('.report-tab').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  document.getElementById('report-period-bar').style.display = tab==='custom' ? 'flex' : 'none';
+  if (tab==='today') generateReport();
+}
+function toggleCustomDates() {
+  var v = document.getElementById('report-period-select').value;
+  document.getElementById('custom-date-inputs').style.display = v==='custom' ? 'flex' : 'none';
+}
+function updatePdfLink(url) {
+  var btn = document.getElementById('report-pdf-btn');
+  if (btn) btn.href = url.replace('/api/report', '/api/export/pdf');
+}
+
+async function generateReport() {
+  document.getElementById('report-content').innerHTML = '<div class="loading">Generating report...</div>';
+  var url = '/api/report?period=today';
+  if (reportTab === 'custom') {
+    var period = document.getElementById('report-period-select').value;
+    if (period === 'custom') {
+      var from = document.getElementById('report-date-from').value;
+      var to   = document.getElementById('report-date-to').value;
+      if (!from) { document.getElementById('report-content').innerHTML = '<div class="loading">Please select a start date.</div>'; return; }
+      url = '/api/report?period=custom&from='+from+'&to='+(to||from);
+    } else {
+      url = '/api/report?period='+period;
+    }
+  }
+  try {
+    updatePdfLink(url);
+    var r = await fetch(url);
+    if (!r.ok) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; return; }
+    var d = await r.json();
+    document.getElementById('report-ts').textContent = 'Generated ' + new Date().toLocaleString();
+    var now = new Date();
+    var dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    var timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    var rate = d.total ? Math.round(d.done/d.total*100) : 0;
+    var resRate = d.total ? Math.round((d.total-d.missed)/d.total*100) : 0;
+    document.getElementById('report-content').innerHTML =
+      '<div style="border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:20px">'
+      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">'
+      + '<div>'
+      + '<div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.3px">'+d.label+'</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-top:3px">Kurtex Truck Maintenance — Operations Report</div>'
+      + '</div>'
+      + '<div style="text-align:right">'
+      + '<div style="font-size:11px;color:var(--muted)">Generated</div>'
+      + '<div style="font-size:12px;font-weight:600;color:var(--text)">'+dateStr+'</div>'
+      + '<div style="font-size:11px;color:var(--muted)">'+timeStr+'</div>'
+      + '</div></div></div>'
+
+      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+      + '<div style="font-size:28px;font-weight:800;color:var(--accent)">'+d.total+'</div>'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Alerts</div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+      + '<div style="font-size:28px;font-weight:800;color:var(--green)">'+d.done+'</div>'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Resolved</div>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
+      + '<div style="font-size:28px;font-weight:800;color:var(--red)">'+d.missed+'</div>'
+      + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Missed</div>'
+      + '</div>'
+      + '</div>'
+
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
+      + '<span style="font-size:12px;color:var(--muted);font-weight:500">Resolution Rate</span>'
+      + '<span style="font-size:18px;font-weight:800;color:'+(resRate>=80?'var(--green)':resRate>=60?'var(--yellow)':'var(--red)')+'">'+resRate+'%</span>'
+      + '</div>'
+      + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
+      + '<span style="font-size:12px;color:var(--muted);font-weight:500">Avg Response Time</span>'
+      + '<span style="font-size:18px;font-weight:800;color:var(--text)">'+d.avg_resp+'</span>'
+      + '</div>'
+      + '</div>'
+
+      + (d.leaderboard.length ? ''
+        + '<div style="margin-bottom:20px">'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Agent Performance</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+        + '<thead><tr>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">#</th>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Agent</th>'
+        + '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Cases</th>'
+        + '</tr></thead><tbody>'
+        + d.leaderboard.map(function(a,i){
+            return '<tr style="border-top:1px solid var(--border)">'
+              + '<td style="padding:8px;font-weight:700;color:var(--muted);width:30px">'+(i+1)+'.</td>'
+              + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+a.name+'</td>'
+              + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+a.count+'</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table></div>'
+        : '')
+
+      + (d.top_groups.length ? ''
+        + '<div style="margin-bottom:20px">'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Most Active Groups</div>'
+        + d.top_groups.map(function(g,i){
+            var maxCount = d.top_groups[0].count;
+            var pct = Math.round(g.count/maxCount*100);
+            return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">'
+              + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+g.name+'</span>'
+              + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">'
+              + '<div style="height:100%;border-radius:3px;background:var(--accent);width:'+pct+'%"></div></div>'
+              + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+g.count+'</span>'
+              + '</div>';
+          }).join('')
+        + '</div>'
+        : '')
+
+      + (d.missed_cases.length ? ''
+        + '<div>'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts ('+d.missed+')</div>'
+        + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+        + '<thead><tr>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Driver</th>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
+        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Time</th>'
+        + '</tr></thead><tbody>'
+        + d.missed_cases.map(function(c){
+            return '<tr style="border-top:1px solid var(--border)">'
+              + '<td style="padding:7px 8px;font-weight:500">'+c.driver+'</td>'
+              + '<td style="padding:7px 8px;color:var(--muted)">'+c.group+'</td>'
+              + '<td style="padding:7px 8px;color:var(--muted);font-size:11px">'+c.opened+'</td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table></div>'
+        : '');
+  } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error.</div>'; }
+}
 function printReport() {
-  const orig = document.title;
+  var orig = document.title;
   document.title = 'Kurtex Report — ' + new Date().toLocaleDateString();
   window.print();
   document.title = orig;
 }
 
+// ── Refresh ────────────────────────────────────────────────────────────────
+
+// ── Nav Groups ──────────────────────────────────────────────────────────────
+function toggleGroup(id) {
+  var el = document.getElementById(id);
+  var caret = document.getElementById('caret-' + id);
+  var open = el.classList.contains('open');
+  el.classList.toggle('open', !open);
+  if (caret) caret.classList.toggle('open', !open);
+}
+
+// ── Trends ───────────────────────────────────────────────────────────────────
+var trendPeriod = 30;
+var trendCharts = {};
+
+function setTrendPeriod(days, btn) {
+  trendPeriod = days;
+  document.querySelectorAll('#page-trends .toggle-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+  loadTrends();
+}
+
+async function loadTrends() {
+  try {
+    var r = await fetch('/api/trends?period=' + trendPeriod);
+    if (!r.ok) return;
+    var d = await r.json();
+
+    // Destroy existing charts
+    Object.values(trendCharts).forEach(function(c){ if(c) c.destroy(); });
+    trendCharts = {};
+
+    var accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    var green  = getComputedStyle(document.documentElement).getPropertyValue('--green').trim();
+    var red    = getComputedStyle(document.documentElement).getPropertyValue('--red').trim();
+    var muted  = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+
+    // Cases over time
+    var ctx1 = document.getElementById('trend-cases-chart').getContext('2d');
+    trendCharts.cases = new Chart(ctx1, {
+      type: 'line',
+      data: {
+        labels: d.labels,
+        datasets: [
+          {label:'Total', data:d.totals, borderColor:accent, backgroundColor:accent+'22', fill:true, tension:.4, pointRadius:2},
+          {label:'Resolved', data:d.resolved, borderColor:green, backgroundColor:'transparent', tension:.4, pointRadius:2},
+          {label:'Missed', data:d.missed, borderColor:red, backgroundColor:'transparent', tension:.4, pointRadius:2},
+        ]
+      },
+      options: {responsive:true, plugins:{legend:{labels:{color:muted,font:{size:11}}}}, scales:{x:{ticks:{color:muted,font:{size:10},maxTicksLimit:10}},y:{ticks:{color:muted,font:{size:10}},beginAtZero:true}}}
+    });
+
+    // Avg response time
+    var ctx2 = document.getElementById('trend-resp-chart').getContext('2d');
+    trendCharts.resp = new Chart(ctx2, {
+      type: 'line',
+      data: {labels: d.labels, datasets: [{label:'Avg Resp (secs)', data:d.avg_resp, borderColor:accent, backgroundColor:accent+'22', fill:true, tension:.4, pointRadius:2}]},
+      options: {responsive:true, plugins:{legend:{labels:{color:muted,font:{size:11}}}}, scales:{x:{ticks:{color:muted,font:{size:10},maxTicksLimit:10}},y:{ticks:{color:muted,font:{size:10}},beginAtZero:true}}}
+    });
+
+    // Daily bar
+    var ctx3 = document.getElementById('trend-bar-chart').getContext('2d');
+    trendCharts.bar = new Chart(ctx3, {
+      type: 'bar',
+      data: {labels: d.labels, datasets: [
+        {label:'Total', data:d.totals, backgroundColor:accent+'88'},
+        {label:'Resolved', data:d.resolved, backgroundColor:green+'88'},
+        {label:'Missed', data:d.missed, backgroundColor:red+'88'},
+      ]},
+      options: {responsive:true, plugins:{legend:{labels:{color:muted,font:{size:11}}}}, scales:{x:{stacked:false,ticks:{color:muted,font:{size:10},maxTicksLimit:15}},y:{beginAtZero:true,ticks:{color:muted,font:{size:10}}}}}
+    });
+  } catch(e) { console.error('trends error:', e); }
+}
+
+// ── Heatmap ──────────────────────────────────────────────────────────────────
+async function loadHeatmap() {
+  var el = document.getElementById('heatmap-container');
+  el.innerHTML = '<div class="loading">Loading heatmap...</div>';
+  try {
+    var r = await fetch('/api/heatmap');
+    var d = await r.json();
+    var hours = [];
+    for (var i=0; i<24; i++) hours.push(i===0?'12am':i<12?i+'am':i===12?'12pm':(i-12)+'pm');
+    var html = '<table style="border-collapse:collapse;font-size:11px;width:100%"><thead><tr><th style="padding:4px 6px;color:var(--muted);text-align:left;width:32px"></th>';
+    hours.forEach(function(h){ html += '<th style="padding:2px 1px;color:var(--muted);font-weight:500;text-align:center;min-width:28px">'+h+'</th>'; });
+    html += '</tr></thead><tbody>';
+    d.days.forEach(function(day, di) {
+      html += '<tr><td style="padding:3px 6px;color:var(--muted);font-weight:600;white-space:nowrap">'+day+'</td>';
+      d.heatmap[di].forEach(function(val) {
+        var intensity = val / d.max;
+        var alpha = val === 0 ? 0.04 : 0.1 + intensity * 0.85;
+        var bg = 'rgba(193,123,63,' + alpha.toFixed(2) + ')';
+        var color = intensity > 0.5 ? '#fff' : 'var(--text)';
+        html += '<td style="padding:3px 1px;text-align:center"><div style="background:'+bg+';color:'+color+';border-radius:4px;padding:5px 2px;font-weight:'+(val>0?'600':'400')+'">'+( val>0?val:'')+'</div></td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch(e) { el.innerHTML = '<div class="loading">Error loading heatmap.</div>'; }
+}
+
+// ── Comparison ───────────────────────────────────────────────────────────────
+async function loadComparison() {
+  var el = document.getElementById('comparison-content');
+  el.innerHTML = '<div class="loading">Loading comparison...</div>';
+  try {
+    var r = await fetch('/api/comparison');
+    var d = await r.json();
+    function deltaHtml(delta, label) {
+      if (!delta || delta.pct === 0) return '<span style="color:var(--muted);font-size:11px">—</span>';
+      var color = delta.up ? 'var(--green)' : 'var(--red)';
+      var arrow = delta.up ? '↑' : '↓';
+      return '<span style="color:'+color+';font-size:11px;font-weight:600">'+arrow+' '+delta.pct+'%</span>';
+    }
+    function compRow(label, thisVal, lastVal, delta, unit) {
+      unit = unit || '';
+      return '<tr style="border-bottom:1px solid var(--border)">'
+        + '<td style="padding:12px 14px;font-size:13px;font-weight:500;color:var(--muted)">'+label+'</td>'
+        + '<td style="padding:12px 14px;font-size:18px;font-weight:800;color:var(--text);text-align:center">'+thisVal+unit+'</td>'
+        + '<td style="padding:12px 14px;font-size:16px;font-weight:600;color:var(--muted2);text-align:center">'+lastVal+unit+'</td>'
+        + '<td style="padding:12px 14px;text-align:center">'+deltaHtml(delta)+'</td>'
+        + '</tr>';
+    }
+    el.innerHTML =
+      '<div class="card">'
+      + '<table style="width:100%;border-collapse:collapse">'
+      + '<thead><tr style="background:var(--surface2)">'
+      + '<th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Metric</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase">This Week</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Last Week</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Change</th>'
+      + '</tr></thead><tbody>'
+      + compRow('Total Cases', d.this_week.total, d.last_week.total, d.delta_total)
+      + compRow('Resolved', d.this_week.done, d.last_week.done, d.delta_done)
+      + compRow('Missed', d.this_week.missed, d.last_week.missed, d.delta_missed)
+      + compRow('Resolution Rate', d.this_week.rate, d.last_week.rate, d.delta_rate, '%')
+      + compRow('Avg Response', d.this_week.avg_resp, d.last_week.avg_resp, d.delta_resp)
+      + '</tbody></table></div>';
+  } catch(e) { el.innerHTML = '<div class="loading">Error.</div>'; }
+}
+
+// ── Fleet Intelligence ────────────────────────────────────────────────────────
+async function loadFleetIntel() {
+  var el = document.getElementById('fleet-intel-content');
+  el.innerHTML = '<div class="loading">Loading fleet intelligence...</div>';
+  try {
+    var r = await fetch('/api/fleet_intelligence');
+    var d = await r.json();
+    var unitsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
+      + (d.top_units.length ? d.top_units.map(function(u){
+          return '<tr>'
+            + '<td><b>'+u.unit+'</b></td>'
+            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+u.vtype+'</span></td>'
+            + '<td><b style="color:var(--accent)">'+u.total+'</b></td>'
+            + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+u.top_issue+'</td>'
+            + '<td style="color:var(--muted);font-size:11px">'+u.last_seen+'</td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No data yet — make reports through bot first</td></tr>')
+      + '</tbody></table></div></div>';
+
+    var driversHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Driver</th><th>Reports</th><th>Most Common Issue</th></tr></thead><tbody>'
+      + (d.top_drivers.length ? d.top_drivers.map(function(dr, i){
+          return '<tr>'
+            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+dr.name+'</b></td>'
+            + '<td><b style="color:var(--accent)">'+dr.total+'</b></td>'
+            + '<td style="color:var(--muted)">'+dr.top_issue+'</td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
+      + '</tbody></table></div></div>';
+
+    el.innerHTML =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
+      + '<div class="stat-card"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
+      + '<div class="stat-card"><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
+      + '</div>'
+      + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
+      + unitsHtml
+      + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
+      + driversHtml;
+  } catch(e) { el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
+}
+
+async function refresh() {
+  await loadStats();
+  if (currentPage==='overview') {
+    try {
+      var r = await fetch('/api/cases?filter=today');
+      if (r.ok) {
+        var cases = await r.json();
+        var el = document.getElementById('recent-table');
+        if (el) el.innerHTML = caseTable(cases.slice(0,10));
+      }
+    } catch(e) { console.error(e); }
+  } else if (currentPage==='cases') loadCases();
+  else if (currentPage==='missed') loadMissed();
+  else if (currentPage==='reassigned') loadReassigned();
+  else if (currentPage==='testing') loadTesting();
+  else if (currentPage==='fleet') loadFleet();
+  else if (currentPage==='trends') loadTrends();
+  else if (currentPage==='heatmap') loadHeatmap();
+  else if (currentPage==='comparison') loadComparison();
+  else if (currentPage==='fleet_intel') loadFleetIntel();
+  else if (currentPage==='my_profile') loadMyProfile();
+  else if (currentPage==='agents') loadAgents();
+  var lu = document.getElementById('last-update');
+  if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+// Restore last visited page
+try {
+  var savedPage = localStorage.getItem('kurtex-page');
+  if (savedPage && pages.indexOf(savedPage) >= 0) {
+    showPage(savedPage);
+  } else {
+    refresh();
+  }
+} catch(e) { refresh(); }
+setInterval(refresh, 10000);
 </script>
 </body>
 </html>"""
@@ -1827,1064 +2176,6 @@ def api_export_pdf():
         logger.error(f"PDF export error: {e}")
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-
-DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en" data-theme="light">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Kurtex Dashboard</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚛</text></svg>">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
-<style>
-:root{
-  --bg:#f4f4f8;--surface:#fff;--surface2:#f0f0f4;--surface3:#e8e8ee;
-  --border:#e2e2e8;--border2:#d0d0da;
-  --text:#18181b;--muted:#6b7280;--muted2:#9ca3af;
-  --accent:#6366f1;--accent-bg:rgba(99,102,241,.08);--accent-border:rgba(99,102,241,.2);
-  --green:#16a34a;--green-bg:rgba(22,163,74,.08);
-  --red:#dc2626;--red-bg:rgba(220,38,38,.08);
-  --yellow:#ca8a04;--yellow-bg:rgba(202,138,4,.08);
-  --blue:#2563eb;--blue-bg:rgba(37,99,235,.08);
-  --purple:#7c3aed;--purple-bg:rgba(124,58,237,.08);
-  --shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
-}
-[data-theme="dark"]{
-  --bg:#0f0f14;--surface:#18181f;--surface2:#1e1e26;--surface3:#25252f;
-  --border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
-  --text:#f0f0f5;--muted:#8b8b9e;--muted2:#5a5a6e;
-  --accent:#818cf8;--accent-bg:rgba(129,140,248,.1);--accent-border:rgba(129,140,248,.25);
-  --green:#4ade80;--green-bg:rgba(74,222,128,.08);
-  --red:#f87171;--red-bg:rgba(248,113,113,.08);
-  --yellow:#fbbf24;--yellow-bg:rgba(251,191,36,.08);
-  --blue:#60a5fa;--blue-bg:rgba(96,165,250,.08);
-  --purple:#c084fc;--purple-bg:rgba(192,132,252,.08);
-  --shadow:0 1px 4px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.2);
-}
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{scroll-behavior:smooth}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
-.hero-bg{position:fixed;inset:0;z-index:0;background:url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1920&q=80')center/cover no-repeat;opacity:.03;pointer-events:none}
-.layout{position:relative;z-index:1;display:flex;min-height:100vh}
-
-/* ── Sidebar ── */
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:20px 12px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;transition:transform .25s,background .2s;z-index:50}
-.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:24px;padding:0 8px}
-.logo-icon{width:32px;height:32px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo-icon svg{width:18px;height:18px;fill:white}
-.logo-text h2{font-size:14px;font-weight:700}
-.logo-text small{font-size:10px;color:var(--muted)}
-nav{flex:1}
-.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;margin-bottom:2px;position:relative;text-decoration:none}
-.nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:var(--accent-bg);color:var(--accent)}
-.nav-item i{font-size:15px;width:18px;text-align:center;flex-shrink:0}
-.nav-badge{margin-left:auto;background:var(--red);color:white;font-size:10px;font-weight:700;padding:1px 6px;border-radius:20px;min-width:18px;text-align:center}
-.sidebar-footer{padding-top:14px;border-top:1px solid var(--border)}
-.user-chip{display:flex;align-items:center;gap:8px;padding:8px 8px;border-radius:10px;background:var(--surface2);margin-bottom:8px}
-.user-avatar{width:30px;height:30px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;object-fit:cover}
-.user-avatar-init{width:30px;height:30px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--accent);flex-shrink:0}
-.user-name{font-size:12px;font-weight:600}
-.user-role{font-size:10px;color:var(--muted)}
-.theme-btn{width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;font-family:inherit;display:flex;align-items:center;gap:7px;margin-bottom:6px}
-.theme-btn:hover{color:var(--text);border-color:var(--border2)}
-.logout-btn{width:100%;padding:7px;background:var(--red-bg);border:1px solid rgba(220,38,38,.15);color:var(--red);border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
-.logout-btn:hover{background:rgba(220,38,38,.14)}
-
-/* Mobile header */
-.mobile-header{display:none;position:sticky;top:0;z-index:40;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px;align-items:center;justify-content:space-between}
-.mobile-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
-.mobile-logo .logo-icon{width:28px;height:28px;border-radius:7px}
-.hamburger{background:var(--surface2);border:1px solid var(--border);border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49}
-
-/* Main */
-.main{flex:1;padding:22px 24px;overflow-x:hidden;min-width:0}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:10px;flex-wrap:wrap}
-.topbar h1{font-size:18px;font-weight:700}
-.topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.badge-btn{display:flex;align-items:center;gap:5px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;font-family:inherit;font-weight:500}
-.badge-btn:hover{border-color:var(--border2);color:var(--text)}
-.badge-btn i{font-size:13px}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-
-/* Stats */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
-.stat-label{font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
-.stat-value{font-size:26px;font-weight:800;line-height:1}
-.v-accent{color:var(--accent)}.v-green{color:var(--green)}.v-red{color:var(--red)}
-.v-yellow{color:var(--yellow)}.v-blue{color:var(--blue)}.v-purple{color:var(--purple)}
-.v-sm{font-size:17px!important;margin-top:4px}
-
-/* Two col */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
-@media(max-width:768px){.two-col{grid-template-columns:1fr}}
-
-/* Card */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
-.card-title{font-size:13px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:7px}
-.card-title i{font-size:14px;color:var(--accent)}
-
-/* Toggle */
-.toggle-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:12px}
-.toggle-btn{flex:1;padding:5px 8px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
-.toggle-btn.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-
-/* Filter tabs */
-.filter-tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tab-btn{padding:5px 11px;border-radius:7px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;transition:all .15s;font-family:inherit}
-.tab-btn:hover{color:var(--text);border-color:var(--border2)}
-.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-
-/* List */
-.list-row{display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border)}
-.list-row:last-child{border-bottom:none}
-.list-name{font-size:12px;font-weight:500;flex:1;color:var(--text)}
-.list-count{font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-bg);padding:2px 9px;border-radius:20px;flex-shrink:0}
-.bar-wrap{flex:1.5;height:4px;background:var(--surface3);border-radius:2px;margin:0 6px}
-.bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .5s}
-.medal{font-size:14px;flex-shrink:0;width:20px}
-
-/* Section */
-.section{margin-bottom:20px}
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px}
-.section-title{font-size:13px;font-weight:700}
-
-/* Search */
-.search-wrap{position:relative;margin-bottom:14px}
-.search-wrap input{width:100%;padding:9px 14px 9px 38px;background:var(--surface);border:1px solid var(--border);border-radius:9px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border .15s}
-.search-wrap input:focus{border-color:var(--accent)}
-.search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px}
-
-
-/* Table */
-.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
-.table-scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:12px;min-width:600px}
-thead th{padding:9px 12px;text-align:left;color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap}
-tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:pointer}
-tbody tr:last-child{border-bottom:none}
-tbody tr:hover{background:var(--surface2)}
-td{padding:9px 12px;vertical-align:middle}
-.status-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap}
-.s-open{background:var(--blue-bg);color:var(--blue)}
-.s-assigned{background:var(--yellow-bg);color:var(--yellow)}
-.s-reported{background:var(--purple-bg);color:var(--purple)}
-.s-done{background:var(--green-bg);color:var(--green)}
-.s-missed{background:var(--red-bg);color:var(--red)}
-.reassign-badge{display:inline-flex;padding:2px 6px;border-radius:20px;font-size:10px;font-weight:700;background:var(--purple-bg);color:var(--purple);margin-left:4px}
-.desc-cell{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
-
-/* Word tags */
-.word-grid{display:flex;flex-wrap:wrap;gap:7px}
-.word-tag{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border)}
-
-/* Week stats */
-.stats-list .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
-.stats-list .row:last-child{border-bottom:none}
-.stats-list .val{font-weight:700}
-
-/* Modal */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:16px}
-.modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:900px;width:100%;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
-.modal-close{position:absolute;top:14px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .15s}
-.modal-close:hover{background:var(--surface3)}
-.modal h2{font-size:16px;font-weight:700;margin-bottom:16px;padding-right:40px}
-.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
-@media(max-width:480px){.detail-grid{grid-template-columns:1fr}}
-.detail-item{background:var(--surface2);border-radius:8px;padding:10px 12px}
-.detail-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
-.detail-val{font-size:13px;font-weight:600}
-.desc-box,.notes-box{border-radius:8px;padding:12px;margin-bottom:10px}
-.desc-box{background:var(--surface2)}
-.notes-box{background:#fffbeb;border:1px solid #fde68a}
-[data-theme="dark"] .notes-box{background:rgba(251,191,36,.06);border-color:rgba(251,191,36,.2)}
-.box-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px;color:var(--muted)}
-.notes-box .box-label{color:#92400e}
-[data-theme="dark"] .notes-box .box-label{color:var(--yellow)}
-.box-text{font-size:13px;line-height:1.6;color:var(--text)}
-.notes-box .box-text{color:#78350f}
-[data-theme="dark"] .notes-box .box-text{color:var(--yellow)}
-
-/* Timeline */
-.timeline{display:flex;align-items:center;gap:0;margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:10px}
-.tl-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
-.tl-step:not(:last-child)::after{content:'';position:absolute;top:12px;left:calc(50% + 12px);width:calc(100% - 24px);height:2px;background:var(--border)}
-.tl-step.done-step::after{background:var(--accent)}
-.tl-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid var(--border);background:var(--surface);z-index:1;position:relative}
-.tl-dot.active{border-color:var(--accent);background:var(--accent);color:#fff}
-.tl-dot.done{border-color:var(--green);background:var(--green);color:#fff}
-.tl-label{font-size:9px;color:var(--muted);margin-top:5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.tl-time{font-size:9px;color:var(--muted2);margin-top:2px}
-
-/* Agent profile modal */
-.agent-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
-@media(max-width:480px){.agent-stats{grid-template-columns:repeat(2,1fr)}}
-.agent-stat{background:var(--surface2);border-radius:8px;padding:10px;text-align:center}
-.agent-stat-val{font-size:22px;font-weight:800;color:var(--accent)}
-.agent-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
-
-/* Print */
-@media print{
-  .sidebar,.mobile-header,.topbar-right,.modal-overlay{display:none!important}
-  .main{padding:0}
-  .hero-bg{display:none}
-  body{background:white;color:black}
-  .stat-card,.card,.table-wrap{box-shadow:none;border:1px solid #ddd}
-}
-
-
-/* Report modal */
-.report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
-.report-modal-overlay.open{display:flex}
-.report-modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;margin:auto;position:relative}
-.report-header{padding:20px 24px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
-.report-header h2{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
-.report-header h2 i{color:var(--accent);font-size:16px}
-.report-tabs{display:flex;gap:0;background:var(--surface2);border-radius:8px;padding:3px}
-.report-tab{padding:5px 16px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s}
-.report-tab.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.report-close{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:16px;flex-shrink:0}
-.report-body{padding:20px 24px}
-.report-period-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-.report-period-bar select,.report-period-bar input{padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text);font-family:inherit;outline:none}
-.report-period-bar select:focus,.report-period-bar input:focus{border-color:var(--accent)}
-.report-generate-btn{padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-.report-generate-btn:hover{opacity:.9}
-.report-title{font-size:18px;font-weight:800;margin-bottom:4px}
-.report-subtitle{font-size:12px;color:var(--muted);margin-bottom:18px}
-.report-stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:18px}
-.report-stat{background:var(--surface2);border-radius:10px;padding:12px;text-align:center}
-.report-stat-val{font-size:24px;font-weight:800;line-height:1}
-.report-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
-.report-section{margin-bottom:16px}
-.report-section h3{font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.report-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
-.report-row:last-child{border-bottom:none}
-.report-row .name{flex:1;font-weight:500}
-.report-row .count{font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px}
-.report-footer{padding:12px 24px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
-.report-footer .ts{font-size:11px;color:var(--muted)}
-.print-report-btn{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
-.print-report-btn:hover{opacity:.9}
-@media print{
-  body > *:not(.report-modal-overlay){display:none!important}
-  .report-modal-overlay{position:static!important;background:none!important;display:block!important;padding:0!important}
-  .report-modal{box-shadow:none!important;border:none!important;max-width:100%!important}
-  .report-close,.report-footer .print-report-btn,.report-tabs,.report-header .badge-btn,.report-period-bar{display:none!important}
-  .report-header{border-bottom:1px solid #ddd!important}
-}
-.loading{text-align:center;padding:28px;color:var(--muted);font-size:13px}
-.page{display:none}
-.page.active{display:block}
-.empty-state{text-align:center;padding:40px;color:var(--muted)}
-.empty-state i{font-size:32px;display:block;margin-bottom:8px;opacity:.4}
-
-/* Responsive */
-@media(max-width:768px){
-  /* Sidebar becomes drawer */
-  .sidebar{position:fixed;left:0;top:0;height:100vh;transform:translateX(-100%);z-index:50;width:240px;transition:transform .25s}
-  .sidebar.open{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,.15)}
-  .sidebar-overlay.open{display:block}
-  .mobile-header{display:flex}
-
-  /* Main content */
-  .main{padding:12px 12px 80px}
-  .layout{display:block}
-
-  /* Topbar */
-  .topbar{margin-bottom:12px;gap:8px}
-  .topbar h1{font-size:15px}
-  .topbar-right{gap:6px}
-  .badge-btn{padding:4px 9px;font-size:11px}
-  .badge-btn span{display:none}
-
-  /* Stats */
-  .stat-grid{grid-template-columns:repeat(2,1fr);gap:8px}
-  .stat-value{font-size:22px}
-
-  /* Two col becomes one */
-  .two-col{grid-template-columns:1fr;gap:10px}
-
-  /* Table - horizontal scroll */
-  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{min-width:500px}
-
-  /* Filter tabs wrap */
-  .filter-tabs{gap:4px}
-  .tab-btn{padding:4px 9px;font-size:11px}
-
-  /* Section header stacks */
-  .section-header{flex-direction:column;align-items:flex-start;gap:8px}
-
-  /* Modal full screen on mobile */
-  .modal-overlay{padding:0;align-items:flex-end}
-  .modal{border-radius:16px 16px 0 0;max-height:92vh;max-width:100%;border-bottom:none}
-  .report-modal{border-radius:16px 16px 0 0;max-width:100%}
-  .report-modal-overlay{padding:0;align-items:flex-end}
-
-  /* Detail grid single col */
-  .detail-grid{grid-template-columns:1fr}
-  .agent-stats{grid-template-columns:repeat(2,1fr)}
-
-  /* Timeline compact */
-  .timeline{padding:10px 8px}
-  .tl-label{font-size:8px}
-  .tl-time{font-size:8px}
-
-  /* Search */
-  .search-wrap input{font-size:14px}
-
-  /* Cards */
-  .card{padding:14px}
-
-  /* Agent grid single col on small screens */
-  #agents-content > div{grid-template-columns:1fr!important}
-}
-
-@media(max-width:480px){
-  .stat-grid{grid-template-columns:repeat(2,1fr)}
-  .topbar-right .badge-btn:not(:last-child){display:none}
-  .detail-grid{grid-template-columns:1fr}
-  table{min-width:420px}
-}
-</style>
-</head>
-<body>
-<div class="hero-bg"></div>
-
-<!-- Mobile header -->
-<div class="mobile-header">
-  <div class="mobile-logo">
-    <div class="logo-icon">🚛</div>
-    Kurtex
-  </div>
-  <div onclick="toggleSidebar()" class="hamburger"><i class="ph ph-list"></i></div>
-</div>
-<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
-
-<div class="layout">
-<aside class="sidebar" id="sidebar">
-  <div class="sidebar-logo">
-    <div class="logo-icon">🚛</div>
-    <div class="logo-text"><h2>Kurtex</h2><small>Alert Dashboard</small></div>
-  </div>
-  <nav>
-    <div class="nav-item active" onclick="showPage('overview')"><i class="ph ph-squares-four"></i> Overview</div>
-    <div class="nav-item" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
-    <div class="nav-item" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
-    <div class="nav-item" onclick="showPage('reassigned')"><i class="ph ph-arrows-clockwise"></i> Reassigned</div>
-    <div class="nav-item" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
-    <div class="nav-item" onclick="showPage('analytics')"><i class="ph ph-chart-bar"></i> Analytics</div>
-    <div class="nav-item" onclick="showPage('fleet')"><i class="ph ph-truck"></i> Fleet Stats</div>
-    <div class="nav-item" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
-    {% if is_manager %}<div class="nav-item" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
-  </nav>
-  <div class="sidebar-footer">
-    <div class="user-chip">
-      {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
-      {% else %}<div class="user-avatar-init">{{ user.first_name[0] }}</div>{% endif %}
-      <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">Manager</div></div>
-    </div>
-    <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light Mode</span></button>
-    <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Sign out</button>
-  </div>
-</aside>
-
-<main class="main">
-  <div class="topbar">
-    <h1 id="page-title">Overview</h1>
-    <div class="topbar-right">
-      <button class="badge-btn" onclick="openReport()"><i class="ph ph-file-text"></i> Report</button>
-      <button class="badge-btn" onclick="window.print()"><i class="ph ph-printer"></i> Print</button>
-      <a class="badge-btn" href="/api/export"><i class="ph ph-download-simple"></i> Export CSV</a>
-      <div class="badge-btn"><div class="dot"></div><span id="last-update">Loading...</span></div>
-    </div>
-  </div>
-
-  <!-- Overview -->
-  <div class="page active" id="page-overview">
-    <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
-    <div class="two-col">
-      <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Top Groups</div><div id="groups-overview"></div></div>
-    </div>
-    <div class="section">
-      <div class="section-header"><div class="section-title">Recent Cases</div></div>
-      <div class="table-wrap"><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></div>
-    </div>
-  </div>
-
-  <!-- Cases -->
-  <div class="page" id="page-cases">
-    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">All Cases</div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <div class="filter-tabs">
-            <button class="tab-btn active" onclick="setCaseFilter('today',this)">Today</button>
-            <button class="tab-btn" onclick="setCaseFilter('week',this)">This Week</button>
-            <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
-            <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <input type="date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer" onchange="setCaseDateFilter(this.value)">
-            <button class="tab-btn" id="cases-date-clear" onclick="clearDateFilter()" style="display:none;padding:5px 8px">✕</button>
-          </div>
-        </div>
-      </div>
-      <div class="table-wrap"><div class="table-scroll" id="cases-table"><div class="loading">Loading...</div></div></div>
-    </div>
-  </div>
-
-  <!-- Missed -->
-  <div class="page" id="page-missed">
-    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
-    <div class="section">
-      <div class="section-header"><div class="section-title">Missed Cases</div></div>
-      <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
-    </div>
-  </div>
-
-  <!-- Reassigned -->
-  <div class="page" id="page-reassigned">
-    <div class="section">
-      <div class="section-header"><div class="section-title">Reassigned Cases</div></div>
-      <div class="table-wrap"><div class="table-scroll" id="reassigned-table"><div class="loading">Loading...</div></div></div>
-    </div>
-  </div>
-
-  <!-- Leaderboard -->
-  <div class="page" id="page-leaderboard">
-    <div class="two-col">
-      <div class="card">
-        <div class="card-title"><i class="ph ph-trophy"></i>Agent Leaderboard</div>
-        <div class="toggle-tabs">
-          <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
-          <button class="toggle-btn" onclick="setLbPeriod('week',this)">Week</button>
-          <button class="toggle-btn" onclick="setLbPeriod('month',this)">Month</button>
-        </div>
-        <div id="leaderboard-full"></div>
-      </div>
-      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Cases by Group</div><div id="group-bars-lb"></div></div>
-    </div>
-  </div>
-
-  <!-- Analytics -->
-  <div class="page" id="page-analytics">
-    <div class="two-col">
-      <div class="card">
-        <div class="card-title"><i class="ph ph-chart-bar"></i>Period Summary</div>
-        <div class="toggle-tabs">
-          <button class="toggle-btn active" onclick="setAnalyticsPeriod('week',this)">Week</button>
-          <button class="toggle-btn" onclick="setAnalyticsPeriod('month',this)">Month</button>
-        </div>
-        <div class="stats-list" id="analytics-stats"></div>
-      </div>
-      <div class="card"><div class="card-title"><i class="ph ph-hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
-    </div>
-  </div>
-
-  <!-- My Profile -->
-  <div class="page" id="page-my_profile">
-    <div id="my-profile-content"><div class="loading">Loading...</div></div>
-  </div>
-
-  <!-- Fleet Stats -->
-  <div class="page" id="page-fleet">
-    <div id="fleet-content"><div class="loading">Loading fleet stats...</div></div>
-  </div>
-
-  <!-- Agent Profiles (manager only) -->
-  <div class="page" id="page-agents">
-    <div id="agents-content"><div class="loading">Loading...</div></div>
-  </div>
-</main>
-</div>
-
-<!-- Case Modal -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeModalOutside(event)">
-<div class="modal" id="modal-content">
-  <button class="modal-close" onclick="closeModal()"><i class="ph ph-x"></i></button>
-  <h2 id="modal-title">Case Detail</h2>
-  <div id="modal-body"><div class="loading">Loading...</div></div>
-</div>
-</div>
-
-
-<!-- Report Modal -->
-<div class="report-modal-overlay" id="report-modal-overlay" onclick="closeReportOutside(event)">
-<div class="report-modal" id="report-modal">
-  <div class="report-header">
-    <h2><i class="ph ph-file-text"></i>Report</h2>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="report-tabs">
-        <button class="report-tab active" onclick="setReportTab('today',this)">Today</button>
-        <button class="report-tab" onclick="setReportTab('custom',this)">Custom</button>
-      </div>
-      <button class="report-close" onclick="closeReport()"><i class="ph ph-x"></i></button>
-    </div>
-  </div>
-  <div class="report-body">
-    <div id="report-period-bar" style="display:none" class="report-period-bar">
-      <select id="report-period-select" onchange="toggleCustomDates()">
-        <option value="week">This Week</option>
-        <option value="month">This Month</option>
-        <option value="custom">Custom Range</option>
-      </select>
-      <div id="custom-date-inputs" style="display:none;align-items:center;gap:6px">
-        <input type="date" id="report-date-from">
-        <span style="color:var(--muted);font-size:12px">to</span>
-        <input type="date" id="report-date-to">
-      </div>
-      <button class="report-generate-btn" onclick="generateReport()">Generate</button>
-    </div>
-    <div id="report-content"><div class="loading">Loading report...</div></div>
-  </div>
-  <div class="report-footer">
-    <span class="ts" id="report-ts"></span>
-    <button class="print-report-btn" onclick="printReport()"><i class="ph ph-printer"></i> Print Report</button>
-  </div>
-</div>
-</div>
-<!-- Agent Modal -->
-<div class="modal-overlay" id="agent-modal-overlay" style="z-index:200" onclick="closeAgentModalOutside(event)">
-<div class="modal" id="agent-modal-content">
-  <button class="modal-close" onclick="closeAgentModal()"><i class="ph ph-x"></i></button>
-  <h2 id="agent-modal-title">Agent Profile</h2>
-  <div id="agent-modal-body"><div class="loading">Loading...</div></div>
-</div>
-</div>
-
-<script>
-let stats = {};
-let currentFilter = 'today';
-let currentPage = 'overview';
-let lbPeriod = 'day';
-let analyticsPeriod = 'week';
-let searchTimers = {};
-let currentDateFilter = '';
-const medals = ['🥇','🥈','🥉'];
-const pages = ['overview','cases','missed','reassigned','leaderboard','analytics','fleet','my_profile','agents'];
-const titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',analytics:'Analytics',fleet:'Fleet Stats',my_profile:'My Profile',agents:'Agent Profiles'};
-
-// Theme
-let isDark = localStorage.getItem('theme') === 'dark';
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-  document.getElementById('theme-icon').className = isDark ? 'ph ph-moon' : 'ph ph-sun';
-  document.getElementById('theme-label').textContent = isDark ? 'Dark Mode' : 'Light Mode';
-}
-function toggleTheme() { isDark = !isDark; localStorage.setItem('theme', isDark?'dark':'light'); applyTheme(); }
-applyTheme();
-
-// Sidebar mobile
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebar-overlay').classList.toggle('open');
-}
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebar-overlay').classList.remove('open');
-}
-
-function showPage(page) {
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(a=>a.classList.remove('active'));
-  document.getElementById('page-'+page).classList.add('active');
-  document.querySelectorAll('.nav-item')[pages.indexOf(page)].classList.add('active');
-  document.getElementById('page-title').textContent = titles[page];
-  currentPage = page;
-  closeSidebar();
-  refresh();
-}
-
-function setCaseFilter(f, btn) {
-  currentFilter = f;
-  document.querySelectorAll('#page-cases .tab-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  loadCases();
-}
-
-function setLbPeriod(p, btn) {
-  lbPeriod = p;
-  document.querySelectorAll('#page-leaderboard .toggle-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderLeaderboard();
-}
-
-function setAnalyticsPeriod(p, btn) {
-  analyticsPeriod = p;
-  document.querySelectorAll('#page-analytics .toggle-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  renderAnalytics();
-}
-
-function onSearch(type) {
-  clearTimeout(searchTimers[type]);
-  searchTimers[type] = setTimeout(() => {
-    if (type === 'cases') loadCases();
-    else if (type === 'missed') loadMissed();
-  }, 300);
-}
-
-function statusBadge(s) {
-  const map = {open:'s-open',assigned:'s-assigned',reported:'s-reported',done:'s-done',missed:'s-missed'};
-  return `<span class="status-badge ${map[s]||'s-open'}">${s}</span>`;
-}
-
-function caseTable(cases) {
-  if (!cases || !cases.length) return '<div class="empty-state"><i class="ph ph-inbox"></i>No cases found</div>';
-  return `<table><thead><tr>
-    <th>Reported By</th><th>Group</th><th>Assigned To</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th>
-  </tr></thead><tbody>${cases.map(c=>`<tr onclick="openCase('${c.full_id}')">
-    <td><b>${c.driver}</b></td>
-    <td style="color:var(--muted)">${c.group}</td>
-    <td style="color:var(--text)">${c.agent}</td>
-    <td>${statusBadge(c.status)}${c.reassigned?'<span class="reassign-badge">reassigned</span>':''}</td>
-    <td style="color:var(--muted);font-size:11px">${c.opened}</td>
-    <td style="font-size:11px">${c.response}</td>
-    <td class="desc-cell">${c.description}</td>
-  </tr>`).join('')}</tbody></table>`;
-}
-
-function listRows(items, maxCount) {
-  if (!items||!items.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
-  return items.map((item,i)=>`
-    <div class="list-row">
-      <span class="medal">${medals[i]||((i+1)+'.')}</span>
-      <span class="list-name "list-name">${item.name}</span>
-      <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(item.count/(maxCount||1)*100)}%"></div></div>
-      <span class="list-count">${item.count}</span>
-    </div>`).join('');
-}
-
-async function loadStats() {
-  try {
-    const r = await fetch('/api/stats');
-    if (r.status===401){window.location='/login';return;}
-    stats = await r.json();
-    const t = stats.today;
-    document.getElementById('stat-grid').innerHTML = `
-      <div class="stat-card"><div class="stat-label">Today Total</div><div class="stat-value v-accent">${t.total}</div></div>
-      <div class="stat-card"><div class="stat-label">Assigned To</div><div class="stat-value v-yellow">${t.assigned}</div></div>
-      <div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value v-green">${t.done}</div></div>
-      <div class="stat-card"><div class="stat-label">Missed</div><div class="stat-value v-red">${t.missed}</div></div>
-      <div class="stat-card"><div class="stat-label">Reassigned</div><div class="stat-value v-purple">${stats.reassigned_count}</div></div>
-      <div class="stat-card"><div class="stat-label">Avg Response</div><div class="stat-value v-sm">${stats.all_time.avg_resp}</div></div>
-    `;
-    // missed badge
-    if (t.missed > 0) {
-      const b = document.getElementById('missed-badge');
-      b.textContent = t.missed; b.style.display = '';
-    }
-    const lb = stats.leaderboard_day.slice(0,5);
-    document.getElementById('lb-overview').innerHTML = listRows(lb, lb[0]?.count||1);
-    const grps = stats.top_groups;
-    document.getElementById('groups-overview').innerHTML = listRows(grps, grps[0]?.count||1);
-    renderLeaderboard(); renderAnalytics();
-    document.getElementById('word-cloud').innerHTML = stats.top_words.length
-      ? `<div class="word-grid">${stats.top_words.map(w=>`<span class="word-tag">${w.word} <b>${w.count}</b></span>`).join('')}</div>`
-      : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>';
-    document.getElementById('group-bars-lb').innerHTML = listRows(grps, grps[0]?.count||1);
-  } catch(e){console.error(e);}
-}
-
-function renderLeaderboard() {
-  if (!stats.leaderboard_day) return;
-  const lb = stats['leaderboard_'+lbPeriod] || [];
-  document.getElementById('leaderboard-full').innerHTML = lb.length
-    ? lb.map((a,i)=>`<div class="list-row"><span class="medal">${medals[i]||((i+1)+'.')}</span><span class="list-name">${a.name}</span><span class="list-count">${a.count} cases</span></div>`).join('')
-    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>';
-}
-
-function renderAnalytics() {
-  if (!stats.week) return;
-  const d = analyticsPeriod==='week' ? stats.week : stats.month;
-  const rate = d.total ? Math.round(d.done/d.total*100) : 0;
-  document.getElementById('analytics-stats').innerHTML = `
-    <div class="row"><span>Total Cases</span><span class="val">${d.total}</span></div>
-    <div class="row"><span>Resolved</span><span class="val" style="color:var(--green)">${d.done}</span></div>
-    <div class="row"><span>Missed</span><span class="val" style="color:var(--red)">${d.missed}</span></div>
-    <div class="row"><span>Resolution Rate</span><span class="val">${rate}%</span></div>
-    <div class="row"><span>All Time Total</span><span class="val">${stats.all_time.total}</span></div>
-    <div class="row"><span>Avg Response</span><span class="val">${stats.all_time.avg_resp}</span></div>
-  `;
-}
-
-async function loadCases() {
-  const search = document.getElementById('cases-search')?.value||'';
-  document.getElementById('cases-table').innerHTML = '<div class="loading">Loading...</div>';
-  try {
-    const url = currentFilter === '__date__'
-      ? `/api/cases?date=${currentDateFilter}&search=${encodeURIComponent(search)}`
-      : `/api/cases?filter=${currentFilter}&search=${encodeURIComponent(search)}`;
-    const r = await fetch(url);
-    const cases = await r.json();
-    document.getElementById('cases-table').innerHTML = caseTable(cases);
-  } catch(e){console.error(e);}
-}
-
-async function loadMissed() {
-  const search = document.getElementById('missed-search')?.value||'';
-  try {
-    const r = await fetch(`/api/cases?filter=missed&search=${encodeURIComponent(search)}`);
-    const cases = await r.json();
-    document.getElementById('missed-table').innerHTML = caseTable(cases);
-  } catch(e){console.error(e);}
-}
-
-async function loadReassigned() {
-  try {
-    const r = await fetch('/api/cases?filter=reassigned');
-    const cases = await r.json();
-    document.getElementById('reassigned-table').innerHTML = caseTable(cases);
-  } catch(e){console.error(e);}
-}
-
-
-
-async function openCase(caseId) {
-  document.getElementById('modal-overlay').classList.add('open');
-  document.getElementById('modal-body').innerHTML = '<div class="loading">Loading...</div>';
-  document.getElementById('modal-title').textContent = 'Loading...';
-  try {
-    const r = await fetch('/api/case?id='+encodeURIComponent(caseId));
-    const c = await r.json();
-    document.getElementById('modal-title').textContent = `${c.driver} — ${c.group}`;
-    document.getElementById('modal-body').innerHTML = `
-      ${buildTimeline(c)}
-      <div class="detail-grid">
-        <div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">${statusBadge(c.status)}</div></div>
-        <div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">${c.agent}</div></div>
-        <div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">${c.driver}</div></div>
-        <div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">${c.group}</div></div>
-        <div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">${c.opened}</div></div>
-        <div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">${c.assigned_at||'—'}</div></div>
-        <div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">${c.response}</div></div>
-        <div class="detail-item"><div class="detail-label">Resolution Time</div><div class="detail-val">${c.resolution_secs||'—'}</div></div>
-      </div>
-      ${c.full_description?`<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">${c.full_description}</p></div>`:''}
-      ${c.full_notes?`<div class="notes-box"><span class="box-label">📋 Report / Notes</span><p class="box-text">${c.full_notes}</p></div>`:''}
-    `;
-  } catch(e){
-    console.error('Case modal error:', e);
-    document.getElementById('modal-body').innerHTML='<div class="loading">Error loading case. Check console.</div>';
-  }
-  }
-
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
-function closeModalOutside(e) { if(e.target.id==='modal-overlay') closeModal(); }
-
-function closeReport() { document.getElementById('report-modal-overlay').classList.remove('open'); }
-function closeReportOutside(e) { if(e.target.id==='report-modal-overlay') closeReport(); }
-
-function setReportTab(tab, btn) {
-  reportTab = tab;
-  document.querySelectorAll('.report-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('report-period-bar').style.display = tab === 'custom' ? 'flex' : 'none';
-  if (tab === 'today') generateReport();
-}
-
-function toggleCustomDates() {
-  const v = document.getElementById('report-period-select').value;
-  document.getElementById('custom-date-inputs').style.display = v === 'custom' ? 'flex' : 'none';
-}
-
-
-function buildTimeline(c) {
-  const steps = [
-    {label:'Open',     time: c.opened},
-    {label:'Assigned', time: c.assigned_at||''},
-    {label:'Reported', time: ''},
-    {label:'Resolved', time: c.closed||''},
-  ];
-  const order = ['open','assigned','reported','done','missed'];
-  const si = Math.max(0, order.indexOf(c.status));
-  let html = '<div class="timeline">';
-  steps.forEach((s,i) => {
-    const isDone   = i < si;
-    const isActive = i === si || (c.status === 'missed' && i === 0);
-    const afterDone = i < si;
-    const dotClass = isDone ? 'done' : isActive ? 'active' : '';
-    html += `<div class="tl-step${afterDone?' done-step':''}">
-      <div class="tl-dot ${dotClass}">${isDone?'✓':i+1}</div>
-      <div class="tl-label">${s.label}</div>
-      <div class="tl-time">${s.time&&s.time!=='—'?s.time:''}</div>
-    </div>`;
-  });
-  html += '</div>';
-  return html;
-}
-
-function openReport() {
-  document.getElementById('report-modal-overlay').classList.add('open');
-  reportTab = 'today';
-  document.querySelectorAll('.report-tab').forEach((b,i)=>b.classList.toggle('active',i===0));
-  document.getElementById('report-period-bar').style.display = 'none';
-  generateReport();
-}
-
-function closeReport() { 
-  document.getElementById('report-modal-overlay').classList.remove('open'); 
-}
-
-function closeReportOutside(e) { 
-  if(e.target.id==='report-modal-overlay') closeReport(); 
-}
-
-function setReportTab(tab, btn) {
-  reportTab = tab;
-  document.querySelectorAll('.report-tab').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('report-period-bar').style.display = tab === 'custom' ? 'flex' : 'none';
-  if (tab === 'today') generateReport();
-}
-
-function toggleCustomDates() {
-  const v = document.getElementById('report-period-select').value;
-  document.getElementById('custom-date-inputs').style.display = v === 'custom' ? 'flex' : 'none';
-}
-async function generateReport() {
-  document.getElementById('report-content').innerHTML = '<div class="loading">Generating report...</div>';
-  let url = '/api/report?period=today';
-  if (reportTab === 'custom') {
-    const period = document.getElementById('report-period-select').value;
-    if (period === 'custom') {
-      const from = document.getElementById('report-date-from').value;
-      const to = document.getElementById('report-date-to').value;
-      if (!from) { document.getElementById('report-content').innerHTML = '<div class="loading">Please select a start date.</div>'; return; }
-      url = `/api/report?period=custom&from=${from}&to=${to||from}`;
-    } else {
-      url = `/api/report?period=${period}`;
-    }
-  }
-  try {
-    const r = await fetch(url);
-    const d = await r.json();
-    const medals = ['🥇','🥈','🥉'];
-    const now = new Date().toLocaleString();
-    document.getElementById('report-ts').textContent = 'Generated ' + now;
-    document.getElementById('report-content').innerHTML = `
-      <div class="report-title">${d.label}</div>
-      <div class="report-subtitle">Kurtex Alert Bot — Truck Maintenance Command Center</div>
-      <div class="report-stat-grid">
-        <div class="report-stat"><div class="report-stat-val v-accent">${d.total}</div><div class="report-stat-label">Total</div></div>
-        <div class="report-stat"><div class="report-stat-val v-green">${d.done}</div><div class="report-stat-label">Resolved</div></div>
-        <div class="report-stat"><div class="report-stat-val v-red">${d.missed}</div><div class="report-stat-label">Missed</div></div>
-        <div class="report-stat"><div class="report-stat-val v-yellow">${d.assigned}</div><div class="report-stat-label">Assigned</div></div>
-        <div class="report-stat"><div class="report-stat-val" style="font-size:16px;margin-top:4px">${d.avg_resp}</div><div class="report-stat-label">Avg Response</div></div>
-        <div class="report-stat"><div class="report-stat-val v-accent">${d.rate}%</div><div class="report-stat-label">Rate</div></div>
-      </div>
-      ${d.leaderboard.length ? `<div class="report-section"><h3>Agent Activity</h3>${d.leaderboard.map((a,i)=>`<div class="report-row"><span class="medal">${medals[i]||(i+1)+'.'}</span><span class="name">${a.name}</span><span class="count">${a.count} cases</span></div>`).join('')}</div>` : ''}
-      ${d.top_groups.length ? `<div class="report-section"><h3>Top Groups</h3>${d.top_groups.map((g,i)=>`<div class="report-row"><span class="medal">${medals[i]||(i+1)+'.'}</span><span class="name">${g.name}</span><span class="count">${g.count}</span></div>`).join('')}</div>` : ''}
-      ${d.missed_cases.length ? `<div class="report-section"><h3>Missed Cases (${d.missed})</h3>${d.missed_cases.map(c=>`<div class="report-row"><span class="name">${c.driver}</span><span style="color:var(--muted);font-size:11px;margin-right:8px">${c.group}</span><span style="color:var(--muted);font-size:11px">${c.opened}</span></div>`).join('')}</div>` : ''}
-    `;
-  } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; }
-}
-
-
-
-// ── Fleet Stats ───────────────────────────────────────────────────────────────
-async function loadFleet() {
-  document.getElementById('fleet-content').innerHTML = '<div class="loading">Loading fleet stats...</div>';
-  try {
-    const r = await fetch('/api/fleet');
-    if (r.status === 401) { window.location='/login'; return; }
-    const d = await r.json();
-    
-    function unitCard(title, items, colorVar) {
-      if (!items || !items.length) return `<div class="card"><div class="card-title">${title}</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>`;
-      const max = items[0].count || 1;
-      return `<div class="card">
-        <div class="card-title">${title}</div>
-        ${items.map((item,i)=>`
-          <div class="list-row">
-            <span class="medal">${['🥇','🥈','🥉'][i]||(i+1)+'.'}</span>
-            <span class="list-name">${item.unit} <span style="font-size:10px;color:var(--muted);font-weight:400">${item.vtype}</span></span>
-            <div class="bar-wrap"><div class="bar-fill" style="width:${Math.round(item.count/max*100)}%;background:${colorVar}"></div></div>
-            <span class="list-count">${item.count}</span>
-          </div>`).join('')}
-      </div>`;
-    }
-
-    document.getElementById('fleet-content').innerHTML = `
-      <div class="stat-grid" style="margin-bottom:20px">
-        <div class="stat-card"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">${d.total_reports}</div></div>
-        <div class="stat-card"><div class="stat-label">Trucks</div><div class="stat-value v-blue">${d.truck_count}</div></div>
-        <div class="stat-card"><div class="stat-label">Trailers</div><div class="stat-value v-yellow">${d.trailer_count}</div></div>
-        <div class="stat-card"><div class="stat-label">Reefers</div><div class="stat-value v-purple">${d.reefer_count}</div></div>
-      </div>
-      <div class="two-col" style="margin-bottom:16px">
-        ${unitCard('<i class="ph ph-truck"></i> Most Reported Units', d.top_units, 'var(--accent)')}
-        ${unitCard('<i class="ph ph-user"></i> Most Reported Drivers', d.top_drivers, 'var(--red)')}
-      </div>
-      <div class="two-col">
-        ${unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues, 'var(--yellow)')}
-        ${unitCard('<i class="ph ph-package"></i> Load Types', d.load_types, 'var(--green)')}
-      </div>
-    `;
-  } catch(e) { 
-    console.error(e);
-    document.getElementById('fleet-content').innerHTML = '<div class="loading">Error loading fleet stats.</div>'; 
-  }
-}
-
-// ── My Profile ────────────────────────────────────────────────────────────────
-async function loadMyProfile() {
-  document.getElementById('my-profile-content').innerHTML = '<div class="loading">Loading...</div>';
-  try {
-    const r = await fetch('/api/my_profile');
-    const p = await r.json();
-    document.getElementById('my-profile-content').innerHTML = `
-      <div class="two-col" style="margin-bottom:16px">
-        <div class="card">
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-            <div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">${p.name[0]}</div>
-            <div>
-              <div style="font-size:17px;font-weight:700">${p.name}</div>
-              <div style="font-size:12px;color:var(--muted)">${p.username ? '@'+p.username : ''} · <span style="color:var(--accent)">${p.role}</span></div>
-            </div>
-          </div>
-          <div class="report-stat-grid">
-            <div class="report-stat"><div class="report-stat-val v-accent">${p.total}</div><div class="report-stat-label">All Time</div></div>
-            <div class="report-stat"><div class="report-stat-val v-green">${p.done}</div><div class="report-stat-label">Resolved</div></div>
-            <div class="report-stat"><div class="report-stat-val v-red">${p.missed}</div><div class="report-stat-label">Missed</div></div>
-            <div class="report-stat"><div class="report-stat-val v-accent">${p.rate}%</div><div class="report-stat-label">Rate</div></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title"><i class="ph ph-calendar"></i>Period Breakdown</div>
-          <div class="stats-list">
-            <div class="row"><span>Today assigned</span><span class="val">${p.today_total}</span></div>
-            <div class="row"><span>Today resolved</span><span class="val" style="color:var(--green)">${p.today_done}</span></div>
-            <div class="row"><span>This week assigned</span><span class="val">${p.week_total}</span></div>
-            <div class="row"><span>This week resolved</span><span class="val" style="color:var(--green)">${p.week_done}</span></div>
-            <div class="row"><span>Avg response</span><span class="val">${p.avg_resp}</span></div>
-          </div>
-        </div>
-      </div>
-      <div class="section-title" style="margin-bottom:10px">Recent Cases</div>
-      <div class="table-wrap"><div class="table-scroll">${caseTable(p.recent)}</div></div>
-    `;
-      } catch(e) { document.getElementById('my-profile-content').innerHTML = '<div class="loading">Error loading profile.</div>'; }
-}
-
-// ── Agents (manager only) ─────────────────────────────────────────────────────
-async function loadAgents() {
-  document.getElementById('agents-content').innerHTML = '<div class="loading">Loading...</div>';
-  try {
-    const r = await fetch('/api/agents');
-    if (r.status === 403) { document.getElementById('agents-content').innerHTML = '<div class="loading">Access denied.</div>'; return; }
-    const agents = await r.json();
-    if (!agents.length) { document.getElementById('agents-content').innerHTML = '<div class="empty-state"><i class="ph ph-users"></i>No agents yet</div>'; return; }
-    document.getElementById('agents-content').innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">
-        ${agents.map(a=>`
-          <div class="card" style="cursor:pointer" onclick="openAgentModal('${a.name}')">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-              <div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">${a.name[0]}</div>
-              <div style="min-width:0">
-                <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.name}</div>
-                <div style="font-size:11px;color:var(--muted)">${a.username?'@'+a.username:'No username'}</div>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;text-align:center">
-              <div style="background:var(--surface2);border-radius:7px;padding:6px">
-                <div style="font-size:16px;font-weight:800;color:var(--accent)">${a.total}</div>
-                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div>
-              </div>
-              <div style="background:var(--surface2);border-radius:7px;padding:6px">
-                <div style="font-size:16px;font-weight:800;color:var(--green)">${a.done}</div>
-                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div>
-              </div>
-              <div style="background:var(--surface2);border-radius:7px;padding:6px">
-                <div style="font-size:16px;font-weight:800;color:var(--accent)">${a.rate}%</div>
-                <div style="font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div>
-              </div>
-            </div>
-            <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">Avg: ${a.avg_resp}</div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-      } catch(e) { document.getElementById('agents-content').innerHTML = '<div class="loading">Error.</div>'; }
-}
-
-async function openAgentModal(name) {
-  const overlay = document.getElementById('agent-modal-overlay');
-  const body    = document.getElementById('agent-modal-body');
-  const title   = document.getElementById('agent-modal-title');
-  overlay.classList.add('open');
-  body.innerHTML = '<div class="loading">Loading profile...</div>';
-  title.textContent = name;
-  try {
-    const r = await fetch('/api/agent?name='+encodeURIComponent(name));
-    if (!r.ok) { body.innerHTML = '<div class="loading">Agent not found.</div>'; return; }
-    const a = await r.json();
-    const rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
-
-    // Build rows separately to avoid nested template literal issues
-    let rows = '';
-    if (a.recent && a.recent.length) {
-      a.recent.forEach(function(c) {
-        const cid = c.full_id || '';
-                rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeAgentModal();setTimeout(function(){openCase(' + JSON.stringify(cid) + ')},200)">'
-          + '<td style="padding:8px 10px;font-weight:500">' + (c.driver||'—') + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
-          + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
-          + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
-          + '</tr>';
-      });
-    }
-
-    const tableHtml = rows
-      ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
-        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
-        + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
-        + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No cases yet.</div>';
-
-    body.innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + a.total + '</div><div class="agent-stat-label">Total</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">' + a.done + '</div><div class="agent-stat-label">Done</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">' + a.missed + '</div><div class="agent-stat-label">Missed</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' + rate + '%</div><div class="agent-stat-label">Rate</div></div>'
-      + '</div>'
-      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>' + a.avg_resp + '</b></div>'
-      + tableHtml;
-
-  } catch(e) {
-    console.error('Agent modal error:', e);
-    body.innerHTML = '<div class="loading">Error loading profile.</div>';
-  }
-}
-
-function printReport() {
-  const orig = document.title;
-  document.title = 'Kurtex Report — ' + new Date().toLocaleDateString();
-  window.print();
-  document.title = orig;
-}
-
-</script>
-</body>
-</html>"""
-
 
 
 @app.route("/login")
