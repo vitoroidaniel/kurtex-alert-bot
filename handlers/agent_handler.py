@@ -20,7 +20,8 @@ from storage.case_store import (
     async_close_case                 as close_case,
     async_get_case                   as get_case,
 )
-from shifts import ADMINS
+
+from storage.user_store import has_role
 
 
 def _esc(t: str) -> str:
@@ -42,7 +43,7 @@ def _busy_agents(ctx) -> set:
 
 
 def _is_admin(user_id):
-    return user_id in ADMINS
+    return has_role(user_id, "agent", "super_admin", "developer")
 
 
 def _fmt_dt(iso):
