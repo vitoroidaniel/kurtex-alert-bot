@@ -342,16 +342,47 @@ def api_fleet():
         trailer_count = sum(1 for c in cases if c.get("vehicle_type") == "trailer")
         reefer_count  = sum(1 for c in cases if c.get("vehicle_type") == "reefer")
         unit_counts   = Counter((c.get("unit_number","").strip(), c.get("vehicle_type","")) for c in cases if c.get("unit_number","").strip())
+        truck_breakdowns = Counter(c.get("unit_number","").strip() for c in cases if c.get("vehicle_type") == "truck" and c.get("unit_number","").strip())
         driver_counts = Counter(c.get("report_driver","").strip() for c in cases if c.get("report_driver","").strip())
         issue_counts  = Counter((c.get("issue_text","").strip() or "")[:40] for c in cases if c.get("issue_text","").strip())
         load_counts   = Counter(c.get("load_type","").strip() for c in cases if c.get("load_type","").strip())
+        latest_by_unit = {}
+        for c in sorted(cases, key=lambda x: x.get("opened_at","")):
+            unit = c.get("unit_number","").strip()
+            vtype = c.get("vehicle_type","").strip()
+            if unit:
+                latest_by_unit[(unit, vtype)] = c
+        fleet_status = []
+        active_statuses = {"open", "assigned", "reported", "missed"}
+        for (unit, vtype), c in latest_by_unit.items():
+            status = c.get("status") or "open"
+            fleet_status.append({
+                "unit": unit,
+                "vtype": vtype,
+                "case_id": c.get("id",""),
+                "status": "active" if status in active_statuses else "repaired",
+                "case_status": status,
+                "issue": c.get("issue_text") or c.get("description") or "",
+                "driver": c.get("report_driver") or c.get("driver_name") or "",
+                "opened": fmt_dt(c.get("opened_at")),
+            })
+        active_units = sum(1 for x in fleet_status if x["status"] == "active")
+        repaired_units = sum(1 for x in fleet_status if x["status"] == "repaired")
+        fleet_status = sorted(
+            fleet_status,
+            key=lambda x: (x["status"] != "active", x["vtype"], x["unit"])
+        )[:30]
         return jsonify({
             "total_reports": total, "truck_count": truck_count,
             "trailer_count": trailer_count, "reefer_count": reefer_count,
+            "active_units": active_units,
+            "repaired_units": repaired_units,
             "top_units":    [{"unit":u,"vtype":vt,"count":cnt} for (u,vt),cnt in unit_counts.most_common(10)],
+            "top_broken_trucks": [{"unit":u,"vtype":"truck","count":cnt} for u,cnt in truck_breakdowns.most_common(10)],
             "top_drivers":  [{"unit":n,"vtype":"","count":cnt} for n,cnt in driver_counts.most_common(10)],
             "top_issues":   [{"unit":iss,"vtype":"","count":cnt} for iss,cnt in issue_counts.most_common(8)],
             "load_types":   [{"unit":lt,"vtype":"","count":cnt} for lt,cnt in load_counts.most_common(6)],
+            "fleet_status": fleet_status,
         })
     except Exception as e:
         logger.error(f"api_fleet error: {e}")
@@ -1429,20 +1460,44 @@ async function loadFleet() {
         }).join('')
         + '</div>';
     }
+    function fleetStatusTable(items) {
+      if (!items||!items.length) return '<div class="card"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status</div><div style="color:var(--muted);font-size:13px">No fleet status yet</div></div>';
+      var rows = items.map(function(item) {
+        var badge = item.status === 'active'
+          ? '<span class="status-badge s-reported">active</span>'
+          : '<span class="status-badge s-done">repaired</span>';
+        return '<tr>'
+          + '<td><b>'+item.unit+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+item.vtype+'</div></td>'
+          + '<td>'+badge+'</td>'
+          + '<td>'+item.issue+'</td>'
+          + '<td>'+item.driver+'</td>'
+          + '<td>'+item.opened+'</td>'
+          + '</tr>';
+      }).join('');
+      return '<div class="card" style="margin-bottom:16px"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status</div>'
+        + '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>'
+        + rows
+        + '</tbody></table></div></div></div>';
+    }
     el.innerHTML =
       '<div class="stat-grid" style="margin-bottom:20px">'
       + '<div class="stat-card"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
       + '<div class="stat-card"><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
+      + '<div class="stat-card"><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
+      + '<div class="stat-card"><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
+      + '</div>'
+      + '<div class="stat-grid" style="margin-bottom:20px">'
       + '<div class="stat-card"><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
       + '<div class="stat-card"><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
       + '</div>'
+      + fleetStatusTable(d.fleet_status)
       + '<div class="two-col" style="margin-bottom:16px">'
-      + unitCard('<i class="ph ph-truck"></i> Most Reported Units', d.top_units)
+      + unitCard('<i class="ph ph-truck"></i> Trucks Breaking Down Most', d.top_broken_trucks)
       + unitCard('<i class="ph ph-user"></i> Most Reported Drivers', d.top_drivers)
       + '</div>'
       + '<div class="two-col">'
+      + unitCard('<i class="ph ph-wrench"></i> Most Reported Units', d.top_units)
       + unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues)
-      + unitCard('<i class="ph ph-package"></i> Load Types', d.load_types)
       + '</div>';
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
