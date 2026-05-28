@@ -92,7 +92,7 @@ async def job_escalation_check(ctx) -> None:
             "⚠️ *Please respond!*"
         )
 
-        recipients = [{" id": aid} for aid in SUPER_ADMINS] if count >= ESCALATION_MAX_ROUNDS - 1 else get_all_admins()
+        recipients = [{"id": aid} for aid in SUPER_ADMINS] if count >= ESCALATION_MAX_ROUNDS - 1 else get_all_admins()
         for admin in recipients:
             try:
                 sent = await ctx.bot.send_message(
