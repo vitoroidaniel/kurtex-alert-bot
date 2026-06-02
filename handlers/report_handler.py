@@ -471,7 +471,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Report sent to {dest_id}")
 
         case_id = ctx.user_data.pop("report_case_id", None)
-        report_data = dict(ctx.user_data.get("report", {}))  # save BEFORE any pops
+        report_data = dict(data)  # save BEFORE any pops
         ctx.user_data.pop("report_handler", None)
         if "busy_agents" in ctx.bot_data:
             ctx.bot_data["busy_agents"].discard(update.effective_user.id)
