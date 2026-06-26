@@ -40,6 +40,19 @@ from storage.user_store import (
     has_role,
 )
 
+from telegram.ext import ApplicationBuilder
+
+app = (
+    ApplicationBuilder()
+    .token(config.TELEGRAM_TOKEN)
+    .post_init(post_init)
+    .read_timeout(30)
+    .write_timeout(30)
+    .connect_timeout(15)
+    .pool_timeout(30)
+    .build()
+)
+
 BOT_NAME    = "Kurtex Alert Bot"
 BOT_TAGLINE = "Truck Maintenance Command Center"
 
