@@ -59,21 +59,27 @@ class AlertHandler:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _make_kb(self, short_id: str) -> InlineKeyboardMarkup:
+    def _make_kb(self, alert_id: str) -> InlineKeyboardMarkup:
+    # Telegram callback_data limit is 64 bytes — a UUID is 36 chars, fine
         return InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Assign", callback_data=f"assign|{short_id}"),
-            InlineKeyboardButton("🚫 Ignore", callback_data=f"ignore|{short_id}"),
-        ]])
+        InlineKeyboardButton("✅ Assign", callback_data=f"assign|{alert_id}"),
+        InlineKeyboardButton("🚫 Ignore", callback_data=f"ignore|{alert_id}"),
+    ]])
 
     def _register_alert(self, alert_id: str) -> str:
+    # Keep short_map for backwards compat with old buttons, but new ones use full id
         short_id = alert_id.replace("-", "")[:12]
         self._short_map[short_id] = alert_id
-        return short_id
+        return alert_id  # ← return full id now
 
-    def _resolve(self, short_id: str):
-        alert_id = self._short_map.get(short_id, short_id)
+    def _resolve(self, token: str):
+    # Try as full alert_id first
+        if token in self._alerts:
+            return token, self._alerts[token]
+    # Fall back to short_map for older buttons
+        alert_id = self._short_map.get(token, token)
         return alert_id, self._alerts.get(alert_id)
-
+    
     def _get_lock(self, alert_id: str) -> asyncio.Lock:
         if alert_id not in self._locks:
             self._locks[alert_id] = asyncio.Lock()
