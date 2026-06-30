@@ -664,7 +664,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
   --shadow:0 1px 4px rgba(0,0,0,.4),0 4px 20px rgba(0,0,0,.3);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
 .layout{display:flex;min-height:100vh}
 
 /* ── Sidebar ── */
