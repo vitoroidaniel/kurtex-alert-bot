@@ -642,35 +642,43 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#F0F2F5;--surface:#FFFFFF;--surface2:#F5F7FA;--surface3:#E8ECF2;
-  --border:#DDE1EA;--text:#1A1F2E;--muted:#6B7280;--muted2:#9CA3AF;
-  --accent:#3B6FE8;--accent-bg:rgba(59,111,232,.09);
+  --bg:#E8ECEF;--surface:rgba(255,255,255,.91);--surface2:rgba(247,248,250,.86);--surface3:#E5E8EC;
+  --border:rgba(30,41,59,.12);--text:#1D2430;--muted:#687384;--muted2:#9AA3AF;
+  --accent:#4E6F8F;--accent-bg:rgba(78,111,143,.1);
   --green:#16A34A;--green-bg:rgba(22,163,74,.08);
   --red:#DC2626;--red-bg:rgba(220,38,38,.08);
   --yellow:#D97706;--yellow-bg:rgba(217,119,6,.09);
-  --blue:#2563EB;--blue-bg:rgba(37,99,235,.08);
-  --purple:#7C3AED;--purple-bg:rgba(124,58,237,.08);
-  --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.05);
+  --blue:#4B6F94;--blue-bg:rgba(75,111,148,.08);
+  --purple:#746B8F;--purple-bg:rgba(116,107,143,.08);
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 28px rgba(15,23,42,.08);
 }
 [data-theme="dark"]{
-  --bg:#0F1117;--surface:#181B24;--surface2:#1E2130;--surface3:#252839;
-  --border:rgba(255,255,255,.07);--text:#E8EAF0;--muted:#8B92A5;--muted2:#555E73;
-  --accent:#6B9BFF;--accent-bg:rgba(107,155,255,.12);
+  --bg:#11161B;--surface:rgba(20,24,30,.9);--surface2:rgba(30,35,42,.86);--surface3:#272D36;
+  --border:rgba(255,255,255,.08);--text:#E8EAF0;--muted:#9AA3B1;--muted2:#626B79;
+  --accent:#8AA4B8;--accent-bg:rgba(138,164,184,.14);
   --green:#4ADE80;--green-bg:rgba(74,222,128,.08);
   --red:#F87171;--red-bg:rgba(248,113,113,.08);
   --yellow:#FBBF24;--yellow-bg:rgba(251,191,36,.1);
-  --blue:#60A5FA;--blue-bg:rgba(96,165,250,.08);
-  --purple:#A78BFA;--purple-bg:rgba(167,139,250,.08);
-  --shadow:0 1px 4px rgba(0,0,0,.4),0 4px 20px rgba(0,0,0,.3);
+  --blue:#86A6C8;--blue-bg:rgba(134,166,200,.1);
+  --purple:#B0A6C8;--purple-bg:rgba(176,166,200,.1);
+  --shadow:0 1px 4px rgba(0,0,0,.28),0 10px 36px rgba(0,0,0,.28);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+html{background:var(--bg)}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:transparent;color:var(--text);min-height:100vh;transition:background .2s,color .2s;isolation:isolate}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:
+  linear-gradient(90deg,rgba(232,236,239,.94),rgba(232,236,239,.82)),
+  url("https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
+[data-theme="dark"] body::before{background:
+  linear-gradient(90deg,rgba(17,22,27,.96),rgba(17,22,27,.86)),
+  url("https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
+body.modal-open{overflow:hidden}
 .layout{display:flex;min-height:100vh}
 
 /* ── Sidebar ── */
-.sidebar{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:18px 10px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
+.sidebar{width:230px;flex-shrink:0;background:var(--surface);backdrop-filter:blur(18px);border-right:1px solid var(--border);padding:18px 10px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
 .sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px;padding:4px 8px 14px;border-bottom:1px solid var(--border)}
-.logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--blue));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;box-shadow:0 2px 8px rgba(59,111,232,.3)}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;box-shadow:0 2px 8px rgba(15,23,42,.16)}
 .logo-text h2{font-size:13px;font-weight:800;letter-spacing:-.2px}
 .logo-text small{font-size:10px;color:var(--muted);font-weight:500}
 nav{flex:1;display:flex;flex-direction:column;gap:1px}
@@ -705,7 +713,7 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 .logout-btn:hover{background:var(--red);color:#fff}
 
 /* ── Mobile ── */
-.mobile-header{display:none;position:sticky;top:0;z-index:60;background:var(--surface);border-bottom:1px solid var(--border);padding:11px 16px;align-items:center;justify-content:space-between}
+.mobile-header{display:none;position:sticky;top:0;z-index:60;background:var(--surface);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);padding:11px 16px;align-items:center;justify-content:space-between}
 .mobile-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800}
 .hamburger{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
@@ -720,7 +728,7 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 .badge-btn{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;transition:all .13s;font-family:inherit;border:none;letter-spacing:.02em}
 .badge-btn.btn-outline{background:var(--surface);border:1px solid var(--border);color:var(--text)}
 .badge-btn.btn-outline:hover{background:var(--surface2);border-color:var(--muted2)}
-.badge-btn.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(59,111,232,.25)}
+.badge-btn.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(15,23,42,.12)}
 .badge-btn.btn-primary:hover{filter:brightness(1.1)}
 .badge-btn.btn-ghost{background:transparent;border:1px solid transparent;color:var(--muted)}
 .badge-btn.btn-ghost:hover{background:var(--surface2);color:var(--text)}
@@ -753,13 +761,13 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 /* ── Period toggle ── */
 .toggle-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:14px}
 .toggle-btn{flex:1;padding:5px 10px;border-radius:6px;border:none;background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .12s}
-.toggle-btn.active{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(59,111,232,.3)}
+.toggle-btn.active{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(15,23,42,.14)}
 
 /* ── Filter tabs ── */
 .filter-tabs{display:flex;gap:5px;flex-wrap:wrap}
 .tab-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-family:inherit;transition:all .12s}
 .tab-btn:hover{border-color:var(--accent);color:var(--accent)}
-.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(59,111,232,.25)}
+.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(15,23,42,.12)}
 
 /* ── List rows ── */
 .list-row{display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border)}
@@ -801,9 +809,9 @@ td{padding:9px 12px;vertical-align:middle}
 .stats-list .row:last-child{border-bottom:none}
 .stats-list .val{font-weight:700}
 
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;padding:16px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:300;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:860px;width:100%;max-height:88vh;overflow-y:auto;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
+.modal{background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:860px;width:100%;max-height:88vh;overflow-y:auto;overscroll-behavior:contain;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
 .modal-close{position:absolute;top:14px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .modal h2{font-size:16px;font-weight:700;margin-bottom:16px;padding-right:40px}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
@@ -830,9 +838,9 @@ td{padding:9px 12px;vertical-align:middle}
 .agent-stat-val{font-size:22px;font-weight:800}
 .agent-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
 
-.report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
+.report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:400;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;overscroll-behavior:contain}
 .report-modal-overlay.open{display:flex}
-.report-modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;margin:auto}
+.report-modal{background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;margin:auto;overscroll-behavior:contain}
 .report-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
 .report-header h2{font-size:17px;font-weight:700}
 .report-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px}
@@ -1242,6 +1250,8 @@ var reportTab = 'today';
 var currentDateFilter = '';
 var searchTimers = {};
 var isDark = localStorage.getItem('kurtex-theme') === 'dark';
+var bodyLockCount = 0;
+var bodyScrollY = 0;
 var pages = ['overview','cases','missed','reassigned','testing','leaderboard','trends','heatmap','comparison','fleet','fleet_intel','my_profile','agents'];
 var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',testing:'Testing',leaderboard:'Leaderboard',trends:'Trends',heatmap:'Activity Heatmap',comparison:'Week Comparison',fleet:'Fleet Stats',fleet_intel:'Fleet Intelligence',my_profile:'My Profile',agents:'Agent Profiles'};
 var medals = ['🥇','🥈','🥉'];
@@ -1278,6 +1288,37 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 
+function lockBodyScroll() {
+  bodyLockCount += 1;
+  if (bodyLockCount === 1) {
+    bodyScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.classList.add('modal-open');
+    document.body.style.position = 'fixed';
+    document.body.style.top = '-' + bodyScrollY + 'px';
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+  }
+}
+
+function unlockBodyScroll() {
+  bodyLockCount = Math.max(0, bodyLockCount - 1);
+  if (bodyLockCount === 0) {
+    document.body.classList.remove('modal-open');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    window.scrollTo(0, bodyScrollY);
+  }
+}
+
+function anyModalOpen() {
+  return !!document.querySelector('.modal-overlay.open,.report-modal-overlay.open');
+}
+
 // ── Navigation ─────────────────────────────────────────────────────────────
 function showPage(page) {
   // Always close sidebar first on mobile
@@ -1295,7 +1336,8 @@ function showPage(page) {
   var titleEl = document.getElementById('page-title');
   if (titleEl) titleEl.textContent = titles[page] || page;
   currentPage = page;
-  setTimeout(refresh, 50);
+  localStorage.setItem('kurtex-page', page);
+  setTimeout(function(){ refresh(true); }, 50);
 }
 
 function setCaseFilter(f, btn) {
@@ -1679,6 +1721,7 @@ async function loadAgents() {
 async function openCase(el) {
   var caseId = (typeof el === 'string') ? el : el.dataset.id;
   document.getElementById('modal-overlay').classList.add('open');
+  lockBodyScroll();
   document.getElementById('modal-body').innerHTML = '<div class="loading">Loading...</div>';
   document.getElementById('modal-title').textContent = 'Loading...';
   try {
@@ -1718,11 +1761,18 @@ async function openCase(el) {
     document.getElementById('modal-body').innerHTML = '<div class="loading">Error loading case.</div>';
   }
 }
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModal() {
+  var overlay = document.getElementById('modal-overlay');
+  if (overlay.classList.contains('open')) {
+    overlay.classList.remove('open');
+    unlockBodyScroll();
+  }
+}
 
 async function viewFullReport(caseIdOrEl) {
   var caseId = (typeof caseIdOrEl === "string") ? caseIdOrEl : caseIdOrEl.dataset.id;
   document.getElementById('report-view-overlay').classList.add('open');
+  lockBodyScroll();
   document.getElementById('report-view-body').innerHTML = '<div class="loading">Loading report...</div>';
   try {
     var r = await fetch('/api/case?id='+encodeURIComponent(caseId));
@@ -1814,7 +1864,13 @@ async function viewFullReport(caseIdOrEl) {
   }
 }
 
-function closeReportView() { document.getElementById('report-view-overlay').classList.remove('open'); }
+function closeReportView() {
+  var overlay = document.getElementById('report-view-overlay');
+  if (overlay.classList.contains('open')) {
+    overlay.classList.remove('open');
+    unlockBodyScroll();
+  }
+}
 
 function printReportView() {
   var orig = document.title;
@@ -1826,6 +1882,7 @@ function printReportView() {
 async function openAgentModal(nameOrEl) {
   var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
   document.getElementById('agent-modal-overlay').classList.add('open');
+  lockBodyScroll();
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
   document.getElementById('agent-modal-title').textContent = name;
   try {
@@ -1867,7 +1924,13 @@ async function openAgentModal(nameOrEl) {
     document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Error loading profile.</div>';
   }
 }
-function closeAgentModal() { document.getElementById('agent-modal-overlay').classList.remove('open'); }
+function closeAgentModal() {
+  var overlay = document.getElementById('agent-modal-overlay');
+  if (overlay.classList.contains('open')) {
+    overlay.classList.remove('open');
+    unlockBodyScroll();
+  }
+}
 
 // ── Unit Modal ─────────────────────────────────────────────────────────────
 async function openUnitModal(unitNumber) {
@@ -1875,6 +1938,7 @@ async function openUnitModal(unitNumber) {
   var body = document.getElementById('unit-modal-body');
   var title = document.getElementById('unit-modal-title');
   overlay.classList.add('open');
+  lockBodyScroll();
   body.innerHTML = '<div class="loading">Loading unit history...</div>';
   title.textContent = 'Unit ' + unitNumber;
   try {
@@ -1924,17 +1988,30 @@ async function openUnitModal(unitNumber) {
     body.innerHTML = '<div class="loading">Error: ' + h(e.message) + '</div>';
   }
 }
-function closeUnitModal() { document.getElementById('unit-modal-overlay').classList.remove('open'); }
+function closeUnitModal() {
+  var overlay = document.getElementById('unit-modal-overlay');
+  if (overlay.classList.contains('open')) {
+    overlay.classList.remove('open');
+    unlockBodyScroll();
+  }
+}
 
 // ── Report ─────────────────────────────────────────────────────────────────
 function openReport() {
   document.getElementById('report-modal-overlay').classList.add('open');
+  lockBodyScroll();
   reportTab = 'today';
   document.querySelectorAll('.report-tab').forEach(function(b,i){b.classList.toggle('active',i===0);});
   document.getElementById('report-period-bar').style.display = 'none';
   generateReport();
 }
-function closeReport() { document.getElementById('report-modal-overlay').classList.remove('open'); }
+function closeReport() {
+  var overlay = document.getElementById('report-modal-overlay');
+  if (overlay.classList.contains('open')) {
+    overlay.classList.remove('open');
+    unlockBodyScroll();
+  }
+}
 function setReportTab(tab, btn) {
   reportTab = tab;
   document.querySelectorAll('.report-tab').forEach(function(b){b.classList.remove('active');});
@@ -2256,8 +2333,15 @@ async function loadFleetIntel() {
   } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
-async function refresh() {
+async function refresh(force) {
+  force = force !== false;
+  if (!force && anyModalOpen()) return;
   await loadStats();
+  if (!force) {
+    var luQuiet = document.getElementById('last-update');
+    if (luQuiet) luQuiet.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    return;
+  }
   if (currentPage==='overview') {
     try {
       var r = await fetch('/api/cases?filter=today');
@@ -2282,16 +2366,20 @@ async function refresh() {
   if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
+function autoRefresh() {
+  refresh(false);
+}
+
 // Restore last visited page
 try {
   var savedPage = localStorage.getItem('kurtex-page');
   if (savedPage && pages.indexOf(savedPage) >= 0) {
     showPage(savedPage);
   } else {
-    refresh();
+    refresh(true);
   }
-} catch(e) { refresh(); }
-setInterval(refresh, 10000);
+} catch(e) { refresh(true); }
+setInterval(autoRefresh, 30000);
 </script>
 </body>
 </html>"""
