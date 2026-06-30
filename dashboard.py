@@ -1349,21 +1349,31 @@ function onSearch(type) {
 // ── Helpers ────────────────────────────────────────────────────────────────
 function statusBadge(s) {
   var map = {open:'s-open',assigned:'s-assigned',reported:'s-reported',done:'s-done',missed:'s-missed'};
-  return '<span class="status-badge ' + (map[s]||'s-open') + '">' + s + '</span>';
+  return '<span class="status-badge ' + (map[s]||'s-open') + '">' + h(s) + '</span>';
+}
+
+function h(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(ch) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+  });
+}
+
+function attr(v) {
+  return h(v);
 }
 
 function caseTable(cases) {
   if (!cases || !cases.length) return '<div class="empty-state">No cases found</div>';
   var rows = cases.map(function(c) {
     var cid = (c.full_id || '');
-    return '<tr onclick="openCase(this.dataset.id)" data-id="' + cid + '">'
-      + '<td><b>' + (c.driver||'—') + '</b></td>'
-      + '<td style="color:var(--muted)">' + (c.group||'—') + '</td>'
-      + '<td>' + (c.agent||'—') + '</td>'
+    return '<tr onclick="openCase(this.dataset.id)" data-id="' + attr(cid) + '">'
+      + '<td><b>' + h(c.driver||'—') + '</b></td>'
+      + '<td style="color:var(--muted)">' + h(c.group||'—') + '</td>'
+      + '<td>' + h(c.agent||'—') + '</td>'
       + '<td>' + statusBadge(c.status) + (c.reassigned ? '<span class="reassign-badge">reassigned</span>' : '') + '</td>'
-      + '<td style="color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
-      + '<td style="font-size:11px">' + (c.response||'—') + '</td>'
-      + '<td class="desc-cell">' + (c.description||'') + '</td>'
+      + '<td style="color:var(--muted);font-size:11px">' + h(c.opened||'—') + '</td>'
+      + '<td style="font-size:11px">' + h(c.response||'—') + '</td>'
+      + '<td class="desc-cell">' + h(c.description||'') + '</td>'
       + '</tr>';
   }).join('');
   return '<table><thead><tr>'
@@ -1378,7 +1388,7 @@ function groupRateRows(groups) {
     return '<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0">'
       + '<div style="display:flex;align-items:center;gap:7px">'
       + '<span class="medal">' + (medals[i]||(i+1)+'.') + '</span>'
-      + '<span class="list-name" style="font-size:12px;font-weight:600">' + g.name + '</span>'
+      + '<span class="list-name" style="font-size:12px;font-weight:600">' + h(g.name) + '</span>'
       + '<span style="margin-left:auto;font-size:11px;font-weight:700;color:'+rateColor+'">' + g.rate + '% ✓</span>'
       + '<span style="font-size:11px;color:var(--muted)">' + g.total + ' cases</span>'
       + '</div>'
@@ -1395,7 +1405,7 @@ function listRows(items, maxCount) {
   return items.map(function(item, i) {
     return '<div class="list-row">'
       + '<span class="medal">' + (medals[i]||(i+1)+'.') + '</span>'
-      + '<span class="list-name">' + item.name + '</span>'
+      + '<span class="list-name">' + h(item.name) + '</span>'
       + '<div class="bar-wrap"><div class="bar-fill" style="width:' + Math.round(item.count/(maxCount||1)*100) + '%"></div></div>'
       + '<span class="list-count">' + item.count + '</span>'
       + '</div>';
@@ -1459,7 +1469,7 @@ async function loadStats() {
 
     var wc = document.getElementById('word-cloud');
     if (wc) wc.innerHTML = (stats.top_words||[]).length
-      ? '<div class="word-grid">' + (stats.top_words||[]).map(function(w){return '<span class="word-tag">'+w.word+' <b>'+w.count+'</b></span>';}).join('') + '</div>'
+    ? '<div class="word-grid">' + (stats.top_words||[]).map(function(w){return '<span class="word-tag">'+h(w.word)+' <b>'+h(w.count)+'</b></span>';}).join('') + '</div>'
       : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>';
 
     var glb = document.getElementById('group-bars-lb');
@@ -1473,7 +1483,7 @@ function renderLeaderboard() {
   var el = document.getElementById('leaderboard-full');
   if (!el) return;
   el.innerHTML = lb.length
-    ? lb.map(function(a,i){return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span><span class="list-name">'+a.name+'</span><span class="list-count">'+a.count+' cases</span></div>';}).join('')
+    ? lb.map(function(a,i){return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span><span class="list-name">'+h(a.name)+'</span><span class="list-count">'+h(a.count)+' cases</span></div>';}).join('')
     : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>';
 }
 
@@ -1553,7 +1563,7 @@ async function loadFleet() {
       return '<div class="card"><div class="card-title">'+title+'</div>'
         + items.map(function(item,i){
           return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span>'
-            + '<span class="list-name">'+item.unit+(item.vtype?' <span style="font-size:10px;color:var(--muted)">'+item.vtype+'</span>':'')+'</span>'
+            + '<span class="list-name">'+h(item.unit)+(item.vtype?' <span style="font-size:10px;color:var(--muted)">'+h(item.vtype)+'</span>':'')+'</span>'
             + '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.round(item.count/max*100)+'%"></div></div>'
             + '<span class="list-count">'+item.count+'</span></div>';
         }).join('')
@@ -1565,13 +1575,12 @@ async function loadFleet() {
         var badge = item.status === 'active'
           ? '<span class="status-badge s-reported">active</span>'
           : '<span class="status-badge s-done">repaired</span>';
-        var unitEnc = encodeURIComponent(item.unit);
-        return '<tr style="cursor:pointer" onclick="openUnitModal(\''+item.unit.replace(/'/g,"\\'")+'\')" title="Click to see all cases for unit '+item.unit+'">'
-          + '<td><b>'+item.unit+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+item.vtype+'</div></td>'
+        return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" onclick="openUnitModal(this.dataset.unit)" title="Click to see all cases for unit '+attr(item.unit)+'">'
+          + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
           + '<td>'+badge+'</td>'
-          + '<td>'+item.issue+'</td>'
-          + '<td>'+item.driver+'</td>'
-          + '<td>'+item.opened+'</td>'
+          + '<td>'+h(item.issue)+'</td>'
+          + '<td>'+h(item.driver)+'</td>'
+          + '<td>'+h(item.opened)+'</td>'
           + '</tr>';
       }).join('');
       return '<div class="card" style="margin-bottom:16px"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
@@ -1614,8 +1623,8 @@ async function loadMyProfile() {
       '<div class="two-col" style="margin-bottom:16px">'
       + '<div class="card">'
       + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'
-      + '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">'+p.name[0]+'</div>'
-      + '<div><div style="font-size:17px;font-weight:700">'+p.name+'</div><div style="font-size:12px;color:var(--muted)">'+(p.username?'@'+p.username+' · ':'')+p.role+'</div></div>'
+      + '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">'+h((p.name||'?')[0])+'</div>'
+      + '<div><div style="font-size:17px;font-weight:700">'+h(p.name)+'</div><div style="font-size:12px;color:var(--muted)">'+(p.username?'@'+h(p.username)+' · ':'')+h(p.role)+'</div></div>'
       + '</div>'
       + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+p.total+'</div><div class="agent-stat-label">Total</div></div>'
@@ -1647,11 +1656,11 @@ async function loadAgents() {
     if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents found.</div>'; return; }
     var cards = agents.map(function(a) {
       var init = (a.name||'?')[0].toUpperCase();
-      return '<div class="card" style="cursor:pointer" data-agent="' + (a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
+      return '<div class="card" style="cursor:pointer" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
         + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
         + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
-        + '<div><div style="font-size:13px;font-weight:700">' + (a.name||'') + '</div>'
-        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+a.username:'No username') + '</div></div>'
+        + '<div><div style="font-size:13px;font-weight:700">' + h(a.name||'') + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
         + '</div>'
         + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
         + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
@@ -1663,7 +1672,7 @@ async function loadAgents() {
         + '</div>';
     }).join('')
     el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">' + cards + '</div>';
-  } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
+  } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
 // ── Modals ─────────────────────────────────────────────────────────────────
@@ -1680,29 +1689,29 @@ async function openCase(el) {
     var extra = '';
     if (c.vehicle_type) {
       extra += '<div class="detail-grid" style="margin-bottom:14px">'
-        + '<div class="detail-item"><div class="detail-label">Vehicle Type</div><div class="detail-val">'+(c.vehicle_type||'—')+'</div></div>'
-        + '<div class="detail-item"><div class="detail-label">Unit Number</div><div class="detail-val">'+(c.unit_number||'—')+'</div></div>'
-        + '<div class="detail-item"><div class="detail-label">Priority</div><div class="detail-val">'+(c.priority||'—')+'</div></div>'
-        + '<div class="detail-item"><div class="detail-label">Load Type</div><div class="detail-val">'+(c.load_type||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Vehicle Type</div><div class="detail-val">'+h(c.vehicle_type||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Unit Number</div><div class="detail-val">'+h(c.unit_number||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Priority</div><div class="detail-val">'+h(c.priority||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Load Type</div><div class="detail-val">'+h(c.load_type||'—')+'</div></div>'
         + '</div>';
     }
     document.getElementById('modal-body').innerHTML =
       buildTimeline(c)
       + '<div class="detail-grid">'
       + '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">'+statusBadge(c.status)+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">'+(c.agent||'—')+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">'+(c.driver||'—')+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">'+(c.group||'—')+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">'+(c.opened||'—')+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">'+(c.assigned_at||'—')+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">'+(c.response||'—')+'</div></div>'
-      + '<div class="detail-item"><div class="detail-label">Resolution Time</div><div class="detail-val">'+(c.resolution_secs||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">'+h(c.agent||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">'+h(c.driver||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">'+h(c.group||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">'+h(c.opened||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">'+h(c.assigned_at||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">'+h(c.response||'—')+'</div></div>'
+      + '<div class="detail-item"><div class="detail-label">Resolution Time</div><div class="detail-val">'+h(c.resolution_secs||'—')+'</div></div>'
       + '</div>'
       + extra
-      + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+c.full_description+'</p></div>' : '')
-      + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+c.full_notes+'</p></div>' : '')
+      + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+h(c.full_description)+'</p></div>' : '')
+      + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+h(c.full_notes)+'</p></div>' : '')
       + ((c.status === 'reported' || c.status === 'done')
-        ? '<div style="margin-top:14px;text-align:center"><button data-id="' + c.full_id + '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
+        ? '<div style="margin-top:14px;text-align:center"><button data-id="' + attr(c.full_id) + '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
         : '');
   } catch(e) {
     console.error('openCase error:', e);
@@ -1734,8 +1743,8 @@ async function viewFullReport(caseIdOrEl) {
     function row(label, val) {
       if (!val || val === '—') return '';
       return '<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">'
-        + '<div style="min-width:160px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+label+'</div>'
-        + '<div style="font-size:14px;font-weight:500;color:var(--text)">'+val+'</div>'
+        + '<div style="min-width:160px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">'+h(label)+'</div>'
+        + '<div style="font-size:14px;font-weight:500;color:var(--text)">'+h(val)+'</div>'
         + '</div>';
     }
 
@@ -1757,7 +1766,7 @@ async function viewFullReport(caseIdOrEl) {
 
     function line(label, val) {
       if (!val || val === '—') return '';
-      return '<div style="font-size:13px;margin-bottom:6px"><b>' + label + ':</b> ' + val + '</div>';
+      return '<div style="font-size:13px;margin-bottom:6px"><b>' + h(label) + ':</b> ' + h(val) + '</div>';
     }
 
     // Build report exactly like Telegram bot
@@ -1828,11 +1837,11 @@ async function openAgentModal(nameOrEl) {
     if (a.recent && a.recent.length) {
       a.recent.forEach(function(c) {
         var cid = c.full_id || '';
-        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" data-id="' + cid + '" onclick="closeAgentModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)">'
-          + '<td style="padding:8px 10px;font-weight:500">' + (c.driver||'—') + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted)">' + (c.group||'—') + '</td>'
+        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" data-id="' + attr(cid) + '" onclick="closeAgentModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)">'
+          + '<td style="padding:8px 10px;font-weight:500">' + h(c.driver||'—') + '</td>'
+          + '<td style="padding:8px 10px;color:var(--muted)">' + h(c.group||'—') + '</td>'
           + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + (c.opened||'—') + '</td>'
+          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + h(c.opened||'—') + '</td>'
           + '</tr>';
       });
     }
@@ -1872,15 +1881,15 @@ async function openUnitModal(unitNumber) {
     var r = await fetch('/api/unit?unit=' + encodeURIComponent(unitNumber));
     if (!r.ok) { body.innerHTML = '<div class="loading">Error loading unit data.</div>'; return; }
     var d = await r.json();
-    var vtypeLabel = d.vtype ? ' <span style="font-size:11px;color:var(--muted);text-transform:uppercase;background:var(--surface2);padding:2px 7px;border-radius:5px">'+d.vtype+'</span>' : '';
-    title.innerHTML = 'Unit ' + unitNumber + vtypeLabel;
+    var vtypeLabel = d.vtype ? ' <span style="font-size:11px;color:var(--muted);text-transform:uppercase;background:var(--surface2);padding:2px 7px;border-radius:5px">'+h(d.vtype)+'</span>' : '';
+    title.innerHTML = 'Unit ' + h(unitNumber) + vtypeLabel;
     var issuesHtml = '';
     if (d.top_issues && d.top_issues.length) {
       issuesHtml = '<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.05em">Top Issues</div>'
         + d.top_issues.map(function(x){
           return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'
-            + '<span style="flex:1">' + (x.issue||'—') + '</span>'
-            + '<span style="font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px;font-size:11px">' + x.count + 'x</span>'
+            + '<span style="flex:1">' + h(x.issue||'—') + '</span>'
+            + '<span style="font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px;font-size:11px">' + h(x.count) + 'x</span>'
             + '</div>';
         }).join('')
         + '</div>';
@@ -1898,12 +1907,12 @@ async function openUnitModal(unitNumber) {
         + '<table><thead><tr><th>Reported By</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th></tr></thead><tbody>'
         + d.cases.map(function(c){
             var cid = c.full_id || '';
-            return '<tr style="cursor:pointer" onclick="closeUnitModal();setTimeout(function(){openCase(\''+cid+'\');},200)" data-id="'+cid+'">'
-              + '<td><b>'+(c.driver||'—')+'</b></td>'
+            return '<tr style="cursor:pointer" onclick="closeUnitModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)" data-id="'+attr(cid)+'">'
+              + '<td><b>'+h(c.driver||'—')+'</b></td>'
               + '<td>'+statusBadge(c.status)+'</td>'
-              + '<td style="font-size:11px;color:var(--muted)">'+(c.opened||'—')+'</td>'
-              + '<td style="font-size:11px">'+(c.response||'—')+'</td>'
-              + '<td class="desc-cell">'+(c.description||'')+'</td>'
+              + '<td style="font-size:11px;color:var(--muted)">'+h(c.opened||'—')+'</td>'
+              + '<td style="font-size:11px">'+h(c.response||'—')+'</td>'
+              + '<td class="desc-cell">'+h(c.description||'')+'</td>'
               + '</tr>';
           }).join('')
         + '</tbody></table></div></div>';
@@ -1912,7 +1921,7 @@ async function openUnitModal(unitNumber) {
     }
     body.innerHTML = statsHtml + issuesHtml + rows;
   } catch(e) {
-    body.innerHTML = '<div class="loading">Error: ' + e.message + '</div>';
+    body.innerHTML = '<div class="loading">Error: ' + h(e.message) + '</div>';
   }
 }
 function closeUnitModal() { document.getElementById('unit-modal-overlay').classList.remove('open'); }
@@ -2012,8 +2021,8 @@ async function generateReport() {
         + d.leaderboard.map(function(a,i){
             return '<tr style="border-top:1px solid var(--border)">'
               + '<td style="padding:8px;font-weight:700;color:var(--muted);width:30px">'+(i+1)+'.</td>'
-              + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+a.name+'</td>'
-              + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+a.count+'</td>'
+              + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+h(a.name)+'</td>'
+              + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+h(a.count)+'</td>'
               + '</tr>';
           }).join('')
         + '</tbody></table></div>'
@@ -2026,10 +2035,10 @@ async function generateReport() {
             var maxCount = d.top_groups[0].count;
             var pct = Math.round(g.count/maxCount*100);
             return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">'
-              + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+g.name+'</span>'
+              + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+h(g.name)+'</span>'
               + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">'
               + '<div style="height:100%;border-radius:3px;background:var(--accent);width:'+pct+'%"></div></div>'
-              + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+g.count+'</span>'
+              + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+h(g.count)+'</span>'
               + '</div>';
           }).join('')
         + '</div>'
@@ -2046,9 +2055,9 @@ async function generateReport() {
         + '</tr></thead><tbody>'
         + d.missed_cases.map(function(c){
             return '<tr style="border-top:1px solid var(--border)">'
-              + '<td style="padding:7px 8px;font-weight:500">'+c.driver+'</td>'
-              + '<td style="padding:7px 8px;color:var(--muted)">'+c.group+'</td>'
-              + '<td style="padding:7px 8px;color:var(--muted);font-size:11px">'+c.opened+'</td>'
+              + '<td style="padding:7px 8px;font-weight:500">'+h(c.driver)+'</td>'
+              + '<td style="padding:7px 8px;color:var(--muted)">'+h(c.group)+'</td>'
+              + '<td style="padding:7px 8px;color:var(--muted);font-size:11px">'+h(c.opened)+'</td>'
               + '</tr>';
           }).join('')
         + '</tbody></table></div>'
@@ -2214,12 +2223,12 @@ async function loadFleetIntel() {
     var unitsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
       + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
       + (d.top_units.length ? d.top_units.map(function(u){
-          return '<tr style="cursor:pointer" onclick="openUnitModal(\''+u.unit.replace(/'/g,"\\'")+'\')" title="View all cases for unit '+u.unit+'">'
-            + '<td><b>'+u.unit+'</b></td>'
-            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+u.vtype+'</span></td>'
-            + '<td><b style="color:var(--accent)">'+u.total+'</b></td>'
-            + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+u.top_issue+'</td>'
-            + '<td style="color:var(--muted);font-size:11px">'+u.last_seen+'</td>'
+          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" onclick="openUnitModal(this.dataset.unit)" title="View all cases for unit '+attr(u.unit)+'">'
+            + '<td><b>'+h(u.unit)+'</b></td>'
+            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
+            + '<td><b style="color:var(--accent)">'+h(u.total)+'</b></td>'
+            + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(u.top_issue)+'</td>'
+            + '<td style="color:var(--muted);font-size:11px">'+h(u.last_seen)+'</td>'
             + '</tr>';
         }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No data yet — make reports through bot first</td></tr>')
       + '</tbody></table></div></div>';
@@ -2228,9 +2237,9 @@ async function loadFleetIntel() {
       + '<thead><tr><th>Driver</th><th>Reports</th><th>Most Common Issue</th></tr></thead><tbody>'
       + (d.top_drivers.length ? d.top_drivers.map(function(dr, i){
           return '<tr>'
-            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+dr.name+'</b></td>'
-            + '<td><b style="color:var(--accent)">'+dr.total+'</b></td>'
-            + '<td style="color:var(--muted)">'+dr.top_issue+'</td>'
+            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+h(dr.name)+'</b></td>'
+            + '<td><b style="color:var(--accent)">'+h(dr.total)+'</b></td>'
+            + '<td style="color:var(--muted)">'+h(dr.top_issue)+'</td>'
             + '</tr>';
         }).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
       + '</tbody></table></div></div>';
@@ -2244,7 +2253,7 @@ async function loadFleetIntel() {
       + unitsHtml
       + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
       + driversHtml;
-  } catch(e) { el.innerHTML = '<div class="loading">Error: '+e.message+'</div>'; }
+  } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
 async function refresh() {
