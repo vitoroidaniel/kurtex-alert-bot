@@ -1620,6 +1620,7 @@ async function loadTesting() {
 }
 
 // ── Fleet Status: state ──────────────────────────────────────────────────────
+var SQ = String.fromCharCode(39); // literal single-quote, avoids escaping headaches in generated HTML
 var fleetData = null;
 var fleetVtype = 'all';
 var fleetSearch = '';
@@ -1718,7 +1719,7 @@ function renderFleetStatusCard() {
   var tabLabels = {all:'All', truck:'Trucks', trailer:'Trailers', reefer:'Reefers'};
   var tabsHtml = '<div class="filter-tabs" id="fleet-vtype-tabs" style="margin-bottom:10px">'
     + tabs.map(function(t){
-        return '<button class="tab-btn'+(fleetVtype===t?' active':'')+'" onclick="setFleetVtype(\''+t+'\',this)">'+tabLabels[t]+'</button>';
+        return '<button class="tab-btn'+(fleetVtype===t?' active':'')+'" onclick="setFleetVtype('+SQ+t+SQ+',this)">'+tabLabels[t]+'</button>';
       }).join('')
     + '</div>';
 
@@ -1739,7 +1740,7 @@ function renderFleetStatusCard() {
     ];
     var thead = '<tr>' + cols.map(function(c) {
       if (c.key === 'issue' || c.key === 'driver') return '<th>'+c.label+'</th>';
-      return '<th style="cursor:pointer;user-select:none" onclick="setFleetSort(\''+(c.key==='opened'?'opened':c.key)+'\')" title="Sort by '+c.label+'">'+c.label+sortIndicator(c.key==='opened'?'opened':c.key)+'</th>';
+      return '<th style="cursor:pointer;user-select:none" onclick="setFleetSort('+SQ+(c.key==='opened'?'opened':c.key)+SQ+')" title="Sort by '+c.label+'">'+c.label+sortIndicator(c.key==='opened'?'opened':c.key)+'</th>';
     }).join('') + '</tr>';
     var rows = visible.map(function(item) {
       var badge = item.status === 'active'
