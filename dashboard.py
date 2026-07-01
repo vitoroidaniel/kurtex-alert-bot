@@ -391,26 +391,50 @@ def api_fleet():
             vtype = c.get("vehicle_type","").strip()
             if unit:
                 latest_by_unit[(unit, vtype)] = c
+        # per-unit history: total report count + most common recurring issue,
+        # used for the inline history column and the unit-detail popover
+        from collections import defaultdict
+        unit_history = defaultdict(lambda: {"total": 0, "issues": Counter()})
+        for c in cases:
+            unit = (c.get("unit_number") or "").strip()
+            if not unit: continue
+            unit_history[unit]["total"] += 1
+            iss = (c.get("issue_text") or "").strip()[:50]
+            if iss: unit_history[unit]["issues"][iss] += 1
         fleet_status = []
         active_statuses = {"open", "assigned", "reported", "missed"}
+        now = datetime.now(timezone.utc)
         for (unit, vtype), c in latest_by_unit.items():
             status = c.get("status") or "open"
+            is_active = status in active_statuses
+            opened_raw = c.get("opened_at") or ""
+            age_days = None
+            if is_active and opened_raw:
+                try:
+                    age_days = (now - datetime.fromisoformat(opened_raw)).days
+                except Exception:
+                    age_days = None
+            hist = unit_history.get(unit, {"total": 0, "issues": Counter()})
             fleet_status.append({
                 "unit": unit,
                 "vtype": vtype,
                 "case_id": c.get("id",""),
-                "status": "active" if status in active_statuses else "repaired",
+                "status": "active" if is_active else "repaired",
                 "case_status": status,
                 "issue": c.get("issue_text") or c.get("description") or "",
                 "driver": c.get("report_driver") or c.get("driver_name") or "",
                 "opened": fmt_dt(c.get("opened_at")),
+                "opened_raw": opened_raw,
+                "age_days": age_days,
+                "total_reports": hist["total"],
+                "top_issue": hist["issues"].most_common(1)[0][0] if hist["issues"] else "",
             })
         active_units = sum(1 for x in fleet_status if x["status"] == "active")
         repaired_units = sum(1 for x in fleet_status if x["status"] == "repaired")
         fleet_status = sorted(
             fleet_status,
             key=lambda x: (x["status"] != "active", x["vtype"], x["unit"])
-        )[:30]
+        )
         return jsonify({
             "total_reports": total, "truck_count": truck_count,
             "trailer_count": trailer_count, "reefer_count": reefer_count,
@@ -1025,7 +1049,7 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
       <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Group Performance</div><div id="groups-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-hash"></i>Recent Issue Trend</div><div id="issue-trend-overview"></div></div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent Cases</div></div>
@@ -1503,8 +1527,12 @@ async function loadStats() {
     if (lbo) lbo.innerHTML = listRows(lb, lb[0]?lb[0].count:1);
 
     var grps = stats.top_groups||[];
-    var go = document.getElementById('groups-overview');
-    if (go) go.innerHTML = groupRateRows(grps);
+
+    var trendWords = (stats.top_words||[]).slice(0,8).map(function(w){return {name:w.word,count:w.count};});
+    var ito = document.getElementById('issue-trend-overview');
+    if (ito) ito.innerHTML = trendWords.length
+      ? listRows(trendWords, trendWords[0].count)
+      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No recent issue tags yet</div>';
 
     renderLeaderboard();
     renderAnalytics();
@@ -1591,6 +1619,157 @@ async function loadTesting() {
   } catch(e) { console.error(e); }
 }
 
+// ── Fleet Status: state ──────────────────────────────────────────────────────
+var fleetData = null;
+var fleetVtype = 'all';
+var fleetSearch = '';
+var fleetSort = {key:'status', dir:1};
+var fleetVisible = 20;
+var FLEET_PAGE_SIZE = 20;
+var fleetSearchTimer = null;
+
+function unitCard(title, items) {
+  if (!items||!items.length) return '<div class="card"><div class="card-title">'+title+'</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>';
+  var max = items[0].count||1;
+  return '<div class="card"><div class="card-title">'+title+'</div>'
+    + items.map(function(item,i){
+      return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span>'
+        + '<span class="list-name">'+h(item.unit)+(item.vtype?' <span style="font-size:10px;color:var(--muted)">'+h(item.vtype)+'</span>':'')+'</span>'
+        + '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.round(item.count/max*100)+'%"></div></div>'
+        + '<span class="list-count">'+item.count+'</span></div>';
+    }).join('')
+    + '</div>';
+}
+
+function fleetAgeBadge(item) {
+  if (item.status !== 'active' || item.age_days == null) return '';
+  var d = item.age_days;
+  if (d >= 7) return '<span class="status-badge s-missed" style="margin-left:5px">🔴 '+d+'d idle</span>';
+  if (d >= 3) return '<span class="status-badge s-assigned" style="margin-left:5px">🟠 '+d+'d</span>';
+  return '<span style="margin-left:5px;font-size:10px;color:var(--muted)">'+(d===0?'today':d+'d')+'</span>';
+}
+
+function fleetSortRows(items) {
+  var key = fleetSort.key, dir = fleetSort.dir;
+  var arr = items.slice();
+  arr.sort(function(a, b) {
+    var av, bv;
+    if (key === 'status') { av = a.status === 'active' ? 0 : 1; bv = b.status === 'active' ? 0 : 1; }
+    else if (key === 'age') { av = a.age_days == null ? -1 : a.age_days; bv = b.age_days == null ? -1 : b.age_days; }
+    else if (key === 'history') { av = a.total_reports||0; bv = b.total_reports||0; }
+    else if (key === 'opened') { av = a.opened_raw||''; bv = b.opened_raw||''; }
+    else { av = (a.unit||'').toLowerCase(); bv = (b.unit||'').toLowerCase(); }
+    if (av < bv) return -1*dir;
+    if (av > bv) return 1*dir;
+    return (a.unit||'').localeCompare(b.unit||'');
+  });
+  return arr;
+}
+
+function setFleetSort(key) {
+  if (fleetSort.key === key) fleetSort.dir *= -1;
+  else fleetSort = {key: key, dir: 1};
+  renderFleetStatusCard();
+}
+
+function setFleetVtype(v, btn) {
+  fleetVtype = v;
+  fleetVisible = FLEET_PAGE_SIZE;
+  document.querySelectorAll('#fleet-vtype-tabs .tab-btn').forEach(function(b){b.classList.remove('active');});
+  if (btn) btn.classList.add('active');
+  renderFleetStatusCard();
+}
+
+function onFleetSearch(val) {
+  clearTimeout(fleetSearchTimer);
+  fleetSearchTimer = setTimeout(function() {
+    fleetSearch = (val||'').toLowerCase().trim();
+    fleetVisible = FLEET_PAGE_SIZE;
+    renderFleetStatusCard();
+  }, 250);
+}
+
+function loadMoreFleet() {
+  fleetVisible += FLEET_PAGE_SIZE;
+  renderFleetStatusCard();
+}
+
+function sortIndicator(key) {
+  if (fleetSort.key !== key) return '';
+  return fleetSort.dir === 1 ? ' ▲' : ' ▼';
+}
+
+function renderFleetStatusCard() {
+  var host = document.getElementById('fleet-status-card');
+  if (!host || !fleetData) return;
+  var all = fleetData.fleet_status || [];
+  var items = all.filter(function(item) {
+    if (fleetVtype !== 'all' && (item.vtype||'').toLowerCase() !== fleetVtype) return false;
+    if (fleetSearch) {
+      var hay = (item.unit+' '+item.driver+' '+item.issue+' '+item.top_issue).toLowerCase();
+      if (hay.indexOf(fleetSearch) === -1) return false;
+    }
+    return true;
+  });
+  items = fleetSortRows(items);
+  var visible = items.slice(0, fleetVisible);
+
+  var tabs = ['all','truck','trailer','reefer'];
+  var tabLabels = {all:'All', truck:'Trucks', trailer:'Trailers', reefer:'Reefers'};
+  var tabsHtml = '<div class="filter-tabs" id="fleet-vtype-tabs" style="margin-bottom:10px">'
+    + tabs.map(function(t){
+        return '<button class="tab-btn'+(fleetVtype===t?' active':'')+'" onclick="setFleetVtype(\''+t+'\',this)">'+tabLabels[t]+'</button>';
+      }).join('')
+    + '</div>';
+
+  var searchHtml = '<div class="search-wrap" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i>'
+    + '<input type="text" placeholder="Search unit, driver, or issue..." value="'+attr(fleetSearch)+'" oninput="onFleetSearch(this.value)"></div>';
+
+  var bodyHtml;
+  if (!items.length) {
+    bodyHtml = '<div style="color:var(--muted);font-size:13px;padding:12px 0">No units match this filter</div>';
+  } else {
+    var cols = [
+      {key:'unit', label:'Unit'},
+      {key:'status', label:'Status'},
+      {key:'history', label:'History'},
+      {key:'issue', label:'Issue'},
+      {key:'driver', label:'Driver'},
+      {key:'opened', label:'Opened'},
+    ];
+    var thead = '<tr>' + cols.map(function(c) {
+      if (c.key === 'issue' || c.key === 'driver') return '<th>'+c.label+'</th>';
+      return '<th style="cursor:pointer;user-select:none" onclick="setFleetSort(\''+(c.key==='opened'?'opened':c.key)+'\')" title="Sort by '+c.label+'">'+c.label+sortIndicator(c.key==='opened'?'opened':c.key)+'</th>';
+    }).join('') + '</tr>';
+    var rows = visible.map(function(item) {
+      var badge = item.status === 'active'
+        ? '<span class="status-badge s-reported">active</span>'
+        : '<span class="status-badge s-done">repaired</span>';
+      var historyCell = item.total_reports > 1
+        ? item.total_reports+' reports'+(item.top_issue?'<div style="font-size:10px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(item.top_issue)+'</div>':'')
+        : '<span style="color:var(--muted)">1st report</span>';
+      return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" onclick="openUnitModal(this.dataset.unit)" title="Click to see all cases for unit '+attr(item.unit)+'">'
+        + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
+        + '<td>'+badge+fleetAgeBadge(item)+'</td>'
+        + '<td style="font-size:12px">'+historyCell+'</td>'
+        + '<td>'+h(item.issue)+'</td>'
+        + '<td>'+h(item.driver)+'</td>'
+        + '<td style="color:var(--muted);font-size:11px">'+h(item.opened)+'</td>'
+        + '</tr>';
+    }).join('');
+    bodyHtml = '<div class="table-wrap"><div class="table-scroll"><table><thead>'+thead+'</thead><tbody>'+rows+'</tbody></table></div></div>';
+    if (items.length > visible.length) {
+      bodyHtml += '<div style="text-align:center;padding:12px 0 2px">'
+        + '<button class="tab-btn" onclick="loadMoreFleet()">Load more ('+(items.length-visible.length)+' remaining)</button></div>';
+    }
+  }
+
+  host.innerHTML = '<div class="card" style="margin-bottom:16px">'
+    + '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
+    + tabsHtml + searchHtml + bodyHtml
+    + '</div>';
+}
+
 async function loadFleet() {
   var el = document.getElementById('fleet-content');
   if (!el) return;
@@ -1599,37 +1778,8 @@ async function loadFleet() {
     var r = await fetch('/api/fleet');
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading fleet stats.</div>'; return; }
     var d = await r.json();
-    function unitCard(title, items) {
-      if (!items||!items.length) return '<div class="card"><div class="card-title">'+title+'</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>';
-      var max = items[0].count||1;
-      return '<div class="card"><div class="card-title">'+title+'</div>'
-        + items.map(function(item,i){
-          return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span>'
-            + '<span class="list-name">'+h(item.unit)+(item.vtype?' <span style="font-size:10px;color:var(--muted)">'+h(item.vtype)+'</span>':'')+'</span>'
-            + '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.round(item.count/max*100)+'%"></div></div>'
-            + '<span class="list-count">'+item.count+'</span></div>';
-        }).join('')
-        + '</div>';
-    }
-    function fleetStatusTable(items) {
-      if (!items||!items.length) return '<div class="card"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status</div><div style="color:var(--muted);font-size:13px">No fleet status yet</div></div>';
-      var rows = items.map(function(item) {
-        var badge = item.status === 'active'
-          ? '<span class="status-badge s-reported">active</span>'
-          : '<span class="status-badge s-done">repaired</span>';
-        return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" onclick="openUnitModal(this.dataset.unit)" title="Click to see all cases for unit '+attr(item.unit)+'">'
-          + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
-          + '<td>'+badge+'</td>'
-          + '<td>'+h(item.issue)+'</td>'
-          + '<td>'+h(item.driver)+'</td>'
-          + '<td>'+h(item.opened)+'</td>'
-          + '</tr>';
-      }).join('');
-      return '<div class="card" style="margin-bottom:16px"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
-        + '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>'
-        + rows
-        + '</tbody></table></div></div></div>';
-    }
+    fleetData = d;
+    fleetVtype = 'all'; fleetSearch = ''; fleetSort = {key:'status', dir:1}; fleetVisible = FLEET_PAGE_SIZE;
     el.innerHTML =
       '<div class="stat-grid" style="margin-bottom:20px">'
       + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
@@ -1641,7 +1791,7 @@ async function loadFleet() {
       + '<div class="stat-card c-yellow"><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
       + '<div class="stat-card c-purple"><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
       + '</div>'
-      + fleetStatusTable(d.fleet_status)
+      + '<div id="fleet-status-card"></div>'
       + '<div class="two-col" style="margin-bottom:16px">'
       + unitCard('<i class="ph ph-truck"></i> Trucks Breaking Down Most', d.top_broken_trucks)
       + unitCard('<i class="ph ph-user"></i> Most Reported Drivers', d.top_drivers)
@@ -1650,6 +1800,7 @@ async function loadFleet() {
       + unitCard('<i class="ph ph-wrench"></i> Most Reported Units', d.top_units)
       + unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues)
       + '</div>';
+    renderFleetStatusCard();
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
