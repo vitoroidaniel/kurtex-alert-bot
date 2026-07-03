@@ -1003,6 +1003,7 @@ td{padding:9px 12px;vertical-align:middle}
         <div class="nav-item nav-sub" onclick="showPage('trends')"><i class="ph ph-trend-up"></i> Trends</div>
         <div class="nav-item nav-sub" onclick="showPage('heatmap')"><i class="ph ph-squares-four"></i> Heatmap</div>
         <div class="nav-item nav-sub" onclick="showPage('comparison')"><i class="ph ph-arrows-left-right"></i> Comparison</div>
+        <div class="nav-item nav-sub" onclick="showPage('shifts')"><i class="ph ph-clock"></i> Shifts</div>
       </div>
     </div>
 
@@ -1176,6 +1177,17 @@ td{padding:9px 12px;vertical-align:middle}
     <div id="comparison-content"><div class="loading">Loading...</div></div>
   </div>
 
+  <!-- Shifts -->
+  <div class="page" id="page-shifts">
+    <div class="toggle-tabs" style="max-width:360px">
+      <button class="toggle-btn active" onclick="setShiftPeriod('today',this)">Today</button>
+      <button class="toggle-btn" onclick="setShiftPeriod('week',this)">Week</button>
+      <button class="toggle-btn" onclick="setShiftPeriod('month',this)">Month</button>
+      <button class="toggle-btn" onclick="setShiftPeriod('all',this)">All Time</button>
+    </div>
+    <div id="shifts-content"><div class="loading">Loading...</div></div>
+  </div>
+
   <!-- Fleet Intelligence -->
   <div class="page" id="page-fleet_intel">
     <div id="fleet-intel-content"><div class="loading">Loading...</div></div>
@@ -1276,8 +1288,8 @@ var searchTimers = {};
 var isDark = localStorage.getItem('kurtex-theme') === 'dark';
 var bodyLockCount = 0;
 var bodyScrollY = 0;
-var pages = ['overview','cases','missed','reassigned','testing','leaderboard','trends','heatmap','comparison','fleet','fleet_intel','my_profile','agents'];
-var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',testing:'Testing',leaderboard:'Leaderboard',trends:'Trends',heatmap:'Activity Heatmap',comparison:'Week Comparison',fleet:'Fleet Stats',fleet_intel:'Fleet Intelligence',my_profile:'My Profile',agents:'Agent Profiles'};
+var pages = ['overview','cases','missed','reassigned','testing','leaderboard','trends','heatmap','comparison','shifts','fleet','fleet_intel','my_profile','agents'];
+var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',testing:'Testing',leaderboard:'Leaderboard',trends:'Trends',heatmap:'Activity Heatmap',comparison:'Week Comparison',shifts:'Shift Statistics',fleet:'Fleet Stats',fleet_intel:'Fleet Intelligence',my_profile:'My Profile',agents:'Agent Profiles'};
 var medals = ['🥇','🥈','🥉'];
 
 // ── Theme ──────────────────────────────────────────────────────────────────
@@ -1617,6 +1629,64 @@ async function loadTesting() {
     if (!r.ok) return;
     el.innerHTML = caseTable(await r.json());
   } catch(e) { console.error(e); }
+}
+
+// ── Shifts ────────────────────────────────────────────────────────────────
+var shiftPeriod = 'today';
+
+function setShiftPeriod(p, btn) {
+  shiftPeriod = p;
+  document.querySelectorAll('#page-shifts .toggle-btn').forEach(function(b){b.classList.remove('active');});
+  if (btn) btn.classList.add('active');
+  loadShifts();
+}
+
+async function loadShifts() {
+  var el = document.getElementById('shifts-content');
+  if (!el) return;
+  el.innerHTML = '<div class="loading">Loading shift stats...</div>';
+  try {
+    var r = await fetch('/api/shifts?period=' + encodeURIComponent(shiftPeriod));
+    if (!r.ok) { el.innerHTML = '<div class="loading">Error loading shift stats.</div>'; return; }
+    var d = await r.json();
+    var windows = d.shift_windows || {};
+    var order = [
+      {key:'dayshift', label:'Dayshift', icon:'ph-sun', color:'yellow'},
+      {key:'ah',        label:'AH',       icon:'ph-moon-stars', color:'purple'},
+      {key:'morning',   label:'Morning',  icon:'ph-cloud-moon', color:'blue'},
+    ];
+    function shiftCard(o) {
+      var s = d[o.key] || {total:0,done:0,missed:0,active:0,avg_resp:'—',rate:0,leaderboard:[]};
+      var rateColor = s.rate >= 80 ? 'var(--green)' : s.rate >= 50 ? 'var(--yellow)' : 'var(--red)';
+      return '<div class="card">'
+        + '<div class="card-title"><i class="ph '+o.icon+'"></i>'+o.label
+        + '<span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--muted)">'+h(windows[o.key]||'')+'</span></div>'
+        + '<div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">'
+        + '<div class="stat-card c-'+o.color+'"><div class="stat-label">Total</div><div class="stat-value v-'+o.color+'">'+s.total+'</div></div>'
+        + '<div class="stat-card c-green"><div class="stat-label">Resolved</div><div class="stat-value v-green">'+s.done+'</div></div>'
+        + '<div class="stat-card c-red"><div class="stat-label">Missed</div><div class="stat-value v-red">'+s.missed+'</div></div>'
+        + '<div class="stat-card c-blue"><div class="stat-label">Active</div><div class="stat-value v-blue">'+s.active+'</div></div>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:10px">'
+        + '<span style="color:var(--muted)">Resolution rate</span>'
+        + '<span style="font-weight:700;color:'+rateColor+'">'+s.rate+'%</span>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:14px">'
+        + '<span style="color:var(--muted)">Avg response</span>'
+        + '<span style="font-weight:700">'+h(s.avg_resp)+'</span>'
+        + '</div>'
+        + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Top Agents</div>'
+        + (s.leaderboard.length ? listRows(s.leaderboard, s.leaderboard[0].count) : '<div style="color:var(--muted);font-size:12px;padding:6px 0">No data yet</div>')
+        + '</div>';
+    }
+    var cardsHtml = '<div class="three-col" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:16px">'
+      + order.map(shiftCard).join('')
+      + '</div>';
+    var note = d.unclassified > 0
+      ? '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">'+d.unclassified+' case(s) had no timestamp and were excluded from shift totals.</div>'
+      : '';
+    el.innerHTML = note + cardsHtml;
+  } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
 // ── Fleet Status: state ──────────────────────────────────────────────────────
@@ -2511,6 +2581,7 @@ async function refresh(force) {
   else if (currentPage==='trends') loadTrends();
   else if (currentPage==='heatmap') loadHeatmap();
   else if (currentPage==='comparison') loadComparison();
+  else if (currentPage==='shifts') loadShifts();
   else if (currentPage==='fleet_intel') loadFleetIntel();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
@@ -2621,7 +2692,87 @@ def api_comparison():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/fleet_intelligence")
+# ── Shift buckets (US Central time) ────────────────────────────────────────────
+# Dayshift: 6:30 AM - 4:00 PM | AH: 4:00 PM - 11:00 PM | Morning: 11:00 PM - 6:30 AM
+# Note: Morning's end is aligned to Dayshift's 6:30 AM start (not 7 AM) so the three
+# windows tile the full 24h with no overlap or gap.
+SHIFT_TZ = "America/Chicago"
+SHIFT_WINDOWS = {
+    "dayshift": "6:30 AM – 4:00 PM CT",
+    "ah":       "4:00 PM – 11:00 PM CT",
+    "morning":  "11:00 PM – 6:30 AM CT",
+}
+
+def classify_shift(local_dt):
+    from datetime import time as dtime
+    t = local_dt.time()
+    if dtime(6, 30) <= t < dtime(16, 0):
+        return "dayshift"
+    if dtime(16, 0) <= t < dtime(23, 0):
+        return "ah"
+    return "morning"
+
+@app.route("/api/shifts")
+def api_shifts():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    try:
+        import zoneinfo
+        ct = zoneinfo.ZoneInfo(SHIFT_TZ)
+        period = request.args.get("period", "all")
+        cases = [c for c in load_cases() if not is_testing(c)]
+        if period == "today":
+            cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
+        elif period == "week":
+            cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
+        elif period == "month":
+            cases = [c for c in cases if (c.get("opened_at") or "") >= month_start_str()]
+
+        buckets = {"dayshift": [], "ah": [], "morning": []}
+        unclassified = 0
+        for c in cases:
+            iso = c.get("opened_at")
+            if not iso:
+                unclassified += 1
+                continue
+            try:
+                dt = datetime.fromisoformat(iso)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                local = dt.astimezone(ct)
+            except Exception:
+                unclassified += 1
+                continue
+            buckets[classify_shift(local)].append(c)
+
+        def build(shift_cases):
+            total = len(shift_cases)
+            done = sum(1 for c in shift_cases if c.get("status") == "done")
+            missed = sum(1 for c in shift_cases if c.get("status") == "missed")
+            active = sum(1 for c in shift_cases if c.get("status") in ("open", "assigned", "reported"))
+            rt = [c["response_secs"] for c in shift_cases if c.get("response_secs")]
+            avg = int(sum(rt) / len(rt)) if rt else 0
+            rate = round(done / total * 100) if total else 0
+            agent_counts = Counter(
+                c.get("agent_name") for c in shift_cases
+                if c.get("agent_name") and c.get("status") in ("assigned", "reported", "done")
+            )
+            leaderboard = [{"name": n, "count": v} for n, v in agent_counts.most_common(8)]
+            return {
+                "total": total, "done": done, "missed": missed, "active": active,
+                "avg_resp": fmt_secs(avg), "avg_secs": avg, "rate": rate,
+                "leaderboard": leaderboard,
+            }
+
+        result = {key: build(vals) for key, vals in buckets.items()}
+        result["shift_windows"] = SHIFT_WINDOWS
+        result["period"] = period
+        result["unclassified"] = unclassified
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"api_shifts error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 def api_fleet_intelligence():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
