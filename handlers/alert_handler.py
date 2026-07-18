@@ -90,7 +90,16 @@ class AlertHandler:
     async def handle(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         import re
         msg = update.effective_message
-        if not msg or not update.effective_user or update.effective_user.is_bot:
+        if not msg:
+            return
+
+        # Messages sent "as the group" (anonymous admin) or from a linked
+        # channel arrive with sender_chat set instead of a normal user, and
+        # Telegram attributes them to the GroupAnonymousBot / ChannelBot
+        # system account (which has is_bot=True). Don't drop those — treat
+        # the group/channel itself as the reporter.
+        is_anonymous = msg.sender_chat is not None
+        if not is_anonymous and (not update.effective_user or update.effective_user.is_bot):
             return
 
         text  = msg.text or msg.caption or ""
@@ -104,9 +113,11 @@ class AlertHandler:
         if not any(_match(w, text) for w in TRIGGER_WORDS):
             return
 
-        user      = update.effective_user
-        driver_id = user.id
-        now       = datetime.now(timezone.utc)
+        if is_anonymous:
+            driver_id = msg.sender_chat.id
+        else:
+            driver_id = update.effective_user.id
+        now = datetime.now(timezone.utc)
 
         last = self._driver_last_time.get(driver_id)
         if last:
@@ -119,9 +130,15 @@ class AlertHandler:
 
         self._driver_last_time[driver_id] = now
 
-        chat_title  = update.effective_chat.title or "Driver Group"
-        driver_name = f"{user.first_name} {user.last_name or ''}".strip()
-        alert_id    = str(uuid.uuid4())
+        chat_title = update.effective_chat.title or "Driver Group"
+        if is_anonymous:
+            driver_name     = msg.sender_chat.title or chat_title
+            driver_username = None
+        else:
+            user            = update.effective_user
+            driver_name     = f"{user.first_name} {user.last_name or ''}".strip()
+            driver_username = user.username or None
+        alert_id = str(uuid.uuid4())
 
         self._alerts[alert_id] = {
             "alert_id":           alert_id,
@@ -132,7 +149,7 @@ class AlertHandler:
             "escalation_count":   0,
             "driver_id":          driver_id,
             "driver_name":        driver_name,
-            "driver_username":    user.username or None,
+            "driver_username":    driver_username,
             "group_name":         chat_title,
             "text":               text,
         }
@@ -140,7 +157,7 @@ class AlertHandler:
         create_case(
             case_id=alert_id,
             driver_name=driver_name,
-            driver_username=user.username or None,
+            driver_username=driver_username,
             group_name=chat_title,
             description=text,
         )
