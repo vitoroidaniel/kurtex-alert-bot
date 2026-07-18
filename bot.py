@@ -334,9 +334,10 @@ def main():
             for w in words
         )
 
+    _trigger_regex = f'(?i)({_build_pattern(TRIGGER_WORDS)})'
     app.add_handler(MessageHandler(
         filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO) &
-        filters.Regex(f'(?i)({_build_pattern(TRIGGER_WORDS)})'),
+        (filters.Regex(_trigger_regex) | filters.CaptionRegex(_trigger_regex)),
         alert_h.handle,
     ))
 
