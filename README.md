@@ -4,26 +4,6 @@ Truck Maintenance Command Center — Telegram bot for managing driver alerts and
 
 ## Project structure
 
-```
-kurtex_bot/
-├── bot.py                  # Entry point
-├── config.py               # Env var loading
-├── shift_manager.py        # Shift logic
-├── shifts.py               # Admin roster & schedules
-├── user_tracker.py         # Registered users (JSON volume)
-├── clear_commands.py       # One-time utility to reset bot commands
-├── railway.json            # Railway deploy config
-├── requirements.txt
-├── handlers/
-│   ├── alert_handler.py    # Group trigger detection & admin DMs
-│   ├── agent_handler.py    # /mycases, /done, /casehistory, /mystats
-│   ├── admin_handler.py    # /report, /leaderboard, /missed, /oncall
-│   ├── report_handler.py   # Full report conversation flow
-│   └── scheduler.py        # Daily report + escalation jobs
-└── storage/
-    └── case_store.py       # All case operations (JSON volume)
-```
-
 ## Data storage
 
 All data is stored as JSON files in a Railway Volume mounted at `/data/`:
