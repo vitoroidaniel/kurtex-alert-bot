@@ -7,8 +7,9 @@ handlers/alert_handler.py
 
 import asyncio
 import logging
+import random
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -31,7 +32,19 @@ def _esc(t: str) -> str:
 
 logger           = logging.getLogger(__name__)
 TRIGGER_WORDS    = ['#maintenance', '#repairs', '#repair']
-COOLDOWN_SECONDS = 10
+
+# Anti-spam cooldown per driver: after a #repairs/#maintenance message opens
+# a case, the same driver is throttled for a random 5-7 minute window so
+# repeated posts don't flood agents with duplicate cases. The exact duration
+# is randomized (rather than a fixed value) so drivers can't easily learn and
+# game a predictable window.
+COOLDOWN_MIN_SECONDS = 5 * 60
+COOLDOWN_MAX_SECONDS = 7 * 60
+
+# If a driver keeps spamming while their case is still unassigned, agents get
+# nudged again — but not on every single spam message, or the nudge itself
+# becomes spam. This throttles the nudges independently of the case cooldown.
+UNASSIGNED_NUDGE_COOLDOWN_SECONDS = 2 * 60
 
 
 class AlertHandler:
@@ -39,6 +52,9 @@ class AlertHandler:
         self._alerts: dict[str, dict]        = {}
         self._locks:  dict[str, asyncio.Lock] = {}
         self._driver_last_time: dict[int, datetime] = {}
+        self._driver_cooldown_until: dict[int, datetime] = {}
+        self._driver_last_alert: dict[int, str] = {}
+        self._last_nudge_at: dict[str, datetime] = {}
         self._short_map: dict[str, str]       = {}
         self._processed_ai_ids: set           = set()
 
@@ -119,16 +135,24 @@ class AlertHandler:
             driver_id = update.effective_user.id
         now = datetime.now(timezone.utc)
 
-        last = self._driver_last_time.get(driver_id)
-        if last:
-            if isinstance(last, str):
-                last = datetime.fromisoformat(last)
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            if (now - last).total_seconds() < COOLDOWN_SECONDS:
+        cooldown_until = self._driver_cooldown_until.get(driver_id)
+        if cooldown_until:
+            if isinstance(cooldown_until, str):
+                cooldown_until = datetime.fromisoformat(cooldown_until)
+            if cooldown_until.tzinfo is None:
+                cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
+            if now < cooldown_until:
+                # Driver is spamming #repairs/#maintenance within the cooldown
+                # window. Don't open a duplicate case for it — but if their
+                # last case is still sitting unassigned, that's a signal
+                # worth escalating to agents (throttled separately below).
+                await self._nudge_if_unassigned(driver_id, ctx)
                 return
 
         self._driver_last_time[driver_id] = now
+        self._driver_cooldown_until[driver_id] = now + timedelta(
+            seconds=random.uniform(COOLDOWN_MIN_SECONDS, COOLDOWN_MAX_SECONDS)
+        )
 
         chat_title = update.effective_chat.title or "Driver Group"
         if is_anonymous:
@@ -161,6 +185,7 @@ class AlertHandler:
             group_name=chat_title,
             description=text,
         )
+        self._driver_last_alert[driver_id] = alert_id
 
         short_id   = self._register_alert(alert_id)
         kb         = self._make_kb(short_id)
@@ -192,6 +217,46 @@ class AlertHandler:
         self._persist()
         if notified == 0:
             logger.warning("No admins could be reached for alert!")
+
+    async def _nudge_if_unassigned(self, driver_id: int, ctx: ContextTypes.DEFAULT_TYPE):
+        """A driver spammed #repairs again while still on cooldown. If their
+        most recent case is still unassigned, ping agents again so it doesn't
+        get lost — throttled so this can't itself turn into spam."""
+        alert_id = self._driver_last_alert.get(driver_id)
+        if not alert_id:
+            return
+        record = self._alerts.get(alert_id)
+        if not record or record.get("taken_by") is not None:
+            return  # already assigned (or already gone) — nothing to nudge about
+
+        now = datetime.now(timezone.utc)
+        last_nudge = self._last_nudge_at.get(alert_id)
+        if last_nudge and (now - last_nudge).total_seconds() < UNASSIGNED_NUDGE_COOLDOWN_SECONDS:
+            return
+        self._last_nudge_at[alert_id] = now
+
+        short_id = self._register_alert(alert_id)
+        kb       = self._make_kb(short_id)
+        text     = (
+            "⚠️ *Case still unassigned!*\n\n"
+            f"👤 *Driver:* {_esc(record.get('driver_name', '—'))} keeps reporting "
+            "this issue and no one has picked it up yet.\n"
+            f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
+            f"📝 *Issue:* {(record.get('text') or '—')[:200]}\n\n"
+            "Please assign it."
+        )
+
+        recipients = get_on_shift_admins() or get_all_admins()
+        for admin in recipients:
+            try:
+                sent = await ctx.bot.send_message(
+                    admin["id"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
+                )
+                record["recipients"].setdefault(admin["id"], []).append(sent.message_id)
+            except TelegramError as e:
+                logger.warning(f"Could not nudge admin {admin['id']} about unassigned case: {e}")
+
+        self._persist()
 
     # ── AI channel ────────────────────────────────────────────────────────────
 
