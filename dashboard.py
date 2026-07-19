@@ -2543,13 +2543,51 @@ async function loadFleetIntel() {
         }).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
       + '</tbody></table></div></div>';
 
+    var vtypeLabels = {truck:'🚛 Most Broken Truck', trailer:'📦 Most Broken Trailer', reefer:'❄️ Most Broken Reefer'};
+    var mostBrokenHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">'
+      + ['truck','trailer','reefer'].map(function(vt){
+          var u = (d.most_broken_by_type||{})[vt];
+          return '<div class="stat-card"'
+            + (u ? ' style="cursor:pointer" data-unit="'+attr(u.unit)+'" onclick="openUnitModal(this.dataset.unit)"' : '')
+            + '><div class="stat-label">'+vtypeLabels[vt]+'</div>'
+            + '<div class="stat-value v-blue">'+(u ? h(u.unit) : '—')+'</div>'
+            + (u ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+h(u.total)+' reports · '+h(u.top_issue)+'</div>' : '<div style="font-size:11px;color:var(--muted);margin-top:4px">No data yet</div>')
+            + '</div>';
+        }).join('')
+      + '</div>';
+
+    var partsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Part</th><th>Times Reported</th></tr></thead><tbody>'
+      + ((d.top_parts||[]).length ? d.top_parts.map(function(p, i){
+          return '<tr>'
+            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+h(p.part)+'</b></td>'
+            + '<td><b style="color:var(--accent)">'+h(p.count)+'</b></td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px">No recognizable parts mentioned yet</td></tr>')
+      + '</tbody></table></div></div>';
+
+    var issuesHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Issue</th><th>Times Reported</th></tr></thead><tbody>'
+      + ((d.top_issues||[]).length ? d.top_issues.map(function(iss, i){
+          return '<tr>'
+            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span>'+h(iss.issue)+'</td>'
+            + '<td><b style="color:var(--accent)">'+h(iss.count)+'</b></td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
+      + '</tbody></table></div></div>';
+
     el.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
       + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
       + '<div class="stat-card"><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
       + '</div>'
+      + mostBrokenHtml
       + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
       + unitsHtml
+      + '<div class="section-title" style="margin:16px 0 10px">Top Broken Parts</div>'
+      + partsHtml
+      + '<div class="section-title" style="margin:16px 0 10px">Most Popular Issues</div>'
+      + issuesHtml
       + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
       + driversHtml;
   } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
@@ -2773,6 +2811,30 @@ def api_shifts():
         return jsonify({"error": str(e)}), 500
 
 
+# Common truck/trailer/reefer parts, checked against each case's free-text
+# issue description so we can roll up "most broken part" without requiring
+# a separate part-picker step in the report flow. Ordered most-specific-first
+# since only the first match found in a given issue is counted for it.
+PART_KEYWORDS = [
+    "reefer unit", "compressor", "condenser", "evaporator", "thermostat",
+    "defrost", "fifth wheel", "landing gear", "mud flap", "air conditioning",
+    "alternator", "transmission", "suspension", "windshield", "headlight",
+    "taillight", "brake", "tire", "wheel", "bearing", "clutch", "battery",
+    "engine", "radiator", "exhaust", "muffler", "axle", "coupling",
+    "wiring", "electrical", "hydraulic", "fuel", "oil leak", "seal",
+    "gasket", "belt", "fan", "sensor", "hose", "door", "hinge", "light",
+]
+
+
+def _find_part(issue_text: str) -> str:
+    hay = (issue_text or "").lower()
+    for kw in PART_KEYWORDS:
+        if kw in hay:
+            return kw.title()
+    return ""
+
+
+@app.route("/api/fleet_intelligence")
 def api_fleet_intelligence():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
@@ -2798,6 +2860,14 @@ def api_fleet_intelligence():
                 "top_issue": top_issue, "last_seen": fmt_dt(last_case.get("opened_at")),
             })
         top_units.sort(key=lambda x: -x["total"])
+
+        # Most broken unit per vehicle type — the single unit with the most
+        # reports for each of truck/trailer/reefer.
+        most_broken_by_type = {}
+        for vtype in ("truck", "trailer", "reefer"):
+            of_type = [u for u in top_units if u["vtype"] == vtype]
+            most_broken_by_type[vtype] = of_type[0] if of_type else None
+
         # Top drivers
         driver_data = defaultdict(list)
         for c in reported:
@@ -2810,12 +2880,29 @@ def api_fleet_intelligence():
             top_issue = issues.most_common(1)[0][0] if issues else "—"
             top_drivers.append({"name": name, "total": total, "top_issue": top_issue})
         top_drivers.sort(key=lambda x: -x["total"])
+
+        # Most popular issue overall (fleet-wide), regardless of unit
+        issue_counts = Counter((c.get("issue_text") or "").strip()[:60] for c in reported if (c.get("issue_text") or "").strip())
+        top_issues = [{"issue": iss, "count": cnt} for iss, cnt in issue_counts.most_common(10)]
+
+        # Most broken part overall, derived from issue text keyword matching
+        part_counts = Counter()
+        for c in reported:
+            part = _find_part(c.get("issue_text") or "")
+            if part:
+                part_counts[part] += 1
+        top_parts = [{"part": p, "count": cnt} for p, cnt in part_counts.most_common(10)]
+
         return jsonify({
             "top_units": top_units[:20],
             "top_drivers": top_drivers[:20],
+            "top_issues": top_issues,
+            "top_parts": top_parts,
+            "most_broken_by_type": most_broken_by_type,
             "total_reports": len(reported),
         })
     except Exception as e:
+        logger.error(f"api_fleet_intelligence error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
