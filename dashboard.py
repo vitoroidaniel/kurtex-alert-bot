@@ -247,18 +247,37 @@ def api_agent():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     agent_name = request.args.get("name","").strip()
     if not agent_name: return jsonify({"error":"no name"}), 400
+    period = request.args.get("period","all")
+    limit  = min(int(request.args.get("limit", 15) or 15), 200)
     try:
-        cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower()]
+        cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower() and not is_testing(c)]
+        if period == "today":
+            cutoff = today_str()
+        elif period == "week":
+            cutoff = week_start_str()
+        elif period == "month":
+            cutoff = month_start_str()
+        else:
+            cutoff = None
+        if cutoff:
+            cases = [c for c in cases if (c.get("opened_at") or "") >= cutoff]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
+        active = sum(1 for c in cases if c.get("status") in ("open","assigned","reported"))
         rt     = [c["response_secs"] for c in cases if c.get("response_secs")]
         avg    = int(sum(rt)/len(rt)) if rt else 0
-        recent = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:15]
+        sorted_cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)
+        recent = sorted_cases[:limit]
+        last_active = fmt_dt(sorted_cases[0].get("opened_at")) if sorted_cases else "—"
         return jsonify({
-            "name": agent_name, "total": total, "done": done, "missed": missed,
+            "name": agent_name, "total": total, "done": done, "missed": missed, "active": active,
             "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
+            "missed_rate": round(missed/total*100) if total else 0,
+            "last_active": last_active,
             "recent": [serialize_case(c) for c in recent],
+            "has_more": len(sorted_cases) > limit,
+            "total_cases_available": len(sorted_cases),
         })
     except Exception as e:
         logger.error(f"api_agent error: {e}")
@@ -271,7 +290,18 @@ def api_agents():
     if session["user"].get("role","agent") not in ("developer","super_admin"):
         return jsonify({"error":"forbidden"}), 403
     try:
-        cases = load_cases()
+        period = request.args.get("period","all")
+        cases = [c for c in load_cases() if not is_testing(c)]
+        if period == "today":
+            cutoff = today_str()
+        elif period == "week":
+            cutoff = week_start_str()
+        elif period == "month":
+            cutoff = month_start_str()
+        else:
+            cutoff = None
+        if cutoff:
+            cases = [c for c in cases if (c.get("opened_at") or "") >= cutoff]
         users = []
         try:
             from storage.user_store import get_all_user_dicts
@@ -296,14 +326,19 @@ def api_agents():
             total  = len(agent_cases)
             done   = sum(1 for c in agent_cases if c.get("status") == "done")
             missed = sum(1 for c in agent_cases if c.get("status") == "missed")
+            active = sum(1 for c in agent_cases if c.get("status") in ("open","assigned","reported"))
             rt     = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
             avg    = int(sum(rt)/len(rt)) if rt else 0
+            latest = max((c.get("opened_at") or "" for c in agent_cases), default="")
             result.append({
                 "name":     name,
                 "username": u.get("username",""),
-                "total":    total, "done": done, "missed": missed,
+                "total":    total, "done": done, "missed": missed, "active": active,
                 "avg_resp": fmt_secs(avg),
                 "rate":     round(done/total*100) if total else 0,
+                "missed_rate": round(missed/total*100) if total else 0,
+                "last_active": fmt_dt(latest) if latest else "—",
+                "last_active_raw": latest,
             })
         result.sort(key=lambda x: -x["total"])
         return jsonify(result)
@@ -666,42 +701,47 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#E8ECEF;--surface:rgba(255,255,255,.91);--surface2:rgba(247,248,250,.86);--surface3:#E5E8EC;
-  --border:rgba(30,41,59,.12);--text:#1D2430;--muted:#687384;--muted2:#9AA3AF;
-  --accent:#4E6F8F;--accent-bg:rgba(78,111,143,.1);
-  --green:#16A34A;--green-bg:rgba(22,163,74,.08);
-  --red:#DC2626;--red-bg:rgba(220,38,38,.08);
-  --yellow:#D97706;--yellow-bg:rgba(217,119,6,.09);
-  --blue:#4B6F94;--blue-bg:rgba(75,111,148,.08);
-  --purple:#746B8F;--purple-bg:rgba(116,107,143,.08);
-  --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 28px rgba(15,23,42,.08);
+  --bg:#EDEAE3;--surface:rgba(255,255,255,.93);--surface2:rgba(248,246,241,.88);--surface3:#EDE7DC;
+  --border:rgba(35,28,20,.12);--text:#221C16;--muted:#6B6055;--muted2:#9C9186;
+  --accent:#C2540B;--accent-bg:rgba(194,84,11,.11);
+  --steel:#2B3440;--steel-bg:rgba(43,52,64,.08);
+  --green:#15803D;--green-bg:rgba(21,128,61,.09);
+  --red:#B91C1C;--red-bg:rgba(185,28,28,.09);
+  --yellow:#B45309;--yellow-bg:rgba(180,83,9,.1);
+  --blue:#2B3440;--blue-bg:rgba(43,52,64,.08);
+  --purple:#7A4A1E;--purple-bg:rgba(122,74,30,.09);
+  --shadow:0 1px 2px rgba(20,14,8,.05),0 8px 28px rgba(20,14,8,.1);
+  --hazard:repeating-linear-gradient(135deg,#F59E0B 0 10px,#1A1410 10px 20px);
 }
 [data-theme="dark"]{
-  --bg:#11161B;--surface:rgba(20,24,30,.9);--surface2:rgba(30,35,42,.86);--surface3:#272D36;
-  --border:rgba(255,255,255,.08);--text:#E8EAF0;--muted:#9AA3B1;--muted2:#626B79;
-  --accent:#8AA4B8;--accent-bg:rgba(138,164,184,.14);
-  --green:#4ADE80;--green-bg:rgba(74,222,128,.08);
-  --red:#F87171;--red-bg:rgba(248,113,113,.08);
-  --yellow:#FBBF24;--yellow-bg:rgba(251,191,36,.1);
-  --blue:#86A6C8;--blue-bg:rgba(134,166,200,.1);
-  --purple:#B0A6C8;--purple-bg:rgba(176,166,200,.1);
-  --shadow:0 1px 4px rgba(0,0,0,.28),0 10px 36px rgba(0,0,0,.28);
+  --bg:#15120F;--surface:rgba(24,20,16,.92);--surface2:rgba(32,27,22,.88);--surface3:#332B22;
+  --border:rgba(255,241,224,.09);--text:#F3EDE4;--muted:#B2A497;--muted2:#726657;
+  --accent:#F0812E;--accent-bg:rgba(240,129,46,.15);
+  --steel:#C7CDD6;--steel-bg:rgba(199,205,214,.1);
+  --green:#4ADE80;--green-bg:rgba(74,222,128,.09);
+  --red:#F87171;--red-bg:rgba(248,113,113,.09);
+  --yellow:#FBBF24;--yellow-bg:rgba(251,191,36,.11);
+  --blue:#C7CDD6;--blue-bg:rgba(199,205,214,.1);
+  --purple:#D9A066;--purple-bg:rgba(217,160,102,.11);
+  --shadow:0 1px 4px rgba(0,0,0,.3),0 10px 36px rgba(0,0,0,.3);
+  --hazard:repeating-linear-gradient(135deg,#F0812E 0 10px,#15120F 10px 20px);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg)}
 body{font-family:"Plus Jakarta Sans",sans-serif;background:transparent;color:var(--text);min-height:100vh;transition:background .2s,color .2s;isolation:isolate}
 body::before{content:"";position:fixed;inset:0;z-index:-1;background:
-  linear-gradient(90deg,rgba(232,236,239,.94),rgba(232,236,239,.82)),
-  url("https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
+  linear-gradient(90deg,rgba(237,234,227,.95),rgba(237,234,227,.84)),
+  url("https://images.unsplash.com/photo-1616432043562-3671ea2e5242?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
 [data-theme="dark"] body::before{background:
-  linear-gradient(90deg,rgba(17,22,27,.96),rgba(17,22,27,.86)),
-  url("https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
+  linear-gradient(90deg,rgba(21,18,15,.96),rgba(21,18,15,.87)),
+  url("https://images.unsplash.com/photo-1616432043562-3671ea2e5242?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
 body.modal-open{overflow:hidden}
 .layout{display:flex;min-height:100vh}
 
 /* ── Sidebar ── */
 .sidebar{width:230px;flex-shrink:0;background:var(--surface);backdrop-filter:blur(18px);border-right:1px solid var(--border);padding:18px 10px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
-.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px;padding:4px 8px 14px;border-bottom:1px solid var(--border)}
+.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px;padding:4px 8px 14px;border-bottom:1px solid var(--border);position:relative}
+.sidebar-logo::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:3px;background:var(--hazard);opacity:.55;border-radius:2px}
 .logo-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;box-shadow:0 2px 8px rgba(15,23,42,.16)}
 .logo-text h2{font-size:13px;font-weight:800;letter-spacing:-.2px}
 .logo-text small{font-size:10px;color:var(--muted);font-weight:500}
@@ -744,7 +784,8 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 
 /* ── Main ── */
 .main{flex:1;padding:20px 24px;overflow-x:hidden;min-width:0}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:10px;flex-wrap:wrap}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);position:relative}
+.topbar::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:3px;background:var(--hazard);opacity:.45;border-radius:2px}
 .topbar h1{font-size:17px;font-weight:800;letter-spacing:-.3px}
 .topbar-right{display:flex;align-items:center;gap:6px}
 
@@ -1195,6 +1236,24 @@ td{padding:9px 12px;vertical-align:middle}
 
   <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
+    <div class="section-header" style="margin-bottom:12px">
+      <div class="search-wrap" style="margin-bottom:0;flex:1;min-width:200px"><i class="ph ph-magnifying-glass"></i><input type="text" id="agents-search" placeholder="Search agents..." oninput="renderAgentsFiltered()"></div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div class="toggle-tabs" style="max-width:320px;margin-bottom:0">
+          <button class="toggle-btn active" onclick="setAgentsPeriod('today',this)">Today</button>
+          <button class="toggle-btn" onclick="setAgentsPeriod('week',this)">Week</button>
+          <button class="toggle-btn" onclick="setAgentsPeriod('month',this)">Month</button>
+          <button class="toggle-btn" onclick="setAgentsPeriod('all',this)">All Time</button>
+        </div>
+        <select id="agents-sort" onchange="renderAgentsFiltered()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
+          <option value="total">Sort: Most Cases</option>
+          <option value="rate">Sort: Best Rate</option>
+          <option value="missed">Sort: Most Missed</option>
+          <option value="active">Sort: Active Now</option>
+          <option value="name">Sort: Name</option>
+        </select>
+      </div>
+    </div>
     <div id="agents-content"><div class="loading">Loading...</div></div>
   </div>
 </main>
@@ -1908,35 +1967,74 @@ async function loadMyProfile() {
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
+var agentsData = [];
+var agentsPeriod = 'today';
+
+function setAgentsPeriod(p, el) {
+  agentsPeriod = p;
+  document.querySelectorAll('#page-agents .toggle-tabs .toggle-btn').forEach(function(b){b.classList.remove('active');});
+  if (el) el.classList.add('active');
+  loadAgents();
+}
+
 async function loadAgents() {
   var el = document.getElementById('agents-content');
   if (!el) return;
   el.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    var r = await fetch('/api/agents');
+    var r = await fetch('/api/agents?period='+encodeURIComponent(agentsPeriod));
     if (r.status === 403) { el.innerHTML = '<div class="loading">Access denied.</div>'; return; }
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading agents.</div>'; return; }
-    var agents = await r.json();
-    if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents found.</div>'; return; }
-    var cards = agents.map(function(a) {
-      var init = (a.name||'?')[0].toUpperCase();
-      return '<div class="card" style="cursor:pointer" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
-        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
-        + '<div><div style="font-size:13px;font-weight:700">' + h(a.name||'') + '</div>'
-        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
-        + '</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--red)">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
-        + '</div>'
-        + '<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Avg: ' + (a.avg_resp||'—') + '</div>'
-        + '</div>';
-    }).join('')
-    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">' + cards + '</div>';
+    agentsData = await r.json();
+    renderAgentsFiltered();
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
+}
+
+function renderAgentsFiltered() {
+  var el = document.getElementById('agents-content');
+  if (!el) return;
+  if (!agentsData.length) { el.innerHTML = '<div class="empty-state">No agents found for this period.</div>'; return; }
+  var q = (document.getElementById('agents-search')||{}).value || '';
+  q = q.toLowerCase().trim();
+  var sortBy = (document.getElementById('agents-sort')||{}).value || 'total';
+  var agents = agentsData.slice();
+  if (q) {
+    agents = agents.filter(function(a){
+      return (a.name||'').toLowerCase().indexOf(q) > -1 || (a.username||'').toLowerCase().indexOf(q) > -1;
+    });
+  }
+  agents.sort(function(a,b){
+    if (sortBy === 'name') return (a.name||'').localeCompare(b.name||'');
+    if (sortBy === 'rate') return (b.rate||0) - (a.rate||0);
+    if (sortBy === 'missed') return (b.missed||0) - (a.missed||0);
+    if (sortBy === 'active') return (b.active||0) - (a.active||0);
+    return (b.total||0) - (a.total||0);
+  });
+  if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents match "'+h(q)+'".</div>'; return; }
+  var cards = agents.map(function(a) {
+    var init = (a.name||'?')[0].toUpperCase();
+    var missedRate = a.missed_rate || 0;
+    var missedColor = missedRate >= 25 ? 'var(--red)' : (missedRate >= 10 ? 'var(--yellow)' : 'var(--muted)');
+    return '<div class="card" style="cursor:pointer" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+      + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
+      + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">' + h(a.name||'') + '</div>'
+      + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
+      + (a.active ? '<span class="live-pill" style="padding:3px 8px;font-size:9px"><span class="dot"></span>'+a.active+'</span>' : '')
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
+      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
+      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
+      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:'+missedColor+'">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
+      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
+      + '</div>'
+      + '<div style="margin-top:8px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">'
+      + '<span>Avg resp: <b style="color:var(--text)">' + (a.avg_resp||'—') + '</b></span>'
+      + '<span>Last active: <b style="color:var(--text)">' + h(a.last_active||'—') + '</b></span>'
+      + '</div>'
+      + '</div>';
+  }).join('')
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">' + cards + '</div>';
 }
 
 // ── Modals ─────────────────────────────────────────────────────────────────
@@ -2101,14 +2199,24 @@ function printReportView() {
   document.title = orig;
 }
 
+var agentModalLimit = 15;
+var agentModalName = '';
+
 async function openAgentModal(nameOrEl) {
   var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
+  agentModalName = name;
+  agentModalLimit = 15;
   document.getElementById('agent-modal-overlay').classList.add('open');
   lockBodyScroll();
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
   document.getElementById('agent-modal-title').textContent = name;
+  await renderAgentModal();
+}
+
+async function renderAgentModal() {
+  var name = agentModalName;
   try {
-    var r = await fetch('/api/agent?name='+encodeURIComponent(name));
+    var r = await fetch('/api/agent?name='+encodeURIComponent(name)+'&period='+encodeURIComponent(agentsPeriod||'all')+'&limit='+agentModalLimit);
     if (!r.ok) { document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Agent not found.</div>'; return; }
     var a = await r.json();
     var rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
@@ -2125,14 +2233,19 @@ async function openAgentModal(nameOrEl) {
       });
     }
     document.getElementById('agent-modal-body').innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
+      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.total+'</div><div class="agent-stat-label">Total</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+a.done+'</div><div class="agent-stat-label">Resolved</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--yellow)">'+(a.active||0)+'</div><div class="agent-stat-label">Active</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+rate+'%</div><div class="agent-stat-label">Rate</div></div>'
       + '</div>'
-      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
-      + (rows ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+      + '<div style="flex:1;min-width:140px;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
+      + '<div style="flex:1;min-width:140px;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:13px">Missed rate: <b style="color:'+(a.missed_rate>=25?'var(--red)':'var(--text)')+'">'+(a.missed_rate||0)+'%</b></div>'
+      + '<div style="flex:1;min-width:140px;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:13px">Last active: <b>'+h(a.last_active||'—')+'</b></div>'
+      + '</div>'
+      + (rows ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases ('+a.total_cases_available+')</span></div>'
         + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
         + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
@@ -2140,7 +2253,8 @@ async function openAgentModal(nameOrEl) {
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
         + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-        : '<div style="color:var(--muted);font-size:13px">No cases yet.</div>');
+        + (a.has_more ? '<div style="text-align:center;margin-top:10px"><button onclick="agentModalLimit+=15;renderAgentModal()" class="badge-btn btn-outline" style="width:100%;justify-content:center">Show more</button></div>' : '')
+        : '<div style="color:var(--muted);font-size:13px">No cases yet for this period.</div>');
   } catch(e) {
     console.error('agent modal error:', e);
     document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Error loading profile.</div>';
@@ -2576,13 +2690,58 @@ async function loadFleetIntel() {
         }).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
       + '</tbody></table></div></div>';
 
+    var trendPct = d.week_trend_pct || 0;
+    var trendColor = trendPct > 0 ? 'var(--red)' : (trendPct < 0 ? 'var(--green)' : 'var(--muted)');
+    var trendIcon = trendPct > 0 ? 'ph-trend-up' : (trendPct < 0 ? 'ph-trend-down' : 'ph-minus');
+
+    var vt = d.vtype_breakdown || {truck:0,trailer:0,reefer:0};
+    var vtTotal = (vt.truck||0) + (vt.trailer||0) + (vt.reefer||0) || 1;
+    var vtypeBarHtml = '<div class="card"><div class="card-title"><i class="ph ph-chart-pie-slice"></i> Reports by Vehicle Type</div>'
+      + ['truck','trailer','reefer'].map(function(k){
+          var pct = Math.round((vt[k]||0)/vtTotal*100);
+          var lbl = k==='truck'?'🚛 Truck':(k==='trailer'?'📦 Trailer':'❄️ Reefer');
+          return '<div style="margin-bottom:10px">'
+            + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>'+lbl+'</span><span style="font-weight:700;color:var(--accent)">'+(vt[k]||0)+' ('+pct+'%)</span></div>'
+            + '<div class="bar-wrap" style="margin:0;height:6px"><div class="bar-fill" style="width:'+pct+'%"></div></div>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+
+    var atRiskHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports (30d)</th><th>Top Issue</th></tr></thead><tbody>'
+      + ((d.at_risk_units||[]).length ? d.at_risk_units.map(function(u){
+          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" onclick="openUnitModal(this.dataset.unit)">'
+            + '<td><b>'+h(u.unit)+'</b></td>'
+            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
+            + '<td><b style="color:var(--red)">'+h(u.recent_count)+'</b></td>'
+            + '<td style="color:var(--muted)">'+h(u.top_issue)+'</td>'
+            + '</tr>';
+        }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No recurring issues in the last 30 days 🎉</td></tr>')
+      + '</tbody></table></div></div>';
+
     el.innerHTML =
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
+      '<div class="stat-grid">'
       + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
-      + '<div class="stat-card"><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
+      + '<div class="stat-card c-blue"><div class="stat-label">Units Tracked</div><div class="stat-value v-blue">'+d.unique_units+'</div></div>'
+      + '<div class="stat-card c-green"><div class="stat-label">Resolved Rate</div><div class="stat-value v-green">'+d.resolved_rate+'%</div></div>'
+      + '<div class="stat-card c-yellow"><div class="stat-label">Avg Resolution</div><div class="stat-value v-yellow" style="font-size:18px">'+h(d.avg_resolution)+'</div></div>'
+      + '<div class="stat-card c-purple"><div class="stat-label">Avg Reports / Unit</div><div class="stat-value v-purple">'+d.avg_reports_per_unit+'</div></div>'
+      + '<div class="stat-card c-red"><div class="stat-label">This Week vs Last</div><div class="stat-value" style="color:'+trendColor+';display:flex;align-items:center;gap:4px;font-size:20px"><i class="ph '+trendIcon+'"></i>'+Math.abs(trendPct)+'%</div></div>'
       + '</div>'
       + mostBrokenHtml
-      + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
+      + '<div class="two-col">'
+      + vtypeBarHtml
+      + '<div class="card"><div class="card-title"><i class="ph ph-calendar"></i> Fleet Rhythm</div>'
+      + '<div class="stats-list">'
+      + '<div class="row"><span>Busiest breakdown day</span><span class="val" style="color:var(--accent)">'+h(d.busiest_weekday)+'</span></div>'
+      + '<div class="row"><span>Reports resolved</span><span class="val">'+d.resolved_count+' / '+d.total_reports+'</span></div>'
+      + '<div class="row"><span>Units needing attention</span><span class="val" style="color:var(--red)">'+((d.at_risk_units||[]).length)+'</span></div>'
+      + '</div></div>'
+      + '</div>'
+      + '<div class="card" style="margin-bottom:20px"><div class="card-title"><i class="ph ph-chart-line"></i> Weekly Report Volume (last 8 weeks)</div><canvas id="fleet-trend-chart" height="90"></canvas></div>'
+      + '<div class="section-title" style="margin-bottom:10px;color:var(--red);display:flex;align-items:center;gap:6px"><i class="ph ph-warning-circle"></i> At-Risk Units — 3+ reports in last 30 days</div>'
+      + atRiskHtml
+      + '<div class="section-title" style="margin:16px 0 10px">Most Reported Units</div>'
       + unitsHtml
       + '<div class="section-title" style="margin:16px 0 10px">Top Broken Parts</div>'
       + partsHtml
@@ -2590,6 +2749,20 @@ async function loadFleetIntel() {
       + issuesHtml
       + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
       + driversHtml;
+
+    if (window.fleetTrendChart) { window.fleetTrendChart.destroy(); }
+    var trendCanvas = document.getElementById('fleet-trend-chart');
+    if (trendCanvas && (d.weekly_trend||[]).length) {
+      window.fleetTrendChart = new Chart(trendCanvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: d.weekly_trend.map(function(w){return w.week;}),
+          datasets: [{ label: 'Reports', data: d.weekly_trend.map(function(w){return w.count;}),
+            backgroundColor: 'rgba(194,84,11,.55)', borderColor: '#C2540B', borderWidth: 1, borderRadius: 4 }]
+        },
+        options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
+      });
+    }
   } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
@@ -2893,6 +3066,59 @@ def api_fleet_intelligence():
                 part_counts[part] += 1
         top_parts = [{"part": p, "count": cnt} for p, cnt in part_counts.most_common(10)]
 
+        # Vehicle type breakdown (share of reports by truck/trailer/reefer)
+        vtype_counts = Counter((c.get("vehicle_type") or "").strip() for c in reported if c.get("vehicle_type"))
+        vtype_breakdown = {vt: vtype_counts.get(vt, 0) for vt in ("truck", "trailer", "reefer")}
+
+        # Weekly trend for the last 8 weeks (Mon-start weeks)
+        weekly_counts = defaultdict(int)
+        for c in reported:
+            ts = c.get("opened_at")
+            if not ts: continue
+            try: d = datetime.fromisoformat(ts).date()
+            except Exception: continue
+            week_start = d - timedelta(days=d.weekday())
+            weekly_counts[week_start] += 1
+        week_keys = sorted(weekly_counts.keys())[-8:]
+        weekly_trend = [{"week": w.strftime("%b %d"), "count": weekly_counts[w]} for w in week_keys]
+        this_week_count = weekly_trend[-1]["count"] if weekly_trend else 0
+        last_week_count = weekly_trend[-2]["count"] if len(weekly_trend) > 1 else 0
+        if last_week_count:
+            week_trend_pct = round((this_week_count - last_week_count) / last_week_count * 100)
+        else:
+            week_trend_pct = 100 if this_week_count else 0
+
+        # Busiest day of week for breakdowns
+        weekday_counts = Counter()
+        for c in reported:
+            ts = c.get("opened_at")
+            if not ts: continue
+            try: d = datetime.fromisoformat(ts)
+            except Exception: continue
+            weekday_counts[d.strftime("%A")] += 1
+        busiest_weekday = weekday_counts.most_common(1)[0][0] if weekday_counts else "—"
+
+        # Units with 3+ reports in the last 30 days — recurring / at-risk units
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        at_risk_units = []
+        for unit, data in unit_data.items():
+            recent_cases = [c for c in data["cases"] if (c.get("opened_at") or "") >= cutoff]
+            if len(recent_cases) >= 3:
+                issues = Counter((c.get("issue_text") or "")[:50] for c in recent_cases if c.get("issue_text"))
+                top_issue = issues.most_common(1)[0][0] if issues else "—"
+                at_risk_units.append({
+                    "unit": unit, "vtype": data["vtype"],
+                    "recent_count": len(recent_cases), "top_issue": top_issue,
+                })
+        at_risk_units.sort(key=lambda x: -x["recent_count"])
+
+        # Fleet-wide average resolution time (for reports that were resolved)
+        resolved_secs = [c["resolution_secs"] for c in reported if c.get("status") == "done" and c.get("resolution_secs")]
+        avg_resolution = int(sum(resolved_secs) / len(resolved_secs)) if resolved_secs else None
+        resolved_count = sum(1 for c in reported if c.get("status") == "done")
+
+        avg_reports_per_unit = round(len(reported) / len(unit_data), 1) if unit_data else 0
+
         return jsonify({
             "top_units": top_units[:20],
             "top_drivers": top_drivers[:20],
@@ -2900,6 +3126,16 @@ def api_fleet_intelligence():
             "top_parts": top_parts,
             "most_broken_by_type": most_broken_by_type,
             "total_reports": len(reported),
+            "vtype_breakdown": vtype_breakdown,
+            "weekly_trend": weekly_trend,
+            "week_trend_pct": week_trend_pct,
+            "busiest_weekday": busiest_weekday,
+            "at_risk_units": at_risk_units[:15],
+            "avg_resolution": fmt_secs(avg_resolution),
+            "resolved_count": resolved_count,
+            "resolved_rate": round(resolved_count / len(reported) * 100) if reported else 0,
+            "avg_reports_per_unit": avg_reports_per_unit,
+            "unique_units": len(unit_data),
         })
     except Exception as e:
         logger.error(f"api_fleet_intelligence error: {e}")
