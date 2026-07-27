@@ -14,7 +14,6 @@ ADMINS = {
     7769230456: {"name": "Andrei",  "username": "Andrei_Cr05"},
     7808593054: {"name": "Petru",   "username": "Petru S"},
     6054170642: {"name": "Ion",   "username": "Ion AH"},
-    8755804962: {"name": "Andrei",   "username": "Andrei"},
     6855707802: {"name": "Mihai AH",   "username": "Mihai AH"},
     457540635: {"name": "Sergiu",   "username": "Lester_Fx"},
 }
