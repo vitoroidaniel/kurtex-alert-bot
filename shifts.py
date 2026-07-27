@@ -16,6 +16,7 @@ ADMINS = {
     6054170642: {"name": "Ion",   "username": "Ion AH"},
     6855707802: {"name": "Mihai AH",   "username": "Mihai AH"},
     457540635: {"name": "Sergiu",   "username": "Lester_Fx"},
+    8755804962: {"name": "Andrei",   "username": "maintenancetag"},
 }
 
 ALL_IDS = list(ADMINS.keys())
