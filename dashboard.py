@@ -55,7 +55,7 @@ def fmt_dt(iso):
     if not iso: return "—"
     try:
         import zoneinfo
-        et = zoneinfo.ZoneInfo("America/New_York")
+        et = zoneinfo.ZoneInfo("America/Chicago")
         return datetime.fromisoformat(iso).astimezone(et).strftime("%b %d %H:%M")
     except: return str(iso)[:16]
 
@@ -383,13 +383,17 @@ def api_issue_search():
     vtype = request.args.get("vtype","").strip().lower()
     if not q: return jsonify({"error":"no query"}), 400
     try:
+        import re
+        words = [w for w in re.split(r"\s+", q) if w]
+        if not words: return jsonify({"error":"no query"}), 400
+        word_patterns = [re.compile(r"\b" + re.escape(w) + r"\b", re.IGNORECASE) for w in words]
         all_cases = load_cases()
         matches = []
         for c in all_cases:
             if not c.get("unit_number"): continue
             if vtype and (c.get("vehicle_type") or "").strip().lower() != vtype: continue
-            text = ((c.get("issue_text") or "") + " " + (c.get("description") or "")).lower()
-            if q in text:
+            text = (c.get("issue_text") or "") + " " + (c.get("description") or "")
+            if all(p.search(text) for p in word_patterns):
                 matches.append(c)
         from collections import defaultdict
         by_unit = defaultdict(lambda: {"cases": [], "vtype": ""})
