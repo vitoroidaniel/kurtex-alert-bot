@@ -2382,7 +2382,14 @@ async function refresh(force) {
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
   var lu = document.getElementById('last-update');
-  if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  if (lu) {
+    lu.textContent =
+        "Updated " +
+        new Date().toLocaleTimeString("en-US", {
+            timeZone: "America/Chicago",
+            hour12: true
+        });
+}
 }
 
 function autoRefresh() {
