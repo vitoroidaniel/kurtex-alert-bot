@@ -13,6 +13,7 @@ from flask import Flask, jsonify, render_template_string, request, session, redi
 from zoneinfo import ZoneInfo
 
 CHICAGO = ZoneInfo("America/Chicago")
+"opened_at": datetime.now(CHICAGO).isoformat()
 
 def chicago_now():
     return datetime.now(CHICAGO)
