@@ -10,6 +10,10 @@ from threading import Thread
 
 from flask import Flask, jsonify, render_template_string, request, session, redirect, Response
 
+from zoneinfo import ZoneInfo
+
+CHICAGO = ZoneInfo("America/Chicago")
+
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv("DASHBOARD_SECRET", "kurtex-dashboard-secret-change-me")
@@ -40,17 +44,19 @@ def load_cases():
     try: return json.loads(f.read_text(encoding="utf-8"))
     except: return []
 
+def chicago_now():
+    return datetime.now(CHICAGO)
 
 def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
+    return chicago_now().date().isoformat()
 
 def week_start_str():
-    now = datetime.now(timezone.utc)
+    now = chicago_now()
     return (now - timedelta(days=now.weekday())).date().isoformat()
 
 def month_start_str():
-    return datetime.now(timezone.utc).date().replace(day=1).isoformat()
-
+    return chicago_now().date().replace(day=1).isoformat()
+    
 def fmt_dt(iso):
     if not iso: return "—"
     try:
