@@ -52,7 +52,7 @@ SHIFTS = [
     },
 ]
 
-TIMEZONE = "America/New_York"
+TIMEZONE = "America/Chicago"
 
 # MAIN_ADMIN_ID is kept as a set so "user.id in MAIN_ADMIN_ID" works correctly everywhere
 MAIN_ADMIN_ID = {8422260316, 7808593054, 7769230456, 1401145589}
