@@ -10,18 +10,6 @@ from threading import Thread
 
 from flask import Flask, jsonify, render_template_string, request, session, redirect, Response
 
-from zoneinfo import ZoneInfo
-
-CHICAGO = ZoneInfo("America/Chicago")
-
-def chicago_now():
-    return datetime.now(CHICAGO)
-
-def chicago_date(iso):
-    if not iso:
-        return None
-    return datetime.fromisoformat(iso).astimezone(CHICAGO).date()
-
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv("DASHBOARD_SECRET", "kurtex-dashboard-secret-change-me")
@@ -29,6 +17,7 @@ app.secret_key = os.getenv("DASHBOARD_SECRET", "kurtex-dashboard-secret-change-m
 DATA_DIR       = Path(os.getenv("DATA_DIR", "/app/data"))
 BOT_TOKEN      = os.getenv("BOT_TOKEN", "")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
+
 
 def verify_telegram_login(data):
     check_hash = data.pop("hash", "")
@@ -51,24 +40,22 @@ def load_cases():
     try: return json.loads(f.read_text(encoding="utf-8"))
     except: return []
 
-def chicago_now():
-    return datetime.now(CHICAGO)
 
 def today_str():
-    return chicago_now().date().isoformat()
+    return datetime.now(timezone.utc).date().isoformat()
 
 def week_start_str():
-    now = chicago_now()
+    now = datetime.now(timezone.utc)
     return (now - timedelta(days=now.weekday())).date().isoformat()
 
 def month_start_str():
-    return chicago_now().date().replace(day=1).isoformat()
-    
+    return datetime.now(timezone.utc).date().replace(day=1).isoformat()
+
 def fmt_dt(iso):
     if not iso: return "—"
     try:
         import zoneinfo
-        et = zoneinfo.ZoneInfo("America/Chicago")
+        et = zoneinfo.ZoneInfo("America/New_York")
         return datetime.fromisoformat(iso).astimezone(et).strftime("%b %d %H:%M")
     except: return str(iso)[:16]
 
@@ -85,6 +72,14 @@ def is_testing(c):
     # Testing tab/filter removed: cases from testing groups are no longer
     # excluded from stats — they now count as normal active cases.
     return False
+
+def build_phrase_pattern(q):
+    """Compile a case-insensitive, whole-word/phrase regex for exact keyword matching.
+    'air' won't match inside 'repair'; 'oil leak' matches only as a contiguous phrase."""
+    tokens = [re.escape(t) for t in re.split(r"\s+", (q or "").strip()) if t]
+    if not tokens:
+        return None
+    return re.compile(r"\b" + r"\s+".join(tokens) + r"\b", re.IGNORECASE)
 
 def serialize_case(c):
     try:
@@ -146,20 +141,13 @@ def api_stats():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
         cases = load_cases()
-        today = chicago_now().date()
-        week_start = today - timedelta(days=today.weekday())
-        month_start = today.replace(day=1)
-        tc = [c for c in real if chicago_date(c.get("opened_at")) == today]
-        wc = [
-            c for c in real
-            if (d := chicago_date(c.get("opened_at"))) and d >= week_start
-        ]
-        mc = [
-            c for c in real
-            if (d := chicago_date(c.get("opened_at"))) and d >= month_start
-        ]
+        today = today_str(); wk = week_start_str(); mo = month_start_str()
+        real = [c for c in cases if not is_testing(c)]
+        tc = [c for c in real if (c.get("opened_at") or "").startswith(today)]
+        wc = [c for c in real if (c.get("opened_at") or "") >= wk]
+        mc = [c for c in real if (c.get("opened_at") or "") >= mo]
         st = Counter(c.get("status","open") for c in tc)
-        
+
         def lb(lst):
             cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
             return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
@@ -269,6 +257,15 @@ def api_agent():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     agent_name = request.args.get("name","").strip()
     if not agent_name: return jsonify({"error":"no name"}), 400
+    period = request.args.get("period","all").strip().lower()
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        limit = max(1, min(int(request.args.get("limit", 15)), 100))
+    except (TypeError, ValueError):
+        limit = 15
     try:
         cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower()]
         total  = len(cases)
@@ -276,11 +273,37 @@ def api_agent():
         missed = sum(1 for c in cases if c.get("status") == "missed")
         rt     = [c["response_secs"] for c in cases if c.get("response_secs")]
         avg    = int(sum(rt)/len(rt)) if rt else 0
-        recent = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:15]
+
+        if period == "today":
+            bound = today_str()
+            period_cases = [c for c in cases if (c.get("opened_at") or "").startswith(bound)]
+        elif period == "week":
+            bound = week_start_str()
+            period_cases = [c for c in cases if (c.get("opened_at") or "") >= bound]
+        elif period == "month":
+            bound = month_start_str()
+            period_cases = [c for c in cases if (c.get("opened_at") or "") >= bound]
+        else:
+            period = "all"
+            period_cases = cases
+
+        period_cases.sort(key=lambda c: c.get("opened_at",""), reverse=True)
+        period_total  = len(period_cases)
+        period_done   = sum(1 for c in period_cases if c.get("status") == "done")
+        period_missed = sum(1 for c in period_cases if c.get("status") == "missed")
+        page = period_cases[offset:offset+limit]
+
         return jsonify({
             "name": agent_name, "total": total, "done": done, "missed": missed,
             "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
-            "recent": [serialize_case(c) for c in recent],
+            "period": period,
+            "period_stats": {
+                "total": period_total, "done": period_done, "missed": period_missed,
+                "rate": round(period_done/period_total*100) if period_total else 0,
+            },
+            "cases": [serialize_case(c) for c in page],
+            "offset": offset, "limit": limit,
+            "has_more": offset + limit < period_total,
         })
     except Exception as e:
         logger.error(f"api_agent error: {e}")
@@ -399,21 +422,22 @@ def api_unit():
 @app.route("/api/issue_search")
 def api_issue_search():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
-    q = request.args.get("q","").strip().lower()
+    q = request.args.get("q","").strip()
     vtype = request.args.get("vtype","").strip().lower()
     if not q: return jsonify({"error":"no query"}), 400
     try:
-        import re
-        words = [w for w in re.split(r"\s+", q) if w]
-        if not words: return jsonify({"error":"no query"}), 400
-        word_patterns = [re.compile(r"\b" + re.escape(w) + r"\b", re.IGNORECASE) for w in words]
+        # Match the exact keyword/phrase as typed (whole-word boundaries on each
+        # side, internal whitespace tolerant), case-insensitive. This is a literal
+        # match of the phrase, not "any of these words anywhere".
+        pattern = build_phrase_pattern(q)
+        if not pattern: return jsonify({"error":"no query"}), 400
         all_cases = load_cases()
         matches = []
         for c in all_cases:
             if not c.get("unit_number"): continue
             if vtype and (c.get("vehicle_type") or "").strip().lower() != vtype: continue
             text = (c.get("issue_text") or "") + " " + (c.get("description") or "")
-            if all(p.search(text) for p in word_patterns):
+            if pattern.search(text):
                 matches.append(c)
         from collections import defaultdict
         by_unit = defaultdict(lambda: {"cases": [], "vtype": ""})
@@ -505,24 +529,12 @@ def api_report():
         date_to   = request.args.get("to","")
         cases     = load_cases()
         if period == "today":
-            today = chicago_now().date()
-            label = "Today — " + chicago_now().strftime("%B %d, %Y")
-            cases = [
-                c for c in cases
-                if chicago_date(c.get("opened_at")) == today
-            ]
+            label = "Today — " + datetime.now().strftime("%B %d, %Y")
+            cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
         elif period == "week":
-            label = "This Week"; week_start = today - timedelta(days=today.weekday())
-            cases = [
-                c for c in cases
-                if (d := chicago_date(c.get("opened_at"))) and d >= week_start
-            ]
+            label = "This Week"; cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
         elif period == "month":
-            label = "This Month"; month_start = today.replace(day=1)
-            cases = [
-                c for c in cases
-                if (d := chicago_date(c.get("opened_at"))) and d >= month_start
-            ]
+            label = "This Month"; cases = [c for c in cases if (c.get("opened_at") or "") >= month_start_str()]
         elif period == "custom" and date_from:
             dt = date_to or today_str(); label = f"{date_from} to {dt}"
             cases = [c for c in cases if date_from <= (c.get("opened_at") or "")[:10] <= dt]
@@ -917,6 +929,16 @@ td{padding:9px 12px;vertical-align:middle}
 .agent-stat{background:var(--surface2);border-radius:8px;padding:10px;text-align:center}
 .agent-stat-val{font-size:22px;font-weight:800}
 .agent-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.agent-card{cursor:pointer;transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;position:relative;overflow:hidden}
+.agent-card:hover{transform:translateY(-3px);box-shadow:0 10px 24px rgba(0,0,0,.18);border-color:var(--accent)}
+.agent-card-rank{position:absolute;top:14px;right:16px;font-size:11px;font-weight:800;color:var(--muted);background:var(--surface2);border-radius:20px;padding:3px 10px}
+.agent-card-avatar{width:56px;height:56px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:var(--accent);flex-shrink:0}
+.agent-card-statbox{background:var(--surface2);border-radius:9px;padding:10px 4px;text-align:center}
+.agent-card-statval{font-size:19px;font-weight:800}
+.agent-card-statlabel{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.agent-rate-track{background:var(--surface2);border-radius:20px;height:8px;overflow:hidden;margin-top:8px}
+.agent-rate-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,var(--accent),var(--green))}
+.agent-card-footer{margin-top:14px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:12px}
 
 .report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:400;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;overscroll-behavior:contain}
 .report-modal-overlay.open{display:flex}
@@ -1742,24 +1764,31 @@ async function loadAgents() {
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading agents.</div>'; return; }
     var agents = await r.json();
     if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents found.</div>'; return; }
-    var cards = agents.map(function(a) {
+    var cards = agents.map(function(a, i) {
       var init = (a.name||'?')[0].toUpperCase();
-      return '<div class="card" style="cursor:pointer" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
-        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
-        + '<div><div style="font-size:13px;font-weight:700">' + h(a.name||'') + '</div>'
-        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
+      var rate = a.rate || 0;
+      var rateColor = rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--accent)' : 'var(--red)';
+      return '<div class="card agent-card" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
+        + '<div class="agent-card-rank">#' + (i+1) + '</div>'
+        + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-right:36px">'
+        + '<div class="agent-card-avatar">' + init + '</div>'
+        + '<div style="min-width:0"><div style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + h(a.name||'') + '</div>'
+        + '<div style="font-size:12px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
         + '</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--red)">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
-        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+        + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--accent)">' + (a.total||0) + '</div><div class="agent-card-statlabel">Total</div></div>'
+        + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--green)">' + (a.done||0) + '</div><div class="agent-card-statlabel">Done</div></div>'
+        + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--red)">' + (a.missed||0) + '</div><div class="agent-card-statlabel">Missed</div></div>'
+        + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:' + rateColor + '">' + rate + '%</div><div class="agent-card-statlabel">Rate</div></div>'
         + '</div>'
-        + '<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Avg: ' + (a.avg_resp||'—') + '</div>'
+        + '<div class="agent-rate-track"><div class="agent-rate-fill" style="width:' + Math.min(rate,100) + '%"></div></div>'
+        + '<div class="agent-card-footer">'
+        + '<span>Avg response: <b style="color:var(--text)">' + (a.avg_resp||'—') + '</b></span>'
+        + '<span style="color:var(--accent);font-weight:700;display:flex;align-items:center;gap:4px">View Cases <i class="ph ph-arrow-right"></i></span>'
+        + '</div>'
         + '</div>';
     }).join('')
-    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">' + cards + '</div>';
+    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px">' + cards + '</div>';
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
@@ -1925,49 +1954,85 @@ function printReportView() {
   document.title = orig;
 }
 
+var agentModalState = { name: '', period: 'all', offset: 0, limit: 15, rows: '' };
+
+function agentCaseRow(c) {
+  var cid = c.full_id || '';
+  return '<tr style="border-bottom:1px solid var(--border);cursor:pointer" data-id="' + attr(cid) + '" onclick="closeAgentModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)">'
+    + '<td style="padding:8px 10px;font-weight:500">' + h(c.driver||'—') + '</td>'
+    + '<td style="padding:8px 10px;color:var(--muted)">' + h(c.group||'—') + '</td>'
+    + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
+    + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + h(c.opened||'—') + '</td>'
+    + '</tr>';
+}
+
 async function openAgentModal(nameOrEl) {
   var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
+  agentModalState = { name: name, period: 'all', offset: 0, limit: 15, rows: '' };
   document.getElementById('agent-modal-overlay').classList.add('open');
   lockBodyScroll();
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
   document.getElementById('agent-modal-title').textContent = name;
+  await loadAgentProfileData(true);
+}
+
+function setAgentPeriod(period) {
+  if (agentModalState.period === period) return;
+  agentModalState.period = period;
+  agentModalState.offset = 0;
+  agentModalState.rows = '';
+  loadAgentProfileData(true);
+}
+
+async function loadAgentModalMore() {
+  agentModalState.offset += agentModalState.limit;
+  await loadAgentProfileData(false);
+}
+
+async function loadAgentProfileData(resetHeader) {
+  var body = document.getElementById('agent-modal-body');
+  var s = agentModalState;
+  if (resetHeader) body.innerHTML = '<div class="loading">Loading profile...</div>';
   try {
-    var r = await fetch('/api/agent?name='+encodeURIComponent(name));
-    if (!r.ok) { document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Agent not found.</div>'; return; }
+    var url = '/api/agent?name=' + encodeURIComponent(s.name)
+      + '&period=' + encodeURIComponent(s.period)
+      + '&offset=' + s.offset + '&limit=' + s.limit;
+    var r = await fetch(url);
+    if (!r.ok) { body.innerHTML = '<div class="loading">Agent not found.</div>'; return; }
     var a = await r.json();
-    var rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
-    var rows = '';
-    if (a.recent && a.recent.length) {
-      a.recent.forEach(function(c) {
-        var cid = c.full_id || '';
-        rows += '<tr style="border-bottom:1px solid var(--border);cursor:pointer" data-id="' + attr(cid) + '" onclick="closeAgentModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)">'
-          + '<td style="padding:8px 10px;font-weight:500">' + h(c.driver||'—') + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted)">' + h(c.group||'—') + '</td>'
-          + '<td style="padding:8px 10px">' + statusBadge(c.status) + '</td>'
-          + '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' + h(c.opened||'—') + '</td>'
-          + '</tr>';
-      });
+    var ps = a.period_stats || {total:0,done:0,missed:0,rate:0};
+    var newRows = (a.cases || []).map(agentCaseRow).join('');
+    s.rows = s.offset > 0 ? s.rows + newRows : newRows;
+    var periodLabels = {today:'Today', week:'This Week', month:'This Month', all:'All Time'};
+    function tab(p) {
+      return '<button class="toggle-btn' + (s.period===p?' active':'') + '" onclick="setAgentPeriod(\'' + p + '\')">' + periodLabels[p] + '</button>';
     }
-    document.getElementById('agent-modal-body').innerHTML =
+    body.innerHTML =
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.total+'</div><div class="agent-stat-label">Total</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.total+'</div><div class="agent-stat-label">Total (all-time)</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+a.done+'</div><div class="agent-stat-label">Resolved</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+rate+'%</div><div class="agent-stat-label">Rate</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.rate+'%</div><div class="agent-stat-label">Rate</div></div>'
       + '</div>'
-      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
-      + (rows ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
-        + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
-        + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
-        + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
-        + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-        : '<div style="color:var(--muted);font-size:13px">No cases yet.</div>');
+      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
+      + '<div class="toggle-tabs" style="margin-bottom:10px">' + tab('today') + tab('week') + tab('month') + tab('all') + '</div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases — ' + periodLabels[s.period] + '</div>'
+      + '<div style="font-size:11px;color:var(--muted)">' + ps.total + ' total &middot; ' + ps.done + ' done &middot; ' + ps.missed + ' missed</div>'
+      + '</div>'
+      + (s.rows
+        ? '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
+          + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
+          + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
+          + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
+          + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
+          + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
+          + '</tr></thead><tbody id="agent-case-rows">' + s.rows + '</tbody></table></div>'
+          + (a.has_more ? '<div style="text-align:center;margin-top:12px"><button class="btn" style="background:var(--surface2);color:var(--text)" onclick="loadAgentModalMore()"><i class="ph ph-arrow-down"></i> Load More</button></div>' : '')
+        : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No cases in this period.</div>');
   } catch(e) {
     console.error('agent modal error:', e);
-    document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Error loading profile.</div>';
+    body.innerHTML = '<div class="loading">Error loading profile.</div>';
   }
 }
 function closeAgentModal() {
@@ -2387,14 +2452,8 @@ async function refresh(force) {
   await loadStats();
   if (!force) {
     var luQuiet = document.getElementById('last-update');
-    if (luQuiet) {
-    lu.textContent =
-        "Updated " +
-        new Date().toLocaleTimeString("en-US", {
-            timeZone: "America/Chicago",
-            hour12: true
-        });
-}
+    if (luQuiet) luQuiet.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    return;
   }
   if (currentPage==='overview') {
     try {
@@ -2414,14 +2473,7 @@ async function refresh(force) {
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
   var lu = document.getElementById('last-update');
-  if (lu) {
-    lu.textContent =
-        "Updated " +
-        new Date().toLocaleTimeString("en-US", {
-            timeZone: "America/Chicago",
-            hour12: true
-        });
-}
+  if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 function autoRefresh() {
