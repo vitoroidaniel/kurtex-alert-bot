@@ -14,6 +14,14 @@ from zoneinfo import ZoneInfo
 
 CHICAGO = ZoneInfo("America/Chicago")
 
+def chicago_now():
+    return datetime.now(CHICAGO)
+
+def chicago_date(iso):
+    if not iso:
+        return None
+    return datetime.fromisoformat(iso).astimezone(CHICAGO).date()
+
 logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.getenv("DASHBOARD_SECRET", "kurtex-dashboard-secret-change-me")
@@ -21,7 +29,6 @@ app.secret_key = os.getenv("DASHBOARD_SECRET", "kurtex-dashboard-secret-change-m
 DATA_DIR       = Path(os.getenv("DATA_DIR", "/app/data"))
 BOT_TOKEN      = os.getenv("BOT_TOKEN", "")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "8080"))
-
 
 def verify_telegram_login(data):
     check_hash = data.pop("hash", "")
@@ -139,13 +146,20 @@ def api_stats():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
         cases = load_cases()
-        today = today_str(); wk = week_start_str(); mo = month_start_str()
-        real = [c for c in cases if not is_testing(c)]
-        tc = [c for c in real if (c.get("opened_at") or "").startswith(today)]
-        wc = [c for c in real if (c.get("opened_at") or "") >= wk]
-        mc = [c for c in real if (c.get("opened_at") or "") >= mo]
+        today = chicago_now().date()
+        week_start = today - timedelta(days=today.weekday())
+        month_start = today.replace(day=1)
+        tc = [c for c in real if chicago_date(c.get("opened_at")) == today]
+        wc = [
+            c for c in real
+            if (d := chicago_date(c.get("opened_at"))) and d >= week_start
+        ]
+        mc = [
+            c for c in real
+            if (d := chicago_date(c.get("opened_at"))) and d >= month_start
+        ]
         st = Counter(c.get("status","open") for c in tc)
-
+        
         def lb(lst):
             cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
             return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
@@ -491,12 +505,24 @@ def api_report():
         date_to   = request.args.get("to","")
         cases     = load_cases()
         if period == "today":
-            label = "Today — " + datetime.now().strftime("%B %d, %Y")
-            cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
+            today = chicago_now().date()
+            label = "Today — " + chicago_now().strftime("%B %d, %Y")
+            cases = [
+                c for c in cases
+                if chicago_date(c.get("opened_at")) == today
+            ]
         elif period == "week":
-            label = "This Week"; cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
+            label = "This Week"; week_start = today - timedelta(days=today.weekday())
+            cases = [
+                c for c in cases
+                if (d := chicago_date(c.get("opened_at"))) and d >= week_start
+            ]
         elif period == "month":
-            label = "This Month"; cases = [c for c in cases if (c.get("opened_at") or "") >= month_start_str()]
+            label = "This Month"; month_start = today.replace(day=1)
+            cases = [
+                c for c in cases
+                if (d := chicago_date(c.get("opened_at"))) and d >= month_start
+            ]
         elif period == "custom" and date_from:
             dt = date_to or today_str(); label = f"{date_from} to {dt}"
             cases = [c for c in cases if date_from <= (c.get("opened_at") or "")[:10] <= dt]
