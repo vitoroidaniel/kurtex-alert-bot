@@ -66,6 +66,13 @@ def fmt_secs(secs):
     if secs < 3600: return f"{secs//60}m {secs%60}s"
     return f"{secs//3600}h {(secs%3600)//60}m"
 
+TESTING_GROUPS = {"testing", "test", "tests"}
+
+def is_testing(c):
+    # Testing tab/filter removed: cases from testing groups are no longer
+    # excluded from stats — they now count as normal active cases.
+    return False
+
 def serialize_case(c):
     try:
         return {
@@ -82,30 +89,13 @@ def serialize_case(c):
             "description": (c.get("description") or "")[:200],
             "notes":       c.get("notes") or "",
             "reassigned":  bool(c.get("reassigned")),
-            "triggers":    extract_triggers(c),
         }
     except Exception as e:
         logger.error(f"serialize_case error: {e}")
         return {"id":"?","full_id":"","driver":"—","group":"—","agent":"—",
                 "status":"open","opened":"—","closed":"—","opened_raw":"",
-                "response":"—","description":"","notes":"","reassigned":False,"triggers":[]}
+                "response":"—","description":"","notes":"","reassigned":False}
 
-def extract_triggers(c):
-    issue = (c.get("issue_text") or "").strip()
-    if not issue: return []
-    triggers = set()
-    for m in re.finditer(r'\b(\d{2,4})\b', issue):
-        triggers.add(m.group(1))
-    kw_set = {"EGT","DPF","SCR","DEF","DTC","O2","ECM","PCM",
-               "ABS","ESP","EGR","OBD","CAN","LIN"}
-    for m in re.finditer(r'\b([A-Z]{2,5})\b', issue):
-        if m.group(1) in kw_set:
-            triggers.add(m.group(1))
-    for part in re.split(r'[|/\\-—\\–,;]+', issue):
-        part = part.strip()
-        if len(part) >= 3:
-            triggers.add(part)
-    return sorted(list(triggers))
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -144,7 +134,7 @@ def api_stats():
     try:
         cases = load_cases()
         today = today_str(); wk = week_start_str(); mo = month_start_str()
-        real = cases
+        real = [c for c in cases if not is_testing(c)]
         tc = [c for c in real if (c.get("opened_at") or "").startswith(today)]
         wc = [c for c in real if (c.get("opened_at") or "") >= wk]
         mc = [c for c in real if (c.get("opened_at") or "") >= mo]
@@ -193,6 +183,8 @@ def api_cases():
         search = request.args.get("search","").lower().strip()
         date_filter = request.args.get("date","").strip()
         cases = load_cases()
+        if f != "testing":
+            cases = [c for c in cases if not is_testing(c)]
         if date_filter:
             cases = [c for c in cases if (c.get("opened_at") or "").startswith(date_filter)]
         elif f == "today":    cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
@@ -200,6 +192,7 @@ def api_cases():
         elif f == "missed":   cases = [c for c in cases if c.get("status") == "missed"]
         elif f == "active":   cases = [c for c in cases if c.get("status") in ("open","assigned","reported")]
         elif f == "reassigned": cases = [c for c in cases if c.get("reassigned")]
+        elif f == "testing":  cases = [c for c in cases if is_testing(c)]
         status_f = request.args.get("status","").strip().lower()
         if status_f:
             cases = [c for c in cases if (c.get("status") or "").lower() == status_f]
@@ -208,9 +201,7 @@ def api_cases():
                      search in (c.get("driver_name") or "").lower() or
                      search in (c.get("group_name") or "").lower() or
                      search in (c.get("agent_name") or "").lower() or
-                     search in (c.get("description") or "").lower() or
-                     search in (c.get("issue_text") or "").lower() or
-                     any(search in t.lower() for t in (c.get("triggers") or []))]
+                     search in (c.get("description") or "").lower()]
         cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:200]
         return jsonify([serialize_case(c) for c in cases])
     except Exception as e:
@@ -258,37 +249,18 @@ def api_agent():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     agent_name = request.args.get("name","").strip()
     if not agent_name: return jsonify({"error":"no name"}), 400
-    period = request.args.get("period","all")
-    limit  = min(int(request.args.get("limit", 15) or 15), 200)
     try:
         cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower()]
-        if period == "today":
-            cutoff = today_str()
-        elif period == "week":
-            cutoff = week_start_str()
-        elif period == "month":
-            cutoff = month_start_str()
-        else:
-            cutoff = None
-        if cutoff:
-            cases = [c for c in cases if (c.get("opened_at") or "") >= cutoff]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
-        active = sum(1 for c in cases if c.get("status") in ("open","assigned","reported"))
         rt     = [c["response_secs"] for c in cases if c.get("response_secs")]
         avg    = int(sum(rt)/len(rt)) if rt else 0
-        sorted_cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)
-        recent = sorted_cases[:limit]
-        last_active = fmt_dt(sorted_cases[0].get("opened_at")) if sorted_cases else "—"
+        recent = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:15]
         return jsonify({
-            "name": agent_name, "total": total, "done": done, "missed": missed, "active": active,
+            "name": agent_name, "total": total, "done": done, "missed": missed,
             "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
-            "missed_rate": round(missed/total*100) if total else 0,
-            "last_active": last_active,
             "recent": [serialize_case(c) for c in recent],
-            "has_more": len(sorted_cases) > limit,
-            "total_cases_available": len(sorted_cases),
         })
     except Exception as e:
         logger.error(f"api_agent error: {e}")
@@ -301,18 +273,7 @@ def api_agents():
     if session["user"].get("role","agent") not in ("developer","super_admin"):
         return jsonify({"error":"forbidden"}), 403
     try:
-        period = request.args.get("period","all")
         cases = load_cases()
-        if period == "today":
-            cutoff = today_str()
-        elif period == "week":
-            cutoff = week_start_str()
-        elif period == "month":
-            cutoff = month_start_str()
-        else:
-            cutoff = None
-        if cutoff:
-            cases = [c for c in cases if (c.get("opened_at") or "") >= cutoff]
         users = []
         try:
             from storage.user_store import get_all_user_dicts
@@ -337,19 +298,14 @@ def api_agents():
             total  = len(agent_cases)
             done   = sum(1 for c in agent_cases if c.get("status") == "done")
             missed = sum(1 for c in agent_cases if c.get("status") == "missed")
-            active = sum(1 for c in agent_cases if c.get("status") in ("open","assigned","reported"))
             rt     = [c["response_secs"] for c in agent_cases if c.get("response_secs")]
             avg    = int(sum(rt)/len(rt)) if rt else 0
-            latest = max((c.get("opened_at") or "" for c in agent_cases), default="")
             result.append({
                 "name":     name,
                 "username": u.get("username",""),
-                "total":    total, "done": done, "missed": missed, "active": active,
+                "total":    total, "done": done, "missed": missed,
                 "avg_resp": fmt_secs(avg),
                 "rate":     round(done/total*100) if total else 0,
-                "missed_rate": round(missed/total*100) if total else 0,
-                "last_active": fmt_dt(latest) if latest else "—",
-                "last_active_raw": latest,
             })
         result.sort(key=lambda x: -x["total"])
         return jsonify(result)
@@ -395,10 +351,13 @@ def api_my_profile():
 def api_unit():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     unit_number = request.args.get("unit","").strip()
+    vtype = request.args.get("vtype","").strip().lower()
     if not unit_number: return jsonify({"error":"no unit"}), 400
     try:
         all_cases = load_cases()
         unit_cases = [c for c in all_cases if (c.get("unit_number") or "").strip() == unit_number]
+        if vtype:
+            unit_cases = [c for c in unit_cases if (c.get("vehicle_type") or "").strip().lower() == vtype]
         unit_cases.sort(key=lambda c: c.get("opened_at",""), reverse=True)
         total  = len(unit_cases)
         active = sum(1 for c in unit_cases if c.get("status") in ("open","assigned","reported","missed"))
@@ -414,6 +373,45 @@ def api_unit():
         })
     except Exception as e:
         logger.error(f"api_unit error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/issue_search")
+def api_issue_search():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    q = request.args.get("q","").strip().lower()
+    vtype = request.args.get("vtype","").strip().lower()
+    if not q: return jsonify({"error":"no query"}), 400
+    try:
+        all_cases = load_cases()
+        matches = []
+        for c in all_cases:
+            if not c.get("unit_number"): continue
+            if vtype and (c.get("vehicle_type") or "").strip().lower() != vtype: continue
+            text = ((c.get("issue_text") or "") + " " + (c.get("description") or "")).lower()
+            if q in text:
+                matches.append(c)
+        from collections import defaultdict
+        by_unit = defaultdict(lambda: {"cases": [], "vtype": ""})
+        for c in matches:
+            unit = (c.get("unit_number") or "").strip()
+            by_unit[unit]["vtype"] = c.get("vehicle_type","")
+            by_unit[unit]["cases"].append(c)
+        results = []
+        for unit, d in by_unit.items():
+            cases = sorted(d["cases"], key=lambda c: c.get("opened_at",""), reverse=True)
+            last = cases[0]
+            results.append({
+                "unit": unit,
+                "vtype": d["vtype"],
+                "count": len(cases),
+                "last_seen": fmt_dt(last.get("opened_at")),
+                "sample_issue": (last.get("issue_text") or last.get("description") or "")[:100],
+            })
+        results.sort(key=lambda x: -x["count"])
+        return jsonify({"query": q, "results": results, "total_matches": len(matches)})
+    except Exception as e:
+        logger.error(f"api_issue_search error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -437,50 +435,26 @@ def api_fleet():
             vtype = c.get("vehicle_type","").strip()
             if unit:
                 latest_by_unit[(unit, vtype)] = c
-        # per-unit history: total report count + most common recurring issue,
-        # used for the inline history column and the unit-detail popover
-        from collections import defaultdict
-        unit_history = defaultdict(lambda: {"total": 0, "issues": Counter()})
-        for c in cases:
-            unit = (c.get("unit_number") or "").strip()
-            if not unit: continue
-            unit_history[unit]["total"] += 1
-            iss = (c.get("issue_text") or "").strip()[:50]
-            if iss: unit_history[unit]["issues"][iss] += 1
         fleet_status = []
         active_statuses = {"open", "assigned", "reported", "missed"}
-        now = datetime.now(timezone.utc)
         for (unit, vtype), c in latest_by_unit.items():
             status = c.get("status") or "open"
-            is_active = status in active_statuses
-            opened_raw = c.get("opened_at") or ""
-            age_days = None
-            if is_active and opened_raw:
-                try:
-                    age_days = (now - datetime.fromisoformat(opened_raw)).days
-                except Exception:
-                    age_days = None
-            hist = unit_history.get(unit, {"total": 0, "issues": Counter()})
             fleet_status.append({
                 "unit": unit,
                 "vtype": vtype,
                 "case_id": c.get("id",""),
-                "status": "active" if is_active else "repaired",
+                "status": "active" if status in active_statuses else "repaired",
                 "case_status": status,
                 "issue": c.get("issue_text") or c.get("description") or "",
                 "driver": c.get("report_driver") or c.get("driver_name") or "",
                 "opened": fmt_dt(c.get("opened_at")),
-                "opened_raw": opened_raw,
-                "age_days": age_days,
-                "total_reports": hist["total"],
-                "top_issue": hist["issues"].most_common(1)[0][0] if hist["issues"] else "",
             })
         active_units = sum(1 for x in fleet_status if x["status"] == "active")
         repaired_units = sum(1 for x in fleet_status if x["status"] == "repaired")
         fleet_status = sorted(
             fleet_status,
             key=lambda x: (x["status"] != "active", x["vtype"], x["unit"])
-        )
+        )[:30]
         return jsonify({
             "total_reports": total, "truck_count": truck_count,
             "trailer_count": trailer_count, "reefer_count": reefer_count,
@@ -568,32 +542,35 @@ LOGIN_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#ffffff}
+body{font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#1a1208}
 
+/* Background slides */
+.bg-slide{position:fixed;inset:0;transition:opacity 2s ease-in-out;background-size:cover;background-position:center;opacity:0}
+.bg-slide.active{opacity:1}
 
-
-
+/* Dark gradient overlay - left side darker for card, right shows photo */
+.overlay{position:fixed;inset:0;background:linear-gradient(105deg,rgba(20,14,6,.92) 0%,rgba(20,14,6,.75) 40%,rgba(20,14,6,.3) 70%,rgba(20,14,6,.1) 100%)}
 
 /* Card on left */
 .card{position:relative;z-index:1;width:100%;max-width:400px;margin:0 auto}
-.card-inner{background:#fff;border:1px solid #ddd;border-radius:24px;padding:44px 36px}
+.card-inner{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:44px 36px;backdrop-filter:blur(16px)}
 
-.logo{width:60px;height:60px;border-radius:16px;background:#333;display:flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:28px}
-h1{color:#000;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.4px;line-height:1.2;text-align:center}
-.tagline{color:#666;font-size:13px;margin-bottom:28px;text-align:center}
+.logo{width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#C17B3F,#8B4A1A);display:flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:28px;box-shadow:0 4px 24px rgba(193,123,63,.5)}
+h1{color:#fff;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.4px;line-height:1.2;text-align:center}
+.tagline{color:rgba(255,255,255,.5);font-size:13px;margin-bottom:28px;text-align:center}
 
 /* Stats strip */
-.stats{display:flex;gap:20px;margin-bottom:28px;padding:14px 16px;background:#f0f0f0;border-radius:12px;border:1px solid #ddd}
+.stats{display:flex;gap:20px;margin-bottom:28px;padding:14px 16px;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.08)}
 .stat{text-align:center;flex:1}
-.stat-num{font-size:20px;font-weight:800;color:#000}
-.stat-lbl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.stat-num{font-size:20px;font-weight:800;color:#D4904E}
+.stat-lbl{font-size:9px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
 
 .divider{display:flex;align-items:center;gap:10px;margin-bottom:20px}
-.divider-line{flex:1;height:1px;background:#ddd}
-.divider span{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}
+.divider-line{flex:1;height:1px;background:rgba(255,255,255,.12)}
+.divider span{font-size:10px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.1em;white-space:nowrap}
 .tg-wrap{display:flex;justify-content:center}
 
-.error{color:#cc0000;font-size:12px;margin-bottom:14px;background:rgba(200,0,0,.06);border:1px solid rgba(200,0,0,.2);border-radius:8px;padding:8px 12px}
+.error{color:#F87171;font-size:12px;margin-bottom:14px;background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);border-radius:8px;padding:8px 12px}
 
 /* Right side caption */
 .caption{position:fixed;bottom:40px;right:40px;z-index:2;text-align:right}
@@ -602,7 +579,7 @@ h1{color:#000;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.
 
 /* Dots indicator */
 .dots{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:2;display:flex;gap:6px}
-.dot{width:6px;height:6px;border-radius:50%;background:#999}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);transition:all .3s}
 .dot.active{background:#D4904E;width:20px;border-radius:3px}
 
 @media(max-width:768px){
@@ -611,6 +588,8 @@ h1{color:#000;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.
 }
 </style>
 </head><body>
+<div id="bg1" class="bg-slide active"></div>
+<div id="bg2" class="bg-slide"></div>
 <div class="overlay"></div>
 
 <div class="card">
@@ -635,16 +614,70 @@ h1{color:#000;font-size:26px;font-weight:800;margin-bottom:6px;letter-spacing:-.
   </div>
 </div>
 
-
+<div class="caption" id="caption">
+  <div class="caption-title" id="caption-title">Fleet Management</div>
+  <div class="caption-sub" id="caption-sub">Photo: Unsplash</div>
+</div>
+<div class="dots" id="dots"></div>
 
 <script>
+var photos = [
+  {url:'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1920&q=80&auto=format&fit=crop',title:'Fleet Operations',sub:'Keep your trucks moving'},
+  {url:'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1920&q=80&auto=format&fit=crop',title:'Route Management',sub:'Every mile tracked'},
+  {url:'https://images.unsplash.com/photo-1519003722824-194d4455a60c?w=1920&q=80&auto=format&fit=crop',title:'Open Road',sub:'24/7 driver support'},
+  {url:'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?w=1920&q=80&auto=format&fit=crop',title:'Highway Logistics',sub:'Nationwide coverage'},
+  {url:'https://images.unsplash.com/photo-1615799998603-7c6270a45196?w=1920&q=80&auto=format&fit=crop',title:'Maintenance Ready',sub:'Zero downtime goal'},
+];
 
+var current = 0;
+var bg1 = document.getElementById('bg1');
+var bg2 = document.getElementById('bg2');
+var activeBg = bg1, inactiveBg = bg2;
+var dotsEl = document.getElementById('dots');
+
+// Build dots
+photos.forEach(function(_, i) {
+  var d = document.createElement('div');
+  d.className = 'dot' + (i===0?' active':'');
+  d.id = 'dot-'+i;
+  dotsEl.appendChild(d);
+});
+
+function updateCaption(p) {
+  document.getElementById('caption-title').textContent = p.title;
+  document.getElementById('caption-sub').textContent = p.sub;
+}
+
+function setDot(idx) {
+  document.querySelectorAll('.dot').forEach(function(d,i){ d.className='dot'+(i===idx?' active':''); });
+}
+
+function loadPhoto(idx) {
+  var p = photos[idx];
+  inactiveBg.style.backgroundImage = 'url('+p.url+')';
+  inactiveBg.style.opacity = '0';
+  setTimeout(function() {
+    inactiveBg.style.opacity = '1';
+    activeBg.style.opacity = '0';
+    var tmp = activeBg; activeBg = inactiveBg; inactiveBg = tmp;
+    updateCaption(p);
+    setDot(idx);
+  }, 50);
+}
+
+bg1.style.backgroundImage = 'url('+photos[0].url+')';
+updateCaption(photos[0]);
+
+setInterval(function() {
+  current = (current+1) % photos.length;
+  loadPhoto(current);
+}, 6000);
 </script>
 </body></html>"""
 
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
@@ -653,128 +686,140 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#ffffff;--surface:#ffffff;--surface2:#f0f0f0;--surface3:#e8e8e8;
-  --border:#d0d0d0;--text:#000000;--muted:#666666;--muted2:#999999;
-  --accent:#000000;--accent-bg:#f0f0f0;
-  --steel:#333333;--steel-bg:#f0f0f0;
-  --green:#333333;--green-bg:#f0f0f0;
-  --red:#333333;--red-bg:#f0f0f0;
-  --yellow:#666666;--yellow-bg:#f0f0f0;
-  --blue:#333333;--blue-bg:#f0f0f0;
-  --purple:#333333;--purple-bg:#f0f0f0;
-  --shadow:0 1px 2px rgba(0,0,0,.08);
-  --hazard:repeating-linear-gradient(135deg,#ccc 0 10px,#eee 10px 20px);
+  --bg:#E8ECEF;--surface:rgba(255,255,255,.91);--surface2:rgba(247,248,250,.86);--surface3:#E5E8EC;
+  --border:rgba(30,41,59,.12);--text:#1D2430;--muted:#687384;--muted2:#9AA3AF;
+  --accent:#4E6F8F;--accent-bg:rgba(78,111,143,.1);
+  --green:#16A34A;--green-bg:rgba(22,163,74,.08);
+  --red:#DC2626;--red-bg:rgba(220,38,38,.08);
+  --yellow:#D97706;--yellow-bg:rgba(217,119,6,.09);
+  --blue:#4B6F94;--blue-bg:rgba(75,111,148,.08);
+  --purple:#746B8F;--purple-bg:rgba(116,107,143,.08);
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 8px 28px rgba(15,23,42,.08);
 }
-
+[data-theme="dark"]{
+  --bg:#11161B;--surface:rgba(20,24,30,.9);--surface2:rgba(30,35,42,.86);--surface3:#272D36;
+  --border:rgba(255,255,255,.08);--text:#E8EAF0;--muted:#9AA3B1;--muted2:#626B79;
+  --accent:#8AA4B8;--accent-bg:rgba(138,164,184,.14);
+  --green:#4ADE80;--green-bg:rgba(74,222,128,.08);
+  --red:#F87171;--red-bg:rgba(248,113,113,.08);
+  --yellow:#FBBF24;--yellow-bg:rgba(251,191,36,.1);
+  --blue:#86A6C8;--blue-bg:rgba(134,166,200,.1);
+  --purple:#B0A6C8;--purple-bg:rgba(176,166,200,.1);
+  --shadow:0 1px 4px rgba(0,0,0,.28),0 10px 36px rgba(0,0,0,.28);
+}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{background:var(--bg)}
-body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-body::before{content:"";position:fixed;inset:0;z-index:-1;background:#fff}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:transparent;color:var(--text);min-height:100vh;transition:background .2s,color .2s;isolation:isolate}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:
+  linear-gradient(90deg,rgba(232,236,239,.94),rgba(232,236,239,.82)),
+  url("https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
+[data-theme="dark"] body::before{background:
+  linear-gradient(90deg,rgba(17,22,27,.96),rgba(17,22,27,.86)),
+  url("https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1800&q=80") center/cover no-repeat}
 body.modal-open{overflow:hidden}
 .layout{display:flex;min-height:100vh}
 
 /* ── Sidebar ── */
-.sidebar{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:18px 10px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;overflow-y:auto}
-.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px;padding:4px 8px 14px;border-bottom:1px solid var(--border);position:relative}
-.sidebar-logo::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:3px;background:#ccc;opacity:.5}
-.logo-icon{width:32px;height:32px;border-radius:8px;background:#333;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.sidebar{width:230px;flex-shrink:0;background:var(--surface);backdrop-filter:blur(18px);border-right:1px solid var(--border);padding:18px 10px 16px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:50;transition:transform .25s,background .2s;overflow-y:auto}
+.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px;padding:4px 8px 14px;border-bottom:1px solid var(--border)}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;box-shadow:0 2px 8px rgba(15,23,42,.16)}
 .logo-text h2{font-size:13px;font-weight:800;letter-spacing:-.2px}
 .logo-text small{font-size:10px;color:var(--muted);font-weight:500}
 nav{flex:1;display:flex;flex-direction:column;gap:1px}
 .nav-section-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);padding:10px 10px 4px;margin-top:4px}
-.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;position:relative}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .12s;position:relative}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:#f0f0f0;color:#333;font-weight:600}
-.nav-item.active::before{content:"";position:absolute;left:0;top:20%;bottom:20%;width:3px;background:#000}
+.nav-item.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.nav-item.active::before{content:"";position:absolute;left:0;top:20%;bottom:20%;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
 .nav-item i{font-size:15px;width:18px;text-align:center;flex-shrink:0}
 .nav-group{margin-top:2px}
-.nav-group-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer}
+.nav-group-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
 .nav-group-header:hover{background:var(--surface2);color:var(--text)}
 .nav-group-header span{display:flex;align-items:center;gap:9px}
-.nav-caret{font-size:11px;flex-shrink:0;opacity:.6}
+.nav-caret{font-size:11px;transition:transform .2s;flex-shrink:0;opacity:.6}
 .nav-caret.open{transform:rotate(180deg)}
-.nav-group-items{overflow:hidden;max-height:0}
+.nav-group-items{overflow:hidden;max-height:0;transition:max-height .25s ease}
 .nav-group-items.open{max-height:200px}
 .nav-sub{padding-left:30px!important;font-size:11px!important;color:var(--muted2)!important}
 .nav-sub:hover{color:var(--text)!important}
-.nav-sub.active{color:#000!important}
-.nav-badge{margin-left:auto;background:#333;color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:20px;line-height:1.6}
+.nav-sub.active{color:var(--accent)!important}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:800;padding:1px 6px;border-radius:20px;line-height:1.6}
 .sidebar-footer{padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
 .user-chip{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:9px;background:var(--surface2);border:1px solid var(--border)}
 .user-avatar{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;object-fit:cover}
-.user-avatar-init{width:28px;height:28px;border-radius:50%;background:#333;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
+.user-avatar-init{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
 .user-name{font-size:12px;font-weight:700;line-height:1.2}
 .user-role{font-size:10px;color:var(--muted);text-transform:capitalize}
 .sidebar-actions{display:flex;gap:5px}
-.theme-btn{flex:1;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.theme-btn{flex:1;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .12s}
 .theme-btn:hover{background:var(--surface3);color:var(--text)}
-.logout-btn{flex:1;padding:6px 8px;background:var(--red-bg);border:1px solid #ccc;color:#333;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
-.logout-btn:hover{background:#333;color:#fff}
+.logout-btn{flex:1;padding:6px 8px;background:var(--red-bg);border:1px solid rgba(220,38,38,.2);color:var(--red);border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .12s}
+.logout-btn:hover{background:var(--red);color:#fff}
 
 /* ── Mobile ── */
-.mobile-header{display:none;position:sticky;top:0;z-index:60;background:var(--surface);border-bottom:1px solid var(--border);padding:11px 16px;align-items:center;justify-content:space-between}
+.mobile-header{display:none;position:sticky;top:0;z-index:60;background:var(--surface);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);padding:11px 16px;align-items:center;justify-content:space-between}
 .mobile-logo{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800}
-.hamburger{background:var(--surface2);border:1px solid var(--border);width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+.hamburger{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
 
 /* ── Main ── */
 .main{flex:1;padding:20px 24px;overflow-x:hidden;min-width:0}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border);position:relative}
-.topbar::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:3px;background:#ccc;opacity:.5}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;gap:10px;flex-wrap:wrap}
 .topbar h1{font-size:17px;font-weight:800;letter-spacing:-.3px}
 .topbar-right{display:flex;align-items:center;gap:6px}
 
 /* Topbar buttons — distinct styles */
-.badge-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;font-family:inherit}
+.badge-btn{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;transition:all .13s;font-family:inherit;border:none;letter-spacing:.02em}
 .badge-btn.btn-outline{background:var(--surface);border:1px solid var(--border);color:var(--text)}
-.badge-btn.btn-outline:hover{background:var(--surface2)}
-.badge-btn.btn-primary{background:#000;color:#fff}
+.badge-btn.btn-outline:hover{background:var(--surface2);border-color:var(--muted2)}
+.badge-btn.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(15,23,42,.12)}
 .badge-btn.btn-primary:hover{filter:brightness(1.1)}
 .badge-btn.btn-ghost{background:transparent;border:1px solid transparent;color:var(--muted)}
 .badge-btn.btn-ghost:hover{background:var(--surface2);color:var(--text)}
-.live-pill{display:inline-flex;align-items:center;gap:6px;background:#f0f0f0;border:1px solid #ccc;color:#333;border-radius:20px;padding:5px 12px;font-size:11px;font-weight:700}
-.dot{width:6px;height:6px;border-radius:50%;background:#000;flex-shrink:0}
+.live-pill{display:inline-flex;align-items:center;gap:6px;background:var(--green-bg);border:1px solid rgba(22,163,74,.2);color:var(--green);border-radius:20px;padding:5px 12px;font-size:11px;font-weight:700}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── Stat cards ── */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
-.stat-card{background:var(--surface);border:1px solid var(--border);padding:16px 14px 14px;position:relative;overflow:hidden}
-.stat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
-.stat-card.c-accent::before{background:#333}
-.stat-card.c-green::before{background:#333}
-.stat-card.c-red::before{background:#333}
-.stat-card.c-yellow::before{background:#666}
-.stat-card.c-blue::before{background:#333}
-.stat-card.c-purple::before{background:#333}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 14px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.stat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px}
+.stat-card.c-accent::before{background:var(--accent)}
+.stat-card.c-green::before{background:var(--green)}
+.stat-card.c-red::before{background:var(--red)}
+.stat-card.c-yellow::before{background:var(--yellow)}
+.stat-card.c-blue::before{background:var(--blue)}
+.stat-card.c-purple::before{background:var(--purple)}
 .stat-label{font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .stat-value{font-size:28px;font-weight:800;line-height:1;letter-spacing:-.5px}
-.v-accent{color:#333}.v-green{color:#333}.v-red{color:#333}
-.v-yellow{color:#666}.v-blue{color:#333}.v-purple{color:#333}
+.v-accent{color:var(--accent)}.v-green{color:var(--green)}.v-red{color:var(--red)}
+.v-yellow{color:var(--yellow)}.v-blue{color:var(--blue)}.v-purple{color:var(--purple)}
 .v-sm{font-size:17px!important;margin-top:4px;letter-spacing:-.2px}
 
 /* ── Cards ── */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
 .card-title{font-size:12px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:7px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-.card-title i{font-size:14px;color:#333}
+.card-title i{font-size:14px;color:var(--accent)}
 
 /* ── Period toggle ── */
 .toggle-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px;margin-bottom:14px}
-.toggle-btn{flex:1;padding:5px 10px;border-radius:6px;border:none;background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit}
-.toggle-btn.active{background:#333;color:#fff;box-shadow:0 2px 6px rgba(15,23,42,.14)}
+.toggle-btn{flex:1;padding:5px 10px;border-radius:6px;border:none;background:transparent;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .12s}
+.toggle-btn.active{background:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(15,23,42,.14)}
 
 /* ── Filter tabs ── */
 .filter-tabs{display:flex;gap:5px;flex-wrap:wrap}
-.tab-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-family:inherit}
-.tab-btn:hover{border-color:#333;color:#333}
-.tab-btn.active{background:#333;border-color:#333;color:#fff;box-shadow:0 2px 6px rgba(15,23,42,.12)}
+.tab-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;font-family:inherit;transition:all .12s}
+.tab-btn:hover{border-color:var(--accent);color:var(--accent)}
+.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 2px 6px rgba(15,23,42,.12)}
 
 /* ── List rows ── */
 .list-row{display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border)}
 .list-row:last-child{border-bottom:none}
 .list-name{font-size:12px;font-weight:500;flex:1}
-.list-count{font-size:11px;font-weight:800;color:#333;background:#f0f0f0;padding:2px 9px;border-radius:20px;flex-shrink:0}
+.list-count{font-size:11px;font-weight:800;color:var(--accent);background:var(--accent-bg);padding:2px 9px;border-radius:20px;flex-shrink:0}
 .bar-wrap{flex:1.5;height:3px;background:var(--surface3);border-radius:2px;margin:0 6px}
-.bar-fill{height:100%;background:#000}
+.bar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .5s}
 .medal{font-size:13px;flex-shrink:0;width:20px}
 
 .section{margin-bottom:20px}
@@ -782,35 +827,35 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 .section-title{font-size:13px;font-weight:700}
 
 .search-wrap{position:relative;margin-bottom:14px}
-.search-wrap input{width:100%;padding:9px 14px 9px 38px;background:var(--surface);border:1px solid var(--border);font-size:13px;color:var(--text);font-family:inherit;outline:none}
-.search-wrap input:focus{border-color:#333}
+.search-wrap input{width:100%;padding:9px 14px 9px 38px;background:var(--surface);border:1px solid var(--border);border-radius:9px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border .15s}
+.search-wrap input:focus{border-color:var(--accent)}
 .search-wrap i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px}
 
-.table-wrap{background:var(--surface);border:1px solid var(--border);overflow:hidden}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
 .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;font-size:12px;min-width:540px}
 thead th{padding:9px 12px;text-align:left;color:var(--muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);background:var(--surface2)}
-tbody tr{border-bottom:1px solid var(--border);cursor:pointer}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:pointer}
 tbody tr:last-child{border-bottom:none}
 tbody tr:hover{background:var(--surface2)}
 td{padding:9px 12px;vertical-align:middle}
 .status-badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;white-space:nowrap}
-.s-open{background:#f0f0f0;color:#333}.s-assigned{background:#f0f0f0;color:#333}
-.s-reported{background:#f0f0f0;color:#333}.s-done{background:#e0e0e0;color:#333}
-.s-missed{background:#f0f0f0;color:#333}
-.reassign-badge{display:inline-flex;padding:2px 6px;border-radius:20px;font-size:10px;font-weight:700;background:var(--purple-bg);color:#333;margin-left:4px}
+.s-open{background:var(--blue-bg);color:var(--blue)}.s-assigned{background:var(--yellow-bg);color:var(--yellow)}
+.s-reported{background:var(--purple-bg);color:var(--purple)}.s-done{background:var(--green-bg);color:var(--green)}
+.s-missed{background:var(--red-bg);color:var(--red)}
+.reassign-badge{display:inline-flex;padding:2px 6px;border-radius:20px;font-size:10px;font-weight:700;background:var(--purple-bg);color:var(--purple);margin-left:4px}
 .desc-cell{max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
 
 .word-grid{display:flex;flex-wrap:wrap;gap:7px}
-.word-tag{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;background:#f0f0f0;color:#333;border:1px solid rgba(99,102,241,.15)}
+.word-tag{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(99,102,241,.15)}
 
 .stats-list .row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .stats-list .row:last-child{border-bottom:none}
 .stats-list .val{font-weight:700}
 
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:300;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.42);z-index:300;align-items:center;justify-content:center;padding:16px;overscroll-behavior:contain}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);padding:24px;max-width:860px;width:100%;max-height:88vh;overflow-y:auto;overscroll-behavior:contain;position:relative}
+.modal{background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:860px;width:100%;max-height:88vh;overflow-y:auto;overscroll-behavior:contain;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.15)}
 .modal-close{position:absolute;top:14px;right:14px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .modal h2{font-size:16px;font-weight:700;margin-bottom:16px;padding-right:40px}
 .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
@@ -818,17 +863,18 @@ td{padding:9px 12px;vertical-align:middle}
 .detail-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
 .detail-val{font-size:13px;font-weight:600}
 .desc-box{background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:10px}
-.notes-box{background:#fff8e0;border:1px solid #e0d8c0;border-radius:8px;padding:12px;margin-bottom:10px}
+.notes-box{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:10px}
+[data-theme="dark"] .notes-box{background:rgba(251,191,36,.06);border-color:rgba(251,191,36,.2)}
 .box-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:6px;color:var(--muted)}
 .box-text{font-size:13px;line-height:1.6}
 
 .timeline{display:flex;align-items:flex-start;gap:0;margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:10px}
 .tl-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
 .tl-step:not(:last-child)::after{content:"";position:absolute;top:12px;left:calc(50% + 12px);width:calc(100% - 24px);height:2px;background:var(--border)}
-.tl-step.done-step::after{background:#333}
+.tl-step.done-step::after{background:var(--accent)}
 .tl-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;border:2px solid var(--border);background:var(--surface);z-index:1;position:relative;font-weight:700}
-.tl-dot.active{border-color:#333;background:#333;color:#fff}
-.tl-dot.done{border-color:#333;background:#333;color:#fff}
+.tl-dot.active{border-color:var(--accent);background:var(--accent);color:#fff}
+.tl-dot.done{border-color:var(--green);background:var(--green);color:#fff}
 .tl-label{font-size:9px;color:var(--muted);margin-top:5px;font-weight:600;text-transform:uppercase}
 .tl-time{font-size:9px;color:var(--muted2);margin-top:2px;text-align:center}
 
@@ -836,19 +882,19 @@ td{padding:9px 12px;vertical-align:middle}
 .agent-stat-val{font-size:22px;font-weight:800}
 .agent-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
 
-.report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:400;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;overscroll-behavior:contain}
+.report-modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:400;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;overscroll-behavior:contain}
 .report-modal-overlay.open{display:flex}
-.report-modal{background:var(--surface);border:1px solid var(--border);width:100%;max-width:700px;margin:auto}
+.report-modal{background:var(--surface);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;margin:auto;overscroll-behavior:contain}
 .report-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
 .report-header h2{font-size:17px;font-weight:700}
 .report-tabs{display:flex;background:var(--surface2);border-radius:8px;padding:3px;gap:2px}
-.report-tab{padding:5px 14px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;font-family:inherit}
-.report-tab.active{background:var(--surface);color:#000}
-.report-close{background:var(--surface2);border:1px solid var(--border);width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.report-tab{padding:5px 14px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s}
+.report-tab.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.report-close{background:var(--surface2);border:1px solid var(--border);border-radius:7px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .report-body{padding:20px 24px}
 .report-period-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
 .report-period-bar select,.report-period-bar input{padding:7px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text);font-family:inherit;outline:none}
-.report-generate-btn{padding:7px 16px;background:#333;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.report-generate-btn{padding:7px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 .report-stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:18px}
 .report-stat{background:var(--surface2);border-radius:10px;padding:12px;text-align:center}
 .report-stat-val{font-size:24px;font-weight:800;line-height:1}
@@ -858,10 +904,10 @@ td{padding:9px 12px;vertical-align:middle}
 .report-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
 .report-row:last-child{border-bottom:none}
 .report-row .rname{flex:1;font-weight:500}
-.report-row .rcount{font-weight:700;color:#333;background:#f0f0f0;padding:1px 8px;border-radius:20px}
+.report-row .rcount{font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px}
 .report-footer{padding:12px 24px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
 .report-footer .ts{font-size:11px;color:var(--muted)}
-.print-report-btn{display:flex;align-items:center;gap:6px;background:#000;color:#fff;border:none;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.print-report-btn{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
 
 .loading{text-align:center;padding:28px;color:var(--muted);font-size:13px}
 .empty-state{text-align:center;padding:40px;color:var(--muted)}
@@ -872,7 +918,7 @@ td{padding:9px 12px;vertical-align:middle}
   /* Sidebar drawer */
   .sidebar{position:fixed;left:0;top:0;height:100%!important;transform:translateX(-100%);width:260px;z-index:100;box-shadow:4px 0 32px rgba(0,0,0,.2);overflow-y:auto}
   .sidebar.open{transform:translateX(0)!important}
-  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:99}
+  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
   .sidebar-overlay.open{display:block}
   .mobile-header{display:flex!important;z-index:101}
 
@@ -962,7 +1008,7 @@ td{padding:9px 12px;vertical-align:middle}
   <nav>
     <div class="nav-item active" onclick="showPage('overview')"><i class="ph ph-squares-four"></i> Overview</div>
     <div class="nav-item" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
-    <div class="nav-item" onclick="showPage('reassigned')"><i class="ph ph-arrows-clockwise"></i> Reassigned</div>
+    <div class="nav-item" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     <div class="nav-item" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
 
     <!-- Analytics group -->
@@ -974,7 +1020,6 @@ td{padding:9px 12px;vertical-align:middle}
       <div class="nav-group-items" id="group-analytics">
         <div class="nav-item nav-sub" onclick="showPage('trends')"><i class="ph ph-trend-up"></i> Trends</div>
         <div class="nav-item nav-sub" onclick="showPage('comparison')"><i class="ph ph-arrows-left-right"></i> Comparison</div>
-        <div class="nav-item nav-sub" onclick="showPage('shifts')"><i class="ph ph-clock"></i> Shifts</div>
       </div>
     </div>
 
@@ -1000,6 +1045,7 @@ td{padding:9px 12px;vertical-align:middle}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
     </div>
     <div class="sidebar-actions">
+      <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light</span></button>
       <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Out</button>
     </div>
   </div>
@@ -1020,7 +1066,7 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
       <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="ph ph-hash"></i>Recent Issue Trend</div><div id="issue-trend-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Group Performance</div><div id="groups-overview"></div></div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent Cases</div></div>
@@ -1061,13 +1107,6 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="section">
       <div class="section-header"><div class="section-title">Missed Cases</div></div>
       <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
-    </div>
-  </div>
-
-  <div class="page" id="page-reassigned">
-    <div class="section">
-      <div class="section-header"><div class="section-title">Reassigned Cases</div></div>
-      <div class="table-wrap"><div class="table-scroll" id="reassigned-table"><div class="loading">Loading...</div></div></div>
     </div>
   </div>
 
@@ -1129,42 +1168,27 @@ td{padding:9px 12px;vertical-align:middle}
     <div id="comparison-content"><div class="loading">Loading...</div></div>
   </div>
 
-  <!-- Shifts -->
-  <div class="page" id="page-shifts">
-    <div class="toggle-tabs" style="max-width:360px">
-      <button class="toggle-btn active" onclick="setShiftPeriod('today',this)">Today</button>
-      <button class="toggle-btn" onclick="setShiftPeriod('week',this)">Week</button>
-      <button class="toggle-btn" onclick="setShiftPeriod('month',this)">Month</button>
-      <button class="toggle-btn" onclick="setShiftPeriod('all',this)">All Time</button>
-    </div>
-    <div id="shifts-content"><div class="loading">Loading...</div></div>
-  </div>
-
   <!-- Fleet Intelligence -->
   <div class="page" id="page-fleet_intel">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><i class="ph ph-magnifying-glass"></i> Search by Issue</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <input id="issue-search-input" type="text" placeholder="e.g. Box temp out of range" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <select id="issue-search-vtype" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+          <option value="">All Types</option>
+          <option value="reefer">Reefer</option>
+          <option value="trailer">Trailer</option>
+          <option value="truck">Truck</option>
+        </select>
+        <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
+      </div>
+      <div id="issue-search-results"></div>
+    </div>
     <div id="fleet-intel-content"><div class="loading">Loading...</div></div>
   </div>
 
   <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
-    <div class="section-header" style="margin-bottom:12px">
-      <div class="search-wrap" style="margin-bottom:0;flex:1;min-width:200px"><i class="ph ph-magnifying-glass"></i><input type="text" id="agents-search" placeholder="Search agents..." oninput="renderAgentsFiltered()"></div>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <div class="toggle-tabs" style="max-width:320px;margin-bottom:0">
-          <button class="toggle-btn active" onclick="setAgentsPeriod('today',this)">Today</button>
-          <button class="toggle-btn" onclick="setAgentsPeriod('week',this)">Week</button>
-          <button class="toggle-btn" onclick="setAgentsPeriod('month',this)">Month</button>
-          <button class="toggle-btn" onclick="setAgentsPeriod('all',this)">All Time</button>
-        </div>
-        <select id="agents-sort" onchange="renderAgentsFiltered()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
-          <option value="total">Sort: Most Cases</option>
-          <option value="rate">Sort: Best Rate</option>
-          <option value="missed">Sort: Most Missed</option>
-          <option value="active">Sort: Active Now</option>
-          <option value="name">Sort: Name</option>
-        </select>
-      </div>
-    </div>
     <div id="agents-content"><div class="loading">Loading...</div></div>
   </div>
 </main>
@@ -1186,7 +1210,7 @@ td{padding:9px 12px;vertical-align:middle}
   <h2 id="report-view-title">Case Report</h2>
   <div id="report-view-body"><div class="loading">Loading...</div></div>
   <div style="margin-top:16px;text-align:right">
-    <button onclick="printReportView()" style="background:#333;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px"><i class="ph ph-printer"></i> Print</button>
+    <button onclick="printReportView()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px"><i class="ph ph-printer"></i> Print</button>
   </div>
 </div>
 </div>
@@ -1213,7 +1237,7 @@ td{padding:9px 12px;vertical-align:middle}
 <div class="report-modal-overlay" id="report-modal-overlay" onclick="if(event.target===this)closeReport()">
 <div class="report-modal">
   <div class="report-header">
-    <h2><i class="ph ph-file-text" style="color:#333"></i> Report</h2>
+    <h2><i class="ph ph-file-text" style="color:var(--accent)"></i> Report</h2>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="report-tabs">
         <button class="report-tab active" onclick="setReportTab('today',this)">Today</button>
@@ -1255,14 +1279,23 @@ var analyticsPeriod = 'week';
 var reportTab = 'today';
 var currentDateFilter = '';
 var searchTimers = {};
+var isDark = localStorage.getItem('kurtex-theme') === 'dark';
 var bodyLockCount = 0;
 var bodyScrollY = 0;
-var pages = ['overview','cases','missed','reassigned','leaderboard','trends','comparison','shifts','fleet','fleet_intel','my_profile','agents'];
-var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',reassigned:'Reassigned Cases',leaderboard:'Leaderboard',trends:'Trends',comparison:'Week Comparison',shifts:'Shift Statistics',fleet:'Fleet Stats',fleet_intel:'Fleet Intelligence',my_profile:'My Profile',agents:'Agent Profiles'};
+var pages = ['overview','cases','missed','leaderboard','trends','comparison','fleet','fleet_intel','my_profile','agents'];
+var titles = {overview:'Overview',cases:'Cases',missed:'Missed Cases',leaderboard:'Leaderboard',trends:'Trends',comparison:'Week Comparison',fleet:'Fleet Stats',fleet_intel:'Fleet Intelligence',my_profile:'My Profile',agents:'Agent Profiles'};
 var medals = ['🥇','🥈','🥉'];
 
 // ── Theme ──────────────────────────────────────────────────────────────────
-
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  var icon = document.getElementById('theme-icon');
+  var label = document.getElementById('theme-label');
+  if (icon) icon.className = isDark ? 'ph ph-moon' : 'ph ph-sun';
+  if (label) label.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+}
+function toggleTheme() { isDark = !isDark; localStorage.setItem('kurtex-theme', isDark?'dark':'light'); applyTheme(); }
+applyTheme();
 
 // ── Sidebar ────────────────────────────────────────────────────────────────
 function toggleSidebar() {
@@ -1423,7 +1456,7 @@ function groupRateRows(groups) {
   if (!groups || !groups.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
   var maxTotal = groups[0].total || 1;
   return groups.map(function(g, i) {
-    var rateColor = g.rate >= 80 ? '#333' : g.rate >= 50 ? '#666' : '#333';
+    var rateColor = g.rate >= 80 ? 'var(--green)' : g.rate >= 50 ? 'var(--yellow)' : 'var(--red)';
     return '<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0">'
       + '<div style="display:flex;align-items:center;gap:7px">'
       + '<span class="medal">' + (medals[i]||(i+1)+'.') + '</span>'
@@ -1432,8 +1465,8 @@ function groupRateRows(groups) {
       + '<span style="font-size:11px;color:var(--muted)">' + g.total + ' cases</span>'
       + '</div>'
       + '<div style="display:flex;gap:3px;height:4px;border-radius:3px;overflow:hidden;background:var(--surface3)">'
-      + '<div style="width:'+Math.round(g.done/Math.max(g.total,1)*100)+'%;background:#333;transition:width .4s"></div>'
-      + '<div style="width:'+Math.round(g.missed/Math.max(g.total,1)*100)+'%;background:#333;transition:width .4s"></div>'
+      + '<div style="width:'+Math.round(g.done/Math.max(g.total,1)*100)+'%;background:var(--green);transition:width .4s"></div>'
+      + '<div style="width:'+Math.round(g.missed/Math.max(g.total,1)*100)+'%;background:var(--red);transition:width .4s"></div>'
       + '</div>'
       + '</div>';
   }).join('');
@@ -1500,12 +1533,8 @@ async function loadStats() {
     if (lbo) lbo.innerHTML = listRows(lb, lb[0]?lb[0].count:1);
 
     var grps = stats.top_groups||[];
-
-    var trendWords = (stats.top_words||[]).slice(0,8).map(function(w){return {name:w.word,count:w.count};});
-    var ito = document.getElementById('issue-trend-overview');
-    if (ito) ito.innerHTML = trendWords.length
-      ? listRows(trendWords, trendWords[0].count)
-      : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No recent issue tags yet</div>';
+    var go = document.getElementById('groups-overview');
+    if (go) go.innerHTML = groupRateRows(grps);
 
     renderLeaderboard();
     renderAnalytics();
@@ -1538,8 +1567,8 @@ function renderAnalytics() {
   if (!el) return;
   el.innerHTML =
     '<div class="row"><span>Total Cases</span><span class="val">'+d.total+'</span></div>'
-    + '<div class="row"><span>Resolved</span><span class="val" style="color:#333">'+d.done+'</span></div>'
-    + '<div class="row"><span>Missed</span><span class="val" style="color:#333">'+d.missed+'</span></div>'
+    + '<div class="row"><span>Resolved</span><span class="val" style="color:var(--green)">'+d.done+'</span></div>'
+    + '<div class="row"><span>Missed</span><span class="val" style="color:var(--red)">'+d.missed+'</span></div>'
     + '<div class="row"><span>Resolution Rate</span><span class="val">'+rate+'%</span></div>'
     + '<div class="row"><span>All Time Total</span><span class="val">'+((stats.all_time||{}).total||0)+'</span></div>';
 }
@@ -1572,224 +1601,6 @@ async function loadMissed() {
   } catch(e) { console.error(e); }
 }
 
-async function loadReassigned() {
-  var el = document.getElementById('reassigned-table');
-  if (!el) return;
-  try {
-    var r = await fetch('/api/cases?filter=reassigned');
-    if (!r.ok) return;
-    el.innerHTML = caseTable(await r.json());
-  } catch(e) { console.error(e); }
-// ── Shifts ────────────────────────────────────────────────────────────────
-var shiftPeriod = 'today';
-
-function setShiftPeriod(p, btn) {
-  shiftPeriod = p;
-  document.querySelectorAll('#page-shifts .toggle-btn').forEach(function(b){b.classList.remove('active');});
-  if (btn) btn.classList.add('active');
-  loadShifts();
-}
-
-async function loadShifts() {
-  var el = document.getElementById('shifts-content');
-  if (!el) return;
-  el.innerHTML = '<div class="loading">Loading shift stats...</div>';
-  try {
-    var r = await fetch('/api/shifts?period=' + encodeURIComponent(shiftPeriod));
-    if (!r.ok) { el.innerHTML = '<div class="loading">Error loading shift stats.</div>'; return; }
-    var d = await r.json();
-    var windows = d.shift_windows || {};
-    var order = [
-      {key:'dayshift', label:'Dayshift', icon:'ph-sun', color:'yellow'},
-      {key:'ah',        label:'AH',       icon:'ph-moon-stars', color:'purple'},
-      {key:'morning',   label:'Morning',  icon:'ph-cloud-moon', color:'blue'},
-    ];
-    function shiftCard(o) {
-      var s = d[o.key] || {total:0,done:0,missed:0,active:0,avg_resp:'—',rate:0,leaderboard:[]};
-      var rateColor = s.rate >= 80 ? '#333' : s.rate >= 50 ? '#666' : '#333';
-      return '<div class="card">'
-        + '<div class="card-title"><i class="ph '+o.icon+'"></i>'+o.label
-        + '<span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--muted)">'+h(windows[o.key]||'')+'</span></div>'
-        + '<div class="stat-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">'
-        + '<div class="stat-card c-'+o.color+'"><div class="stat-label">Total</div><div class="stat-value v-'+o.color+'">'+s.total+'</div></div>'
-        + '<div class="stat-card c-green"><div class="stat-label">Resolved</div><div class="stat-value v-green">'+s.done+'</div></div>'
-        + '<div class="stat-card c-red"><div class="stat-label">Missed</div><div class="stat-value v-red">'+s.missed+'</div></div>'
-        + '<div class="stat-card c-blue"><div class="stat-label">Active</div><div class="stat-value v-blue">'+s.active+'</div></div>'
-        + '</div>'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:10px">'
-        + '<span style="color:var(--muted)">Resolution rate</span>'
-        + '<span style="font-weight:700;color:'+rateColor+'">'+s.rate+'%</span>'
-        + '</div>'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:14px">'
-        + '<span style="color:var(--muted)">Avg response</span>'
-        + '<span style="font-weight:700">'+h(s.avg_resp)+'</span>'
-        + '</div>'
-        + '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px">Top Agents</div>'
-        + (s.leaderboard.length ? listRows(s.leaderboard, s.leaderboard[0].count) : '<div style="color:var(--muted);font-size:12px;padding:6px 0">No data yet</div>')
-        + '</div>';
-    }
-    var cardsHtml = '<div class="three-col" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:16px">'
-      + order.map(shiftCard).join('')
-      + '</div>';
-    var note = d.unclassified > 0
-      ? '<div style="font-size:11px;color:var(--muted);margin-bottom:14px">'+d.unclassified+' case(s) had no timestamp and were excluded from shift totals.</div>'
-      : '';
-    el.innerHTML = note + cardsHtml;
-  } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
-}
-
-// ── Fleet Status: state ──────────────────────────────────────────────────────
-var SQ = String.fromCharCode(39); // literal single-quote, avoids escaping headaches in generated HTML
-var fleetData = null;
-var fleetVtype = 'all';
-var fleetSearch = '';
-var fleetSort = {key:'status', dir:1};
-var fleetVisible = 20;
-var FLEET_PAGE_SIZE = 20;
-var fleetSearchTimer = null;
-
-function unitCard(title, items) {
-  if (!items||!items.length) return '<div class="card"><div class="card-title">'+title+'</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>';
-  var max = items[0].count||1;
-  return '<div class="card"><div class="card-title">'+title+'</div>'
-    + items.map(function(item,i){
-      return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span>'
-        + '<span class="list-name">'+h(item.unit)+(item.vtype?' <span style="font-size:10px;color:var(--muted)">'+h(item.vtype)+'</span>':'')+'</span>'
-        + '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.round(item.count/max*100)+'%"></div></div>'
-        + '<span class="list-count">'+item.count+'</span></div>';
-    }).join('')
-    + '</div>';
-}
-
-function fleetAgeBadge(item) {
-  if (item.status !== 'active' || item.age_days == null) return '';
-  var d = item.age_days;
-  if (d >= 7) return '<span class="status-badge s-missed" style="margin-left:5px">🔴 '+d+'d idle</span>';
-  if (d >= 3) return '<span class="status-badge s-assigned" style="margin-left:5px">🟠 '+d+'d</span>';
-  return '<span style="margin-left:5px;font-size:10px;color:var(--muted)">'+(d===0?'today':d+'d')+'</span>';
-}
-
-function fleetSortRows(items) {
-  var key = fleetSort.key, dir = fleetSort.dir;
-  var arr = items.slice();
-  arr.sort(function(a, b) {
-    var av, bv;
-    if (key === 'status') { av = a.status === 'active' ? 0 : 1; bv = b.status === 'active' ? 0 : 1; }
-    else if (key === 'age') { av = a.age_days == null ? -1 : a.age_days; bv = b.age_days == null ? -1 : b.age_days; }
-    else if (key === 'history') { av = a.total_reports||0; bv = b.total_reports||0; }
-    else if (key === 'opened') { av = a.opened_raw||''; bv = b.opened_raw||''; }
-    else { av = (a.unit||'').toLowerCase(); bv = (b.unit||'').toLowerCase(); }
-    if (av < bv) return -1*dir;
-    if (av > bv) return 1*dir;
-    return (a.unit||'').localeCompare(b.unit||'');
-  });
-  return arr;
-}
-
-function setFleetSort(key) {
-  if (fleetSort.key === key) fleetSort.dir *= -1;
-  else fleetSort = {key: key, dir: 1};
-  renderFleetStatusCard();
-}
-
-function setFleetVtype(v, btn) {
-  fleetVtype = v;
-  fleetVisible = FLEET_PAGE_SIZE;
-  document.querySelectorAll('#fleet-vtype-tabs .tab-btn').forEach(function(b){b.classList.remove('active');});
-  if (btn) btn.classList.add('active');
-  renderFleetStatusCard();
-}
-
-function onFleetSearch(val) {
-  clearTimeout(fleetSearchTimer);
-  fleetSearchTimer = setTimeout(function() {
-    fleetSearch = (val||'').toLowerCase().trim();
-    fleetVisible = FLEET_PAGE_SIZE;
-    renderFleetStatusCard();
-  }, 250);
-}
-
-function loadMoreFleet() {
-  fleetVisible += FLEET_PAGE_SIZE;
-  renderFleetStatusCard();
-}
-
-function sortIndicator(key) {
-  if (fleetSort.key !== key) return '';
-  return fleetSort.dir === 1 ? ' ▲' : ' ▼';
-}
-
-function renderFleetStatusCard() {
-  var host = document.getElementById('fleet-status-card');
-  if (!host || !fleetData) return;
-  var all = fleetData.fleet_status || [];
-  var items = all.filter(function(item) {
-    if (fleetVtype !== 'all' && (item.vtype||'').toLowerCase() !== fleetVtype) return false;
-    if (fleetSearch) {
-      var hay = (item.unit+' '+item.driver+' '+item.issue+' '+item.top_issue).toLowerCase();
-      if (hay.indexOf(fleetSearch) === -1) return false;
-    }
-    return true;
-  });
-  items = fleetSortRows(items);
-  var visible = items.slice(0, fleetVisible);
-
-  var tabs = ['all','truck','trailer','reefer'];
-  var tabLabels = {all:'All', truck:'Trucks', trailer:'Trailers', reefer:'Reefers'};
-  var tabsHtml = '<div class="filter-tabs" id="fleet-vtype-tabs" style="margin-bottom:10px">'
-    + tabs.map(function(t){
-        return '<button class="tab-btn'+(fleetVtype===t?' active':'')+'" onclick="setFleetVtype('+SQ+t+SQ+',this)">'+tabLabels[t]+'</button>';
-      }).join('')
-    + '</div>';
-
-  var searchHtml = '<div class="search-wrap" style="margin-bottom:10px"><i class="ph ph-magnifying-glass"></i>'
-    + '<input type="text" placeholder="Search unit, driver, or issue..." value="'+attr(fleetSearch)+'" oninput="onFleetSearch(this.value)"></div>';
-
-  var bodyHtml;
-  if (!items.length) {
-    bodyHtml = '<div style="color:var(--muted);font-size:13px;padding:12px 0">No units match this filter</div>';
-  } else {
-    var cols = [
-      {key:'unit', label:'Unit'},
-      {key:'status', label:'Status'},
-      {key:'history', label:'History'},
-      {key:'issue', label:'Issue'},
-      {key:'driver', label:'Driver'},
-      {key:'opened', label:'Opened'},
-    ];
-    var thead = '<tr>' + cols.map(function(c) {
-      if (c.key === 'issue' || c.key === 'driver') return '<th>'+c.label+'</th>';
-      return '<th style="cursor:pointer;user-select:none" onclick="setFleetSort('+SQ+(c.key==='opened'?'opened':c.key)+SQ+')" title="Sort by '+c.label+'">'+c.label+sortIndicator(c.key==='opened'?'opened':c.key)+'</th>';
-    }).join('') + '</tr>';
-    var rows = visible.map(function(item) {
-      var badge = item.status === 'active'
-        ? '<span class="status-badge s-reported">active</span>'
-        : '<span class="status-badge s-done">repaired</span>';
-      var historyCell = item.total_reports > 1
-        ? item.total_reports+' reports'+(item.top_issue?'<div style="font-size:10px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(item.top_issue)+'</div>':'')
-        : '<span style="color:var(--muted)">1st report</span>';
-      return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" onclick="openUnitModal(this.dataset.unit)" title="Click to see all cases for unit '+attr(item.unit)+'">'
-        + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
-        + '<td>'+badge+fleetAgeBadge(item)+'</td>'
-        + '<td style="font-size:12px">'+historyCell+'</td>'
-        + '<td>'+h(item.issue)+'</td>'
-        + '<td>'+h(item.driver)+'</td>'
-        + '<td style="color:var(--muted);font-size:11px">'+h(item.opened)+'</td>'
-        + '</tr>';
-    }).join('');
-    bodyHtml = '<div class="table-wrap"><div class="table-scroll"><table><thead>'+thead+'</thead><tbody>'+rows+'</tbody></table></div></div>';
-    if (items.length > visible.length) {
-      bodyHtml += '<div style="text-align:center;padding:12px 0 2px">'
-        + '<button class="tab-btn" onclick="loadMoreFleet()">Load more ('+(items.length-visible.length)+' remaining)</button></div>';
-    }
-  }
-
-  host.innerHTML = '<div class="card" style="margin-bottom:16px">'
-    + '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
-    + tabsHtml + searchHtml + bodyHtml
-    + '</div>';
-}
-
 async function loadFleet() {
   var el = document.getElementById('fleet-content');
   if (!el) return;
@@ -1798,8 +1609,37 @@ async function loadFleet() {
     var r = await fetch('/api/fleet');
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading fleet stats.</div>'; return; }
     var d = await r.json();
-    fleetData = d;
-    fleetVtype = 'all'; fleetSearch = ''; fleetSort = {key:'status', dir:1}; fleetVisible = FLEET_PAGE_SIZE;
+    function unitCard(title, items) {
+      if (!items||!items.length) return '<div class="card"><div class="card-title">'+title+'</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>';
+      var max = items[0].count||1;
+      return '<div class="card"><div class="card-title">'+title+'</div>'
+        + items.map(function(item,i){
+          return '<div class="list-row"><span class="medal">'+(medals[i]||(i+1)+'.')+'</span>'
+            + '<span class="list-name">'+h(item.unit)+(item.vtype?' <span style="font-size:10px;color:var(--muted)">'+h(item.vtype)+'</span>':'')+'</span>'
+            + '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.round(item.count/max*100)+'%"></div></div>'
+            + '<span class="list-count">'+item.count+'</span></div>';
+        }).join('')
+        + '</div>';
+    }
+    function fleetStatusTable(items) {
+      if (!items||!items.length) return '<div class="card"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status</div><div style="color:var(--muted);font-size:13px">No fleet status yet</div></div>';
+      var rows = items.map(function(item) {
+        var badge = item.status === 'active'
+          ? '<span class="status-badge s-reported">active</span>'
+          : '<span class="status-badge s-done">repaired</span>';
+        return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" data-vtype="'+attr(item.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="Click to see all cases for unit '+attr(item.unit)+'">'
+          + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
+          + '<td>'+badge+'</td>'
+          + '<td>'+h(item.issue)+'</td>'
+          + '<td>'+h(item.driver)+'</td>'
+          + '<td>'+h(item.opened)+'</td>'
+          + '</tr>';
+      }).join('');
+      return '<div class="card" style="margin-bottom:16px"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
+        + '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>'
+        + rows
+        + '</tbody></table></div></div></div>';
+    }
     el.innerHTML =
       '<div class="stat-grid" style="margin-bottom:20px">'
       + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
@@ -1811,7 +1651,7 @@ async function loadFleet() {
       + '<div class="stat-card c-yellow"><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
       + '<div class="stat-card c-purple"><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
       + '</div>'
-      + '<div id="fleet-status-card"></div>'
+      + fleetStatusTable(d.fleet_status)
       + '<div class="two-col" style="margin-bottom:16px">'
       + unitCard('<i class="ph ph-truck"></i> Trucks Breaking Down Most', d.top_broken_trucks)
       + unitCard('<i class="ph ph-user"></i> Most Reported Drivers', d.top_drivers)
@@ -1820,7 +1660,6 @@ async function loadFleet() {
       + unitCard('<i class="ph ph-wrench"></i> Most Reported Units', d.top_units)
       + unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues)
       + '</div>';
-    renderFleetStatusCard();
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
@@ -1836,20 +1675,20 @@ async function loadMyProfile() {
       '<div class="two-col" style="margin-bottom:16px">'
       + '<div class="card">'
       + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'
-      + '<div style="width:52px;height:52px;border-radius:50%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#333;flex-shrink:0">'+h((p.name||'?')[0])+'</div>'
+      + '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">'+h((p.name||'?')[0])+'</div>'
       + '<div><div style="font-size:17px;font-weight:700">'+h(p.name)+'</div><div style="font-size:12px;color:var(--muted)">'+(p.username?'@'+h(p.username)+' · ':'')+h(p.role)+'</div></div>'
       + '</div>'
       + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+p.total+'</div><div class="agent-stat-label">Total</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+p.done+'</div><div class="agent-stat-label">Resolved</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+p.missed+'</div><div class="agent-stat-label">Missed</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+p.rate+'%</div><div class="agent-stat-label">Rate</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+p.total+'</div><div class="agent-stat-label">Total</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+p.done+'</div><div class="agent-stat-label">Resolved</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+p.missed+'</div><div class="agent-stat-label">Missed</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+p.rate+'%</div><div class="agent-stat-label">Rate</div></div>'
       + '</div></div>'
       + '<div class="card"><div class="card-title">Period Breakdown</div><div class="stats-list">'
       + '<div class="row"><span>Today assigned</span><span class="val">'+p.today_total+'</span></div>'
-      + '<div class="row"><span>Today resolved</span><span class="val" style="color:#333">'+p.today_done+'</span></div>'
+      + '<div class="row"><span>Today resolved</span><span class="val" style="color:var(--green)">'+p.today_done+'</span></div>'
       + '<div class="row"><span>This week assigned</span><span class="val">'+p.week_total+'</span></div>'
-      + '<div class="row"><span>This week resolved</span><span class="val" style="color:#333">'+p.week_done+'</span></div>'
+      + '<div class="row"><span>This week resolved</span><span class="val" style="color:var(--green)">'+p.week_done+'</span></div>'
       + '<div class="row"><span>Avg response</span><span class="val">'+p.avg_resp+'</span></div>'
       + '</div></div></div>'
       + '<div class="section-title" style="margin-bottom:10px">Recent Cases</div>'
@@ -1857,74 +1696,35 @@ async function loadMyProfile() {
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
-var agentsData = [];
-var agentsPeriod = 'today';
-
-function setAgentsPeriod(p, el) {
-  agentsPeriod = p;
-  document.querySelectorAll('#page-agents .toggle-tabs .toggle-btn').forEach(function(b){b.classList.remove('active');});
-  if (el) el.classList.add('active');
-  loadAgents();
-}
-
 async function loadAgents() {
   var el = document.getElementById('agents-content');
   if (!el) return;
   el.innerHTML = '<div class="loading">Loading...</div>';
   try {
-    var r = await fetch('/api/agents?period='+encodeURIComponent(agentsPeriod));
+    var r = await fetch('/api/agents');
     if (r.status === 403) { el.innerHTML = '<div class="loading">Access denied.</div>'; return; }
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading agents.</div>'; return; }
-    agentsData = await r.json();
-    renderAgentsFiltered();
+    var agents = await r.json();
+    if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents found.</div>'; return; }
+    var cards = agents.map(function(a) {
+      var init = (a.name||'?')[0].toUpperCase();
+      return '<div class="card" style="cursor:pointer" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
+        + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
+        + '<div style="width:38px;height:38px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--accent);flex-shrink:0">' + init + '</div>'
+        + '<div><div style="font-size:13px;font-weight:700">' + h(a.name||'') + '</div>'
+        + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
+        + '</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--green)">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--red)">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
+        + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:var(--accent)">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
+        + '</div>'
+        + '<div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Avg: ' + (a.avg_resp||'—') + '</div>'
+        + '</div>';
+    }).join('')
+    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">' + cards + '</div>';
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
-}
-
-function renderAgentsFiltered() {
-  var el = document.getElementById('agents-content');
-  if (!el) return;
-  if (!agentsData.length) { el.innerHTML = '<div class="empty-state">No agents found for this period.</div>'; return; }
-  var q = (document.getElementById('agents-search')||{}).value || '';
-  q = q.toLowerCase().trim();
-  var sortBy = (document.getElementById('agents-sort')||{}).value || 'total';
-  var agents = agentsData.slice();
-  if (q) {
-    agents = agents.filter(function(a){
-      return (a.name||'').toLowerCase().indexOf(q) > -1 || (a.username||'').toLowerCase().indexOf(q) > -1;
-    });
-  }
-  agents.sort(function(a,b){
-    if (sortBy === 'name') return (a.name||'').localeCompare(b.name||'');
-    if (sortBy === 'rate') return (b.rate||0) - (a.rate||0);
-    if (sortBy === 'missed') return (b.missed||0) - (a.missed||0);
-    if (sortBy === 'active') return (b.active||0) - (a.active||0);
-    return (b.total||0) - (a.total||0);
-  });
-  if (!agents.length) { el.innerHTML = '<div class="empty-state">No agents match "'+h(q)+'".</div>'; return; }
-  var cards = agents.map(function(a) {
-    var init = (a.name||'?')[0].toUpperCase();
-    var missedRate = a.missed_rate || 0;
-    var missedColor = missedRate >= 25 ? '#333' : (missedRate >= 10 ? '#666' : 'var(--muted)');
-    return '<div class="card" style="cursor:pointer" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
-      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'
-      + '<div style="width:38px;height:38px;border-radius:50%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#333;flex-shrink:0">' + init + '</div>'
-      + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">' + h(a.name||'') + '</div>'
-      + '<div style="font-size:11px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
-      + (a.active ? '<span class="live-pill" style="padding:3px 8px;font-size:9px"><span class="dot"></span>'+a.active+'</span>' : '')
-      + '</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center">'
-      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:#333">' + (a.total||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Total</div></div>'
-      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:#333">' + (a.done||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Done</div></div>'
-      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:'+missedColor+'">' + (a.missed||0) + '</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Missed</div></div>'
-      + '<div style="background:var(--surface2);border-radius:7px;padding:5px"><div style="font-size:14px;font-weight:800;color:#333">' + (a.rate||0) + '%</div><div style="font-size:8px;color:var(--muted);font-weight:600;text-transform:uppercase">Rate</div></div>'
-      + '</div>'
-      + '<div style="margin-top:8px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">'
-      + '<span>Avg resp: <b style="color:var(--text)">' + (a.avg_resp||'—') + '</b></span>'
-      + '<span>Last active: <b style="color:var(--text)">' + h(a.last_active||'—') + '</b></span>'
-      + '</div>'
-      + '</div>';
-  }).join('')
-  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">' + cards + '</div>';
 }
 
 // ── Modals ─────────────────────────────────────────────────────────────────
@@ -1964,7 +1764,7 @@ async function openCase(el) {
       + (c.full_description ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">'+h(c.full_description)+'</p></div>' : '')
       + (c.full_notes ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">'+h(c.full_notes)+'</p></div>' : '')
       + ((c.status === 'reported' || c.status === 'done')
-        ? '<div style="margin-top:14px;text-align:center"><button data-id="' + attr(c.full_id) + '" onclick="viewFullReport(this.dataset.id)" style="background:#333;color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
+        ? '<div style="margin-top:14px;text-align:center"><button data-id="' + attr(c.full_id) + '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
         : '');
   } catch(e) {
     console.error('openCase error:', e);
@@ -2089,24 +1889,14 @@ function printReportView() {
   document.title = orig;
 }
 
-var agentModalLimit = 15;
-var agentModalName = '';
-
 async function openAgentModal(nameOrEl) {
   var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
-  agentModalName = name;
-  agentModalLimit = 15;
   document.getElementById('agent-modal-overlay').classList.add('open');
   lockBodyScroll();
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
   document.getElementById('agent-modal-title').textContent = name;
-  await renderAgentModal();
-}
-
-async function renderAgentModal() {
-  var name = agentModalName;
   try {
-    var r = await fetch('/api/agent?name='+encodeURIComponent(name)+'&period='+encodeURIComponent(agentsPeriod||'all')+'&limit='+agentModalLimit);
+    var r = await fetch('/api/agent?name='+encodeURIComponent(name));
     if (!r.ok) { document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Agent not found.</div>'; return; }
     var a = await r.json();
     var rate = a.total > 0 ? Math.round(a.done/a.total*100) : 0;
@@ -2123,19 +1913,14 @@ async function renderAgentModal() {
       });
     }
     document.getElementById('agent-modal-body').innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:16px">'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+a.total+'</div><div class="agent-stat-label">Total</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+a.done+'</div><div class="agent-stat-label">Resolved</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#666">'+(a.active||0)+'</div><div class="agent-stat-label">Active</div></div>'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:#333">'+rate+'%</div><div class="agent-stat-label">Rate</div></div>'
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.total+'</div><div class="agent-stat-label">Total</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+a.done+'</div><div class="agent-stat-label">Resolved</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
+      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+rate+'%</div><div class="agent-stat-label">Rate</div></div>'
       + '</div>'
-      + '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
-      + '<div style="flex:1;min-width:140px;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
-      + '<div style="flex:1;min-width:140px;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:13px">Missed rate: <b style="color:'+(a.missed_rate>=25?'#333':'var(--text)')+'">'+(a.missed_rate||0)+'%</b></div>'
-      + '<div style="flex:1;min-width:140px;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:13px">Last active: <b>'+h(a.last_active||'—')+'</b></div>'
-      + '</div>'
-      + (rows ? '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases ('+a.total_cases_available+')</span></div>'
+      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
+      + (rows ? '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Recent Cases</div>'
         + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">'
         + '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">'
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>'
@@ -2143,8 +1928,7 @@ async function renderAgentModal() {
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>'
         + '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>'
         + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-        + (a.has_more ? '<div style="text-align:center;margin-top:10px"><button onclick="agentModalLimit+=15;renderAgentModal()" class="badge-btn btn-outline" style="width:100%;justify-content:center">Show more</button></div>' : '')
-        : '<div style="color:var(--muted);font-size:13px">No cases yet for this period.</div>');
+        : '<div style="color:var(--muted);font-size:13px">No cases yet.</div>');
   } catch(e) {
     console.error('agent modal error:', e);
     document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Error loading profile.</div>';
@@ -2159,7 +1943,7 @@ function closeAgentModal() {
 }
 
 // ── Unit Modal ─────────────────────────────────────────────────────────────
-async function openUnitModal(unitNumber) {
+async function openUnitModal(unitNumber, vtype) {
   var overlay = document.getElementById('unit-modal-overlay');
   var body = document.getElementById('unit-modal-body');
   var title = document.getElementById('unit-modal-title');
@@ -2168,7 +1952,9 @@ async function openUnitModal(unitNumber) {
   body.innerHTML = '<div class="loading">Loading unit history...</div>';
   title.textContent = 'Unit ' + unitNumber;
   try {
-    var r = await fetch('/api/unit?unit=' + encodeURIComponent(unitNumber));
+    var url = '/api/unit?unit=' + encodeURIComponent(unitNumber);
+    if (vtype) url += '&vtype=' + encodeURIComponent(vtype);
+    var r = await fetch(url);
     if (!r.ok) { body.innerHTML = '<div class="loading">Error loading unit data.</div>'; return; }
     var d = await r.json();
     var vtypeLabel = d.vtype ? ' <span style="font-size:11px;color:var(--muted);text-transform:uppercase;background:var(--surface2);padding:2px 7px;border-radius:5px">'+h(d.vtype)+'</span>' : '';
@@ -2179,7 +1965,7 @@ async function openUnitModal(unitNumber) {
         + d.top_issues.map(function(x){
           return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">'
             + '<span style="flex:1">' + h(x.issue||'—') + '</span>'
-            + '<span style="font-weight:700;color:#333;background:#f0f0f0;padding:1px 8px;border-radius:20px;font-size:11px">' + h(x.count) + 'x</span>'
+            + '<span style="font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px;font-size:11px">' + h(x.count) + 'x</span>'
             + '</div>';
         }).join('')
         + '</div>';
@@ -2274,7 +2060,7 @@ async function generateReport() {
     var rate = d.total ? Math.round(d.done/d.total*100) : 0;
     var resRate = d.total ? Math.round((d.total-d.missed)/d.total*100) : 0;
     document.getElementById('report-content').innerHTML =
-      '<div style="border-bottom:2px solid #333;padding-bottom:16px;margin-bottom:20px">'
+      '<div style="border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:20px">'
       + '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">'
       + '<div>'
       + '<div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.3px">'+d.label+'</div>'
@@ -2288,15 +2074,15 @@ async function generateReport() {
 
       + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
-      + '<div style="font-size:28px;font-weight:800;color:#333">'+d.total+'</div>'
+      + '<div style="font-size:28px;font-weight:800;color:var(--accent)">'+d.total+'</div>'
       + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Alerts</div>'
       + '</div>'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
-      + '<div style="font-size:28px;font-weight:800;color:#333">'+d.done+'</div>'
+      + '<div style="font-size:28px;font-weight:800;color:var(--green)">'+d.done+'</div>'
       + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Resolved</div>'
       + '</div>'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
-      + '<div style="font-size:28px;font-weight:800;color:#333">'+d.missed+'</div>'
+      + '<div style="font-size:28px;font-weight:800;color:var(--red)">'+d.missed+'</div>'
       + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Missed</div>'
       + '</div>'
       + '</div>'
@@ -2304,7 +2090,7 @@ async function generateReport() {
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
       + '<span style="font-size:12px;color:var(--muted);font-weight:500">Resolution Rate</span>'
-      + '<span style="font-size:18px;font-weight:800;color:'+(resRate>=80?'#333':resRate>=60?'#666':'#333')+'">'+resRate+'%</span>'
+      + '<span style="font-size:18px;font-weight:800;color:'+(resRate>=80?'var(--green)':resRate>=60?'var(--yellow)':'var(--red)')+'">'+resRate+'%</span>'
       + '</div>'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
       + '<span style="font-size:12px;color:var(--muted);font-weight:500">Avg Response Time</span>'
@@ -2325,7 +2111,7 @@ async function generateReport() {
             return '<tr style="border-top:1px solid var(--border)">'
               + '<td style="padding:8px;font-weight:700;color:var(--muted);width:30px">'+(i+1)+'.</td>'
               + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+h(a.name)+'</td>'
-              + '<td style="padding:8px;text-align:right;font-weight:700;color:#333">'+h(a.count)+'</td>'
+              + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+h(a.count)+'</td>'
               + '</tr>';
           }).join('')
         + '</tbody></table></div>'
@@ -2340,8 +2126,8 @@ async function generateReport() {
             return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">'
               + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+h(g.name)+'</span>'
               + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">'
-              + '<div style="height:100%;border-radius:3px;background:#333;width:'+pct+'%"></div></div>'
-              + '<span style="font-size:12px;font-weight:700;color:#333;width:30px;text-align:right">'+h(g.count)+'</span>'
+              + '<div style="height:100%;border-radius:3px;background:var(--accent);width:'+pct+'%"></div></div>'
+              + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+h(g.count)+'</span>'
               + '</div>';
           }).join('')
         + '</div>'
@@ -2349,7 +2135,7 @@ async function generateReport() {
 
       + (d.missed_cases.length ? ''
         + '<div>'
-        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#333;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts ('+d.missed+')</div>'
+        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts ('+d.missed+')</div>'
         + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
         + '<thead><tr>'
         + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Driver</th>'
@@ -2457,7 +2243,7 @@ async function loadComparison() {
     var d = await r.json();
     function deltaHtml(delta, label) {
       if (!delta || delta.pct === 0) return '<span style="color:var(--muted);font-size:11px">—</span>';
-      var color = delta.up ? '#333' : '#333';
+      var color = delta.up ? 'var(--green)' : 'var(--red)';
       var arrow = delta.up ? '↑' : '↓';
       return '<span style="color:'+color+';font-size:11px;font-weight:600">'+arrow+' '+delta.pct+'%</span>';
     }
@@ -2475,7 +2261,7 @@ async function loadComparison() {
       + '<table style="width:100%;border-collapse:collapse">'
       + '<thead><tr style="background:var(--surface2)">'
       + '<th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Metric</th>'
-      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:#333;font-weight:700;text-transform:uppercase">This Week</th>'
+      + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase">This Week</th>'
       + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Last Week</th>'
       + '<th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Change</th>'
       + '</tr></thead><tbody>'
@@ -2488,6 +2274,34 @@ async function loadComparison() {
   } catch(e) { el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
+// ── Issue Search ──────────────────────────────────────────────────────────────
+async function searchIssue() {
+  var q = document.getElementById('issue-search-input').value.trim();
+  var vtype = document.getElementById('issue-search-vtype').value;
+  var el = document.getElementById('issue-search-results');
+  if (!q) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="loading">Searching...</div>';
+  try {
+    var r = await fetch('/api/issue_search?q=' + encodeURIComponent(q) + (vtype ? '&vtype=' + encodeURIComponent(vtype) : ''));
+    var d = await r.json();
+    if (!r.ok) { el.innerHTML = '<div class="empty-state">' + h(d.error||'Error') + '</div>'; return; }
+    if (!d.results.length) { el.innerHTML = '<div class="empty-state">No units found for "' + h(q) + '".</div>'; return; }
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' + d.total_matches + ' matching case(s) across ' + d.results.length + ' unit(s)</div>'
+      + '<div class="table-wrap"><div class="table-scroll"><table>'
+      + '<thead><tr><th>Unit #</th><th>Type</th><th>Matches</th><th>Sample Issue</th><th>Last Seen</th></tr></thead><tbody>'
+      + d.results.map(function(u){
+          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="View all cases for unit '+attr(u.unit)+'">'
+            + '<td><b>'+h(u.unit)+'</b></td>'
+            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
+            + '<td><b style="color:var(--accent)">'+h(u.count)+'</b></td>'
+            + '<td style="color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(u.sample_issue)+'</td>'
+            + '<td style="color:var(--muted);font-size:11px">'+h(u.last_seen)+'</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div></div>';
+  } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
+}
+
 // ── Fleet Intelligence ────────────────────────────────────────────────────────
 async function loadFleetIntel() {
   var el = document.getElementById('fleet-intel-content');
@@ -2498,10 +2312,10 @@ async function loadFleetIntel() {
     var unitsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
       + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
       + (d.top_units.length ? d.top_units.map(function(u){
-          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" onclick="openUnitModal(this.dataset.unit)" title="View all cases for unit '+attr(u.unit)+'">'
+          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="View all cases for unit '+attr(u.unit)+'">'
             + '<td><b>'+h(u.unit)+'</b></td>'
-            + '<td><span style="background:#f0f0f0;color:#333;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
-            + '<td><b style="color:#333">'+h(u.total)+'</b></td>'
+            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
+            + '<td><b style="color:var(--accent)">'+h(u.total)+'</b></td>'
             + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(u.top_issue)+'</td>'
             + '<td style="color:var(--muted);font-size:11px">'+h(u.last_seen)+'</td>'
             + '</tr>';
@@ -2513,118 +2327,21 @@ async function loadFleetIntel() {
       + (d.top_drivers.length ? d.top_drivers.map(function(dr, i){
           return '<tr>'
             + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+h(dr.name)+'</b></td>'
-            + '<td><b style="color:#333">'+h(dr.total)+'</b></td>'
+            + '<td><b style="color:var(--accent)">'+h(dr.total)+'</b></td>'
             + '<td style="color:var(--muted)">'+h(dr.top_issue)+'</td>'
             + '</tr>';
         }).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
       + '</tbody></table></div></div>';
 
-    var vtypeLabels = {truck:'🚛 Most Broken Truck', trailer:'📦 Most Broken Trailer', reefer:'❄️ Most Broken Reefer'};
-    var mostBrokenHtml = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">'
-      + ['truck','trailer','reefer'].map(function(vt){
-          var u = (d.most_broken_by_type||{})[vt];
-          return '<div class="stat-card"'
-            + (u ? ' style="cursor:pointer" data-unit="'+attr(u.unit)+'" onclick="openUnitModal(this.dataset.unit)"' : '')
-            + '><div class="stat-label">'+vtypeLabels[vt]+'</div>'
-            + '<div class="stat-value v-blue">'+(u ? h(u.unit) : '—')+'</div>'
-            + (u ? '<div style="font-size:11px;color:var(--muted);margin-top:4px">'+h(u.total)+' reports · '+h(u.top_issue)+'</div>' : '<div style="font-size:11px;color:var(--muted);margin-top:4px">No data yet</div>')
-            + '</div>';
-        }).join('')
-      + '</div>';
-
-    var partsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
-      + '<thead><tr><th>Part</th><th>Times Reported</th></tr></thead><tbody>'
-      + ((d.top_parts||[]).length ? d.top_parts.map(function(p, i){
-          return '<tr>'
-            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span><b>'+h(p.part)+'</b></td>'
-            + '<td><b style="color:#333">'+h(p.count)+'</b></td>'
-            + '</tr>';
-        }).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px">No recognizable parts mentioned yet</td></tr>')
-      + '</tbody></table></div></div>';
-
-    var issuesHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
-      + '<thead><tr><th>Issue</th><th>Times Reported</th></tr></thead><tbody>'
-      + ((d.top_issues||[]).length ? d.top_issues.map(function(iss, i){
-          return '<tr>'
-            + '<td><span style="margin-right:6px">'+(i<3?['🥇','🥈','🥉'][i]:(i+1)+'.')+'</span>'+h(iss.issue)+'</td>'
-            + '<td><b style="color:#333">'+h(iss.count)+'</b></td>'
-            + '</tr>';
-        }).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>')
-      + '</tbody></table></div></div>';
-
-    var trendPct = d.week_trend_pct || 0;
-    var trendColor = trendPct > 0 ? '#333' : (trendPct < 0 ? '#333' : 'var(--muted)');
-    var trendIcon = trendPct > 0 ? 'ph-trend-up' : (trendPct < 0 ? 'ph-trend-down' : 'ph-minus');
-
-    var vt = d.vtype_breakdown || {truck:0,trailer:0,reefer:0};
-    var vtTotal = (vt.truck||0) + (vt.trailer||0) + (vt.reefer||0) || 1;
-    var vtypeBarHtml = '<div class="card"><div class="card-title"><i class="ph ph-chart-pie-slice"></i> Reports by Vehicle Type</div>'
-      + ['truck','trailer','reefer'].map(function(k){
-          var pct = Math.round((vt[k]||0)/vtTotal*100);
-          var lbl = k==='truck'?'🚛 Truck':(k==='trailer'?'📦 Trailer':'❄️ Reefer');
-          return '<div style="margin-bottom:10px">'
-            + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>'+lbl+'</span><span style="font-weight:700;color:#333">'+(vt[k]||0)+' ('+pct+'%)</span></div>'
-            + '<div class="bar-wrap" style="margin:0;height:6px"><div class="bar-fill" style="width:'+pct+'%"></div></div>'
-            + '</div>';
-        }).join('')
-      + '</div>';
-
-    var atRiskHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
-      + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports (30d)</th><th>Top Issue</th></tr></thead><tbody>'
-      + ((d.at_risk_units||[]).length ? d.at_risk_units.map(function(u){
-          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" onclick="openUnitModal(this.dataset.unit)">'
-            + '<td><b>'+h(u.unit)+'</b></td>'
-            + '<td><span style="background:#f0f0f0;color:#333;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
-            + '<td><b style="color:#333">'+h(u.recent_count)+'</b></td>'
-            + '<td style="color:var(--muted)">'+h(u.top_issue)+'</td>'
-            + '</tr>';
-        }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No recurring issues in the last 30 days 🎉</td></tr>')
-      + '</tbody></table></div></div>';
-
     el.innerHTML =
-      '<div class="stat-grid">'
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
       + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
-      + '<div class="stat-card c-blue"><div class="stat-label">Units Tracked</div><div class="stat-value v-blue">'+d.unique_units+'</div></div>'
-      + '<div class="stat-card c-green"><div class="stat-label">Resolved Rate</div><div class="stat-value v-green">'+d.resolved_rate+'%</div></div>'
-      + '<div class="stat-card c-yellow"><div class="stat-label">Avg Resolution</div><div class="stat-value v-yellow" style="font-size:18px">'+h(d.avg_resolution)+'</div></div>'
-      + '<div class="stat-card c-purple"><div class="stat-label">Avg Reports / Unit</div><div class="stat-value v-purple">'+d.avg_reports_per_unit+'</div></div>'
-      + '<div class="stat-card c-red"><div class="stat-label">This Week vs Last</div><div class="stat-value" style="color:'+trendColor+';display:flex;align-items:center;gap:4px;font-size:20px"><i class="ph '+trendIcon+'"></i>'+Math.abs(trendPct)+'%</div></div>'
+      + '<div class="stat-card"><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
       + '</div>'
-      + mostBrokenHtml
-      + '<div class="two-col">'
-      + vtypeBarHtml
-      + '<div class="card"><div class="card-title"><i class="ph ph-calendar"></i> Fleet Rhythm</div>'
-      + '<div class="stats-list">'
-      + '<div class="row"><span>Busiest breakdown day</span><span class="val" style="color:#333">'+h(d.busiest_weekday)+'</span></div>'
-      + '<div class="row"><span>Reports resolved</span><span class="val">'+d.resolved_count+' / '+d.total_reports+'</span></div>'
-      + '<div class="row"><span>Units needing attention</span><span class="val" style="color:#333">'+((d.at_risk_units||[]).length)+'</span></div>'
-      + '</div></div>'
-      + '</div>'
-      + '<div class="card" style="margin-bottom:20px"><div class="card-title"><i class="ph ph-chart-line"></i> Weekly Report Volume (last 8 weeks)</div><canvas id="fleet-trend-chart" height="90"></canvas></div>'
-      + '<div class="section-title" style="margin-bottom:10px;color:#333;display:flex;align-items:center;gap:6px"><i class="ph ph-warning-circle"></i> At-Risk Units — 3+ reports in last 30 days</div>'
-      + atRiskHtml
-      + '<div class="section-title" style="margin:16px 0 10px">Most Reported Units</div>'
+      + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
       + unitsHtml
-      + '<div class="section-title" style="margin:16px 0 10px">Top Broken Parts</div>'
-      + partsHtml
-      + '<div class="section-title" style="margin:16px 0 10px">Most Popular Issues</div>'
-      + issuesHtml
       + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
       + driversHtml;
-
-    if (window.fleetTrendChart) { window.fleetTrendChart.destroy(); }
-    var trendCanvas = document.getElementById('fleet-trend-chart');
-    if (trendCanvas && (d.weekly_trend||[]).length) {
-      window.fleetTrendChart = new Chart(trendCanvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-          labels: d.weekly_trend.map(function(w){return w.week;}),
-          datasets: [{ label: 'Reports', data: d.weekly_trend.map(function(w){return w.count;}),
-            backgroundColor: 'rgba(194,84,11,.55)', borderColor: '#C2540B', borderWidth: 1, borderRadius: 4 }]
-        },
-        options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
-      });
-    }
   } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
@@ -2648,11 +2365,9 @@ async function refresh(force) {
     } catch(e) { console.error(e); }
   } else if (currentPage==='cases') loadCases();
   else if (currentPage==='missed') loadMissed();
-  else if (currentPage==='reassigned') loadReassigned();
   else if (currentPage==='fleet') loadFleet();
   else if (currentPage==='trends') loadTrends();
   else if (currentPage==='comparison') loadComparison();
-  else if (currentPage==='shifts') loadShifts();
   else if (currentPage==='fleet_intel') loadFleetIntel();
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
@@ -2686,7 +2401,7 @@ def api_trends():
     try:
         import zoneinfo
         et = zoneinfo.ZoneInfo("America/New_York")
-        cases = load_cases()
+        cases = [c for c in load_cases() if not is_testing(c)]
         period = request.args.get("period","30")
         days = int(period)
         from datetime import date, timedelta
@@ -2711,7 +2426,7 @@ def api_comparison():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
         from datetime import date, timedelta
-        cases = load_cases()
+        cases = [c for c in load_cases() if not is_testing(c)]
         today = date.today()
         # This week vs last week
         this_mon = today - timedelta(days=today.weekday())
@@ -2744,115 +2459,11 @@ def api_comparison():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ── Shift buckets (US Central time) ────────────────────────────────────────────
-# Dayshift: 6:30 AM - 4:00 PM | AH: 4:00 PM - 11:00 PM | Morning: 11:00 PM - 6:30 AM
-# Note: Morning's end is aligned to Dayshift's 6:30 AM start (not 7 AM) so the three
-# windows tile the full 24h with no overlap or gap.
-SHIFT_TZ = "America/Chicago"
-SHIFT_WINDOWS = {
-    "dayshift": "6:30 AM – 4:00 PM CT",
-    "ah":       "4:00 PM – 11:00 PM CT",
-    "morning":  "11:00 PM – 6:30 AM CT",
-}
-
-def classify_shift(local_dt):
-    from datetime import time as dtime
-    t = local_dt.time()
-    if dtime(6, 30) <= t < dtime(16, 0):
-        return "dayshift"
-    if dtime(16, 0) <= t < dtime(23, 0):
-        return "ah"
-    return "morning"
-
-@app.route("/api/shifts")
-def api_shifts():
-    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
-    try:
-        import zoneinfo
-        ct = zoneinfo.ZoneInfo(SHIFT_TZ)
-        period = request.args.get("period", "all")
-        cases = load_cases()
-        if period == "today":
-            cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
-        elif period == "week":
-            cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
-        elif period == "month":
-            cases = [c for c in cases if (c.get("opened_at") or "") >= month_start_str()]
-
-        buckets = {"dayshift": [], "ah": [], "morning": []}
-        unclassified = 0
-        for c in cases:
-            iso = c.get("opened_at")
-            if not iso:
-                unclassified += 1
-                continue
-            try:
-                dt = datetime.fromisoformat(iso)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                local = dt.astimezone(ct)
-            except Exception:
-                unclassified += 1
-                continue
-            buckets[classify_shift(local)].append(c)
-
-        def build(shift_cases):
-            total = len(shift_cases)
-            done = sum(1 for c in shift_cases if c.get("status") == "done")
-            missed = sum(1 for c in shift_cases if c.get("status") == "missed")
-            active = sum(1 for c in shift_cases if c.get("status") in ("open", "assigned", "reported"))
-            rt = [c["response_secs"] for c in shift_cases if c.get("response_secs")]
-            avg = int(sum(rt) / len(rt)) if rt else 0
-            rate = round(done / total * 100) if total else 0
-            agent_counts = Counter(
-                c.get("agent_name") for c in shift_cases
-                if c.get("agent_name") and c.get("status") in ("assigned", "reported", "done")
-            )
-            leaderboard = [{"name": n, "count": v} for n, v in agent_counts.most_common(8)]
-            return {
-                "total": total, "done": done, "missed": missed, "active": active,
-                "avg_resp": fmt_secs(avg), "avg_secs": avg, "rate": rate,
-                "leaderboard": leaderboard,
-            }
-
-        result = {key: build(vals) for key, vals in buckets.items()}
-        result["shift_windows"] = SHIFT_WINDOWS
-        result["period"] = period
-        result["unclassified"] = unclassified
-        return jsonify(result)
-    except Exception as e:
-        logger.error(f"api_shifts error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-# Common truck/trailer/reefer parts, checked against each case's free-text
-# issue description so we can roll up "most broken part" without requiring
-# a separate part-picker step in the report flow. Ordered most-specific-first
-# since only the first match found in a given issue is counted for it.
-PART_KEYWORDS = [
-    "reefer unit", "compressor", "condenser", "evaporator", "thermostat",
-    "defrost", "fifth wheel", "landing gear", "mud flap", "air conditioning",
-    "alternator", "transmission", "suspension", "windshield", "headlight",
-    "taillight", "brake", "tire", "wheel", "bearing", "clutch", "battery",
-    "engine", "radiator", "exhaust", "muffler", "axle", "coupling",
-    "wiring", "electrical", "hydraulic", "fuel", "oil leak", "seal",
-    "gasket", "belt", "fan", "sensor", "hose", "door", "hinge", "light",
-]
-
-
-def _find_part(issue_text: str) -> str:
-    hay = (issue_text or "").lower()
-    for kw in PART_KEYWORDS:
-        if kw in hay:
-            return kw.title()
-    return ""
-
-
 @app.route("/api/fleet_intelligence")
 def api_fleet_intelligence():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
-        all_cases = load_cases()
+        all_cases = [c for c in load_cases() if not is_testing(c)]
         reported = [c for c in all_cases if c.get("vehicle_type")]
         # Top units with history
         from collections import defaultdict
@@ -2874,14 +2485,6 @@ def api_fleet_intelligence():
                 "top_issue": top_issue, "last_seen": fmt_dt(last_case.get("opened_at")),
             })
         top_units.sort(key=lambda x: -x["total"])
-
-        # Most broken unit per vehicle type — the single unit with the most
-        # reports for each of truck/trailer/reefer.
-        most_broken_by_type = {}
-        for vtype in ("truck", "trailer", "reefer"):
-            of_type = [u for u in top_units if u["vtype"] == vtype]
-            most_broken_by_type[vtype] = of_type[0] if of_type else None
-
         # Top drivers
         driver_data = defaultdict(list)
         for c in reported:
@@ -2894,92 +2497,12 @@ def api_fleet_intelligence():
             top_issue = issues.most_common(1)[0][0] if issues else "—"
             top_drivers.append({"name": name, "total": total, "top_issue": top_issue})
         top_drivers.sort(key=lambda x: -x["total"])
-
-        # Most popular issue overall (fleet-wide), regardless of unit
-        issue_counts = Counter((c.get("issue_text") or "").strip()[:60] for c in reported if (c.get("issue_text") or "").strip())
-        top_issues = [{"issue": iss, "count": cnt} for iss, cnt in issue_counts.most_common(10)]
-
-        # Most broken part overall, derived from issue text keyword matching
-        part_counts = Counter()
-        for c in reported:
-            part = _find_part(c.get("issue_text") or "")
-            if part:
-                part_counts[part] += 1
-        top_parts = [{"part": p, "count": cnt} for p, cnt in part_counts.most_common(10)]
-
-        # Vehicle type breakdown (share of reports by truck/trailer/reefer)
-        vtype_counts = Counter((c.get("vehicle_type") or "").strip() for c in reported if c.get("vehicle_type"))
-        vtype_breakdown = {vt: vtype_counts.get(vt, 0) for vt in ("truck", "trailer", "reefer")}
-
-        # Weekly trend for the last 8 weeks (Mon-start weeks)
-        weekly_counts = defaultdict(int)
-        for c in reported:
-            ts = c.get("opened_at")
-            if not ts: continue
-            try: d = datetime.fromisoformat(ts).date()
-            except Exception: continue
-            week_start = d - timedelta(days=d.weekday())
-            weekly_counts[week_start] += 1
-        week_keys = sorted(weekly_counts.keys())[-8:]
-        weekly_trend = [{"week": w.strftime("%b %d"), "count": weekly_counts[w]} for w in week_keys]
-        this_week_count = weekly_trend[-1]["count"] if weekly_trend else 0
-        last_week_count = weekly_trend[-2]["count"] if len(weekly_trend) > 1 else 0
-        if last_week_count:
-            week_trend_pct = round((this_week_count - last_week_count) / last_week_count * 100)
-        else:
-            week_trend_pct = 100 if this_week_count else 0
-
-        # Busiest day of week for breakdowns
-        weekday_counts = Counter()
-        for c in reported:
-            ts = c.get("opened_at")
-            if not ts: continue
-            try: d = datetime.fromisoformat(ts)
-            except Exception: continue
-            weekday_counts[d.strftime("%A")] += 1
-        busiest_weekday = weekday_counts.most_common(1)[0][0] if weekday_counts else "—"
-
-        # Units with 3+ reports in the last 30 days — recurring / at-risk units
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-        at_risk_units = []
-        for unit, data in unit_data.items():
-            recent_cases = [c for c in data["cases"] if (c.get("opened_at") or "") >= cutoff]
-            if len(recent_cases) >= 3:
-                issues = Counter((c.get("issue_text") or "")[:50] for c in recent_cases if c.get("issue_text"))
-                top_issue = issues.most_common(1)[0][0] if issues else "—"
-                at_risk_units.append({
-                    "unit": unit, "vtype": data["vtype"],
-                    "recent_count": len(recent_cases), "top_issue": top_issue,
-                })
-        at_risk_units.sort(key=lambda x: -x["recent_count"])
-
-        # Fleet-wide average resolution time (for reports that were resolved)
-        resolved_secs = [c["resolution_secs"] for c in reported if c.get("status") == "done" and c.get("resolution_secs")]
-        avg_resolution = int(sum(resolved_secs) / len(resolved_secs)) if resolved_secs else None
-        resolved_count = sum(1 for c in reported if c.get("status") == "done")
-
-        avg_reports_per_unit = round(len(reported) / len(unit_data), 1) if unit_data else 0
-
         return jsonify({
             "top_units": top_units[:20],
             "top_drivers": top_drivers[:20],
-            "top_issues": top_issues,
-            "top_parts": top_parts,
-            "most_broken_by_type": most_broken_by_type,
             "total_reports": len(reported),
-            "vtype_breakdown": vtype_breakdown,
-            "weekly_trend": weekly_trend,
-            "week_trend_pct": week_trend_pct,
-            "busiest_weekday": busiest_weekday,
-            "at_risk_units": at_risk_units[:15],
-            "avg_resolution": fmt_secs(avg_resolution),
-            "resolved_count": resolved_count,
-            "resolved_rate": round(resolved_count / len(reported) * 100) if reported else 0,
-            "avg_reports_per_unit": avg_reports_per_unit,
-            "unique_units": len(unit_data),
         })
     except Exception as e:
-        logger.error(f"api_fleet_intelligence error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
