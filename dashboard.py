@@ -2361,8 +2361,14 @@ async function refresh(force) {
   await loadStats();
   if (!force) {
     var luQuiet = document.getElementById('last-update');
-    if (luQuiet) luQuiet.textContent = 'Updated ' + new Date().toLocaleTimeString();
-    return;
+    if (luQuiet) {
+    lu.textContent =
+        "Updated " +
+        new Date().toLocaleTimeString("en-US", {
+            timeZone: "America/Chicago",
+            hour12: true
+        });
+}
   }
   if (currentPage==='overview') {
     try {
