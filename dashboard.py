@@ -178,6 +178,18 @@ def api_stats():
                 rate = round(d["done"]/d["total"]*100) if d["total"] else 0
                 group_stats.append({"name":gn,"total":d["total"],"done":d["done"],"missed":d["missed"],"rate":rate})
         group_stats.sort(key=lambda x: -x["total"])
+
+        unit_counts = Counter()
+        unit_vtype = {}
+        for c in real:
+            u = (c.get("unit_number") or "").strip()
+            if not u: continue
+            unit_counts[u] += 1
+            unit_vtype[u] = c.get("vehicle_type","") or ""
+        top_problem_units = [
+            {"unit": u, "vtype": unit_vtype.get(u,""), "count": cnt}
+            for u, cnt in unit_counts.most_common(6)
+        ]
         hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in real).lower())
         rt = [c["response_secs"] for c in real if c.get("response_secs")]
         avg = int(sum(rt)/len(rt)) if rt else 0
@@ -188,6 +200,7 @@ def api_stats():
             "all_time": {"total":len(cases),"done":sum(1 for c in cases if c.get("status")=="done"),"avg_resp":fmt_secs(avg)},
             "leaderboard_day": lb(tc), "leaderboard_week": lb(wc), "leaderboard_month": lb(mc),
             "top_groups": group_stats[:6],
+            "top_problem_units": top_problem_units,
             "top_words": [{"word":w,"count":v} for w,v in Counter(hashtags).most_common(15)],
             "reassigned_count": sum(1 for c in cases if c.get("reassigned")),
         })
@@ -749,7 +762,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 :root{
   --bg:#E8ECEF;--surface:rgba(255,255,255,.91);--surface2:rgba(247,248,250,.86);--surface3:#E5E8EC;
   --border:rgba(30,41,59,.12);--text:#1D2430;--muted:#687384;--muted2:#9AA3AF;
-  --accent:#4E6F8F;--accent-bg:rgba(78,111,143,.1);
+  --accent:#111418;--accent-bg:rgba(17,20,24,.08);
   --green:#16A34A;--green-bg:rgba(22,163,74,.08);
   --red:#DC2626;--red-bg:rgba(220,38,38,.08);
   --yellow:#D97706;--yellow-bg:rgba(217,119,6,.09);
@@ -1137,7 +1150,7 @@ td{padding:9px 12px;vertical-align:middle}
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
       <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top Assigned Today</div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Group Performance</div><div id="groups-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Top Problem Units</div><div id="units-overview"></div></div>
     </div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent Cases</div></div>
@@ -1192,7 +1205,7 @@ td{padding:9px 12px;vertical-align:middle}
         </div>
         <div id="leaderboard-full"></div>
       </div>
-      <div class="card"><div class="card-title"><i class="ph ph-broadcast"></i>Group Performance</div><div id="group-bars-lb"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Top Problem Units</div><div id="units-lb"></div></div>
     </div>
   </div>
 
@@ -1543,6 +1556,30 @@ function groupRateRows(groups) {
   }).join('');
 }
 
+function unitProblemRows(units) {
+  if (!units || !units.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
+  var maxCount = units[0].count || 1;
+  var vtypeStyles = {
+    truck:   'color:#fff;background:#000',
+    trailer: 'color:var(--purple);background:var(--surface2)',
+    reefer:  'color:var(--accent);background:var(--surface2)',
+  };
+  return units.map(function(u, i) {
+    var vs = vtypeStyles[(u.vtype||'').toLowerCase()] || 'color:var(--muted);background:var(--surface2)';
+    return '<div class="list-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:8px 0;cursor:pointer" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit,this.dataset.vtype)">'
+      + '<div style="display:flex;align-items:center;gap:7px">'
+      + '<span class="medal">' + (medals[i]||(i+1)+'.') + '</span>'
+      + '<span class="list-name" style="font-size:12px;font-weight:600">' + h(u.unit) + '</span>'
+      + (u.vtype ? '<span style="font-size:10px;font-weight:700;'+vs+';padding:2px 7px;border-radius:20px;text-transform:capitalize">'+h(u.vtype)+'</span>' : '')
+      + '<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--red)">' + u.count + ' cases</span>'
+      + '</div>'
+      + '<div style="height:4px;border-radius:3px;overflow:hidden;background:var(--surface3)">'
+      + '<div style="width:'+Math.round(u.count/maxCount*100)+'%;background:var(--red);transition:width .4s"></div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
 function listRows(items, maxCount) {
   if (!items || !items.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data yet</div>';
   return items.map(function(item, i) {
@@ -1604,8 +1641,9 @@ async function loadStats() {
     if (lbo) lbo.innerHTML = listRows(lb, lb[0]?lb[0].count:1);
 
     var grps = stats.top_groups||[];
-    var go = document.getElementById('groups-overview');
-    if (go) go.innerHTML = groupRateRows(grps);
+    var units = stats.top_problem_units||[];
+    var uo = document.getElementById('units-overview');
+    if (uo) uo.innerHTML = unitProblemRows(units);
 
     renderLeaderboard();
     renderAnalytics();
@@ -1615,8 +1653,8 @@ async function loadStats() {
     ? '<div class="word-grid">' + (stats.top_words||[]).map(function(w){return '<span class="word-tag">'+h(w.word)+' <b>'+h(w.count)+'</b></span>';}).join('') + '</div>'
       : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>';
 
-    var glb = document.getElementById('group-bars-lb');
-    if (glb) glb.innerHTML = groupRateRows(grps);
+    var ulb = document.getElementById('units-lb');
+    if (ulb) ulb.innerHTML = unitProblemRows(units);
   } catch(e) { console.error('loadStats error:', e); }
 }
 
