@@ -60,6 +60,10 @@ def fmt_dt(iso):
         return datetime.fromisoformat(iso).astimezone(CHI_TZ).strftime("%b %d %H:%M")
     except: return str(iso)[:16]
 
+def norm_uname(u):
+    """Normalize a Telegram username for comparison: strip whitespace, leading '@', lowercase."""
+    return (u or "").strip().lstrip("@").lower()
+
 def case_local_date(c):
     """The case's opened_at date, converted to America/Chicago (naive timestamps are assumed UTC)."""
     iso = c.get("opened_at") if isinstance(c, dict) else c
@@ -296,7 +300,7 @@ def api_case_detail():
 def api_agent():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     agent_name = request.args.get("name","").strip()
-    agent_uname = request.args.get("username","").strip().lower()
+    agent_uname = norm_uname(request.args.get("username",""))
     if not agent_name: return jsonify({"error":"no name"}), 400
     period = request.args.get("period","all").strip().lower()
     try:
@@ -310,7 +314,7 @@ def api_agent():
     try:
         cases = [c for c in load_cases() if
                  (c.get("agent_name") or "").strip().lower() == agent_name.lower() or
-                 (agent_uname and (c.get("agent_username") or "").strip().lower() == agent_uname)]
+                 (agent_uname and norm_uname(c.get("agent_username")) == agent_uname)]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
@@ -377,10 +381,10 @@ def api_agents():
         for u in users:
             name = (u.get("name") or "").strip()
             if not name: continue
-            uname = (u.get("username") or "").lower()
+            uname = norm_uname(u.get("username"))
             agent_cases = [c for c in cases if
-                           (c.get("agent_name") or "").lower() == name.lower() or
-                           (uname and (c.get("agent_username") or "").lower() == uname)]
+                           (c.get("agent_name") or "").strip().lower() == name.lower() or
+                           (uname and norm_uname(c.get("agent_username")) == uname)]
             total  = len(agent_cases)
             done   = sum(1 for c in agent_cases if c.get("status") == "done")
             missed = sum(1 for c in agent_cases if c.get("status") == "missed")
@@ -406,11 +410,11 @@ def api_my_profile():
     try:
         user  = session["user"]
         name  = user.get("first_name","")
-        uname = user.get("username","")
+        uname = norm_uname(user.get("username",""))
         cases = load_cases()
         my_cases = [c for c in cases if
-                    (c.get("agent_name") or "").lower() == name.lower() or
-                    (uname and (c.get("agent_username") or "") == uname)]
+                    (c.get("agent_name") or "").strip().lower() == name.strip().lower() or
+                    (uname and norm_uname(c.get("agent_username")) == uname)]
         today = today_str(); wk = week_start_str()
         tc = [c for c in my_cases if case_local_date(c) == today]
         wc = [c for c in my_cases if case_local_date(c) >= wk]
