@@ -216,6 +216,14 @@ def api_cases():
         f = request.args.get("filter","today")
         search = request.args.get("search","").lower().strip()
         date_filter = request.args.get("date","").strip()
+        try:
+            offset = max(0, int(request.args.get("offset", 0)))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = max(1, min(int(request.args.get("limit", 100)), 500))
+        except (TypeError, ValueError):
+            limit = 100
         cases = load_cases()
         if f != "testing":
             cases = [c for c in cases if not is_testing(c)]
@@ -236,8 +244,14 @@ def api_cases():
                      search in (c.get("group_name") or "").lower() or
                      search in (c.get("agent_name") or "").lower() or
                      search in (c.get("description") or "").lower()]
-        cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)[:200]
-        return jsonify([serialize_case(c) for c in cases])
+        cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)
+        total = len(cases)
+        page = cases[offset:offset+limit]
+        return jsonify({
+            "cases": [serialize_case(c) for c in page],
+            "total": total, "offset": offset, "limit": limit,
+            "has_more": offset + limit < total,
+        })
     except Exception as e:
         logger.error(f"api_cases error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -282,6 +296,7 @@ def api_case_detail():
 def api_agent():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     agent_name = request.args.get("name","").strip()
+    agent_uname = request.args.get("username","").strip().lower()
     if not agent_name: return jsonify({"error":"no name"}), 400
     period = request.args.get("period","all").strip().lower()
     try:
@@ -293,7 +308,9 @@ def api_agent():
     except (TypeError, ValueError):
         limit = 15
     try:
-        cases = [c for c in load_cases() if (c.get("agent_name") or "").lower() == agent_name.lower()]
+        cases = [c for c in load_cases() if
+                 (c.get("agent_name") or "").strip().lower() == agent_name.lower() or
+                 (agent_uname and (c.get("agent_username") or "").strip().lower() == agent_uname)]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
@@ -1691,31 +1708,47 @@ function renderAnalytics() {
     + '<div class="row"><span>All Time Total</span><span class="val">'+((stats.all_time||{}).total||0)+'</span></div>';
 }
 
-async function loadCases() {
+var casesOffset = 0;
+var casesLimit = 100;
+var casesAccum = [];
+
+async function loadCases(append) {
   var el = document.getElementById('cases-table');
   if (!el) return;
-  el.innerHTML = '<div class="loading">Loading...</div>';
+  if (!append) { casesOffset = 0; casesAccum = []; el.innerHTML = '<div class="loading">Loading...</div>'; }
   try {
     var search = (document.getElementById('cases-search')||{}).value||'';
     var statusF = (document.getElementById('status-filter')||{}).value||'';
-    var url = currentFilter === '__date__'
-      ? '/api/cases?date='+currentDateFilter+'&search='+encodeURIComponent(search)+'&status='+statusF
-      : '/api/cases?filter='+currentFilter+'&search='+encodeURIComponent(search)+'&status='+statusF;
+    var base = currentFilter === '__date__'
+      ? '/api/cases?date='+currentDateFilter
+      : '/api/cases?filter='+currentFilter;
+    var url = base + '&search='+encodeURIComponent(search)+'&status='+statusF+'&offset='+casesOffset+'&limit='+casesLimit;
     var r = await fetch(url);
     if (!r.ok) return;
-    var cases = await r.json();
-    el.innerHTML = caseTable(cases);
+    var d = await r.json();
+    casesAccum = append ? casesAccum.concat(d.cases||[]) : (d.cases||[]);
+    var countLabel = '<div style="font-size:11px;color:var(--muted);padding:6px 2px">Showing ' + casesAccum.length + ' of ' + d.total + ' cases</div>';
+    el.innerHTML = countLabel + caseTable(casesAccum)
+      + (d.has_more ? '<div style="text-align:center;margin:12px 0"><button class="btn" style="background:var(--surface2);color:var(--text)" onclick="casesOffset+='+casesLimit+';loadCases(true)"><i class="ph ph-arrow-down"></i> Load More</button></div>' : '');
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error loading cases.</div>'; }
 }
 
-async function loadMissed() {
+var missedOffset = 0;
+var missedAccum = [];
+
+async function loadMissed(append) {
   var el = document.getElementById('missed-table');
   if (!el) return;
+  if (!append) { missedOffset = 0; missedAccum = []; }
   try {
     var search = (document.getElementById('missed-search')||{}).value||'';
-    var r = await fetch('/api/cases?filter=missed&search='+encodeURIComponent(search));
+    var r = await fetch('/api/cases?filter=missed&search='+encodeURIComponent(search)+'&offset='+missedOffset+'&limit=100');
     if (!r.ok) return;
-    el.innerHTML = caseTable(await r.json());
+    var d = await r.json();
+    missedAccum = append ? missedAccum.concat(d.cases||[]) : (d.cases||[]);
+    var countLabel = '<div style="font-size:11px;color:var(--muted);padding:6px 2px">Showing ' + missedAccum.length + ' of ' + d.total + ' cases</div>';
+    el.innerHTML = countLabel + caseTable(missedAccum)
+      + (d.has_more ? '<div style="text-align:center;margin:12px 0"><button class="btn" style="background:var(--surface2);color:var(--text)" onclick="missedOffset+=100;loadMissed(true)"><i class="ph ph-arrow-down"></i> Load More</button></div>' : '');
   } catch(e) { console.error(e); }
 }
 
@@ -1828,7 +1861,7 @@ async function loadAgents() {
       var init = (a.name||'?')[0].toUpperCase();
       var rate = a.rate || 0;
       var rateColor = rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--accent)' : 'var(--red)';
-      return '<div class="card agent-card" data-agent="' + attr(a.name||'') + '" onclick="openAgentModal(this.dataset.agent)">'
+      return '<div class="card agent-card" data-agent="' + attr(a.name||'') + '" data-username="' + attr(a.username||'') + '" onclick="openAgentModal(this.dataset.agent, this.dataset.username)">'
         + '<div class="agent-card-rank">#' + (i+1) + '</div>'
         + '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-right:36px">'
         + '<div class="agent-card-avatar">' + init + '</div>'
@@ -2013,7 +2046,7 @@ function printReportView() {
   document.title = orig;
 }
 
-var agentModalState = { name: '', period: 'all', offset: 0, limit: 15, rows: '' };
+var agentModalState = { name: '', username: '', period: 'all', offset: 0, limit: 15, rows: '' };
 
 function agentCaseRow(c) {
   var cid = c.full_id || '';
@@ -2025,9 +2058,10 @@ function agentCaseRow(c) {
     + '</tr>';
 }
 
-async function openAgentModal(nameOrEl) {
+async function openAgentModal(nameOrEl, username) {
   var name = (typeof nameOrEl === 'string') ? nameOrEl : nameOrEl.dataset.agent;
-  agentModalState = { name: name, period: 'all', offset: 0, limit: 15, rows: '' };
+  var uname = (typeof nameOrEl === 'string') ? (username||'') : (nameOrEl.dataset.username||'');
+  agentModalState = { name: name, username: uname, period: 'all', offset: 0, limit: 15, rows: '' };
   document.getElementById('agent-modal-overlay').classList.add('open');
   lockBodyScroll();
   document.getElementById('agent-modal-body').innerHTML = '<div class="loading">Loading profile...</div>';
@@ -2054,6 +2088,7 @@ async function loadAgentProfileData(resetHeader) {
   if (resetHeader) body.innerHTML = '<div class="loading">Loading profile...</div>';
   try {
     var url = '/api/agent?name=' + encodeURIComponent(s.name)
+      + '&username=' + encodeURIComponent(s.username||'')
       + '&period=' + encodeURIComponent(s.period)
       + '&offset=' + s.offset + '&limit=' + s.limit;
     var r = await fetch(url);
@@ -2515,11 +2550,11 @@ async function refresh(force) {
   }
   if (currentPage==='overview') {
     try {
-      var r = await fetch('/api/cases?filter=today');
+      var r = await fetch('/api/cases?filter=today&limit=10');
       if (r.ok) {
-        var cases = await r.json();
+        var d = await r.json();
         var el = document.getElementById('recent-table');
-        if (el) el.innerHTML = caseTable(cases.slice(0,10));
+        if (el) el.innerHTML = caseTable((d.cases||[]).slice(0,10));
       }
     } catch(e) { console.error(e); }
   } else if (currentPage==='cases') loadCases();
