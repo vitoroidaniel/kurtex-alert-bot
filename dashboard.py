@@ -2018,7 +2018,7 @@ async function loadAgentProfileData(resetHeader) {
     s.rows = s.offset > 0 ? s.rows + newRows : newRows;
     var periodLabels = {today:'Today', week:'This Week', month:'This Month', all:'All Time'};
     function tab(p) {
-      return '<button class="toggle-btn' + (s.period===p?' active':'') + '" onclick="setAgentPeriod(\'' + p + '\')">' + periodLabels[p] + '</button>';
+      return '<button class="toggle-btn' + (s.period===p?' active':'') + '" onclick="setAgentPeriod(\\'' + p + '\\')">' + periodLabels[p] + '</button>';
     }
     body.innerHTML =
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
