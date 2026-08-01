@@ -41,23 +41,36 @@ def load_cases():
     except: return []
 
 
+import zoneinfo
+CHI_TZ = zoneinfo.ZoneInfo("America/Chicago")
+
 def today_str():
-    return datetime.now(timezone.utc).date().isoformat()
+    return datetime.now(CHI_TZ).date().isoformat()
 
 def week_start_str():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(CHI_TZ)
     return (now - timedelta(days=now.weekday())).date().isoformat()
 
 def month_start_str():
-    return datetime.now(timezone.utc).date().replace(day=1).isoformat()
+    return datetime.now(CHI_TZ).date().replace(day=1).isoformat()
 
 def fmt_dt(iso):
     if not iso: return "—"
     try:
-        import zoneinfo
-        et = zoneinfo.ZoneInfo("America/New_York")
-        return datetime.fromisoformat(iso).astimezone(et).strftime("%b %d %H:%M")
+        return datetime.fromisoformat(iso).astimezone(CHI_TZ).strftime("%b %d %H:%M")
     except: return str(iso)[:16]
+
+def case_local_date(c):
+    """The case's opened_at date, converted to America/Chicago (naive timestamps are assumed UTC)."""
+    iso = c.get("opened_at") if isinstance(c, dict) else c
+    if not iso: return ""
+    try:
+        dt = datetime.fromisoformat(iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(CHI_TZ).date().isoformat()
+    except Exception:
+        return (iso or "")[:10]
 
 def fmt_secs(secs):
     if secs is None: return "—"
@@ -92,7 +105,7 @@ def serialize_case(c):
             "status":      c.get("status") or "open",
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
-            "opened_raw":  (c.get("opened_at") or "")[:10],
+            "opened_raw":  case_local_date(c),
             "response":    fmt_secs(c.get("response_secs")),
             "description": (c.get("description") or "")[:200],
             "notes":       c.get("notes") or "",
@@ -143,9 +156,9 @@ def api_stats():
         cases = load_cases()
         today = today_str(); wk = week_start_str(); mo = month_start_str()
         real = [c for c in cases if not is_testing(c)]
-        tc = [c for c in real if (c.get("opened_at") or "").startswith(today)]
-        wc = [c for c in real if (c.get("opened_at") or "") >= wk]
-        mc = [c for c in real if (c.get("opened_at") or "") >= mo]
+        tc = [c for c in real if case_local_date(c) == today]
+        wc = [c for c in real if case_local_date(c) >= wk]
+        mc = [c for c in real if case_local_date(c) >= mo]
         st = Counter(c.get("status","open") for c in tc)
 
         def lb(lst):
@@ -194,9 +207,9 @@ def api_cases():
         if f != "testing":
             cases = [c for c in cases if not is_testing(c)]
         if date_filter:
-            cases = [c for c in cases if (c.get("opened_at") or "").startswith(date_filter)]
-        elif f == "today":    cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
-        elif f == "week":     cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
+            cases = [c for c in cases if case_local_date(c) == date_filter]
+        elif f == "today":    cases = [c for c in cases if case_local_date(c) == today_str()]
+        elif f == "week":     cases = [c for c in cases if case_local_date(c) >= week_start_str()]
         elif f == "missed":   cases = [c for c in cases if c.get("status") == "missed"]
         elif f == "active":   cases = [c for c in cases if c.get("status") in ("open","assigned","reported")]
         elif f == "reassigned": cases = [c for c in cases if c.get("reassigned")]
@@ -276,13 +289,13 @@ def api_agent():
 
         if period == "today":
             bound = today_str()
-            period_cases = [c for c in cases if (c.get("opened_at") or "").startswith(bound)]
+            period_cases = [c for c in cases if case_local_date(c) == bound]
         elif period == "week":
             bound = week_start_str()
-            period_cases = [c for c in cases if (c.get("opened_at") or "") >= bound]
+            period_cases = [c for c in cases if case_local_date(c) >= bound]
         elif period == "month":
             bound = month_start_str()
-            period_cases = [c for c in cases if (c.get("opened_at") or "") >= bound]
+            period_cases = [c for c in cases if case_local_date(c) >= bound]
         else:
             period = "all"
             period_cases = cases
@@ -369,8 +382,8 @@ def api_my_profile():
                     (c.get("agent_name") or "").lower() == name.lower() or
                     (uname and (c.get("agent_username") or "") == uname)]
         today = today_str(); wk = week_start_str()
-        tc = [c for c in my_cases if (c.get("opened_at") or "").startswith(today)]
-        wc = [c for c in my_cases if (c.get("opened_at") or "") >= wk]
+        tc = [c for c in my_cases if case_local_date(c) == today]
+        wc = [c for c in my_cases if case_local_date(c) >= wk]
         total  = len(my_cases)
         done   = sum(1 for c in my_cases if c.get("status") == "done")
         missed = sum(1 for c in my_cases if c.get("status") == "missed")
@@ -529,15 +542,15 @@ def api_report():
         date_to   = request.args.get("to","")
         cases     = load_cases()
         if period == "today":
-            label = "Today — " + datetime.now().strftime("%B %d, %Y")
-            cases = [c for c in cases if (c.get("opened_at") or "").startswith(today_str())]
+            label = "Today — " + datetime.now(CHI_TZ).strftime("%B %d, %Y")
+            cases = [c for c in cases if case_local_date(c) == today_str()]
         elif period == "week":
-            label = "This Week"; cases = [c for c in cases if (c.get("opened_at") or "") >= week_start_str()]
+            label = "This Week"; cases = [c for c in cases if case_local_date(c) >= week_start_str()]
         elif period == "month":
-            label = "This Month"; cases = [c for c in cases if (c.get("opened_at") or "") >= month_start_str()]
+            label = "This Month"; cases = [c for c in cases if case_local_date(c) >= month_start_str()]
         elif period == "custom" and date_from:
             dt = date_to or today_str(); label = f"{date_from} to {dt}"
-            cases = [c for c in cases if date_from <= (c.get("opened_at") or "")[:10] <= dt]
+            cases = [c for c in cases if date_from <= case_local_date(c) <= dt]
         else:
             label = "All Time"
         total  = len(cases)
@@ -576,7 +589,7 @@ def api_export():
             fmt_secs(c.get("response_secs")), c.get("description",""), c.get("notes",""),
         ])
     out.seek(0)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(CHI_TZ).strftime("%Y-%m-%d")
     return Response(out.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=kurtex-{today}.csv"})
 
@@ -2154,10 +2167,10 @@ async function generateReport() {
     var r = await fetch(url);
     if (!r.ok) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; return; }
     var d = await r.json();
-    document.getElementById('report-ts').textContent = 'Generated ' + new Date().toLocaleString();
+    document.getElementById('report-ts').textContent = 'Generated ' + new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}) + ' CT';
     var now = new Date();
-    var dateStr = now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    var timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    var dateStr = now.toLocaleDateString('en-US',{timeZone:'America/Chicago',weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    var timeStr = now.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit'}) + ' CT';
     var rate = d.total ? Math.round(d.done/d.total*100) : 0;
     var resRate = d.total ? Math.round((d.total-d.missed)/d.total*100) : 0;
     document.getElementById('report-content').innerHTML =
@@ -2256,7 +2269,7 @@ async function generateReport() {
 }
 function printReport() {
   var orig = document.title;
-  document.title = 'Kurtex Report — ' + new Date().toLocaleDateString();
+  document.title = 'Kurtex Report — ' + new Date().toLocaleDateString('en-US',{timeZone:'America/Chicago'});
   window.print();
   document.title = orig;
 }
@@ -2452,7 +2465,7 @@ async function refresh(force) {
   await loadStats();
   if (!force) {
     var luQuiet = document.getElementById('last-update');
-    if (luQuiet) luQuiet.textContent = 'Updated ' + new Date().toLocaleTimeString();
+    if (luQuiet) luQuiet.textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{timeZone:'America/Chicago'}) + ' CT';
     return;
   }
   if (currentPage==='overview') {
@@ -2473,7 +2486,7 @@ async function refresh(force) {
   else if (currentPage==='my_profile') loadMyProfile();
   else if (currentPage==='agents') loadAgents();
   var lu = document.getElementById('last-update');
-  if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString('en-US',{timeZone:'America/Chicago'}) + ' CT';
 }
 
 function autoRefresh() {
@@ -2500,18 +2513,16 @@ setInterval(autoRefresh, 30000);
 def api_trends():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
-        import zoneinfo
-        et = zoneinfo.ZoneInfo("America/New_York")
         cases = [c for c in load_cases() if not is_testing(c)]
         period = request.args.get("period","30")
         days = int(period)
-        from datetime import date, timedelta
-        today = date.today()
+        from datetime import timedelta
+        today = datetime.now(CHI_TZ).date()
         labels, totals, resolved, missed_arr, avg_resp_arr = [], [], [], [], []
         for i in range(days-1, -1, -1):
             d = today - timedelta(days=i)
             ds = d.isoformat()
-            day_cases = [c for c in cases if (c.get("opened_at") or "").startswith(ds)]
+            day_cases = [c for c in cases if case_local_date(c) == ds]
             rt = [c["response_secs"] for c in day_cases if c.get("response_secs")]
             labels.append(d.strftime("%b %d"))
             totals.append(len(day_cases))
@@ -2526,15 +2537,15 @@ def api_trends():
 def api_comparison():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
-        from datetime import date, timedelta
+        from datetime import timedelta
         cases = [c for c in load_cases() if not is_testing(c)]
-        today = date.today()
+        today = datetime.now(CHI_TZ).date()
         # This week vs last week
         this_mon = today - timedelta(days=today.weekday())
         last_mon = this_mon - timedelta(days=7)
         last_sun = this_mon - timedelta(days=1)
         def week_stats(start, end):
-            wc = [c for c in cases if start.isoformat() <= (c.get("opened_at") or "")[:10] <= end.isoformat()]
+            wc = [c for c in cases if start.isoformat() <= case_local_date(c) <= end.isoformat()]
             total = len(wc); done = sum(1 for c in wc if c.get("status")=="done")
             missed = sum(1 for c in wc if c.get("status")=="missed")
             rt = [c["response_secs"] for c in wc if c.get("response_secs")]
