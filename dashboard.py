@@ -1842,8 +1842,7 @@ async function loadAgents() {
         + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:' + rateColor + '">' + rate + '%</div><div class="agent-card-statlabel">Rate</div></div>'
         + '</div>'
         + '<div class="agent-rate-track"><div class="agent-rate-fill" style="width:' + Math.min(rate,100) + '%"></div></div>'
-        + '<div class="agent-card-footer">'
-        + '<span>Avg response: <b style="color:var(--text)">' + (a.avg_resp||'—') + '</b></span>'
+        + '<div class="agent-card-footer" style="justify-content:flex-end">'
         + '<span style="color:var(--accent);font-weight:700;display:flex;align-items:center;gap:4px">View Cases <i class="ph ph-arrow-right"></i></span>'
         + '</div>'
         + '</div>';
@@ -2074,7 +2073,6 @@ async function loadAgentProfileData(resetHeader) {
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.rate+'%</div><div class="agent-stat-label">Rate</div></div>'
       + '</div>'
-      + '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px">Avg response: <b>'+a.avg_resp+'</b></div>'
       + '<div class="toggle-tabs" style="margin-bottom:10px">' + tab('today') + tab('week') + tab('month') + tab('all') + '</div>'
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
       + '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases — ' + periodLabels[s.period] + '</div>'
