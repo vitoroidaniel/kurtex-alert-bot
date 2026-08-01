@@ -808,6 +808,7 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 .nav-item i{font-size:15px;width:18px;text-align:center;flex-shrink:0}
 .nav-group{margin-top:2px}
 .nav-group-header{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .12s}
+.nav-group-header i{font-size:15px;width:18px;text-align:center;flex-shrink:0}
 .nav-group-header:hover{background:var(--surface2);color:var(--text)}
 .nav-group-header span{display:flex;align-items:center;gap:9px}
 .nav-caret{font-size:11px;transition:transform .2s;flex-shrink:0;opacity:.6}
@@ -855,16 +856,24 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── Stat cards ── */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:20px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 14px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.stat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 14px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .15s ease, box-shadow .15s ease}
+.stat-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(15,23,42,.14)}
+.stat-card::before{content:"";position:absolute;left:0;top:0;right:0;height:3px}
 .stat-card.c-accent::before{background:var(--accent)}
 .stat-card.c-green::before{background:var(--green)}
 .stat-card.c-red::before{background:var(--red)}
 .stat-card.c-yellow::before{background:var(--yellow)}
 .stat-card.c-blue::before{background:var(--blue)}
 .stat-card.c-purple::before{background:var(--purple)}
-.stat-label{font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.stat-icon{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px}
+.stat-card.c-accent .stat-icon{background:var(--accent-bg);color:var(--accent)}
+.stat-card.c-green .stat-icon{background:var(--green-bg);color:var(--green)}
+.stat-card.c-red .stat-icon{background:var(--red-bg);color:var(--red)}
+.stat-card.c-yellow .stat-icon{background:var(--yellow-bg);color:var(--yellow)}
+.stat-card.c-blue .stat-icon{background:var(--blue-bg);color:var(--blue)}
+.stat-card.c-purple .stat-icon{background:var(--purple-bg);color:var(--purple)}
+.stat-label{font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;padding-right:34px}
 .stat-value{font-size:28px;font-weight:800;line-height:1;letter-spacing:-.5px}
 .v-accent{color:var(--accent)}.v-green{color:var(--green)}.v-red{color:var(--red)}
 .v-yellow{color:var(--yellow)}.v-blue{color:var(--blue)}.v-purple{color:var(--purple)}
@@ -1626,12 +1635,12 @@ async function loadStats() {
     var t = stats.today || {};
     var sg = document.getElementById('stat-grid');
     if (sg) sg.innerHTML =
-      '<div class="stat-card c-accent"><div class="stat-label">Today Total</div><div class="stat-value v-accent">' + (t.total||0) + '</div></div>'
-      + '<div class="stat-card c-blue"><div class="stat-label">Assigned</div><div class="stat-value v-blue">' + (t.assigned||0) + '</div></div>'
-      + '<div class="stat-card c-green"><div class="stat-label">Resolved</div><div class="stat-value v-green">' + (t.done||0) + '</div></div>'
-      + '<div class="stat-card c-red"><div class="stat-label">Missed</div><div class="stat-value v-red">' + (t.missed||0) + '</div></div>'
-      + '<div class="stat-card c-purple"><div class="stat-label">Reassigned</div><div class="stat-value v-purple">' + (stats.reassigned_count||0) + '</div></div>'
-      + '<div class="stat-card c-yellow"><div class="stat-label">Avg Response</div><div class="stat-value v-sm v-yellow">' + ((stats.all_time||{}).avg_resp||'—') + '</div></div>';
+      '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Today Total</div><div class="stat-value v-accent">' + (t.total||0) + '</div></div>'
+      + '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-user-check"></i></div><div class="stat-label">Assigned</div><div class="stat-value v-blue">' + (t.assigned||0) + '</div></div>'
+      + '<div class="stat-card c-green"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Resolved</div><div class="stat-value v-green">' + (t.done||0) + '</div></div>'
+      + '<div class="stat-card c-red"><div class="stat-icon"><i class="ph ph-warning-circle"></i></div><div class="stat-label">Missed</div><div class="stat-value v-red">' + (t.missed||0) + '</div></div>'
+      + '<div class="stat-card c-purple"><div class="stat-icon"><i class="ph ph-arrows-clockwise"></i></div><div class="stat-label">Reassigned</div><div class="stat-value v-purple">' + (stats.reassigned_count||0) + '</div></div>'
+      + '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-timer"></i></div><div class="stat-label">Avg Response</div><div class="stat-value v-sm v-yellow">' + ((stats.all_time||{}).avg_resp||'—') + '</div></div>';
 
     var badge = document.getElementById('missed-badge');
     if (badge) { if (t.missed > 0) { badge.textContent = t.missed; badge.style.display=''; } else badge.style.display='none'; }
@@ -1751,14 +1760,14 @@ async function loadFleet() {
     }
     el.innerHTML =
       '<div class="stat-grid" style="margin-bottom:20px">'
-      + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
-      + '<div class="stat-card c-blue"><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
-      + '<div class="stat-card c-yellow"><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
-      + '<div class="stat-card c-green"><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
+      + '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
+      + '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-truck"></i></div><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
+      + '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-lightning"></i></div><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
+      + '<div class="stat-card c-green"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
       + '</div>'
       + '<div class="stat-grid" style="margin-bottom:20px">'
-      + '<div class="stat-card c-yellow"><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
-      + '<div class="stat-card c-purple"><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
+      + '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-package"></i></div><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
+      + '<div class="stat-card c-purple"><div class="stat-icon"><i class="ph ph-snowflake"></i></div><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
       + '</div>'
       + fleetStatusTable(d.fleet_status)
       + '<div class="two-col" style="margin-bottom:16px">'
@@ -2487,8 +2496,8 @@ async function loadFleetIntel() {
 
     el.innerHTML =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'
-      + '<div class="stat-card c-accent"><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
-      + '<div class="stat-card"><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
+      + '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
+      + '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-hash"></i></div><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
       + '</div>'
       + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
       + unitsHtml
