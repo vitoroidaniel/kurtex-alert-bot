@@ -1286,14 +1286,14 @@ td{padding:9px 12px;vertical-align:middle}
   <div class="page" id="page-fleet_intel">
     <div class="card" style="margin-bottom:16px">
       <div class="card-title"><i class="ph ph-magnifying-glass"></i> Search by Issue</div>
+      <div class="toggle-tabs" style="margin-bottom:10px" id="issue-search-vtype-tabs">
+        <button class="toggle-btn active" data-vtype="" onclick="setIssueSearchVtype('')">All</button>
+        <button class="toggle-btn" data-vtype="truck" onclick="setIssueSearchVtype('truck')">Truck</button>
+        <button class="toggle-btn" data-vtype="trailer" onclick="setIssueSearchVtype('trailer')">Trailer</button>
+        <button class="toggle-btn" data-vtype="reefer" onclick="setIssueSearchVtype('reefer')">Reefer</button>
+      </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <input id="issue-search-input" type="text" placeholder="e.g. Box temp out of range" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
-        <select id="issue-search-vtype" style="padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
-          <option value="">All Types</option>
-          <option value="reefer">Reefer</option>
-          <option value="trailer">Trailer</option>
-          <option value="truck">Truck</option>
-        </select>
         <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
       </div>
       <div id="issue-search-results"></div>
@@ -2512,9 +2512,18 @@ async function loadComparison() {
 }
 
 // ── Issue Search ──────────────────────────────────────────────────────────────
+var issueSearchVtype = '';
+function setIssueSearchVtype(vtype) {
+  issueSearchVtype = vtype;
+  document.querySelectorAll('#issue-search-vtype-tabs .toggle-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.vtype === vtype);
+  });
+  if (document.getElementById('issue-search-input').value.trim()) searchIssue();
+}
+
 async function searchIssue() {
   var q = document.getElementById('issue-search-input').value.trim();
-  var vtype = document.getElementById('issue-search-vtype').value;
+  var vtype = issueSearchVtype;
   var el = document.getElementById('issue-search-results');
   if (!q) { el.innerHTML = ''; return; }
   el.innerHTML = '<div class="loading">Searching...</div>';
