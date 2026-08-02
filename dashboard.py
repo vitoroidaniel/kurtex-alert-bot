@@ -1764,6 +1764,7 @@ async function loadFleet() {
     var r = await fetch('/api/fleet');
     if (!r.ok) { el.innerHTML = '<div class="loading">Error loading fleet stats.</div>'; return; }
     var d = await r.json();
+    window._fleetData = d;
     function unitCard(title, items) {
       if (!items||!items.length) return '<div class="card"><div class="card-title">'+title+'</div><div style="color:var(--muted);font-size:13px">No data yet</div></div>';
       var max = items[0].count||1;
@@ -1776,37 +1777,18 @@ async function loadFleet() {
         }).join('')
         + '</div>';
     }
-    function fleetStatusTable(items) {
-      if (!items||!items.length) return '<div class="card"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status</div><div style="color:var(--muted);font-size:13px">No fleet status yet</div></div>';
-      var rows = items.map(function(item) {
-        var badge = item.status === 'active'
-          ? '<span class="status-badge s-reported">active</span>'
-          : '<span class="status-badge s-done">repaired</span>';
-        return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" data-vtype="'+attr(item.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="Click to see all cases for unit '+attr(item.unit)+'">'
-          + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
-          + '<td>'+badge+'</td>'
-          + '<td>'+h(item.issue)+'</td>'
-          + '<td>'+h(item.driver)+'</td>'
-          + '<td>'+h(item.opened)+'</td>'
-          + '</tr>';
-      }).join('');
-      return '<div class="card" style="margin-bottom:16px"><div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
-        + '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>'
-        + rows
-        + '</tbody></table></div></div></div>';
-    }
     el.innerHTML =
       '<div class="stat-grid" style="margin-bottom:20px">'
-      + '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
-      + '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-truck"></i></div><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
-      + '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-lightning"></i></div><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
-      + '<div class="stat-card c-green"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
+      + '<div class="stat-card c-accent" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\',\\'\\')" title="Show all cases"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
+      + '<div class="stat-card c-blue" style="cursor:pointer" onclick="setFleetStatusFilter(\\'truck\\',\\'\\')" title="Show truck cases"><div class="stat-icon"><i class="ph ph-truck"></i></div><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
+      + '<div class="stat-card c-yellow" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\',\\'active\\')" title="Show units with an unresolved issue (their latest case is not yet marked done)"><div class="stat-icon"><i class="ph ph-lightning"></i></div><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
+      + '<div class="stat-card c-green" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\',\\'repaired\\')" title="Show units whose latest issue was resolved"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
       + '</div>'
       + '<div class="stat-grid" style="margin-bottom:20px">'
-      + '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-package"></i></div><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
-      + '<div class="stat-card c-purple"><div class="stat-icon"><i class="ph ph-snowflake"></i></div><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
+      + '<div class="stat-card c-yellow" style="cursor:pointer" onclick="setFleetStatusFilter(\\'trailer\\',\\'\\')" title="Show trailer cases"><div class="stat-icon"><i class="ph ph-package"></i></div><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
+      + '<div class="stat-card c-purple" style="cursor:pointer" onclick="setFleetStatusFilter(\\'reefer\\',\\'\\')" title="Show reefer cases"><div class="stat-icon"><i class="ph ph-snowflake"></i></div><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
       + '</div>'
-      + fleetStatusTable(d.fleet_status)
+      + '<div id="fleet-status-wrap"></div>'
       + '<div class="two-col" style="margin-bottom:16px">'
       + unitCard('<i class="ph ph-truck"></i> Trucks Breaking Down Most', d.top_broken_trucks)
       + unitCard('<i class="ph ph-user"></i> Most Reported Drivers', d.top_drivers)
@@ -1815,8 +1797,65 @@ async function loadFleet() {
       + unitCard('<i class="ph ph-wrench"></i> Most Reported Units', d.top_units)
       + unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues)
       + '</div>';
+    fleetStatusState = { vtype: 'all', status: '', search: '' };
+    renderFleetStatus();
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
+
+var fleetStatusState = { vtype: 'all', status: '', search: '' };
+
+function setFleetStatusFilter(vtype, status) {
+  fleetStatusState.vtype = vtype;
+  fleetStatusState.status = status;
+  renderFleetStatus();
+  var wrap = document.getElementById('fleet-status-wrap');
+  if (wrap) wrap.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderFleetStatus() {
+  var wrap = document.getElementById('fleet-status-wrap');
+  if (!wrap || !window._fleetData) return;
+  var s = fleetStatusState;
+  var items = window._fleetData.fleet_status || [];
+  var q = (s.search||'').toLowerCase().trim();
+  var filtered = items.filter(function(item) {
+    if (s.vtype !== 'all' && (item.vtype||'').toLowerCase() !== s.vtype) return false;
+    if (s.status && item.status !== s.status) return false;
+    if (q && (item.unit||'').toLowerCase().indexOf(q)===-1 && (item.issue||'').toLowerCase().indexOf(q)===-1 && (item.driver||'').toLowerCase().indexOf(q)===-1) return false;
+    return true;
+  });
+  function vbtn(v, label) {
+    return '<button class="toggle-btn'+(s.vtype===v?' active':'')+'" onclick="fleetStatusState.vtype=\\''+v+'\\';renderFleetStatus()">'+label+'</button>';
+  }
+  function sbtn(v, label) {
+    return '<button class="toggle-btn'+(s.status===v?' active':'')+'" onclick="fleetStatusState.status=\\''+v+'\\';renderFleetStatus()">'+label+'</button>';
+  }
+  var rows = filtered.map(function(item) {
+    var badge = item.status === 'active'
+      ? '<span class="status-badge s-reported">active</span>'
+      : '<span class="status-badge s-done">repaired</span>';
+    return '<tr style="cursor:pointer" data-unit="'+attr(item.unit)+'" data-vtype="'+attr(item.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="Click to see all cases for unit '+attr(item.unit)+'">'
+      + '<td><b>'+h(item.unit)+'</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">'+h(item.vtype)+'</div></td>'
+      + '<td>'+badge+'</td>'
+      + '<td>'+h(item.issue)+'</td>'
+      + '<td>'+h(item.driver)+'</td>'
+      + '<td>'+h(item.opened)+'</td>'
+      + '</tr>';
+  }).join('');
+  wrap.innerHTML =
+    '<div class="card" style="margin-bottom:16px">'
+    + '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+    + '<div class="toggle-tabs" style="margin-bottom:0;flex:1;min-width:220px">' + vbtn('all','All') + vbtn('truck','Truck') + vbtn('trailer','Trailer') + vbtn('reefer','Reefer') + '</div>'
+    + '<div class="toggle-tabs" style="margin-bottom:0;flex:1;min-width:180px">' + sbtn('','Any Status') + sbtn('active','Active') + sbtn('repaired','Repaired') + '</div>'
+    + '</div>'
+    + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" placeholder="Search unit, issue, or driver..." value="'+attr(s.search||'')+'" oninput="fleetStatusState.search=this.value;renderFleetStatus()"></div>'
+    + (filtered.length
+      ? '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'
+      : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No units match this filter.</div>')
+    + '</div>';
+}
+
 
 async function loadMyProfile() {
   var el = document.getElementById('my-profile-content');
@@ -2507,18 +2546,7 @@ async function loadFleetIntel() {
   try {
     var r = await fetch('/api/fleet_intelligence');
     var d = await r.json();
-    var unitsHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
-      + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
-      + (d.top_units.length ? d.top_units.map(function(u){
-          return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="View all cases for unit '+attr(u.unit)+'">'
-            + '<td><b>'+h(u.unit)+'</b></td>'
-            + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
-            + '<td><b style="color:var(--accent)">'+h(u.total)+'</b></td>'
-            + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(u.top_issue)+'</td>'
-            + '<td style="color:var(--muted);font-size:11px">'+h(u.last_seen)+'</td>'
-            + '</tr>';
-        }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No data yet — make reports through bot first</td></tr>')
-      + '</tbody></table></div></div>';
+    window._intelData = d;
 
     var driversHtml = '<div class="table-wrap"><div class="table-scroll"><table>'
       + '<thead><tr><th>Driver</th><th>Reports</th><th>Most Common Issue</th></tr></thead><tbody>'
@@ -2536,11 +2564,43 @@ async function loadFleetIntel() {
       + '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
       + '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-hash"></i></div><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">'+d.top_units.length+'</div></div>'
       + '</div>'
-      + '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
-      + unitsHtml
+      + '<div id="intel-units-wrap"></div>'
       + '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>'
       + driversHtml;
+    renderIntelUnits('all', '');
   } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
+}
+
+function renderIntelUnits(vtype, search) {
+  var wrap = document.getElementById('intel-units-wrap');
+  if (!wrap || !window._intelData) return;
+  var items = window._intelData.top_units || [];
+  var q = (search||'').toLowerCase().trim();
+  var filtered = items.filter(function(u) {
+    if (vtype !== 'all' && (u.vtype||'').toLowerCase() !== vtype) return false;
+    if (q && (u.unit||'').toLowerCase().indexOf(q)===-1 && (u.top_issue||'').toLowerCase().indexOf(q)===-1) return false;
+    return true;
+  });
+  function vbtn(v, label) {
+    return '<button class="toggle-btn'+(vtype===v?' active':'')+'" onclick="renderIntelUnits(\\''+v+'\\', document.getElementById(\\'intel-units-search\\').value)">'+label+'</button>';
+  }
+  var rows = filtered.map(function(u){
+    return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="View all cases for unit '+attr(u.unit)+'">'
+      + '<td><b>'+h(u.unit)+'</b></td>'
+      + '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">'+h(u.vtype)+'</span></td>'
+      + '<td><b style="color:var(--accent)">'+h(u.total)+'</b></td>'
+      + '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(u.top_issue)+'</td>'
+      + '<td style="color:var(--muted);font-size:11px">'+h(u.last_seen)+'</td>'
+      + '</tr>';
+  }).join('');
+  wrap.innerHTML =
+    '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
+    + '<div class="toggle-tabs" style="margin-bottom:10px">' + vbtn('all','All') + vbtn('truck','Truck') + vbtn('trailer','Trailer') + vbtn('reefer','Reefer') + '</div>'
+    + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" placeholder="Search unit or issue..." value="'+attr(search||'')+'" oninput="renderIntelUnits(\\''+vtype+'\\', this.value)"></div>'
+    + '<div class="table-wrap"><div class="table-scroll"><table>'
+    + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
+    + (filtered.length ? rows : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No units match this filter</td></tr>')
+    + '</tbody></table></div></div>';
 }
 
 async function refresh(force) {
