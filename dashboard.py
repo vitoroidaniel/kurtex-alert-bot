@@ -594,6 +594,27 @@ def api_report():
         avg    = int(sum(rt)/len(rt)) if rt else 0
         agent_counts  = Counter(c["agent_name"] for c in cases if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
         group_counts  = Counter(c.get("group_name","Unknown") for c in cases)
+
+        # Top issues broken down by vehicle type (truck/trailer/reefer)
+        by_vtype = {}
+        for vt in ("truck", "trailer", "reefer"):
+            vt_cases = [c for c in cases if (c.get("vehicle_type") or "").lower() == vt]
+            issue_counts = Counter((c.get("issue_text") or c.get("description") or "Unspecified issue").strip() for c in vt_cases if (c.get("issue_text") or c.get("description")))
+            by_vtype[vt] = {
+                "total": len(vt_cases),
+                "top_issues": [{"issue": i, "count": n} for i, n in issue_counts.most_common(5)],
+            }
+
+        # Top problem units for this period (most reported units, any type)
+        unit_counts = Counter()
+        unit_vtype = {}
+        for c in cases:
+            u = (c.get("unit_number") or "").strip()
+            if not u: continue
+            unit_counts[u] += 1
+            unit_vtype[u] = c.get("vehicle_type","") or ""
+        top_units = [{"unit": u, "vtype": unit_vtype.get(u,""), "count": n} for u, n in unit_counts.most_common(10)]
+
         return jsonify({
             "label": label, "total": total, "done": done, "missed": len(missed),
             "assigned": sum(1 for c in cases if c.get("status") in ("assigned","reported","done")),
@@ -602,6 +623,8 @@ def api_report():
             "leaderboard": [{"name":n,"count":v} for n,v in agent_counts.most_common(10)],
             "top_groups":  [{"name":n,"count":v} for n,v in group_counts.most_common(5)],
             "missed_cases": [serialize_case(c) for c in missed[:20]],
+            "by_vtype": by_vtype,
+            "top_units": top_units,
         })
     except Exception as e:
         logger.error(f"api_report error: {e}")
@@ -1114,8 +1137,27 @@ td{padding:9px 12px;vertical-align:middle}
   .topbar-right .badge-btn:first-child{display:none}
 }
 @media print{
-  .sidebar,.mobile-header,.topbar-right,.report-modal-overlay{display:none!important}
-  .main{padding:0}body{background:white;color:black}
+  /* Generic page print (topbar Print button) — unchanged */
+  body:not(.printing-report) .sidebar,
+  body:not(.printing-report) .mobile-header,
+  body:not(.printing-report) .topbar-right,
+  body:not(.printing-report) .report-modal-overlay{display:none!important}
+  body:not(.printing-report) .main{padding:0}
+
+  /* Report print — show only the official report, nothing else */
+  body.printing-report .sidebar,
+  body.printing-report .mobile-header,
+  body.printing-report .topbar-right,
+  body.printing-report .main,
+  body.printing-report .report-header,
+  body.printing-report .report-period-bar,
+  body.printing-report #report-sections-bar,
+  body.printing-report .report-footer{display:none!important}
+  body.printing-report .report-modal-overlay{display:block!important;position:static!important;padding:0!important;background:white!important;inset:auto!important}
+  body.printing-report .report-modal{box-shadow:none!important;border:none!important;border-radius:0!important;max-width:100%!important;width:100%!important;margin:0!important;backdrop-filter:none!important}
+  body.printing-report .report-body{padding:0!important}
+
+  body{background:white;color:black}
 }
 </style>
 </head>
@@ -1388,6 +1430,15 @@ td{padding:9px 12px;vertical-align:middle}
         <input type="date" id="report-date-to">
       </div>
       <button class="report-generate-btn" onclick="generateReport()">Generate</button>
+    </div>
+    <div id="report-sections-bar" style="display:none;flex-wrap:wrap;gap:4px 16px;padding:10px 12px;margin-bottom:14px;background:var(--surface2);border-radius:10px;font-size:12px">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.04em;width:100%;margin-bottom:2px">Include in report:</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="report-section-cb" data-section="summary" checked onchange="renderReportContent()"> Summary</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="report-section-cb" data-section="agents" checked onchange="renderReportContent()"> Agent Performance</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="report-section-cb" data-section="groups" checked onchange="renderReportContent()"> Most Active Groups</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="report-section-cb" data-section="vtype" checked onchange="renderReportContent()"> Top Issues by Vehicle Type</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="report-section-cb" data-section="units" checked onchange="renderReportContent()"> Top Problem Units</label>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" class="report-section-cb" data-section="missed" checked onchange="renderReportContent()"> Unresolved Alerts</label>
     </div>
     <div id="report-content"><div class="loading">Loading report...</div></div>
   </div>
@@ -2258,6 +2309,7 @@ function openReport() {
   reportTab = 'today';
   document.querySelectorAll('.report-tab').forEach(function(b,i){b.classList.toggle('active',i===0);});
   document.getElementById('report-period-bar').style.display = 'none';
+  document.getElementById('report-sections-bar').style.display = 'none';
   generateReport();
 }
 function closeReport() {
@@ -2280,6 +2332,7 @@ function toggleCustomDates() {
 }
 async function generateReport() {
   document.getElementById('report-content').innerHTML = '<div class="loading">Generating report...</div>';
+  document.getElementById('report-sections-bar').style.display = 'none';
   var url = '/api/report?period=today';
   if (reportTab === 'custom') {
     var period = document.getElementById('report-period-select').value;
@@ -2295,27 +2348,40 @@ async function generateReport() {
   try {
     var r = await fetch(url);
     if (!r.ok) { document.getElementById('report-content').innerHTML = '<div class="loading">Error generating report.</div>'; return; }
-    var d = await r.json();
-    document.getElementById('report-ts').textContent = 'Generated ' + new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}) + ' CT';
-    var now = new Date();
-    var dateStr = now.toLocaleDateString('en-US',{timeZone:'America/Chicago',weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    var timeStr = now.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit'}) + ' CT';
-    var rate = d.total ? Math.round(d.done/d.total*100) : 0;
-    var resRate = d.total ? Math.round((d.total-d.missed)/d.total*100) : 0;
-    document.getElementById('report-content').innerHTML =
-      '<div style="border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:20px">'
-      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">'
-      + '<div>'
-      + '<div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.3px">'+d.label+'</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-top:3px">Kurtex Truck Maintenance — Operations Report</div>'
-      + '</div>'
-      + '<div style="text-align:right">'
-      + '<div style="font-size:11px;color:var(--muted)">Generated</div>'
-      + '<div style="font-size:12px;font-weight:600;color:var(--text)">'+dateStr+'</div>'
-      + '<div style="font-size:11px;color:var(--muted)">'+timeStr+'</div>'
-      + '</div></div></div>'
+    window._reportData = await r.json();
+    document.getElementById('report-sections-bar').style.display = 'flex';
+    renderReportContent();
+  } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error.</div>'; }
+}
 
-      + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">'
+function reportSectionEnabled(name) {
+  var cb = document.querySelector('.report-section-cb[data-section="'+name+'"]');
+  return !cb || cb.checked;
+}
+
+function renderReportContent() {
+  var d = window._reportData;
+  if (!d) return;
+  document.getElementById('report-ts').textContent = 'Generated ' + new Date().toLocaleString('en-US',{timeZone:'America/Chicago'}) + ' CT';
+  var now = new Date();
+  var dateStr = now.toLocaleDateString('en-US',{timeZone:'America/Chicago',weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var timeStr = now.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'2-digit',minute:'2-digit'}) + ' CT';
+  var resRate = d.total ? Math.round((d.total-d.missed)/d.total*100) : 0;
+  var vtypeLabels = {truck:'Trucks', trailer:'Trailers', reefer:'Reefers'};
+  var vtypeIcons = {truck:'🚚', trailer:'📦', reefer:'❄️'};
+  var html = '';
+
+  // Official letterhead — always shown
+  html += '<div style="text-align:center;border-bottom:3px double var(--accent);padding-bottom:16px;margin-bottom:22px">'
+    + '<div style="font-size:25px;font-weight:900;letter-spacing:.06em;color:var(--text)">KURTEX MAINTENANCE</div>'
+    + '<div style="font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--accent);text-transform:uppercase;margin-top:3px">Official Fleet Operations Report</div>'
+    + '<div style="display:flex;justify-content:center;gap:28px;margin-top:16px;flex-wrap:wrap">'
+    + '<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Report Period</div><div style="font-size:14px;font-weight:700">'+h(d.label)+'</div></div>'
+    + '<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Generated</div><div style="font-size:14px;font-weight:700">'+dateStr+'</div><div style="font-size:11px;color:var(--muted)">'+timeStr+'</div></div>'
+    + '</div></div>';
+
+  if (reportSectionEnabled('summary')) {
+    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">'
       + '<div style="font-size:28px;font-weight:800;color:var(--accent)">'+d.total+'</div>'
       + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Alerts</div>'
@@ -2329,7 +2395,6 @@ async function generateReport() {
       + '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Missed</div>'
       + '</div>'
       + '</div>'
-
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">'
       + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">'
       + '<span style="font-size:12px;color:var(--muted);font-weight:500">Resolution Rate</span>'
@@ -2339,68 +2404,119 @@ async function generateReport() {
       + '<span style="font-size:12px;color:var(--muted);font-weight:500">Avg Response Time</span>'
       + '<span style="font-size:18px;font-weight:800;color:var(--text)">'+d.avg_resp+'</span>'
       + '</div>'
-      + '</div>'
+      + '</div>';
+  }
 
-      + (d.leaderboard.length ? ''
-        + '<div style="margin-bottom:20px">'
-        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Agent Performance</div>'
-        + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
-        + '<thead><tr>'
-        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">#</th>'
-        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Agent</th>'
-        + '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Cases</th>'
-        + '</tr></thead><tbody>'
-        + d.leaderboard.map(function(a,i){
-            return '<tr style="border-top:1px solid var(--border)">'
-              + '<td style="padding:8px;font-weight:700;color:var(--muted);width:30px">'+(i+1)+'.</td>'
-              + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+h(a.name)+'</td>'
-              + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+h(a.count)+'</td>'
-              + '</tr>';
-          }).join('')
-        + '</tbody></table></div>'
-        : '')
+  if (reportSectionEnabled('agents') && d.leaderboard.length) {
+    html += '<div style="margin-bottom:20px">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Agent Performance</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+      + '<thead><tr>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">#</th>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Agent</th>'
+      + '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Cases</th>'
+      + '</tr></thead><tbody>'
+      + d.leaderboard.map(function(a,i){
+          return '<tr style="border-top:1px solid var(--border)">'
+            + '<td style="padding:8px;font-weight:700;color:var(--muted);width:30px">'+(i+1)+'.</td>'
+            + '<td style="padding:8px;font-weight:500">'+(medals[i]?medals[i]+' ':'')+h(a.name)+'</td>'
+            + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--accent)">'+h(a.count)+'</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
 
-      + (d.top_groups.length ? ''
-        + '<div style="margin-bottom:20px">'
-        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Most Active Groups</div>'
-        + d.top_groups.map(function(g,i){
-            var maxCount = d.top_groups[0].count;
-            var pct = Math.round(g.count/maxCount*100);
-            return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">'
-              + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+h(g.name)+'</span>'
-              + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">'
-              + '<div style="height:100%;border-radius:3px;background:var(--accent);width:'+pct+'%"></div></div>'
-              + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+h(g.count)+'</span>'
-              + '</div>';
-          }).join('')
-        + '</div>'
-        : '')
+  if (reportSectionEnabled('groups') && d.top_groups.length) {
+    html += '<div style="margin-bottom:20px">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Most Active Groups</div>'
+      + d.top_groups.map(function(g,i){
+          var maxCount = d.top_groups[0].count;
+          var pct = Math.round(g.count/maxCount*100);
+          return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">'
+            + '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">'+h(g.name)+'</span>'
+            + '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">'
+            + '<div style="height:100%;border-radius:3px;background:var(--accent);width:'+pct+'%"></div></div>'
+            + '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">'+h(g.count)+'</span>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+  }
 
-      + (d.missed_cases.length ? ''
-        + '<div>'
-        + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts ('+d.missed+')</div>'
-        + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
-        + '<thead><tr>'
-        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Driver</th>'
-        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
-        + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Time</th>'
-        + '</tr></thead><tbody>'
-        + d.missed_cases.map(function(c){
-            return '<tr style="border-top:1px solid var(--border)">'
-              + '<td style="padding:7px 8px;font-weight:500">'+h(c.driver)+'</td>'
-              + '<td style="padding:7px 8px;color:var(--muted)">'+h(c.group)+'</td>'
-              + '<td style="padding:7px 8px;color:var(--muted);font-size:11px">'+h(c.opened)+'</td>'
-              + '</tr>';
-          }).join('')
-        + '</tbody></table></div>'
-        : '');
-  } catch(e) { document.getElementById('report-content').innerHTML = '<div class="loading">Error.</div>'; }
+  if (reportSectionEnabled('vtype') && d.by_vtype) {
+    var vtypeBlocks = ['truck','trailer','reefer'].map(function(vt) {
+      var vd = d.by_vtype[vt];
+      if (!vd || !vd.total) return '';
+      return '<div style="margin-bottom:14px">'
+        + '<div style="font-size:12px;font-weight:700;margin-bottom:6px">'+vtypeIcons[vt]+' '+vtypeLabels[vt]+' <span style="color:var(--muted);font-weight:500">('+vd.total+' reports)</span></div>'
+        + (vd.top_issues.length
+          ? vd.top_issues.map(function(x){
+              return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0 4px 20px;border-top:1px solid var(--border);font-size:12px">'
+                + '<span>'+h(x.issue)+'</span><span style="font-weight:700;color:var(--accent);flex-shrink:0">'+x.count+'x</span></div>';
+            }).join('')
+          : '<div style="padding-left:20px;color:var(--muted);font-size:12px">No issues logged</div>')
+        + '</div>';
+    }).join('');
+    html += '<div style="margin-bottom:20px">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Top Issues by Vehicle Type</div>'
+      + (vtypeBlocks || '<div style="color:var(--muted);font-size:12px">No vehicle-type data for this period</div>')
+      + '</div>';
+  }
+
+  if (reportSectionEnabled('units') && d.top_units && d.top_units.length) {
+    html += '<div style="margin-bottom:20px">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Top Problem Units</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      + '<thead><tr>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Unit</th>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Type</th>'
+      + '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reports</th>'
+      + '</tr></thead><tbody>'
+      + d.top_units.map(function(u){
+          return '<tr style="border-top:1px solid var(--border)">'
+            + '<td style="padding:7px 8px;font-weight:700">'+h(u.unit)+'</td>'
+            + '<td style="padding:7px 8px;color:var(--muted);text-transform:capitalize">'+h(u.vtype||'—')+'</td>'
+            + '<td style="padding:7px 8px;text-align:right;font-weight:700;color:var(--accent)">'+h(u.count)+'</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
+
+  if (reportSectionEnabled('missed') && d.missed_cases.length) {
+    html += '<div style="margin-bottom:8px">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts ('+d.missed+')</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+      + '<thead><tr>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Driver</th>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>'
+      + '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Time</th>'
+      + '</tr></thead><tbody>'
+      + d.missed_cases.map(function(c){
+          return '<tr style="border-top:1px solid var(--border)">'
+            + '<td style="padding:7px 8px;font-weight:500">'+h(c.driver)+'</td>'
+            + '<td style="padding:7px 8px;color:var(--muted)">'+h(c.group)+'</td>'
+            + '<td style="padding:7px 8px;color:var(--muted);font-size:11px">'+h(c.opened)+'</td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
+
+  html += '<div style="margin-top:24px;padding-top:12px;border-top:1px solid var(--border);text-align:center;font-size:10px;color:var(--muted)">This is an official Kurtex Maintenance report, generated automatically from live fleet data.</div>';
+
+  document.getElementById('report-content').innerHTML = html;
 }
 function printReport() {
   var orig = document.title;
-  document.title = 'Kurtex Report — ' + new Date().toLocaleDateString('en-US',{timeZone:'America/Chicago'});
+  document.title = 'Kurtex Maintenance Report — ' + new Date().toLocaleDateString('en-US',{timeZone:'America/Chicago'});
+  document.body.classList.add('printing-report');
+  function cleanup() {
+    document.title = orig;
+    document.body.classList.remove('printing-report');
+    window.removeEventListener('afterprint', cleanup);
+  }
+  window.addEventListener('afterprint', cleanup);
   window.print();
-  document.title = orig;
+  // Fallback in case afterprint doesn't fire (some mobile browsers)
+  setTimeout(cleanup, 2000);
 }
 
 // ── Refresh ────────────────────────────────────────────────────────────────
