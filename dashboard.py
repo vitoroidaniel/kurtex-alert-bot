@@ -866,6 +866,9 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 
 /* Topbar buttons — distinct styles */
 .badge-btn{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;transition:all .13s;font-family:inherit;border:none;letter-spacing:.02em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;border:none;background:var(--accent);color:#fff;transition:filter .13s, transform .1s;white-space:nowrap}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:scale(.97)}
 .badge-btn.btn-outline{background:var(--surface);border:1px solid var(--border);color:var(--text)}
 .badge-btn.btn-outline:hover{background:var(--surface2);border-color:var(--muted2)}
 .badge-btn.btn-primary{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(15,23,42,.12)}
@@ -878,6 +881,7 @@ nav{flex:1;display:flex;flex-direction:column;gap:1px}
 
 /* ── Stat cards ── */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.mini-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 14px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .15s ease, box-shadow .15s ease}
 .stat-card:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(15,23,42,.14)}
 .stat-card::before{content:"";position:absolute;left:0;top:0;right:0;height:3px}
@@ -1052,6 +1056,12 @@ td{padding:9px 12px;vertical-align:middle}
   .stat-grid{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px}
   .stat-value{font-size:22px}
   .stat-card{padding:12px}
+  .mini-stat-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px}
+  .mini-stat-grid .agent-stat-val{font-size:18px}
+  .mini-stat-grid .agent-stat-label{font-size:9px}
+  .mini-stat-grid .agent-card-statval{font-size:16px}
+  .mini-stat-grid .agent-card-statlabel{font-size:9px}
+  .mini-stat-grid .stat-label{padding-right:0}
 
   /* Columns */
   .two-col{grid-template-columns:1fr;gap:10px}
@@ -1068,12 +1078,17 @@ td{padding:9px 12px;vertical-align:middle}
   .filter-tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
   .tab-btn{white-space:nowrap;padding:7px 12px;font-size:12px}
 
+  /* Toggle tabs (period/type pills) - scroll instead of squeezing */
+  .toggle-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toggle-btn{flex:none;white-space:nowrap;padding:8px 14px;font-size:12px}
+
   /* Section header stacks */
   .section-header{flex-direction:column;align-items:flex-start;gap:8px}
   .section-header > div{width:100%}
 
   /* Search input bigger */
   .search-wrap input{font-size:15px;padding:11px 14px 11px 40px}
+  .btn{padding:11px 18px;font-size:14px;width:100%}
 
   /* Modals - bottom sheet */
   .modal-overlay{padding:0;align-items:flex-end}
@@ -1779,14 +1794,14 @@ async function loadFleet() {
     }
     el.innerHTML =
       '<div class="stat-grid" style="margin-bottom:20px">'
-      + '<div class="stat-card c-accent" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\',\\'\\')" title="Show all cases"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
-      + '<div class="stat-card c-blue" style="cursor:pointer" onclick="setFleetStatusFilter(\\'truck\\',\\'\\')" title="Show truck cases"><div class="stat-icon"><i class="ph ph-truck"></i></div><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
-      + '<div class="stat-card c-yellow" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\',\\'active\\')" title="Show units with an unresolved issue (their latest case is not yet marked done)"><div class="stat-icon"><i class="ph ph-lightning"></i></div><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
-      + '<div class="stat-card c-green" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\',\\'repaired\\')" title="Show units whose latest issue was resolved"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
+      + '<div class="stat-card c-accent" style="cursor:pointer" onclick="setFleetStatusFilter(\\'all\\')" title="Show all cases"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">'+d.total_reports+'</div></div>'
+      + '<div class="stat-card c-blue" style="cursor:pointer" onclick="setFleetStatusFilter(\\'truck\\')" title="Show truck cases"><div class="stat-icon"><i class="ph ph-truck"></i></div><div class="stat-label">Trucks</div><div class="stat-value v-blue">'+d.truck_count+'</div></div>'
+      + '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-lightning"></i></div><div class="stat-label">Active Units</div><div class="stat-value v-yellow">'+d.active_units+'</div></div>'
+      + '<div class="stat-card c-green"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Repaired Units</div><div class="stat-value v-green">'+d.repaired_units+'</div></div>'
       + '</div>'
       + '<div class="stat-grid" style="margin-bottom:20px">'
-      + '<div class="stat-card c-yellow" style="cursor:pointer" onclick="setFleetStatusFilter(\\'trailer\\',\\'\\')" title="Show trailer cases"><div class="stat-icon"><i class="ph ph-package"></i></div><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
-      + '<div class="stat-card c-purple" style="cursor:pointer" onclick="setFleetStatusFilter(\\'reefer\\',\\'\\')" title="Show reefer cases"><div class="stat-icon"><i class="ph ph-snowflake"></i></div><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
+      + '<div class="stat-card c-yellow" style="cursor:pointer" onclick="setFleetStatusFilter(\\'trailer\\')" title="Show trailer cases"><div class="stat-icon"><i class="ph ph-package"></i></div><div class="stat-label">Trailers</div><div class="stat-value v-yellow">'+d.trailer_count+'</div></div>'
+      + '<div class="stat-card c-purple" style="cursor:pointer" onclick="setFleetStatusFilter(\\'reefer\\')" title="Show reefer cases"><div class="stat-icon"><i class="ph ph-snowflake"></i></div><div class="stat-label">Reefers</div><div class="stat-value v-purple">'+d.reefer_count+'</div></div>'
       + '</div>'
       + '<div id="fleet-status-wrap"></div>'
       + '<div class="two-col" style="margin-bottom:16px">'
@@ -1797,16 +1812,15 @@ async function loadFleet() {
       + unitCard('<i class="ph ph-wrench"></i> Most Reported Units', d.top_units)
       + unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues)
       + '</div>';
-    fleetStatusState = { vtype: 'all', status: '', search: '' };
+    fleetStatusState = { vtype: 'all', search: '' };
     renderFleetStatus();
   } catch(e) { console.error(e); el.innerHTML = '<div class="loading">Error.</div>'; }
 }
 
-var fleetStatusState = { vtype: 'all', status: '', search: '' };
+var fleetStatusState = { vtype: 'all', search: '' };
 
-function setFleetStatusFilter(vtype, status) {
+function setFleetStatusFilter(vtype) {
   fleetStatusState.vtype = vtype;
-  fleetStatusState.status = status;
   renderFleetStatus();
   var wrap = document.getElementById('fleet-status-wrap');
   if (wrap) wrap.scrollIntoView({behavior:'smooth', block:'start'});
@@ -1820,15 +1834,11 @@ function renderFleetStatus() {
   var q = (s.search||'').toLowerCase().trim();
   var filtered = items.filter(function(item) {
     if (s.vtype !== 'all' && (item.vtype||'').toLowerCase() !== s.vtype) return false;
-    if (s.status && item.status !== s.status) return false;
     if (q && (item.unit||'').toLowerCase().indexOf(q)===-1 && (item.issue||'').toLowerCase().indexOf(q)===-1 && (item.driver||'').toLowerCase().indexOf(q)===-1) return false;
     return true;
   });
   function vbtn(v, label) {
     return '<button class="toggle-btn'+(s.vtype===v?' active':'')+'" onclick="fleetStatusState.vtype=\\''+v+'\\';renderFleetStatus()">'+label+'</button>';
-  }
-  function sbtn(v, label) {
-    return '<button class="toggle-btn'+(s.status===v?' active':'')+'" onclick="fleetStatusState.status=\\''+v+'\\';renderFleetStatus()">'+label+'</button>';
   }
   var rows = filtered.map(function(item) {
     var badge = item.status === 'active'
@@ -1845,10 +1855,7 @@ function renderFleetStatus() {
   wrap.innerHTML =
     '<div class="card" style="margin-bottom:16px">'
     + '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
-    + '<div class="toggle-tabs" style="margin-bottom:0;flex:1;min-width:220px">' + vbtn('all','All') + vbtn('truck','Truck') + vbtn('trailer','Trailer') + vbtn('reefer','Reefer') + '</div>'
-    + '<div class="toggle-tabs" style="margin-bottom:0;flex:1;min-width:180px">' + sbtn('','Any Status') + sbtn('active','Active') + sbtn('repaired','Repaired') + '</div>'
-    + '</div>'
+    + '<div class="toggle-tabs" style="margin-bottom:10px">' + vbtn('all','All') + vbtn('truck','Truck') + vbtn('trailer','Trailer') + vbtn('reefer','Reefer') + '</div>'
     + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" placeholder="Search unit, issue, or driver..." value="'+attr(s.search||'')+'" oninput="fleetStatusState.search=this.value;renderFleetStatus()"></div>'
     + (filtered.length
       ? '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'
@@ -1872,8 +1879,7 @@ async function loadMyProfile() {
       + '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">'+h((p.name||'?')[0])+'</div>'
       + '<div><div style="font-size:17px;font-weight:700">'+h(p.name)+'</div><div style="font-size:12px;color:var(--muted)">'+(p.username?'@'+h(p.username)+' · ':'')+h(p.role)+'</div></div>'
       + '</div>'
-      + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
-      + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+p.total+'</div><div class="agent-stat-label">Total</div></div>'
+      + '<div class="mini-stat-grid">'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+p.done+'</div><div class="agent-stat-label">Resolved</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+p.missed+'</div><div class="agent-stat-label">Missed</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+p.rate+'%</div><div class="agent-stat-label">Rate</div></div>'
@@ -1911,7 +1917,7 @@ async function loadAgents() {
         + '<div style="min-width:0"><div style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + h(a.name||'') + '</div>'
         + '<div style="font-size:12px;color:var(--muted)">' + (a.username?'@'+h(a.username):'No username') + '</div></div>'
         + '</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">'
+        + '<div class="mini-stat-grid">'
         + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--accent)">' + (a.total||0) + '</div><div class="agent-card-statlabel">Total</div></div>'
         + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--green)">' + (a.done||0) + '</div><div class="agent-card-statlabel">Done</div></div>'
         + '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--red)">' + (a.missed||0) + '</div><div class="agent-card-statlabel">Missed</div></div>'
@@ -2145,14 +2151,14 @@ async function loadAgentProfileData(resetHeader) {
       return '<button class="toggle-btn' + (s.period===p?' active':'') + '" onclick="setAgentPeriod(\\'' + p + '\\')">' + periodLabels[p] + '</button>';
     }
     body.innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
+      '<div class="mini-stat-grid" style="margin-bottom:16px">'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.total+'</div><div class="agent-stat-label">Total (all-time)</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">'+a.done+'</div><div class="agent-stat-label">Resolved</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">'+a.missed+'</div><div class="agent-stat-label">Missed</div></div>'
       + '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">'+a.rate+'%</div><div class="agent-stat-label">Rate</div></div>'
       + '</div>'
       + '<div class="toggle-tabs" style="margin-bottom:10px">' + tab('today') + tab('week') + tab('month') + tab('all') + '</div>'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">'
       + '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases — ' + periodLabels[s.period] + '</div>'
       + '<div style="font-size:11px;color:var(--muted)">' + ps.total + ' total &middot; ' + ps.done + ' done &middot; ' + ps.missed + ' missed</div>'
       + '</div>'
@@ -2207,7 +2213,7 @@ async function openUnitModal(unitNumber, vtype) {
         }).join('')
         + '</div>';
     }
-    var statsHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">'
+    var statsHtml = '<div class="mini-stat-grid" style="margin-bottom:16px">'
       + '<div class="stat-card"><div class="stat-label">Total</div><div class="stat-value v-accent" style="font-size:20px">' + d.total + '</div></div>'
       + '<div class="stat-card"><div class="stat-label">Active</div><div class="stat-value v-yellow" style="font-size:20px">' + d.active + '</div></div>'
       + '<div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value v-green" style="font-size:20px">' + d.done + '</div></div>'
