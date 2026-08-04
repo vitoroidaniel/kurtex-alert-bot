@@ -1877,20 +1877,14 @@ function setFleetStatusFilter(vtype) {
   if (wrap) wrap.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
-function renderFleetStatus() {
-  var wrap = document.getElementById('fleet-status-wrap');
-  if (!wrap || !window._fleetData) return;
-  var s = fleetStatusState;
-  var items = window._fleetData.fleet_status || [];
+function fleetStatusFilteredHtml(s) {
+  var items = (window._fleetData && window._fleetData.fleet_status) || [];
   var q = (s.search||'').toLowerCase().trim();
   var filtered = items.filter(function(item) {
     if (s.vtype !== 'all' && (item.vtype||'').toLowerCase() !== s.vtype) return false;
     if (q && (item.unit||'').toLowerCase().indexOf(q)===-1 && (item.issue||'').toLowerCase().indexOf(q)===-1 && (item.driver||'').toLowerCase().indexOf(q)===-1) return false;
     return true;
   });
-  function vbtn(v, label) {
-    return '<button class="toggle-btn'+(s.vtype===v?' active':'')+'" onclick="fleetStatusState.vtype=\\''+v+'\\';renderFleetStatus()">'+label+'</button>';
-  }
   var rows = filtered.map(function(item) {
     var badge = item.status === 'active'
       ? '<span class="status-badge s-reported">active</span>'
@@ -1903,14 +1897,32 @@ function renderFleetStatus() {
       + '<td>'+h(item.opened)+'</td>'
       + '</tr>';
   }).join('');
+  return filtered.length
+    ? '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'
+    : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No units match this filter.</div>';
+}
+
+// Only refreshes the results area (used while typing) so the search input
+// itself is never destroyed/recreated and keeps focus + cursor position.
+function updateFleetStatusResults() {
+  var results = document.getElementById('fleet-status-results');
+  if (!results || !window._fleetData) return;
+  results.innerHTML = fleetStatusFilteredHtml(fleetStatusState);
+}
+
+function renderFleetStatus() {
+  var wrap = document.getElementById('fleet-status-wrap');
+  if (!wrap || !window._fleetData) return;
+  var s = fleetStatusState;
+  function vbtn(v, label) {
+    return '<button class="toggle-btn'+(s.vtype===v?' active':'')+'" onclick="fleetStatusState.vtype=\\''+v+'\\';renderFleetStatus()">'+label+'</button>';
+  }
   wrap.innerHTML =
     '<div class="card" style="margin-bottom:16px">'
     + '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>'
     + '<div class="toggle-tabs" style="margin-bottom:10px">' + vbtn('all','All') + vbtn('truck','Truck') + vbtn('trailer','Trailer') + vbtn('reefer','Reefer') + '</div>'
-    + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" placeholder="Search unit, issue, or driver..." value="'+attr(s.search||'')+'" oninput="fleetStatusState.search=this.value;renderFleetStatus()"></div>'
-    + (filtered.length
-      ? '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>' + rows + '</tbody></table></div></div>'
-      : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No units match this filter.</div>')
+    + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" placeholder="Search unit, issue, or driver..." value="'+attr(s.search||'')+'" oninput="fleetStatusState.search=this.value;updateFleetStatusResults()"></div>'
+    + '<div id="fleet-status-results">' + fleetStatusFilteredHtml(s) + '</div>'
     + '</div>';
 }
 
@@ -2702,19 +2714,14 @@ async function loadFleetIntel() {
   } catch(e) { el.innerHTML = '<div class="loading">Error: '+h(e.message)+'</div>'; }
 }
 
-function renderIntelUnits(vtype, search) {
-  var wrap = document.getElementById('intel-units-wrap');
-  if (!wrap || !window._intelData) return;
-  var items = window._intelData.top_units || [];
+function intelUnitsRowsHtml(vtype, search) {
+  var items = (window._intelData && window._intelData.top_units) || [];
   var q = (search||'').toLowerCase().trim();
   var filtered = items.filter(function(u) {
     if (vtype !== 'all' && (u.vtype||'').toLowerCase() !== vtype) return false;
     if (q && (u.unit||'').toLowerCase().indexOf(q)===-1 && (u.top_issue||'').toLowerCase().indexOf(q)===-1) return false;
     return true;
   });
-  function vbtn(v, label) {
-    return '<button class="toggle-btn'+(vtype===v?' active':'')+'" onclick="renderIntelUnits(\\''+v+'\\', document.getElementById(\\'intel-units-search\\').value)">'+label+'</button>';
-  }
   var rows = filtered.map(function(u){
     return '<tr style="cursor:pointer" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit, this.dataset.vtype)" title="View all cases for unit '+attr(u.unit)+'">'
       + '<td><b>'+h(u.unit)+'</b></td>'
@@ -2724,14 +2731,32 @@ function renderIntelUnits(vtype, search) {
       + '<td style="color:var(--muted);font-size:11px">'+h(u.last_seen)+'</td>'
       + '</tr>';
   }).join('');
+  return filtered.length ? rows : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No units match this filter</td></tr>';
+}
+
+// Only refreshes the table rows (used while typing) so the search input
+// itself is never destroyed/recreated and keeps focus + cursor position.
+function updateIntelUnitsTable(vtype, search) {
+  var tbody = document.getElementById('intel-units-tbody');
+  if (!tbody || !window._intelData) return;
+  window._intelUnitsVtype = vtype;
+  tbody.innerHTML = intelUnitsRowsHtml(vtype, search);
+}
+
+function renderIntelUnits(vtype, search) {
+  var wrap = document.getElementById('intel-units-wrap');
+  if (!wrap || !window._intelData) return;
+  window._intelUnitsVtype = vtype;
+  function vbtn(v, label) {
+    return '<button class="toggle-btn'+(vtype===v?' active':'')+'" onclick="renderIntelUnits(\\''+v+'\\', document.getElementById(\\'intel-units-search\\').value)">'+label+'</button>';
+  }
   wrap.innerHTML =
     '<div class="section-title" style="margin-bottom:10px">Most Reported Units</div>'
     + '<div class="toggle-tabs" style="margin-bottom:10px">' + vbtn('all','All') + vbtn('truck','Truck') + vbtn('trailer','Trailer') + vbtn('reefer','Reefer') + '</div>'
-    + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" placeholder="Search unit or issue..." value="'+attr(search||'')+'" oninput="renderIntelUnits(\\''+vtype+'\\', this.value)"></div>'
+    + '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" placeholder="Search unit or issue..." value="'+attr(search||'')+'" oninput="updateIntelUnitsTable(window._intelUnitsVtype, this.value)"></div>'
     + '<div class="table-wrap"><div class="table-scroll"><table>'
-    + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>'
-    + (filtered.length ? rows : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No units match this filter</td></tr>')
-    + '</tbody></table></div></div>';
+    + '<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead>'
+    + '<tbody id="intel-units-tbody">' + intelUnitsRowsHtml(vtype, search) + '</tbody></table></div></div>';
 }
 
 async function refresh(force) {
