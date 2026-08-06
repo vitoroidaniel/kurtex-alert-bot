@@ -43,11 +43,16 @@ logger = logging.getLogger(__name__)
 
 SKIP_KB = InlineKeyboardMarkup([[InlineKeyboardButton("Skip", callback_data="rpt_skip")]])
 
-LOAD_TYPE_KB = InlineKeyboardMarkup([[
-    InlineKeyboardButton("JBS Load",    callback_data="rpt_loadtype|jbs"),
-    InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
-    InlineKeyboardButton("Empty",       callback_data="rpt_loadtype|empty"),
-]])
+LOAD_TYPE_KB = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton("JBS Load",    callback_data="rpt_loadtype|jbs"),
+        InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
+    ],
+    [
+        InlineKeyboardButton("Meijer Load", callback_data="rpt_loadtype|meijer"),
+        InlineKeyboardButton("Empty",       callback_data="rpt_loadtype|empty"),
+    ],
+])
 
 VTYPE_LABELS = {
     "truck":   "Truck",
@@ -130,7 +135,7 @@ def _build_report(d: dict) -> str:
     else:
         lines.append(f"Current Location: {_esc(d.get('location', '—'))}")
 
-    if vtype == "reefer":
+    if vtype == "reefer" and load.lower() != "empty":
         lines += [
             "",
             f"*Setpoint:* {_esc(d.get('setpoint', '—'))}",
@@ -231,7 +236,7 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     ltype = query.data.split("|")[1]
-    label_map = {"jbs": "JBS Load", "broker": "Broker Load", "empty": "Empty"}
+    label_map = {"jbs": "JBS Load", "broker": "Broker Load", "meijer": "Meijer Load", "empty": "Empty"}
     label = label_map.get(ltype, ltype.title())
     ctx.user_data["report"]["load"] = label
 
@@ -272,11 +277,13 @@ async def recv_delivery(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["location"] = update.message.text.strip()
-    vtype = ctx.user_data["report"].get("vehicle_type", "truck")
-    if vtype == "reefer":
+    report = ctx.user_data["report"]
+    vtype  = report.get("vehicle_type", "truck")
+    load   = report.get("load", "")
+    if vtype == "reefer" and load.lower() != "empty":
         await update.message.reply_text("Setpoint temperature (e.g. -10°C):", reply_markup=SKIP_KB)
         return ASK_SETPOINT
-    # truck/trailer — skip straight to comments, no temp questions
+    # truck/trailer, or reefer with Empty load — skip straight to comments, no temp questions
     await update.message.reply_text("Comments:", reply_markup=SKIP_KB)
     return ASK_COMMENTS
 
@@ -367,10 +374,10 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return ASK_LOCATION
     elif "location" not in report:
         report["location"] = "—"
-        if vtype == "reefer":
+        if vtype == "reefer" and report.get("load", "").lower() != "empty":
             await query.edit_message_text("Setpoint temperature:", reply_markup=SKIP_KB)
             return ASK_SETPOINT
-        # truck / trailer — straight to comments, never ask temp
+        # truck / trailer, or reefer with Empty load — straight to comments, never ask temp
         await query.edit_message_text("Comments:", reply_markup=SKIP_KB)
         return ASK_COMMENTS
     elif vtype == "reefer" and "setpoint" not in report:
@@ -539,7 +546,7 @@ async def _show_preview(target, ctx, edit=True):
         await msg.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=_confirm_kb())
 
 
-def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
+def _edit_fields_kb(vtype: str, load: str = "") -> InlineKeyboardMarkup:
     fields = [
         ("Unit number",   "rpt_editfield|unit"),
         ("Driver name",   "rpt_editfield|driver"),
@@ -551,7 +558,7 @@ def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
         ("Comments",      "rpt_editfield|comments"),
         ("Priority",      "rpt_editfield|priority"),
     ]
-    if vtype in ("trailer", "reefer"):
+    if vtype in ("trailer", "reefer") and load.lower() != "empty":
         fields[7:7] = [
             ("Setpoint",      "rpt_editfield|setpoint"),
             ("Current temp",  "rpt_editfield|current_temp"),
@@ -565,8 +572,10 @@ def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
 async def cb_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    vtype = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
-    await query.edit_message_text("Which field would you like to edit?", reply_markup=_edit_fields_kb(vtype))
+    report = ctx.user_data.get("report", {})
+    vtype  = report.get("vehicle_type", "truck")
+    load   = report.get("load", "")
+    await query.edit_message_text("Which field would you like to edit?", reply_markup=_edit_fields_kb(vtype, load))
     return ASK_EDIT_FIELD
 
 
@@ -591,11 +600,16 @@ async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "comments": "Enter new comments:", "priority": "Select new priority:",
     }
     if field == "load":
-        await query.edit_message_text("Select load type:", reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("JBS Load",    callback_data="rpt_editval|JBS Load"),
-            InlineKeyboardButton("Broker Load", callback_data="rpt_editval|Broker Load"),
-            InlineKeyboardButton("Empty",       callback_data="rpt_editval|Empty"),
-        ]]))
+        await query.edit_message_text("Select load type:", reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("JBS Load",    callback_data="rpt_editval|JBS Load"),
+                InlineKeyboardButton("Broker Load", callback_data="rpt_editval|Broker Load"),
+            ],
+            [
+                InlineKeyboardButton("Meijer Load", callback_data="rpt_editval|Meijer Load"),
+                InlineKeyboardButton("Empty",       callback_data="rpt_editval|Empty"),
+            ],
+        ]))
         return ASK_EDIT_VALUE
     if field == "temp_recorder":
         await query.edit_message_text(prompts[field], reply_markup=InlineKeyboardMarkup([[
