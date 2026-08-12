@@ -46,70 +46,11 @@ def _save(path: Path, data: list[dict] | dict) -> None:
         logger.error(f"Failed to save {path.name}: {e}")
 
 
-# ── FAST IN-PLACE UPDATE (new!) ──────────────────────────────────────────────
-
-def _update_case_inplace(case_id: str, updater: callable) -> Optional[dict]:
-    """
-    Read cases.json line by line, find the matching case, apply `updater`,
-    and write only that line back. This is O(n) but never rewrites the whole file.
-    Returns the updated case dict if found, else None.
-    """
-    if not CASES_FILE.exists():
-        return None
-
-    updated_case = None
-    found = False
-    lines = []
-
-    try:
-        with open(CASES_FILE, "r", encoding="utf-8") as f:
-            # Read all lines (we'll rebuild the file with the same formatting)
-            lines = f.readlines()
-    except Exception as e:
-        logger.error(f"Failed to read {CASES_FILE} for in-place update: {e}")
-        return None
-
-    # Find the line containing the case — we'll rewrite it
-    for i, line in enumerate(lines):
-        try:
-            if not line.strip():
-                continue
-            obj = json.loads(line.rstrip(",\n"))
-            if obj.get("id") == case_id:
-                updated_case = updater(obj)
-                # Replace the line with the updated JSON (keep the comma if needed)
-                # We'll keep the same indentation style: 2 spaces, with a comma at the end if not the last item
-                new_line = json.dumps(obj, default=str)
-                # Check if the original line had a trailing comma (assume it's a list item)
-                if line.rstrip().endswith(","):
-                    new_line += ","
-                lines[i] = new_line + "\n"
-                found = True
-                break
-        except Exception:
-            continue
-
-    if not found:
-        return None
-
-    # Write back the modified file
-    try:
-        tmp = CASES_FILE.with_suffix(".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-        tmp.replace(CASES_FILE)
-    except Exception as e:
-        logger.error(f"Failed to write in-place update for {case_id}: {e}")
-        return None
-
-    return updated_case
-
-
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-# ── Cases — write (now using in‑place update where possible) ─────────────────
+# ── Cases — write ─────────────────────────────────────────────────────────────
 
 def create_case(
     case_id: str,
@@ -142,84 +83,79 @@ def create_case(
 
 
 def assign_case(case_id: str, agent_id: int, agent_name: str, agent_username: Optional[str]) -> Optional[dict]:
-    def updater(case):
-        assigned_at   = now_iso()
-        response_secs = int(
-            (datetime.fromisoformat(assigned_at) - datetime.fromisoformat(case["opened_at"])).total_seconds()
-        )
-        case.update({
-            "assigned_at":    assigned_at,
-            "agent_id":       agent_id,
-            "agent_name":     agent_name,
-            "agent_username": agent_username,
-            "status":         "assigned",
-            "response_secs":  response_secs,
-        })
-        return case
-
-    updated = _update_case_inplace(case_id, updater)
-    if updated:
-        logger.info(f"Case {case_id} assigned to {agent_name}")
-    else:
-        logger.warning(f"assign_case: {case_id} not found")
-    return updated
+    cases = _load(CASES_FILE)
+    for case in cases:
+        if case["id"] == case_id:
+            assigned_at   = now_iso()
+            response_secs = int(
+                (datetime.fromisoformat(assigned_at) - datetime.fromisoformat(case["opened_at"])).total_seconds()
+            )
+            case.update({
+                "assigned_at":    assigned_at,
+                "agent_id":       agent_id,
+                "agent_name":     agent_name,
+                "agent_username": agent_username,
+                "status":         "assigned",
+                "response_secs":  response_secs,
+            })
+            _save(CASES_FILE, cases)
+            logger.info(f"Case {case_id} assigned to {agent_name}")
+            return case
+    logger.warning(f"assign_case: {case_id} not found")
+    return None
 
 
 def report_case(case_id: str, notes: Optional[str] = "case reported") -> Optional[dict]:
-    def updater(case):
-        case.update({"status": "reported", "notes": notes})
-        return case
-
-    updated = _update_case_inplace(case_id, updater)
-    if updated:
-        logger.info(f"Case {case_id} reported")
-    else:
-        logger.warning(f"report_case: {case_id} not found")
-    return updated
+    cases = _load(CASES_FILE)
+    for case in cases:
+        if case["id"] == case_id:
+            case.update({"status": "reported", "notes": notes})
+            _save(CASES_FILE, cases)
+            return case
+    return None
 
 
 def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
-    def updater(case):
-        closed_at       = now_iso()
-        resolution_secs = None
-        if case.get("assigned_at"):
-            resolution_secs = int(
-                (datetime.fromisoformat(closed_at) - datetime.fromisoformat(case["assigned_at"])).total_seconds()
-            )
-        case.update({
-            "closed_at":       closed_at,
-            "status":          "done",
-            "notes":           notes,
-            "resolution_secs": resolution_secs,
-        })
-        return case
-
-    updated = _update_case_inplace(case_id, updater)
-    if updated:
-        logger.info(f"Case {case_id} closed")
-    else:
-        logger.warning(f"close_case: {case_id} not found")
-    return updated
+    cases = _load(CASES_FILE)
+    for case in cases:
+        if case["id"] == case_id:
+            closed_at       = now_iso()
+            resolution_secs = None
+            if case.get("assigned_at"):
+                resolution_secs = int(
+                    (datetime.fromisoformat(closed_at) - datetime.fromisoformat(case["assigned_at"])).total_seconds()
+                )
+            case.update({
+                "closed_at":       closed_at,
+                "status":          "done",
+                "notes":           notes,
+                "resolution_secs": resolution_secs,
+            })
+            _save(CASES_FILE, cases)
+            logger.info(f"Case {case_id} closed")
+            return case
+    return None
 
 
 def mark_missed(case_id: str) -> None:
-    def updater(case):
-        if case["status"] in ("open", "assigned"):
+    cases = _load(CASES_FILE)
+    for case in cases:
+        if case["id"] == case_id and case["status"] in ("open", "assigned"):
             case["status"] = "missed"
-        return case
-
-    _update_case_inplace(case_id, updater)
+            _save(CASES_FILE, cases)
+            return
 
 
 def set_report_msg_id(case_id: str, msg_id: int) -> None:
-    def updater(case):
-        case["report_msg_id"] = msg_id
-        return case
+    cases = _load(CASES_FILE)
+    for case in cases:
+        if case["id"] == case_id:
+            case["report_msg_id"] = msg_id
+            _save(CASES_FILE, cases)
+            return
 
-    _update_case_inplace(case_id, updater)
 
-
-# ── Cases — read (unchanged) ─────────────────────────────────────────────────
+# ── Cases — read ──────────────────────────────────────────────────────────────
 
 def get_case(case_id: str) -> Optional[dict]:
     for case in _load(CASES_FILE):

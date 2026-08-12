@@ -76,13 +76,12 @@ class AlertHandler:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _make_kb(self, alert_id: str) -> InlineKeyboardMarkup:
+    # Telegram callback_data limit is 64 bytes — a UUID is 36 chars, fine
         return InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Assign", callback_data=f"assign|{alert_id}"),
-        # Add Report and Solve buttons here so they can skip the assign step entirely
-            InlineKeyboardButton("📋 Report", callback_data=f"solve|{alert_id}"),
-            InlineKeyboardButton("✅ Solve",  callback_data=f"close_ask|{alert_id}"),
-            InlineKeyboardButton("🚫 Ignore", callback_data=f"ignore|{alert_id}"),
-        ]])
+        InlineKeyboardButton("✅ Assign", callback_data=f"assign|{alert_id}"),
+        InlineKeyboardButton("🚫 Ignore", callback_data=f"ignore|{alert_id}"),
+    ]])
+
     def _register_alert(self, alert_id: str) -> str:
     # Keep short_map for backwards compat with old buttons, but new ones use full id
         short_id = alert_id.replace("-", "")[:12]
