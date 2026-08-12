@@ -12,6 +12,7 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from config import config
 from shift_manager import MAIN_ADMIN_ID
+from storage.case_store import get_case  # <-- IMPORTANT: added this import
 
 
 def _esc(t: str) -> str:
@@ -93,14 +94,6 @@ def _confirm_kb():
     ])
 
 
-def _esc(text) -> str:
-    if not text or text == "—":
-        return "—"
-    for ch in ['_', '*', '`', '[']:
-        text = str(text).replace(ch, f'\\{ch}')
-    return text
-
-
 def _build_report(d: dict) -> str:
     vtype        = d.get("vehicle_type", "truck")
     priority_key = d.get("priority", "low")
@@ -124,8 +117,6 @@ def _build_report(d: dict) -> str:
         "",
     ]
 
-    # Load label — just "JBS Load" or "Broker Load" or "Empty", no colon, no "Load:" prefix
-    # Empty only shows Current Location
     if load and load != "—":
         lines.append(f"*{_esc(load)}*")
         if load.lower() != "empty":
@@ -150,17 +141,31 @@ def _build_report(d: dict) -> str:
     return "\n".join(lines)
 
 
-
 async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Entry point from Report button (solve|case_id). Stores handler info and shows vehicle selector."""
+    """Entry point from Report button (solve|case_id)."""
     query   = update.callback_query
     await query.answer()
     case_id = query.data.split("|")[1]
 
-    from storage.case_store import get_case
-    case = get_case(case_id)
-    if not case or case["status"] not in ("assigned", "reported"):
-        await query.edit_message_text("This case is no longer active.", reply_markup=None)
+    # 🔥 FIX: Freshly fetch the case from disk right now to ensure it's still valid
+    try:
+        case = get_case(case_id)
+    except Exception as e:
+        logger.error(f"Error fetching case {case_id}: {e}")
+        await query.edit_message_text("⚠️ Error loading case data. Please try again.", reply_markup=None)
+        return ConversationHandler.END
+
+    # Check if the case is actually active right now
+    if not case:
+        await query.edit_message_text("❌ This case no longer exists (deleted).", reply_markup=None)
+        return ConversationHandler.END
+
+    if case["status"] not in ("assigned", "reported"):
+        await query.edit_message_text(
+            f"ℹ️ This case is no longer active (Status: {case['status']}).\n"
+            f"Use /mycases to see your current cases.",
+            reply_markup=None
+        )
         return ConversationHandler.END
 
     # Block if agent is mid-report on another case
@@ -171,11 +176,13 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await query.answer("Finish your current report first.", show_alert=True)
             return ConversationHandler.END
 
-    # Store handler name and case_id
+    # Store handler name and case_id (use the ID we just verified)
     user = update.effective_user
     handler_name = f"{user.first_name} {user.last_name or ''}".strip()
     ctx.user_data["report_case_id"] = case_id
     ctx.user_data["report_handler"] = handler_name
+    
+    # Mark agent as busy to prevent double assignments
     if "busy_agents" not in ctx.bot_data:
         ctx.bot_data["busy_agents"] = set()
     ctx.bot_data["busy_agents"].add(user.id)
@@ -186,13 +193,10 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Issue: {(case.get('description') or '')[:80]}\n\n"
         "Select vehicle type:",
         parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
-            InlineKeyboardButton("🚚 Trailer", callback_data="rpt_type|trailer"),
-            InlineKeyboardButton("❄️ Reefer",  callback_data="rpt_type|reefer"),
-        ]])
+        reply_markup=_type_kb()
     )
     return ASK_TYPE
+
 
 async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -241,7 +245,6 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["load"] = label
 
     if ltype == "empty":
-        # Empty — no PU or Delivery, jump straight to current location
         ctx.user_data["report"]["pickup"]   = "—"
         ctx.user_data["report"]["delivery"] = "—"
         await query.edit_message_text(
@@ -283,7 +286,6 @@ async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if vtype == "reefer" and load.lower() != "empty":
         await update.message.reply_text("Setpoint temperature (e.g. -10°C):", reply_markup=SKIP_KB)
         return ASK_SETPOINT
-    # truck/trailer, or reefer with Empty load — skip straight to comments, no temp questions
     await update.message.reply_text("Comments:", reply_markup=SKIP_KB)
     return ASK_COMMENTS
 
@@ -363,7 +365,6 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     report = ctx.user_data.get("report", {})
     vtype  = report.get("vehicle_type", "truck")
 
-    # Step order: pickup → delivery → location → (reefer only: setpoint → current_temp → temp_recorder) → comments → media
     if "pickup" not in report:
         report["pickup"] = "—"
         await query.edit_message_text("Delivery Location / Time:", reply_markup=SKIP_KB)
@@ -377,7 +378,6 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if vtype == "reefer" and report.get("load", "").lower() != "empty":
             await query.edit_message_text("Setpoint temperature:", reply_markup=SKIP_KB)
             return ASK_SETPOINT
-        # truck / trailer, or reefer with Empty load — straight to comments, never ask temp
         await query.edit_message_text("Comments:", reply_markup=SKIP_KB)
         return ASK_COMMENTS
     elif vtype == "reefer" and "setpoint" not in report:
@@ -478,7 +478,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Report sent to {dest_id}")
 
         case_id = ctx.user_data.pop("report_case_id", None)
-        report_data = dict(data)  # save BEFORE any pops
+        report_data = dict(data)
         ctx.user_data.pop("report_handler", None)
         if "busy_agents" in ctx.bot_data:
             ctx.bot_data["busy_agents"].discard(update.effective_user.id)
@@ -486,7 +486,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             try:
                 from storage.case_store import report_case, _load, _save, CASES_FILE
                 report_case(case_id)
-                # Save all report fields to the case for dashboard analytics
+                # Save all report fields to the case
                 logger.info(f"Saving report data for case {case_id}: vtype={report_data.get('vehicle_type')}, unit={report_data.get('unit_number')}, issue={report_data.get('issue')}")
                 cases = _load(CASES_FILE)
                 found = False
@@ -517,7 +517,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     except TelegramError as e:
         logger.error(f"Failed to send report: {e}")
-        await query.edit_message_text("Failed to send report. Please try again.", reply_markup=None)
+        await query.edit_message_text("❌ Failed to send report. Please try again.", reply_markup=None)
 
     return ConversationHandler.END
 
@@ -530,7 +530,6 @@ async def cmd_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.bot_data["busy_agents"].discard(update.effective_user.id)
     await update.message.reply_text("Report cancelled. Use /mycases to continue.")
     return ConversationHandler.END
-
 
 
 async def _show_preview(target, ctx, edit=True):
@@ -646,6 +645,7 @@ async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
     await _show_preview(update.message, ctx, edit=False)
     return CONFIRM
+
 
 def get_report_conversation():
     private_text = filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND
