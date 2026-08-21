@@ -41,10 +41,10 @@ TRIGGER_WORDS    = ['#maintenance', '#repairs', '#repair']
 COOLDOWN_MIN_SECONDS = 5 * 60
 COOLDOWN_MAX_SECONDS = 7 * 60
 
-# A repeat #repairs tag during the case-cooldown window still ALWAYS notifies
-# agents (see _notify_repeat_tag) — this just stops a literal duplicate send
-# if two messages land within the same few seconds of each other.
-UNASSIGNED_NUDGE_COOLDOWN_SECONDS = 20
+# If a driver keeps spamming while their case is still unassigned, agents get
+# nudged again — but not on every single spam message, or the nudge itself
+# becomes spam. This throttles the nudges independently of the case cooldown.
+UNASSIGNED_NUDGE_COOLDOWN_SECONDS = 2 * 60
 
 
 class AlertHandler:
@@ -142,12 +142,11 @@ class AlertHandler:
             if cooldown_until.tzinfo is None:
                 cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
             if now < cooldown_until:
-                # Driver (or, for anonymous/"send as group" posts, anyone
-                # sharing that same group identity) is within the cooldown
-                # window. We still ALWAYS notify agents instantly — the
-                # cooldown only prevents opening a duplicate case, it must
-                # never silently swallow the notification itself.
-                await self._notify_repeat_tag(driver_id, ctx)
+                # Driver is spamming #repairs/#maintenance within the cooldown
+                # window. Don't open a duplicate case for it — but if their
+                # last case is still sitting unassigned, that's a signal
+                # worth escalating to agents (throttled separately below).
+                await self._nudge_if_unassigned(driver_id, ctx)
                 return
 
         self._driver_last_time[driver_id] = now
@@ -193,9 +192,9 @@ class AlertHandler:
         recipients = get_on_shift_admins() or get_all_admins()
         notified   = 0
         dm_text    = (
-            "🔔 You have been mentioned in *" + _esc(chat_title) + "*\n\n"
-            "👤 *Reported by:* " + _esc(driver_name) + "\n"
-            "📝 *Issue:* " + _esc(text[:200])
+            "🔔 You have been mentioned in *" + chat_title + "*\n\n"
+            "👤 *Reported by:* " + driver_name + "\n"
+            "📝 *Issue:* " + text[:200]
         )
 
         for admin in recipients:
@@ -219,18 +218,16 @@ class AlertHandler:
         if notified == 0:
             logger.warning("No admins could be reached for alert!")
 
-    async def _notify_repeat_tag(self, driver_id: int, ctx: ContextTypes.DEFAULT_TYPE):
-        """A driver (or shared group identity) tagged #repairs again while
-        still on the anti-duplicate-case cooldown. We never skip the
-        notification itself — agents should always hear about a repair tag
-        instantly. A short throttle (well under the case cooldown) just
-        stops a literal double-send if two messages land in the same second."""
+    async def _nudge_if_unassigned(self, driver_id: int, ctx: ContextTypes.DEFAULT_TYPE):
+        """A driver spammed #repairs again while still on cooldown. If their
+        most recent case is still unassigned, ping agents again so it doesn't
+        get lost — throttled so this can't itself turn into spam."""
         alert_id = self._driver_last_alert.get(driver_id)
         if not alert_id:
             return
         record = self._alerts.get(alert_id)
-        if not record:
-            return
+        if not record or record.get("taken_by") is not None:
+            return  # already assigned (or already gone) — nothing to nudge about
 
         now = datetime.now(timezone.utc)
         last_nudge = self._last_nudge_at.get(alert_id)
@@ -238,28 +235,16 @@ class AlertHandler:
             return
         self._last_nudge_at[alert_id] = now
 
-        already_assigned = record.get("taken_by") is not None
         short_id = self._register_alert(alert_id)
-        kb       = None if already_assigned else self._make_kb(short_id)
-
-        if already_assigned:
-            assignee = record["taken_by"][1] if record["taken_by"] else "an agent"
-            text = (
-                "🔁 *Repeat tag*\n\n"
-                f"👤 *Driver:* {_esc(record.get('driver_name', '—'))} tagged this again.\n"
-                f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
-                f"📝 *Issue:* {_esc((record.get('text') or '—')[:200])}\n\n"
-                f"Already assigned to {_esc(assignee)} — FYI only."
-            )
-        else:
-            text = (
-                "⚠️ *Case still unassigned!*\n\n"
-                f"👤 *Driver:* {_esc(record.get('driver_name', '—'))} keeps reporting "
-                "this issue and no one has picked it up yet.\n"
-                f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
-                f"📝 *Issue:* {_esc((record.get('text') or '—')[:200])}\n\n"
-                "Please assign it."
-            )
+        kb       = self._make_kb(short_id)
+        text     = (
+            "⚠️ *Case still unassigned!*\n\n"
+            f"👤 *Driver:* {_esc(record.get('driver_name', '—'))} keeps reporting "
+            "this issue and no one has picked it up yet.\n"
+            f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
+            f"📝 *Issue:* {(record.get('text') or '—')[:200]}\n\n"
+            "Please assign it."
+        )
 
         recipients = get_on_shift_admins() or get_all_admins()
         for admin in recipients:
@@ -269,7 +254,7 @@ class AlertHandler:
                 )
                 record["recipients"].setdefault(admin["id"], []).append(sent.message_id)
             except TelegramError as e:
-                logger.warning(f"Could not notify admin {admin['id']} about repeat tag: {e}")
+                logger.warning(f"Could not nudge admin {admin['id']} about unassigned case: {e}")
 
         self._persist()
 
@@ -333,10 +318,10 @@ class AlertHandler:
             short_id = self._register_alert(alert_id)
             kb       = self._make_kb(short_id)
             dm_text  = (
-                "🤖 *AI Detected Issue* in *" + _esc(group_name) + "*\n\n"
-                "👤 *Driver:* " + _esc(driver_name) + "\n"
-                "📝 *Issue:* " + _esc(summary) + "\n"
-                "_" + _esc(confidence) + " confidence_"
+                "🤖 *AI Detected Issue* in *" + group_name + "*\n\n"
+                "👤 *Driver:* " + driver_name + "\n"
+                "📝 *Issue:* " + summary + "\n"
+                "_" + confidence + " confidence_"
             )
 
             recipients = get_on_shift_admins() or get_all_admins()
@@ -425,11 +410,11 @@ class AlertHandler:
             action = "Reassigned" if prev_agent_id else "Assigned"
             report_text = (
                 f"✅ *Case {action}*\n\n"
-                f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
-                f"👤 *Reported by:* {_esc(record.get('driver_name', '—'))}\n"
+                f"📌 *Group:* {record.get('group_name', '—')}\n"
+                f"👤 *Reported by:* {record.get('driver_name', '—')}\n"
                 f"🙋 *Handled by:* {_esc(name)}\n"
                 f"⏱ *Response:* {secs}s\n"
-                f"📝 {_esc(record.get('text', '(no details)')[:200])}"
+                f"📝 {record.get('text', '(no details)')[:200]}"
             )
             try:
                 sent = await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
@@ -494,9 +479,9 @@ class AlertHandler:
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             case_text = (
                 f"📋 *Active Case*\n\n"
-                f"📌 *Group:* {_esc(saved.get('group_name', '—'))}\n"
-                f"👤 *Reported by:* {_esc(saved.get('driver_name', '—'))}\n"
-                f"📝 *Issue:* {_esc((saved.get('text') or '—')[:200])}"
+                f"📌 *Group:* {saved.get('group_name', '—')}\n"
+                f"👤 *Reported by:* {saved.get('driver_name', '—')}\n"
+                f"📝 *Issue:* {(saved.get('text') or '—')[:200]}"
             )
             case_kb = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{alert_id}"),
