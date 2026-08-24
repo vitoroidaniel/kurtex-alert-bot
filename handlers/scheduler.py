@@ -1,7 +1,7 @@
 """
 handlers/scheduler.py
-- Daily report at 06:50 America/New_York
-- Escalation: first ping after 10 min, repeat every 30 min, max 5 rounds
+- Daily report at 06:50 America/Chicago
+- Escalation: first ping after 10 min, repeat every 10 min, max 5 rounds
 """
 
 import logging
@@ -24,9 +24,9 @@ def _esc(t: str) -> str:
 logger = logging.getLogger(__name__)
 
 ESCALATION_FIRST_MINUTES  = 10
-ESCALATION_REPEAT_MINUTES = 30
+ESCALATION_REPEAT_MINUTES = 10
 ESCALATION_MAX_ROUNDS     = 5
-ET = ZoneInfo("America/New_York")
+ET = ZoneInfo("America/Chicago")
 
 
 async def job_daily_report(ctx) -> None:
@@ -117,6 +117,8 @@ def register_jobs(app: Application) -> None:
 
     report_time = datetime.now(ET).replace(hour=6, minute=50, second=0, microsecond=0).timetz()
     jq.run_daily(job_daily_report, time=report_time, name="daily_report")
-    jq.run_repeating(job_escalation_check, interval=300, first=60, name="escalation_check")
+    # Check every 30s so reminders land within ~30s of each 10-minute mark,
+    # instead of drifting up to 5 minutes late.
+    jq.run_repeating(job_escalation_check, interval=30, first=60, name="escalation_check")
 
-    logger.info("Jobs registered: daily_report @ 06:50 ET, escalation check every 5 min")
+    logger.info("Jobs registered: daily_report @ 06:50 ET, escalation check every 30s")
