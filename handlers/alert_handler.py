@@ -39,7 +39,7 @@ TRIGGER_WORDS    = ['#maintenance', '#repairs', '#repair']
 # is randomized (rather than a fixed value) so drivers can't easily learn and
 # game a predictable window.
 COOLDOWN_MIN_SECONDS = 5 * 60
-COOLDOWN_MAX_SECONDS = 7 * 60
+COOLDOWN_MAX_SECONDS = 6 * 60
 
 # If a driver keeps spamming while their case is still unassigned, agents get
 # nudged again — but not on every single spam message, or the nudge itself
