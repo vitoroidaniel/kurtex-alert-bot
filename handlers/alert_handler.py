@@ -149,6 +149,18 @@ class AlertHandler:
                 await self._nudge_if_unassigned(driver_id, ctx)
                 return
 
+        # The driver's most recent case is still unassigned. Don't open a NEW
+        # case for this repeat report — otherwise the reminder would get its own
+        # fresh case id and clicking Assign on it would only assign that new case,
+        # leaving the ORIGINAL case unassigned/separate. Reuse the original case
+        # (same id) when pinging agents so Assign on the reminder assigns it.
+        if self._driver_last_alert.get(driver_id):
+            prev_alert_id = self._driver_last_alert[driver_id]
+            prev_record   = self._alerts.get(prev_alert_id)
+            if prev_record and prev_record.get("taken_by") is None:
+                await self._nudge_if_unassigned(driver_id, ctx)
+                return
+
         self._driver_last_time[driver_id] = now
         self._driver_cooldown_until[driver_id] = now + timedelta(
             seconds=random.uniform(COOLDOWN_MIN_SECONDS, COOLDOWN_MAX_SECONDS)
