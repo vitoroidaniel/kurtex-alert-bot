@@ -14,11 +14,11 @@ from telegram.ext import (
 from telegram.error import TelegramError
 
 from storage.case_store import (
-    async_get_active_case_for_agent  as get_active_case_for_agent,
-    async_get_cases_for_agent_today  as get_cases_for_agent_today,
-    async_get_all_cases_for_agent    as get_all_cases_for_agent,
-    async_close_case                 as close_case,
-    async_get_case                   as get_case,
+    get_active_case_for_agent,
+    get_cases_for_agent_today,
+    get_all_cases_for_agent,
+    close_case,
+    get_case,
 )
 
 from storage.user_store import has_role

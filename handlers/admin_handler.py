@@ -4,7 +4,7 @@ All commands respond in <100ms.
 """
 import logging
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -12,9 +12,11 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 
 from storage.case_store import (
-    async_get_cases_today     as get_cases_today,
-    async_get_cases_this_week as get_cases_this_week,
+    get_cases_today,
+    get_completed_day_cases,
+    get_cases_this_week,
     get_all_cases,
+    report_window_start,
 )
 from storage.user_store import (
     get_all_users, get_user, add_user, remove_user, edit_role,
@@ -91,8 +93,8 @@ async def cmd_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Access denied.")
         return
     cases  = await get_cases_today()
-    today  = datetime.now().strftime("%B %d, %Y")
-    report = _build_daily_report(cases, f"Daily Report — {today}")
+    day    = report_window_start().strftime("%B %d, %Y")
+    report = _build_daily_report(cases, f"Daily Report — {day}")
     await update.message.reply_text(report, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -149,9 +151,11 @@ async def cmd_missed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── Daily report (called by scheduler) ───────────────────────────────────────
 
 async def send_daily_report(bot, chat_id: int) -> None:
-    cases  = await get_cases_today()
-    today  = datetime.now().strftime("%B %d, %Y")
-    report = _build_daily_report(cases, f"End of Day Report — {today}")
+    # Count the 24h window that just ended: yesterday 6:30 AM -> today 6:30 AM
+    # (America/Chicago).
+    cases = await get_completed_day_cases()
+    day   = (report_window_start() - timedelta(days=1)).strftime("%B %d, %Y")
+    report = _build_daily_report(cases, f"End of Day Report — {day}")
     try:
         await bot.send_message(chat_id, report, parse_mode=ParseMode.MARKDOWN)
         logger.info(f"Daily report sent to {chat_id}")

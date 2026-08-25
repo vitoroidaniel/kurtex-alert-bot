@@ -108,7 +108,7 @@ async def post_init(application: Application) -> None:
     # Reload unassigned alerts from disk so admins can still accept after restart
     alert_h = application.bot_data.get("alert_handler")
     if alert_h:
-        alert_h.load_from_disk()
+        await alert_h.load_from_disk()
 
     base_commands = [
         ("start",       "Register with Kurtex Alert Bot"),
