@@ -60,9 +60,9 @@ class AlertHandler:
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
-    async def load_from_disk(self):
+    def load_from_disk(self):
         """Call once at startup to reload unassigned alerts."""
-        raw = await load_active_alerts()
+        raw = load_active_alerts()
         for aid, record in raw.items():
             if record.get("taken_by"):
                 continue
@@ -70,8 +70,8 @@ class AlertHandler:
             self._short_map[aid.replace("-", "")[:12]] = aid
         logger.info(f"Loaded {len(self._alerts)} active alerts from disk")
 
-    async def _persist(self):
-        await save_active_alerts(self._alerts)
+    def _persist(self):
+        save_active_alerts(self._alerts)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ class AlertHandler:
             "text":               text,
         }
 
-        await create_case(
+        create_case(
             case_id=alert_id,
             driver_name=driver_name,
             driver_username=driver_username,
@@ -214,7 +214,7 @@ class AlertHandler:
             except TelegramError as e:
                 logger.warning(f"Could not DM admin {admin['id']}: {e}")
 
-        await self._persist()
+        self._persist()
         if notified == 0:
             logger.warning("No admins could be reached for alert!")
 
@@ -256,7 +256,7 @@ class AlertHandler:
             except TelegramError as e:
                 logger.warning(f"Could not nudge admin {admin['id']} about unassigned case: {e}")
 
-        await self._persist()
+        self._persist()
 
     # ── AI channel ────────────────────────────────────────────────────────────
 
@@ -335,7 +335,7 @@ class AlertHandler:
                 except Exception as e:
                     logger.warning(f"Could not DM admin {admin['id']}: {e}")
 
-            await self._persist()
+            self._persist()
         except Exception as e:
             logger.error(f"AI channel error: {e}")
 
@@ -381,12 +381,19 @@ class AlertHandler:
                     pass
 
         # Reassign: update case owner — removes from old agent, appears for new agent
-        await assign_case(
+        assign_case(
             case_id=alert_id, agent_id=admin.id,
             agent_name=name, agent_username=admin.username,
-            reassigned=bool(prev_agent_id),
         )
-        await self._persist()
+        if prev_agent_id:
+            from storage.case_store import get_case, _load, _save, CASES_FILE
+            cases = _load(CASES_FILE)
+            for c in cases:
+                if c["id"] == alert_id:
+                    c["reassigned"] = True
+                    break
+            _save(CASES_FILE, cases)
+        self._persist()
 
         # Notify previous agent their case was taken over
         if prev_agent_id and prev_agent_id != admin.id:
@@ -422,7 +429,7 @@ class AlertHandler:
             )
             try:
                 sent = await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
-                await set_report_msg_id(alert_id, sent.message_id)
+                set_report_msg_id(alert_id, sent.message_id)
             except TelegramError as e:
                 logger.warning(f"Could not post assignment to reports: {e}")
 
@@ -446,7 +453,7 @@ class AlertHandler:
 
         # If not in memory, try reloading from disk (happens after bot restart)
         if not record:
-            await self.load_from_disk()
+            self.load_from_disk()
             alert_id, record = self._resolve(short_id)
 
         if not record:
@@ -542,4 +549,4 @@ class AlertHandler:
                 pass
 
         if record is not None:
-            await self._persist()
+            self._persist()

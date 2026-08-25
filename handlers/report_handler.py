@@ -12,7 +12,6 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from config import config
 from shift_manager import MAIN_ADMIN_ID
-from storage.case_store import get_case, report_case
 
 
 def _esc(t: str) -> str:
@@ -153,7 +152,8 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     case_id = query.data.split("|")[1]
 
-    case = await get_case(case_id)
+    from storage.case_store import get_case
+    case = get_case(case_id)
     if not case or case["status"] not in ("assigned", "reported"):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
@@ -161,7 +161,7 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Block if agent is mid-report on another case
     existing_case_id = ctx.user_data.get("report_case_id")
     if existing_case_id and existing_case_id != case_id:
-        existing = await get_case(existing_case_id)
+        existing = get_case(existing_case_id)
         if existing and existing["status"] in ("assigned", "reported"):
             await query.answer("Finish your current report first.", show_alert=True)
             return ConversationHandler.END
@@ -477,23 +477,31 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ctx.bot_data["busy_agents"].discard(update.effective_user.id)
         if case_id:
             try:
-                fleet_data = {
-                    "vehicle_type":   report_data.get("vehicle_type", ""),
-                    "unit_number":    report_data.get("unit_number", ""),
-                    "report_driver":  report_data.get("driver", ""),
-                    "issue_text":     report_data.get("issue", ""),
-                    "load_type":      report_data.get("load", ""),
-                    "location":       report_data.get("location", ""),
-                    "priority":       report_data.get("priority", ""),
-                    "pickup":         report_data.get("pickup", ""),
-                    "delivery":       report_data.get("delivery", ""),
-                    "comments":       report_data.get("comments", ""),
-                    "setpoint":       report_data.get("setpoint", ""),
-                    "current_temp":   report_data.get("current_temp", ""),
-                    "temp_recorder":  report_data.get("temp_recorder", ""),
-                }
-                case = await report_case(case_id, fleet_data=fleet_data)
-                if case:
+                from storage.case_store import report_case, _load, _save, CASES_FILE
+                report_case(case_id)
+                # Save all report fields to the case for dashboard analytics
+                logger.info(f"Saving report data for case {case_id}: vtype={report_data.get('vehicle_type')}, unit={report_data.get('unit_number')}, issue={report_data.get('issue')}")
+                cases = _load(CASES_FILE)
+                found = False
+                for c in cases:
+                    if c["id"] == case_id:
+                        c["vehicle_type"]   = report_data.get("vehicle_type", "")
+                        c["unit_number"]    = report_data.get("unit_number", "")
+                        c["report_driver"]  = report_data.get("driver", "")
+                        c["issue_text"]     = report_data.get("issue", "")
+                        c["load_type"]      = report_data.get("load", "")
+                        c["location"]       = report_data.get("location", "")
+                        c["priority"]       = report_data.get("priority", "")
+                        c["pickup"]         = report_data.get("pickup", "")
+                        c["delivery"]       = report_data.get("delivery", "")
+                        c["comments"]       = report_data.get("comments", "")
+                        c["setpoint"]       = report_data.get("setpoint", "")
+                        c["current_temp"]   = report_data.get("current_temp", "")
+                        c["temp_recorder"]  = report_data.get("temp_recorder", "")
+                        found = True
+                        break
+                if found:
+                    _save(CASES_FILE, cases)
                     logger.info(f"Case {case_id} fleet data saved: vtype={report_data.get('vehicle_type')}")
                 else:
                     logger.warning(f"Case {case_id} not found in cases.json for fleet data save")
