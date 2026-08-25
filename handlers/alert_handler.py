@@ -373,11 +373,22 @@ class AlertHandler:
                     if aid == admin.id:
                         await ctx.bot.delete_message(chat_id=aid, message_id=mid)
                     else:
-                        await ctx.bot.edit_message_text(
-                            chat_id=aid, message_id=mid,
-                            text=f"✅ Case assigned to {_esc(name)}.\nNo action needed.",
-                            reply_markup=None,
-                        )
+                        done_text = f"✅ Case assigned to {_esc(name)}.\nNo action needed."
+                        try:
+                            await ctx.bot.edit_message_text(
+                                chat_id=aid, message_id=mid,
+                                text=done_text,
+                                reply_markup=None,
+                            )
+                        except TelegramError:
+                            # Photo alerts are media messages: text can't be
+                            # edited, only the caption. Otherwise the Assign
+                            # button stays visible to the other agents.
+                            await ctx.bot.edit_message_caption(
+                                chat_id=aid, message_id=mid,
+                                caption=done_text,
+                                reply_markup=None,
+                            )
                 except TelegramError:
                     pass
 
