@@ -10,6 +10,8 @@ import signal
 from pathlib import Path
 
 from telegram import Update
+from telegram.error import BadRequest, NetworkError, TimedOut
+from telegram.request import HTTPXRequest
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -26,7 +28,7 @@ from handlers.agent_handler import (
     cb_done_pick, cb_solve_confirm, cb_solve_cancel,
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
     cb_close_confirm, cb_close_cancel,
-    cb_histpage, cb_hist_delete_chat, get_solve_conversation,
+    cb_histpage, cb_hist_delete_chat,
     cb_solve_start, cb_close_ask,
 )
 from handlers.admin_handler import (
@@ -319,9 +321,31 @@ def main():
 
     alert_h = AlertHandler()
 
+    # Use dedicated HTTP clients for normal Bot API calls and long polling.
+    # A transient Railway/Telegram socket reset must not leave the bot looking
+    # alive while getUpdates is unhealthy.  The updater already retries
+    # NetworkError; these timeouts give it enough room to finish long polls
+    # and reconnect cleanly instead of churning connections.
+    bot_request = HTTPXRequest(
+        connection_pool_size=32,
+        connect_timeout=15.0,
+        read_timeout=30.0,
+        write_timeout=30.0,
+        pool_timeout=15.0,
+    )
+    updates_request = HTTPXRequest(
+        connection_pool_size=4,
+        connect_timeout=15.0,
+        read_timeout=45.0,
+        write_timeout=15.0,
+        pool_timeout=15.0,
+    )
+
     app = (
         Application.builder()
         .token(config.TELEGRAM_TOKEN)
+        .request(bot_request)
+        .get_updates_request(updates_request)
         .post_init(post_init)
         .build()
     )
@@ -331,9 +355,30 @@ def main():
 
     async def error_handler(update, ctx):
         update_id = getattr(update, "update_id", "unknown") if update else "unknown"
+        error = ctx.error
+
+        # getUpdates/network disconnects are recoverable. PTB's polling loop
+        # reconnects automatically, so don't bury the useful logs in a full
+        # traceback for every temporary socket reset.
+        if isinstance(error, (NetworkError, TimedOut)):
+            logger.warning(
+                "Telegram network interruption (update_id=%s): %s; polling will retry",
+                update_id, error,
+            )
+            return
+
+        if isinstance(error, BadRequest):
+            logger.error(
+                "Telegram rejected an update response (update_id=%s): %s",
+                update_id, error,
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            return
+
         logger.error(
-            f"Unhandled update error (update_id={update_id}): {ctx.error}",
-            exc_info=(type(ctx.error), ctx.error, ctx.error.__traceback__),
+            "Unhandled update error (update_id=%s): %s",
+            update_id, error,
+            exc_info=(type(error), error, error.__traceback__),
         )
 
     app.add_error_handler(error_handler)
@@ -370,7 +415,10 @@ def main():
     # ── Role selection callback (from forward flow) ──
     app.add_handler(CallbackQueryHandler(cb_addrole, pattern=r"^addrole\|"))
 
-    app.add_handler(get_solve_conversation())
+    # Solve/close callbacks are registered below as ordinary callback handlers.
+    # They don't hold conversational state, so wrapping them in an empty
+    # ConversationHandler only caused PTB callback-tracking warnings and could
+    # intercept the real handlers.
     app.add_handler(get_report_conversation())
 
     import re as _re
@@ -408,7 +456,11 @@ def main():
     logger.info(f"Starting {BOT_NAME}...")
     # Keep updates that arrive during a short deploy/restart. Dropping them can
     # discard Assign button clicks and makes the bot appear to freeze.
-    app.run_polling(drop_pending_updates=False)
+    app.run_polling(
+        drop_pending_updates=False,
+        timeout=20,
+        bootstrap_retries=-1,
+    )
 
 
 if __name__ == "__main__":
