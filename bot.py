@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import signal
+from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ChatAction
@@ -48,6 +49,32 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+# httpx logs Telegram URLs at INFO level, which exposes the bot token and
+# creates enough noise to hide real callback errors in Railway logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
+
+
+def _acquire_instance_lock():
+    """Prevent two Railway processes sharing the volume from polling one bot."""
+    try:
+        import fcntl
+        lock_path = Path(config.DATA_DIR) / ".kurtex-bot.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = lock_path.open("a+")
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        handle.seek(0)
+        handle.truncate()
+        handle.write(str(os.getpid()))
+        handle.flush()
+        return handle
+    except BlockingIOError:
+        logger.critical("Another bot process already owns the polling lock; stopping duplicate instance.")
+        return None
+    except (ImportError, OSError) as e:
+        # Local non-Linux development should still work; Railway uses Linux.
+        logger.warning(f"Could not create single-instance lock: {e}")
+        return True
 
 
 # ── Typing decorator ──────────────────────────────────────────────────────────
@@ -286,6 +313,10 @@ def _register_sigterm(application: Application):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
+    instance_lock = _acquire_instance_lock()
+    if instance_lock is None:
+        raise SystemExit(1)
+
     alert_h = AlertHandler()
 
     app = (
@@ -299,7 +330,11 @@ def main():
     _ah._bot_ref = app.bot
 
     async def error_handler(update, ctx):
-        logger.error(f"Update error: {ctx.error}", exc_info=ctx.error)
+        update_id = getattr(update, "update_id", "unknown") if update else "unknown"
+        logger.error(
+            f"Unhandled update error (update_id={update_id}): {ctx.error}",
+            exc_info=(type(ctx.error), ctx.error, ctx.error.__traceback__),
+        )
 
     app.add_error_handler(error_handler)
     app.bot_data["alert_handler"] = alert_h
@@ -352,11 +387,6 @@ def main():
         alert_h.handle,
     ))
 
-    app.add_handler(MessageHandler(
-        filters.ChatType.CHANNEL & filters.TEXT,
-        alert_h.handle_channel_post,
-    ))
-
     app.add_handler(CallbackQueryHandler(alert_h.handle_assignment,  pattern=r'^(assign|assignrpt|ignore)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,    pattern=r'^reassign_'))
     app.add_handler(CallbackQueryHandler(cb_done_pick,               pattern=r'^done_pick\|'))
@@ -376,7 +406,9 @@ def main():
 
     start_dashboard_thread()
     logger.info(f"Starting {BOT_NAME}...")
-    app.run_polling(drop_pending_updates=True)
+    # Keep updates that arrive during a short deploy/restart. Dropping them can
+    # discard Assign button clicks and makes the bot appear to freeze.
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == "__main__":
