@@ -244,6 +244,26 @@ def get_all_cases() -> list[dict]:
     return sorted(_load(CASES_FILE), key=lambda c: c.get("opened_at", ""), reverse=True)
 
 
+def get_untouched_unassigned_cases() -> list[dict]:
+    """Return only cases that have never been claimed or otherwise handled.
+
+    Deliberately strict: assigned/reported/done/missed cases are excluded, as
+    are records with any assignment/closure/report residue. This keeps the
+    /unassigned recovery command from resurfacing an active or previously
+    touched case.
+    """
+    untouched = [
+        c for c in _load(CASES_FILE)
+        if c.get("status") == "open"
+        and c.get("agent_id") is None
+        and c.get("assigned_at") is None
+        and c.get("closed_at") is None
+        and c.get("notes") is None
+        and c.get("report_msg_id") is None
+    ]
+    return sorted(untouched, key=lambda c: c.get("opened_at", ""), reverse=True)
+
+
 # ── Active alerts — persisted so restarts don't lose unassigned alerts ────────
 
 def save_active_alerts(alerts: dict) -> None:
@@ -303,6 +323,9 @@ async def async_get_cases_today():
 
 async def async_get_cases_this_week():
     return await asyncio.to_thread(get_cases_this_week)
+
+async def async_get_untouched_unassigned_cases():
+    return await asyncio.to_thread(get_untouched_unassigned_cases)
 
 async def async_set_report_msg_id(case_id, msg_id):
     return await asyncio.to_thread(set_report_msg_id, case_id, msg_id)

@@ -9,7 +9,7 @@ import os
 import signal
 from pathlib import Path
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, Conflict, NetworkError, TimedOut
 from telegram.request import HTTPXRequest
 from telegram.constants import ChatAction
@@ -42,6 +42,7 @@ from storage.user_store import (
     is_authorized, bootstrap_developer, migrate_from_shifts,
     has_role,
 )
+from storage.case_store import async_get_untouched_unassigned_cases
 
 BOT_NAME    = "Kurtex Alert Bot"
 BOT_TAGLINE = "Truck Maintenance Command Center"
@@ -259,6 +260,39 @@ async def cmd_shifts(update: Update, ctx):
 
 
 @with_typing
+async def cmd_unassigned(update: Update, ctx):
+    """Show only untouched, still-unassigned cases with a fresh Assign button."""
+    cases = await async_get_untouched_unassigned_cases()
+    if not cases:
+        await update.message.reply_text("No untouched unassigned cases.")
+        return
+
+    # Avoid flooding a private chat if stale data has accumulated. The newest
+    # untouched cases are the useful recovery targets; the count remains clear.
+    limit = 20
+    shown = cases[:limit]
+    await update.message.reply_text(
+        f"Unassigned untouched cases: {len(cases)}"
+        + (f"\nShowing newest {limit}." if len(cases) > limit else "")
+    )
+
+    for case in shown:
+        case_id = case.get("id", "")
+        opened = (case.get("opened_at") or "").replace("T", " ")[:16]
+        text = (
+            "🔔 Unassigned Case\n\n"
+            f"Group: {case.get('group_name') or '—'}\n"
+            f"Driver: {case.get('driver_name') or '—'}\n"
+            f"Issue: {(case.get('description') or '—')[:300]}\n"
+            f"Opened: {opened or '—'} UTC"
+        )
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Assign", callback_data=f"assign|{case_id}")
+        ]])
+        await update.message.reply_text(text, reply_markup=kb)
+
+
+@with_typing
 async def cmd_help(update: Update, ctx):
     user     = update.effective_user
     is_super = _is_main_admin(user.id)
@@ -272,6 +306,7 @@ async def cmd_help(update: Update, ctx):
         "_Example: #maintenance engine overheating, truck 42_\n\n"
         "*Agent commands:*\n"
         "/mycases — Active cases\n"
+        "/unassigned — Untouched unassigned cases\n"
         "/done — Today's closed cases\n"
         "/casehistory — Full history\n"
         "/mystats — Your stats\n"
@@ -439,6 +474,7 @@ def main():
     app.add_handler(CommandHandler("help",        cmd_help,        filters=private))
     app.add_handler(CommandHandler("done",        cmd_done,        filters=private))
     app.add_handler(CommandHandler("mycases",     cmd_mycases,     filters=private))
+    app.add_handler(CommandHandler("unassigned",  cmd_unassigned,  filters=private))
     app.add_handler(CommandHandler("casehistory", cmd_casehistory, filters=private))
     app.add_handler(CommandHandler("mystats",     cmd_mystats,     filters=private))
 
