@@ -94,6 +94,17 @@ async def auth_middleware(update: Update, ctx):
 async def post_init(application: Application) -> None:
     from telegram import BotCommandScopeChat
 
+    # ── Ensure no stale webhook is registered before polling starts ──
+    # (polling and webhooks are mutually exclusive; a leftover webhook
+    # causes a 409 Conflict loop on every getUpdates call)
+    try:
+        webhook_info = await application.bot.get_webhook_info()
+        if webhook_info.url:
+            logger.warning(f"Stale webhook detected ({webhook_info.url}); deleting it before polling.")
+            await application.bot.delete_webhook(drop_pending_updates=False)
+    except Exception as e:
+        logger.error(f"Failed to check/delete webhook: {e}")
+
     # ── Migrate existing hardcoded admins on first boot ──
     migrate_from_shifts(ADMINS, SUPER_ADMINS)
 
