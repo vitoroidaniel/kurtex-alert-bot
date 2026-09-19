@@ -10,7 +10,7 @@ import signal
 from pathlib import Path
 
 from telegram import Update
-from telegram.error import BadRequest, NetworkError, TimedOut
+from telegram.error import BadRequest, Conflict, NetworkError, TimedOut
 from telegram.request import HTTPXRequest
 from telegram.constants import ChatAction
 from telegram.ext import (
@@ -123,16 +123,51 @@ async def auth_middleware(update: Update, ctx):
 async def post_init(application: Application) -> None:
     from telegram import BotCommandScopeChat
 
-    # ── Ensure no stale webhook is registered before polling starts ──
-    # (polling and webhooks are mutually exclusive; a leftover webhook
-    # causes a 409 Conflict loop on every getUpdates call)
+    # ── Force polling mode before getUpdates starts ───────────────────────
+    # Polling and webhooks are mutually exclusive. Always issue deleteWebhook
+    # (even when getWebhookInfo currently looks empty), then verify Telegram
+    # accepted it. This also cleans up webhooks left by old deployments.
     try:
         webhook_info = await application.bot.get_webhook_info()
         if webhook_info.url:
-            logger.warning(f"Stale webhook detected ({webhook_info.url}); deleting it before polling.")
-            await application.bot.delete_webhook(drop_pending_updates=False)
-    except Exception as e:
-        logger.error(f"Failed to check/delete webhook: {e}")
+            logger.warning("[TELEGRAM] Webhook active at startup: %s", webhook_info.url)
+        await application.bot.delete_webhook(drop_pending_updates=False)
+        webhook_info = await application.bot.get_webhook_info()
+        if webhook_info.url:
+            raise RuntimeError(f"Webhook is still active after deleteWebhook: {webhook_info.url}")
+        logger.info("[TELEGRAM] Polling mode verified; webhook is disabled")
+    except Exception:
+        logger.exception("[TELEGRAM] Could not force polling mode before startup")
+        raise
+
+    # Runtime guard: another old deployment/service using the same token can
+    # call setWebhook after this process has already started. If that happens,
+    # remove it so PTB's getUpdates retry loop can recover automatically.
+    async def webhook_guard() -> None:
+        while True:
+            try:
+                await asyncio.sleep(15)
+                info = await application.bot.get_webhook_info()
+                if info.url:
+                    logger.error(
+                        "[TELEGRAM] Unexpected webhook detected while polling: %s; deleting it",
+                        info.url,
+                    )
+                    await application.bot.delete_webhook(drop_pending_updates=False)
+                    verify = await application.bot.get_webhook_info()
+                    if verify.url:
+                        logger.critical(
+                            "[TELEGRAM] Webhook could not be removed: %s. Another service is likely using this BOT_TOKEN.",
+                            verify.url,
+                        )
+                    else:
+                        logger.warning("[TELEGRAM] Unexpected webhook removed; polling can recover")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning("[TELEGRAM] Webhook guard check failed: %s", exc)
+
+    application.create_task(webhook_guard(), name="telegram-webhook-guard")
 
     # ── Migrate existing hardcoded admins on first boot ──
     migrate_from_shifts(ADMINS, SUPER_ADMINS)
@@ -356,6 +391,27 @@ def main():
     async def error_handler(update, ctx):
         update_id = getattr(update, "update_id", "unknown") if update else "unknown"
         error = ctx.error
+
+        # A webhook conflict means something else used setWebhook with this
+        # token. Remove it immediately; PTB's polling loop will retry getUpdates.
+        if isinstance(error, Conflict) and "webhook" in str(error).lower():
+            logger.error(
+                "[TELEGRAM] Polling/webhook conflict (update_id=%s): %s; forcing polling mode",
+                update_id, error,
+            )
+            try:
+                await ctx.bot.delete_webhook(drop_pending_updates=False)
+                info = await ctx.bot.get_webhook_info()
+                if info.url:
+                    logger.critical(
+                        "[TELEGRAM] Webhook remains active at %s. Check for another Railway service/deployment using this BOT_TOKEN.",
+                        info.url,
+                    )
+                else:
+                    logger.warning("[TELEGRAM] Webhook removed after conflict; polling will retry")
+            except Exception as cleanup_error:
+                logger.exception("[TELEGRAM] Failed to recover from webhook conflict: %s", cleanup_error)
+            return
 
         # getUpdates/network disconnects are recoverable. PTB's polling loop
         # reconnects automatically, so don't bury the useful logs in a full
