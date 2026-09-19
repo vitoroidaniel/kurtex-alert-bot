@@ -7,11 +7,8 @@ import asyncio
 import logging
 import os
 import signal
-from pathlib import Path
 
 from telegram import Update
-from telegram.error import BadRequest, Conflict, NetworkError, TimedOut
-from telegram.request import HTTPXRequest
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -28,7 +25,7 @@ from handlers.agent_handler import (
     cb_done_pick, cb_solve_confirm, cb_solve_cancel,
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
     cb_close_confirm, cb_close_cancel,
-    cb_histpage, cb_hist_delete_chat,
+    cb_histpage, cb_hist_delete_chat, get_solve_conversation,
     cb_solve_start, cb_close_ask,
 )
 from handlers.admin_handler import (
@@ -51,32 +48,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-# httpx logs Telegram URLs at INFO level, which exposes the bot token and
-# creates enough noise to hide real callback errors in Railway logs.
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
-
-
-def _acquire_instance_lock():
-    """Prevent two Railway processes sharing the volume from polling one bot."""
-    try:
-        import fcntl
-        lock_path = Path(config.DATA_DIR) / ".kurtex-bot.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        handle = lock_path.open("a+")
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        handle.seek(0)
-        handle.truncate()
-        handle.write(str(os.getpid()))
-        handle.flush()
-        return handle
-    except BlockingIOError:
-        logger.critical("Another bot process already owns the polling lock; stopping duplicate instance.")
-        return None
-    except (ImportError, OSError) as e:
-        # Local non-Linux development should still work; Railway uses Linux.
-        logger.warning(f"Could not create single-instance lock: {e}")
-        return True
 
 
 # ── Typing decorator ──────────────────────────────────────────────────────────
@@ -91,17 +62,6 @@ def with_typing(fn):
         return await fn(update, ctx)
     wrapper.__name__ = fn.__name__
     return wrapper
-
-
-# ── Callback diagnostics ─────────────────────────────────────────────────────
-
-async def callback_trace_middleware(update: Update, ctx):
-    """Log every inline-button update before auth/handler routing."""
-    query = update.callback_query
-    if query is None:
-        return
-    user_id = update.effective_user.id if update.effective_user else None
-    logger.info("[CALLBACK] RECEIVED data=%r user=%s", query.data, user_id)
 
 
 # ── Auth middleware ───────────────────────────────────────────────────────────
@@ -133,28 +93,6 @@ async def auth_middleware(update: Update, ctx):
 
 async def post_init(application: Application) -> None:
     from telegram import BotCommandScopeChat
-
-    # ── Force polling mode before getUpdates starts ───────────────────────
-    # Polling and webhooks are mutually exclusive. Always issue deleteWebhook
-    # (even when getWebhookInfo currently looks empty), then verify Telegram
-    # accepted it. This also cleans up webhooks left by old deployments.
-    try:
-        webhook_info = await application.bot.get_webhook_info()
-        if webhook_info.url:
-            logger.warning("[TELEGRAM] Webhook active at startup: %s", webhook_info.url)
-        await application.bot.delete_webhook(drop_pending_updates=False)
-        webhook_info = await application.bot.get_webhook_info()
-        if webhook_info.url:
-            raise RuntimeError(f"Webhook is still active after deleteWebhook: {webhook_info.url}")
-        logger.info("[TELEGRAM] Polling mode verified; webhook is disabled")
-    except Exception:
-        logger.exception("[TELEGRAM] Could not force polling mode before startup")
-        raise
-
-    # Do not run a background webhook watchdog here. Polling is the only
-    # update transport for this service; startup cleanup above is sufficient.
-    # A watchdog created from post_init runs before Application.start() and can
-    # interfere with startup/callback diagnostics.
 
     # ── Migrate existing hardcoded admins on first boot ──
     migrate_from_shifts(ADMINS, SUPER_ADMINS)
@@ -337,37 +275,11 @@ def _register_sigterm(application: Application):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    instance_lock = _acquire_instance_lock()
-    if instance_lock is None:
-        raise SystemExit(1)
-
     alert_h = AlertHandler()
-
-    # Use dedicated HTTP clients for normal Bot API calls and long polling.
-    # A transient Railway/Telegram socket reset must not leave the bot looking
-    # alive while getUpdates is unhealthy.  The updater already retries
-    # NetworkError; these timeouts give it enough room to finish long polls
-    # and reconnect cleanly instead of churning connections.
-    bot_request = HTTPXRequest(
-        connection_pool_size=32,
-        connect_timeout=15.0,
-        read_timeout=30.0,
-        write_timeout=30.0,
-        pool_timeout=15.0,
-    )
-    updates_request = HTTPXRequest(
-        connection_pool_size=4,
-        connect_timeout=15.0,
-        read_timeout=45.0,
-        write_timeout=15.0,
-        pool_timeout=15.0,
-    )
 
     app = (
         Application.builder()
         .token(config.TELEGRAM_TOKEN)
-        .request(bot_request)
-        .get_updates_request(updates_request)
         .post_init(post_init)
         .build()
     )
@@ -376,59 +288,12 @@ def main():
     _ah._bot_ref = app.bot
 
     async def error_handler(update, ctx):
-        update_id = getattr(update, "update_id", "unknown") if update else "unknown"
-        error = ctx.error
-
-        # A webhook conflict means something else used setWebhook with this
-        # token. Remove it immediately; PTB's polling loop will retry getUpdates.
-        if isinstance(error, Conflict) and "webhook" in str(error).lower():
-            logger.error(
-                "[TELEGRAM] Polling/webhook conflict (update_id=%s): %s; forcing polling mode",
-                update_id, error,
-            )
-            try:
-                await ctx.bot.delete_webhook(drop_pending_updates=False)
-                info = await ctx.bot.get_webhook_info()
-                if info.url:
-                    logger.critical(
-                        "[TELEGRAM] Webhook remains active at %s. Check for another Railway service/deployment using this BOT_TOKEN.",
-                        info.url,
-                    )
-                else:
-                    logger.warning("[TELEGRAM] Webhook removed after conflict; polling will retry")
-            except Exception as cleanup_error:
-                logger.exception("[TELEGRAM] Failed to recover from webhook conflict: %s", cleanup_error)
-            return
-
-        # getUpdates/network disconnects are recoverable. PTB's polling loop
-        # reconnects automatically, so don't bury the useful logs in a full
-        # traceback for every temporary socket reset.
-        if isinstance(error, (NetworkError, TimedOut)):
-            logger.warning(
-                "Telegram network interruption (update_id=%s): %s; polling will retry",
-                update_id, error,
-            )
-            return
-
-        if isinstance(error, BadRequest):
-            logger.error(
-                "Telegram rejected an update response (update_id=%s): %s",
-                update_id, error,
-                exc_info=(type(error), error, error.__traceback__),
-            )
-            return
-
-        logger.error(
-            "Unhandled update error (update_id=%s): %s",
-            update_id, error,
-            exc_info=(type(error), error, error.__traceback__),
-        )
+        logger.error(f"Update error: {ctx.error}", exc_info=ctx.error)
 
     app.add_error_handler(error_handler)
     app.bot_data["alert_handler"] = alert_h
     _register_sigterm(app)
 
-    app.add_handler(TypeHandler(Update, callback_trace_middleware), group=-2)
     app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
 
     private = filters.ChatType.PRIVATE
@@ -459,10 +324,7 @@ def main():
     # ── Role selection callback (from forward flow) ──
     app.add_handler(CallbackQueryHandler(cb_addrole, pattern=r"^addrole\|"))
 
-    # Solve/close callbacks are registered below as ordinary callback handlers.
-    # They don't hold conversational state, so wrapping them in an empty
-    # ConversationHandler only caused PTB callback-tracking warnings and could
-    # intercept the real handlers.
+    app.add_handler(get_solve_conversation())
     app.add_handler(get_report_conversation())
 
     import re as _re
@@ -479,9 +341,15 @@ def main():
         alert_h.handle,
     ))
 
+    app.add_handler(MessageHandler(
+        filters.ChatType.CHANNEL & filters.TEXT,
+        alert_h.handle_channel_post,
+    ))
+
     app.add_handler(CallbackQueryHandler(alert_h.handle_assignment,  pattern=r'^(assign|assignrpt|ignore)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,    pattern=r'^reassign_'))
     app.add_handler(CallbackQueryHandler(cb_done_pick,               pattern=r'^done_pick\|'))
+    app.add_handler(CallbackQueryHandler(cb_solve_start,             pattern=r'^solve\|'))
     app.add_handler(CallbackQueryHandler(cb_close_ask,               pattern=r'^close_ask\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,           pattern=r'^solve_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_cancel,            pattern=r'^solve_cancel\|'))
@@ -497,13 +365,7 @@ def main():
 
     start_dashboard_thread()
     logger.info(f"Starting {BOT_NAME}...")
-    # Keep updates that arrive during a short deploy/restart. Dropping them can
-    # discard Assign button clicks and makes the bot appear to freeze.
-    app.run_polling(
-        drop_pending_updates=False,
-        timeout=20,
-        bootstrap_retries=-1,
-    )
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":

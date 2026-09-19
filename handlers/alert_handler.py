@@ -18,7 +18,7 @@ from telegram.error import TelegramError
 
 from shift_manager import get_on_shift_admins, get_all_admins
 from storage.case_store import (
-    create_case, assign_case, get_case,
+    create_case, assign_case,
     save_active_alerts, load_active_alerts,
     set_report_msg_id,
 )
@@ -56,31 +56,22 @@ class AlertHandler:
         self._driver_last_alert: dict[int, str] = {}
         self._last_nudge_at: dict[str, datetime] = {}
         self._short_map: dict[str, str]       = {}
+        self._processed_ai_ids: set           = set()
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
     def load_from_disk(self):
-        """Reload active alerts and discard records for already-closed cases."""
+        """Call once at startup to reload unassigned alerts."""
         raw = load_active_alerts()
-        self._alerts.clear()
-        self._short_map.clear()
         for aid, record in raw.items():
-            case = get_case(aid)
-            if case and case.get("status") == "done":
+            if record.get("taken_by"):
                 continue
             self._alerts[aid] = record
             self._short_map[aid.replace("-", "")[:12]] = aid
-        if len(self._alerts) != len(raw):
-            self._persist()
         logger.info(f"Loaded {len(self._alerts)} active alerts from disk")
 
     def _persist(self):
         save_active_alerts(self._alerts)
-
-    async def _persist_async(self):
-        # JSON serialization and fsync can be slow on a mounted volume. Keep it
-        # off the Telegram update loop so commands and callbacks stay responsive.
-        await asyncio.to_thread(self._persist)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -104,49 +95,11 @@ class AlertHandler:
     # Fall back to short_map for older buttons
         alert_id = self._short_map.get(token, token)
         return alert_id, self._alerts.get(alert_id)
-
-    async def _restore_from_case(self, case_id: str):
-        """Rebuild callback state when active_alerts.json is missing or stale."""
-        case = await asyncio.to_thread(get_case, case_id)
-        if not case or case.get("status") == "done":
-            return case_id, None
-        record = {
-            "alert_id": case_id,
-            "recipients": {},
-            "taken_by": (
-                [case.get("agent_id"), case.get("agent_name")]
-                if case.get("agent_id") is not None else None
-            ),
-            "created_at": case.get("opened_at") or datetime.now(timezone.utc).isoformat(),
-            "last_escalated_at": None,
-            "escalation_count": 0,
-            "driver_id": 0,
-            "driver_name": case.get("driver_name") or "Unknown",
-            "driver_username": case.get("driver_username"),
-            "group_name": case.get("group_name") or "Driver Group",
-            "text": case.get("description") or "",
-        }
-        self._alerts[case_id] = record
-        self._register_alert(case_id)
-        await self._persist_async()
-        logger.info(f"Restored alert state for case {case_id}")
-        return case_id, record
     
     def _get_lock(self, alert_id: str) -> asyncio.Lock:
         if alert_id not in self._locks:
             self._locks[alert_id] = asyncio.Lock()
         return self._locks[alert_id]
-
-    @staticmethod
-    def _log_background_result(task):
-        if task.cancelled():
-            return
-        error = task.exception()
-        if error:
-            logger.error(
-                f"Background assignment update failed: {error}",
-                exc_info=(type(error), error, error.__traceback__),
-            )
 
     # ── Group trigger handler ─────────────────────────────────────────────────
 
@@ -225,8 +178,7 @@ class AlertHandler:
             "text":               text,
         }
 
-        await asyncio.to_thread(
-            create_case,
+        create_case(
             case_id=alert_id,
             driver_name=driver_name,
             driver_username=driver_username,
@@ -240,12 +192,12 @@ class AlertHandler:
         recipients = get_on_shift_admins() or get_all_admins()
         notified   = 0
         dm_text    = (
-            "🔔 You have been mentioned in *" + _esc(chat_title) + "*\n\n"
-            "👤 *Reported by:* " + _esc(driver_name) + "\n"
-            "📝 *Issue:* " + _esc(text[:200])
+            "🔔 You have been mentioned in *" + chat_title + "*\n\n"
+            "👤 *Reported by:* " + driver_name + "\n"
+            "📝 *Issue:* " + text[:200]
         )
 
-        async def notify_admin(admin):
+        for admin in recipients:
             try:
                 if photo:
                     sent = await ctx.bot.send_photo(
@@ -258,16 +210,11 @@ class AlertHandler:
                         parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
                     )
                 self._alerts[alert_id]["recipients"].setdefault(admin["id"], []).append(sent.message_id)
-                return True
+                notified += 1
             except TelegramError as e:
                 logger.warning(f"Could not DM admin {admin['id']}: {e}")
-                return False
 
-        if recipients:
-            results = await asyncio.gather(*(notify_admin(a) for a in recipients), return_exceptions=True)
-            notified = sum(result is True for result in results)
-
-        await self._persist_async()
+        self._persist()
         if notified == 0:
             logger.warning("No admins could be reached for alert!")
 
@@ -295,12 +242,12 @@ class AlertHandler:
             f"👤 *Driver:* {_esc(record.get('driver_name', '—'))} keeps reporting "
             "this issue and no one has picked it up yet.\n"
             f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
-            f"📝 *Issue:* {_esc((record.get('text') or '—')[:200])}\n\n"
+            f"📝 *Issue:* {(record.get('text') or '—')[:200]}\n\n"
             "Please assign it."
         )
 
         recipients = get_on_shift_admins() or get_all_admins()
-        async def send_nudge(admin):
+        for admin in recipients:
             try:
                 sent = await ctx.bot.send_message(
                     admin["id"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
@@ -309,58 +256,146 @@ class AlertHandler:
             except TelegramError as e:
                 logger.warning(f"Could not nudge admin {admin['id']} about unassigned case: {e}")
 
-        if recipients:
-            await asyncio.gather(*(send_nudge(a) for a in recipients), return_exceptions=True)
+        self._persist()
 
-        await self._persist_async()
+    # ── AI channel ────────────────────────────────────────────────────────────
+
+    async def handle_channel_post(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        msg = update.channel_post or update.effective_message
+        if not msg or not msg.text or "AI DETECTED ISSUE" not in msg.text:
+            return
+        from config import config as _cfg
+        channel_id = getattr(_cfg, "AI_ALERTS_CHANNEL_ID", 0)
+        if channel_id and msg.chat.id != channel_id:
+            return
+        await self._process_ai_message(msg, ctx)
+
+    async def _process_ai_message(self, message, ctx):
+        import re as _re
+        try:
+            text       = message.text or ""
+            uuid_match = _re.search(
+                r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',
+                text, _re.IGNORECASE,
+            )
+            if not uuid_match:
+                return
+            alert_id = uuid_match.group(0)
+            if alert_id in self._processed_ai_ids:
+                return
+            self._processed_ai_ids.add(alert_id)
+
+            driver_name = "Unknown"
+            group_name  = "Driver Group"
+            summary     = ""
+            confidence  = "HIGH"
+            original    = ""
+
+            for line in text.split("\n"):
+                clean = line.strip().replace("*", "").replace("`", "")
+                if clean.startswith("Driver:"):    driver_name = clean[7:].strip()
+                elif clean.startswith("Group:"):   group_name  = clean[6:].strip()
+                elif clean.startswith("Issue:"):   summary     = clean[6:].strip()
+                elif clean.startswith("Confidence:"): confidence = clean[11:].strip()
+                elif clean.startswith("Message:"): original    = clean[8:].strip().strip("_")
+
+            now = datetime.now(timezone.utc)
+            self._alerts[alert_id] = {
+                "alert_id":          alert_id,
+                "recipients":        {},
+                "taken_by":          None,
+                "created_at":        now.isoformat(),
+                "last_escalated_at": None,
+                "escalation_count":  0,
+                "driver_id":         0,
+                "driver_name":       driver_name,
+                "driver_username":   None,
+                "group_name":        group_name,
+                "text":              original or summary,
+                "source":            "ai_scanner",
+            }
+
+            short_id = self._register_alert(alert_id)
+            kb       = self._make_kb(short_id)
+            dm_text  = (
+                "🤖 *AI Detected Issue* in *" + group_name + "*\n\n"
+                "👤 *Driver:* " + driver_name + "\n"
+                "📝 *Issue:* " + summary + "\n"
+                "_" + confidence + " confidence_"
+            )
+
+            recipients = get_on_shift_admins() or get_all_admins()
+            for admin in recipients:
+                try:
+                    sent = await ctx.bot.send_message(
+                        admin["id"], dm_text,
+                        parse_mode="Markdown", reply_markup=kb,
+                    )
+                    self._alerts[alert_id]["recipients"].setdefault(admin["id"], []).append(sent.message_id)
+                except Exception as e:
+                    logger.warning(f"Could not DM admin {admin['id']}: {e}")
+
+            self._persist()
+        except Exception as e:
+            logger.error(f"AI channel error: {e}")
 
     # ── Assignment ────────────────────────────────────────────────────────────
 
-    async def _replace_alert_message(self, query, text: str):
-        """Remove alert buttons from both text and photo notifications."""
-        try:
-            if query.message and query.message.caption is not None:
-                await query.edit_message_caption(caption=text, reply_markup=None)
+    async def _do_assign(self, admin, name, alert_id, record, ctx):
+        lock = self._get_lock(alert_id)
+        async with lock:
+            if record["taken_by"] is not None:
+                # This is a reassignment — previous agent loses the case
+                prev_agent_id = record["taken_by"][0] if record["taken_by"] else None
+                record["taken_by"] = (admin.id, name)
+                record["_prev_agent_id"] = prev_agent_id
             else:
-                await query.edit_message_text(text, reply_markup=None)
-        except TelegramError as e:
-            logger.warning(f"Could not update alert message: {e}")
+                record["taken_by"] = (admin.id, name)
+                record["_prev_agent_id"] = None
 
-    async def _cleanup_assignment_messages(self, record, admin_id: int, name: str, ctx):
-        """Update old alert DMs concurrently so they cannot freeze polling."""
-        done_text = f"✅ Case assigned to {_esc(name)}.\nNo action needed."
+        prev_agent_id = record.pop("_prev_agent_id", None)
 
-        async def clean_one(chat_id, message_id):
-            try:
-                chat_id = int(chat_id)
-                if chat_id == admin_id:
-                    await ctx.bot.delete_message(chat_id=chat_id, message_id=message_id)
-                    return
+        for aid, mids in record["recipients"].items():
+            for mid in mids:
                 try:
-                    await ctx.bot.edit_message_text(
-                        chat_id=chat_id, message_id=message_id,
-                        text=done_text, reply_markup=None,
-                    )
+                    if aid == admin.id:
+                        await ctx.bot.delete_message(chat_id=aid, message_id=mid)
+                    else:
+                        done_text = f"✅ Case assigned to {_esc(name)}.\nNo action needed."
+                        try:
+                            await ctx.bot.edit_message_text(
+                                chat_id=aid, message_id=mid,
+                                text=done_text,
+                                reply_markup=None,
+                            )
+                        except TelegramError:
+                            # Photo alerts are media messages: text can't be
+                            # edited, only the caption. Otherwise the Assign
+                            # button stays visible to the other agents.
+                            await ctx.bot.edit_message_caption(
+                                chat_id=aid, message_id=mid,
+                                caption=done_text,
+                                reply_markup=None,
+                            )
                 except TelegramError:
-                    await ctx.bot.edit_message_caption(
-                        chat_id=chat_id, message_id=message_id,
-                        caption=done_text, reply_markup=None,
-                    )
-            except (TelegramError, ValueError, TypeError):
-                pass
+                    pass
 
-        tasks = [
-            clean_one(chat_id, message_id)
-            for chat_id, message_ids in record.get("recipients", {}).items()
-            for message_id in message_ids
-        ]
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        # Reassign: update case owner — removes from old agent, appears for new agent
+        assign_case(
+            case_id=alert_id, agent_id=admin.id,
+            agent_name=name, agent_username=admin.username,
+        )
+        if prev_agent_id:
+            from storage.case_store import get_case, _load, _save, CASES_FILE
+            cases = _load(CASES_FILE)
+            for c in cases:
+                if c["id"] == alert_id:
+                    c["reassigned"] = True
+                    break
+            _save(CASES_FILE, cases)
+        self._persist()
 
-    async def _post_assignment_updates(self, record, admin, name, alert_id, prev_agent_id, ctx):
-        """Run non-critical Telegram updates after the case is safely claimed."""
-        await self._cleanup_assignment_messages(record, admin.id, name, ctx)
-
+        # Notify previous agent their case was taken over
         if prev_agent_id and prev_agent_id != admin.id:
             try:
                 await ctx.bot.send_message(
@@ -370,144 +405,94 @@ class AlertHandler:
                     f"It has been removed from your active cases.",
                     parse_mode=ParseMode.MARKDOWN,
                 )
-            except TelegramError as e:
-                logger.warning(f"Could not notify previous agent for {alert_id}: {e}")
+            except TelegramError:
+                pass
 
         from config import config as cfg
         from shifts import MAIN_ADMIN_ID
         dest_id = cfg.REPORTS_GROUP_ID or next(iter(MAIN_ADMIN_ID), None)
-        if not dest_id:
-            return
-
-        created_at = record.get("created_at")
-        try:
+        if dest_id:
+            created_at = record.get("created_at")
             if isinstance(created_at, str):
                 created_at = datetime.fromisoformat(created_at)
             if created_at and created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=timezone.utc)
-        except (TypeError, ValueError):
-            created_at = None
-        secs = int((datetime.now(timezone.utc) - created_at).total_seconds()) if created_at else 0
-        action = "Reassigned" if prev_agent_id else "Assigned"
-        report_text = (
-            f"✅ *Case {action}*\n\n"
-            f"📌 *Group:* {_esc(record.get('group_name', '—'))}\n"
-            f"👤 *Reported by:* {_esc(record.get('driver_name', '—'))}\n"
-            f"🙋 *Handled by:* {_esc(name)}\n"
-            f"⏱ *Response:* {secs}s\n"
-            f"📝 {_esc(record.get('text', '(no details)')[:200])}"
-        )
-        try:
-            sent = await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
-            await asyncio.to_thread(set_report_msg_id, alert_id, sent.message_id)
-        except TelegramError as e:
-            logger.warning(f"Could not post assignment to reports for {alert_id}: {e}")
-
-    async def _do_assign(self, admin, name, alert_id, record, ctx):
-        lock = self._get_lock(alert_id)
-        logger.info("[ASSIGN] LOCK_WAIT case=%s user=%s", alert_id, admin.id)
-        async with lock:
-            logger.info("[ASSIGN] LOCK_ACQUIRED case=%s user=%s", alert_id, admin.id)
-            previous = record.get("taken_by")
-            prev_agent_id = previous[0] if previous else None
-            allow_reassign = bool(record.get("reassign_requested"))
-            claimed = await asyncio.to_thread(
-                assign_case,
-                case_id=alert_id,
-                agent_id=admin.id,
-                agent_name=name,
-                agent_username=admin.username,
-                allow_reassign=allow_reassign,
+            secs = int((datetime.now(timezone.utc) - created_at).total_seconds()) if created_at else 0
+            action = "Reassigned" if prev_agent_id else "Assigned"
+            report_text = (
+                f"✅ *Case {action}*\n\n"
+                f"📌 *Group:* {record.get('group_name', '—')}\n"
+                f"👤 *Reported by:* {record.get('driver_name', '—')}\n"
+                f"🙋 *Handled by:* {_esc(name)}\n"
+                f"⏱ *Response:* {secs}s\n"
+                f"📝 {record.get('text', '(no details)')[:200]}"
             )
-            if not claimed:
-                logger.info(f"Assignment rejected for {alert_id}; already owned or closed")
-                return False
-            record["taken_by"] = [admin.id, name]
-            record.pop("reassign_requested", None)
-            await self._persist_async()
-            logger.info("[ASSIGN] STORED case=%s user=%s", alert_id, admin.id)
+            try:
+                sent = await ctx.bot.send_message(dest_id, report_text, parse_mode=ParseMode.MARKDOWN)
+                set_report_msg_id(alert_id, sent.message_id)
+            except TelegramError as e:
+                logger.warning(f"Could not post assignment to reports: {e}")
 
-        logger.info("[ASSIGN] SUCCESS case=%s user=%s", alert_id, admin.id)
-        task = asyncio.create_task(
-            self._post_assignment_updates(dict(record), admin, name, alert_id, prev_agent_id, ctx)
-        )
-        task.add_done_callback(self._log_background_result)
         return True
 
     async def handle_assignment(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        admin = update.effective_user
-        if query is None or admin is None:
-            logger.error("[ASSIGN] Handler invoked without callback query/user")
-            return
-
-        # Log BEFORE query.answer() or any Telegram API request. This tells us
-        # definitively whether Telegram delivered the button click to Railway.
-        logger.info("[ASSIGN] ENTER data=%r user=%s", query.data, admin.id)
+        query  = update.callback_query
+        await query.answer()
+        admin  = update.effective_user
 
         if not is_authorized(admin.id):
-            logger.warning("[ASSIGN] REJECT unauthorized user=%s", admin.id)
-            try:
-                await query.answer("Not authorized.", show_alert=True)
-            except TelegramError as exc:
-                logger.warning("[ASSIGN] Could not answer unauthorized callback: %s", exc)
+            await query.answer("Not authorized.", show_alert=True)
             return
 
-        # A failed callback acknowledgement must never prevent the assignment.
-        try:
-            await query.answer("Processing...", read_timeout=5, write_timeout=5, connect_timeout=5, pool_timeout=5)
-        except TelegramError as exc:
-            logger.warning("[ASSIGN] Callback acknowledgement failed; continuing: %s", exc)
-
-        name = f"{admin.first_name} {admin.last_name or ''}".strip()
-        parts = (query.data or "").split("|")
-        action = parts[0]
+        name     = f"{admin.first_name} {admin.last_name or ''}".strip()
+        parts    = query.data.split("|")
+        action   = parts[0]
         short_id = parts[1] if len(parts) > 1 else ""
-        logger.info("[ASSIGN] PARSED action=%s case=%s user=%s", action, short_id, admin.id)
 
         alert_id, record = self._resolve(short_id)
 
         # If not in memory, try reloading from disk (happens after bot restart)
         if not record:
-            logger.info("[ASSIGN] Case not in memory; reloading storage case=%s", short_id)
-            await asyncio.to_thread(self.load_from_disk)
+            self.load_from_disk()
             alert_id, record = self._resolve(short_id)
 
         if not record:
-            alert_id, record = await self._restore_from_case(alert_id)
-
-        if not record:
             # Truly gone — already assigned and cleaned up
-            await self._replace_alert_message(query, "✅ This alert was already handled.")
+            await query.edit_message_text(
+                "✅ This alert was already handled.", reply_markup=None
+            )
             return
 
         if action == "ignore":
-            await self._replace_alert_message(
-                query, "🚫 You ignored this alert. Another agent can still take it."
+            await query.edit_message_text(
+                "🚫 You ignored this alert. Another agent can still take it.",
+                reply_markup=None,
             )
             return
 
         if action in ("assign", "assignrpt"):
-            if record.get("taken_by") is not None and not record.get("reassign_requested"):
-                if record["taken_by"][0] == admin.id:
-                    text = "✅ You already have this case. Use /mycases to manage it."
-                else:
-                    text = "✅ Already assigned to someone else."
-                await self._replace_alert_message(query, text)
+            # Block only if this exact agent already owns it
+            if record["taken_by"] is not None and record["taken_by"][0] == admin.id:
+                await query.edit_message_text(
+                    "✅ You already have this case. Use /mycases to manage it.",
+                    reply_markup=None,
+                )
                 return
 
             saved = dict(record)
             success = await self._do_assign(admin, name, alert_id, record, ctx)
             if not success:
-                await self._replace_alert_message(query, "✅ Already assigned to someone else.")
+                await query.edit_message_text(
+                    "✅ Already assigned to someone else.", reply_markup=None
+                )
                 return
 
             from telegram import InlineKeyboardButton, InlineKeyboardMarkup
             case_text = (
                 f"📋 *Active Case*\n\n"
-                f"📌 *Group:* {_esc(saved.get('group_name', '—'))}\n"
-                f"👤 *Reported by:* {_esc(saved.get('driver_name', '—'))}\n"
-                f"📝 *Issue:* {_esc((saved.get('text') or '—')[:200])}"
+                f"📌 *Group:* {saved.get('group_name', '—')}\n"
+                f"👤 *Reported by:* {saved.get('driver_name', '—')}\n"
+                f"📝 *Issue:* {(saved.get('text') or '—')[:200]}"
             )
             case_kb = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{alert_id}"),
@@ -519,8 +504,8 @@ class AlertHandler:
                     admin.id, case_text,
                     parse_mode=ParseMode.MARKDOWN, reply_markup=case_kb,
                 )
-            except TelegramError as e:
-                logger.error(f"Case {alert_id} was assigned but active-case DM failed: {e}")
+            except TelegramError:
+                pass
 
     async def handle_reassign(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -532,15 +517,6 @@ class AlertHandler:
         case_id   = query.data.replace("reassign_", "")
         alert_id  = case_id  # alert_id == case_id throughout this bot
         record    = self._alerts.get(alert_id)
-        if record is None:
-            _, record = await self._restore_from_case(alert_id)
-
-        if record is None:
-            await self._replace_alert_message(query, "This case is no longer active.")
-            return
-
-        record["reassign_requested"] = True
-        await self._persist_async()
 
         await query.edit_message_reply_markup(reply_markup=None)
         await query.message.reply_text(
@@ -557,19 +533,20 @@ class AlertHandler:
         short_id = self._register_alert(alert_id)
         kb       = self._make_kb(short_id)
 
-        async def notify_agent(a):
+        for a in get_all_admins():
+            if a["id"] == admin.id:
+                continue
             try:
                 sent = await ctx.bot.send_message(
                     a["id"], dm_text,
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=kb,
                 )
-                record["recipients"].setdefault(a["id"], []).append(sent.message_id)
-            except TelegramError as e:
-                logger.warning(f"Could not send reassignment {alert_id} to {a['id']}: {e}")
+                # Track so assignment can clean up these messages too
+                if record is not None:
+                    record["recipients"].setdefault(a["id"], []).append(sent.message_id)
+            except TelegramError:
+                pass
 
-        recipients = [a for a in get_all_admins() if a["id"] != admin.id]
-        if recipients:
-            await asyncio.gather(*(notify_agent(a) for a in recipients), return_exceptions=True)
-        await self._persist_async()
-        logger.info(f"Reassignment requested for {alert_id} by {admin.id}")
+        if record is not None:
+            self._persist()

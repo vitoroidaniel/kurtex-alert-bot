@@ -277,14 +277,9 @@ async def cmd_listusers(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for uid, u in sorted_users:
         icon   = role_icons.get(u["role"], "•")
         handle = f"@{u['username']}" if u.get("username") else "—"
-        # /listusers contains user-controlled names/usernames and role names
-        # such as super_admin. Sending those through Markdown without escaping
-        # makes Telegram reject the whole command response. Keep this command
-        # plain-text so arbitrary account data can never break it.
-        lines.append(f"{icon} {u['name']} ({handle})\n   ID: {uid} — {u['role']}")
+        lines.append(f"{icon} *{u['name']}* ({handle})\n   ID: `{uid}` — _{u['role']}_")
 
-    lines[0] = "User List\n"
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 
 # ── Forward a message → add user flow ────────────────────────────────────────
