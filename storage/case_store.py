@@ -8,9 +8,11 @@ Files survive restarts and redeploys permanently.
   /app/data/active_alerts.json — in-flight alerts (rebuilt on startup)
 """
 
+import asyncio
 import json
 import logging
 import os
+import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -22,28 +24,42 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CASES_FILE   = DATA_DIR / "cases.json"
 ALERTS_FILE  = DATA_DIR / "active_alerts.json"
+_FILE_LOCK   = threading.RLock()
 
 
 # ── Atomic write helpers ──────────────────────────────────────────────────────
 
 def _load(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.error(f"Failed to load {path.name}: {e}")
-        return []
+    with _FILE_LOCK:
+        if not path.exists():
+            return []
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.error(f"Failed to load {path.name}: {e}")
+            return []
 
 
 def _save(path: Path, data: list[dict] | dict) -> None:
-    """Atomic write — write to .tmp then replace to avoid corruption."""
-    tmp = path.with_suffix(".tmp")
-    try:
-        tmp.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
-        tmp.replace(path)
-    except Exception as e:
-        logger.error(f"Failed to save {path.name}: {e}")
+    """Durable atomic write protected against overlapping handler callbacks."""
+    with _FILE_LOCK:
+        tmp = path.with_name(
+            f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        try:
+            payload = json.dumps(data, indent=2, default=str)
+            with tmp.open("w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp, path)
+        except Exception as e:
+            logger.error(f"Failed to save {path.name}: {e}")
+        finally:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def now_iso() -> str:
@@ -75,17 +91,37 @@ def create_case(
         "notes":           None,
         "report_msg_id":   None,
     }
-    cases = _load(CASES_FILE)
-    cases.append(case)
-    _save(CASES_FILE, cases)
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE)
+        cases.append(case)
+        _save(CASES_FILE, cases)
     logger.info(f"Case {case_id} created")
     return case
 
 
-def assign_case(case_id: str, agent_id: int, agent_name: str, agent_username: Optional[str]) -> Optional[dict]:
-    cases = _load(CASES_FILE)
-    for case in cases:
-        if case["id"] == case_id:
+def assign_case(
+    case_id: str,
+    agent_id: int,
+    agent_name: str,
+    agent_username: Optional[str],
+    allow_reassign: bool = False,
+) -> Optional[dict]:
+    """Atomically claim an unassigned case, or explicitly reassign it.
+
+    Returning ``None`` means another agent already owns the case. Keeping the
+    check and write under one lock prevents two nearly simultaneous button
+    clicks from both succeeding.
+    """
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE)
+        for case in cases:
+            if case["id"] != case_id:
+                continue
+            if case.get("status") == "done":
+                return None
+            previous_agent_id = case.get("agent_id")
+            if previous_agent_id is not None and not allow_reassign:
+                return None
             assigned_at   = now_iso()
             response_secs = int(
                 (datetime.fromisoformat(assigned_at) - datetime.fromisoformat(case["opened_at"])).total_seconds()
@@ -97,28 +133,32 @@ def assign_case(case_id: str, agent_id: int, agent_name: str, agent_username: Op
                 "agent_username": agent_username,
                 "status":         "assigned",
                 "response_secs":  response_secs,
+                "reassigned":     bool(previous_agent_id is not None),
             })
             _save(CASES_FILE, cases)
             logger.info(f"Case {case_id} assigned to {agent_name}")
-            return case
+            return dict(case)
     logger.warning(f"assign_case: {case_id} not found")
     return None
 
 
 def report_case(case_id: str, notes: Optional[str] = "case reported") -> Optional[dict]:
-    cases = _load(CASES_FILE)
-    for case in cases:
-        if case["id"] == case_id:
-            case.update({"status": "reported", "notes": notes})
-            _save(CASES_FILE, cases)
-            return case
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE)
+        for case in cases:
+            if case["id"] == case_id:
+                case.update({"status": "reported", "notes": notes})
+                _save(CASES_FILE, cases)
+                return case
     return None
 
 
 def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
-    cases = _load(CASES_FILE)
-    for case in cases:
-        if case["id"] == case_id:
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE)
+        for case in cases:
+            if case["id"] != case_id:
+                continue
             closed_at       = now_iso()
             resolution_secs = None
             if case.get("assigned_at"):
@@ -138,21 +178,24 @@ def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
 
 
 def mark_missed(case_id: str) -> None:
-    cases = _load(CASES_FILE)
-    for case in cases:
-        if case["id"] == case_id and case["status"] in ("open", "assigned"):
-            case["status"] = "missed"
-            _save(CASES_FILE, cases)
-            return
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE)
+        for case in cases:
+            # Never turn an already-assigned case into a missed one.
+            if case["id"] == case_id and case["status"] == "open" and case.get("agent_id") is None:
+                case["status"] = "missed"
+                _save(CASES_FILE, cases)
+                return
 
 
 def set_report_msg_id(case_id: str, msg_id: int) -> None:
-    cases = _load(CASES_FILE)
-    for case in cases:
-        if case["id"] == case_id:
-            case["report_msg_id"] = msg_id
-            _save(CASES_FILE, cases)
-            return
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE)
+        for case in cases:
+            if case["id"] == case_id:
+                case["report_msg_id"] = msg_id
+                _save(CASES_FILE, cases)
+                return
 
 
 # ── Cases — read ──────────────────────────────────────────────────────────────
@@ -213,12 +256,14 @@ def save_active_alerts(alerts: dict) -> None:
         if isinstance(r.get("last_escalated_at"), datetime):
             r["last_escalated_at"] = r["last_escalated_at"].isoformat()
         serialisable[aid] = r
-    _save(ALERTS_FILE, serialisable)
+    with _FILE_LOCK:
+        _save(ALERTS_FILE, serialisable)
 
 
 def load_active_alerts() -> dict:
     """Load persisted alerts back into memory on startup."""
-    raw = _load(ALERTS_FILE)
+    with _FILE_LOCK:
+        raw = _load(ALERTS_FILE)
     if isinstance(raw, list):
         return {}          # old format guard
     return raw if isinstance(raw, dict) else {}
@@ -228,37 +273,39 @@ def load_active_alerts() -> dict:
 # These are thin wrappers so handlers that use `await` still work fine.
 
 async def async_get_active_case_for_agent(agent_id):
-    return get_active_case_for_agent(agent_id)
+    return await asyncio.to_thread(get_active_case_for_agent, agent_id)
 
 async def async_create_case(case_id, driver_name, driver_username, group_name, description):
-    return create_case(case_id, driver_name, driver_username, group_name, description)
+    return await asyncio.to_thread(
+        create_case, case_id, driver_name, driver_username, group_name, description
+    )
 
 async def async_assign_case(case_id, agent_id, agent_name, agent_username):
-    return assign_case(case_id, agent_id, agent_name, agent_username)
+    return await asyncio.to_thread(assign_case, case_id, agent_id, agent_name, agent_username)
 
 async def async_close_case(case_id, notes=None):
-    return close_case(case_id, notes)
+    return await asyncio.to_thread(close_case, case_id, notes)
 
 async def async_mark_missed(case_id):
-    return mark_missed(case_id)
+    return await asyncio.to_thread(mark_missed, case_id)
 
 async def async_get_case(case_id):
-    return get_case(case_id)
+    return await asyncio.to_thread(get_case, case_id)
 
 async def async_get_cases_for_agent_today(agent_id):
-    return get_cases_for_agent_today(agent_id)
+    return await asyncio.to_thread(get_cases_for_agent_today, agent_id)
 
 async def async_get_all_cases_for_agent(agent_id):
-    return get_all_cases_for_agent(agent_id)
+    return await asyncio.to_thread(get_all_cases_for_agent, agent_id)
 
 async def async_get_cases_today():
-    return get_cases_today()
+    return await asyncio.to_thread(get_cases_today)
 
 async def async_get_cases_this_week():
-    return get_cases_this_week()
+    return await asyncio.to_thread(get_cases_this_week)
 
 async def async_set_report_msg_id(case_id, msg_id):
-    return set_report_msg_id(case_id, msg_id)
+    return await asyncio.to_thread(set_report_msg_id, case_id, msg_id)
 
 async def ensure_indexes():
     """No-op — kept so bot.py import doesn't break."""
