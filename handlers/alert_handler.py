@@ -420,12 +420,12 @@ class AlertHandler:
                 allow_reassign=allow_reassign,
             )
             if not claimed:
-                logger.info("[ASSIGN] REJECTED case=%s user=%s already owned/closed", alert_id, admin.id)
+                logger.info(f"Assignment rejected for {alert_id}; already owned or closed")
                 return False
-            logger.info("[ASSIGN] STORED case=%s user=%s", alert_id, admin.id)
             record["taken_by"] = [admin.id, name]
             record.pop("reassign_requested", None)
             await self._persist_async()
+            logger.info("[ASSIGN] STORED case=%s user=%s", alert_id, admin.id)
 
         logger.info("[ASSIGN] SUCCESS case=%s user=%s", alert_id, admin.id)
         task = asyncio.create_task(
@@ -435,43 +435,45 @@ class AlertHandler:
         return True
 
     async def handle_assignment(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-        query  = update.callback_query
-        admin  = update.effective_user
-
+        query = update.callback_query
+        admin = update.effective_user
         if query is None or admin is None:
-            logger.error("[ASSIGN] Callback missing query/user")
+            logger.error("[ASSIGN] Handler invoked without callback query/user")
             return
 
-        logger.info("[ASSIGN] CLICK data=%s user=%s", query.data, admin.id)
+        # Log BEFORE query.answer() or any Telegram API request. This tells us
+        # definitively whether Telegram delivered the button click to Railway.
+        logger.info("[ASSIGN] ENTER data=%r user=%s", query.data, admin.id)
+
         if not is_authorized(admin.id):
-            logger.warning("[ASSIGN] DENIED unauthorized user=%s", admin.id)
+            logger.warning("[ASSIGN] REJECT unauthorized user=%s", admin.id)
             try:
                 await query.answer("Not authorized.", show_alert=True)
-            except TelegramError as e:
-                logger.warning("[ASSIGN] Could not answer unauthorized callback: %s", e)
+            except TelegramError as exc:
+                logger.warning("[ASSIGN] Could not answer unauthorized callback: %s", exc)
             return
-        try:
-            await query.answer("Processing...")
-        except TelegramError as e:
-            # Callback acknowledgement failure must not prevent the assignment.
-            logger.warning("[ASSIGN] callback answer failed, continuing: %s", e)
 
-        name     = f"{admin.first_name} {admin.last_name or ''}".strip()
-        parts    = query.data.split("|")
-        action   = parts[0]
+        # A failed callback acknowledgement must never prevent the assignment.
+        try:
+            await query.answer("Processing...", read_timeout=5, write_timeout=5, connect_timeout=5, pool_timeout=5)
+        except TelegramError as exc:
+            logger.warning("[ASSIGN] Callback acknowledgement failed; continuing: %s", exc)
+
+        name = f"{admin.first_name} {admin.last_name or ''}".strip()
+        parts = (query.data or "").split("|")
+        action = parts[0]
         short_id = parts[1] if len(parts) > 1 else ""
-        logger.info(f"Assignment callback received: action={action}, case={short_id}, user={admin.id}")
+        logger.info("[ASSIGN] PARSED action=%s case=%s user=%s", action, short_id, admin.id)
 
         alert_id, record = self._resolve(short_id)
 
         # If not in memory, try reloading from disk (happens after bot restart)
         if not record:
-            logger.info("[ASSIGN] case=%s not in memory; reloading active alerts", short_id)
+            logger.info("[ASSIGN] Case not in memory; reloading storage case=%s", short_id)
             await asyncio.to_thread(self.load_from_disk)
             alert_id, record = self._resolve(short_id)
 
         if not record:
-            logger.info("[ASSIGN] case=%s not in active alerts; restoring from case store", alert_id)
             alert_id, record = await self._restore_from_case(alert_id)
 
         if not record:

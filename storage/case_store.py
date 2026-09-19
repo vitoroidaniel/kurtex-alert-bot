@@ -54,8 +54,7 @@ def _save(path: Path, data: list[dict] | dict) -> None:
                 os.fsync(fh.fileno())
             os.replace(tmp, path)
         except Exception as e:
-            logger.exception("Failed to save %s", path.name)
-            raise
+            logger.error(f"Failed to save {path.name}: {e}")
         finally:
             try:
                 tmp.unlink(missing_ok=True)

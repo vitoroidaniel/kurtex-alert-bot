@@ -93,6 +93,17 @@ def with_typing(fn):
     return wrapper
 
 
+# ── Callback diagnostics ─────────────────────────────────────────────────────
+
+async def callback_trace_middleware(update: Update, ctx):
+    """Log every inline-button update before auth/handler routing."""
+    query = update.callback_query
+    if query is None:
+        return
+    user_id = update.effective_user.id if update.effective_user else None
+    logger.info("[CALLBACK] RECEIVED data=%r user=%s", query.data, user_id)
+
+
 # ── Auth middleware ───────────────────────────────────────────────────────────
 
 async def auth_middleware(update: Update, ctx):
@@ -140,9 +151,10 @@ async def post_init(application: Application) -> None:
         logger.exception("[TELEGRAM] Could not force polling mode before startup")
         raise
 
-    # Polling is kept intentionally simple: webhook is cleared once at startup.
-    # A separate watchdog is not started here because post_init runs before the
-    # Application enters its running state.
+    # Do not run a background webhook watchdog here. Polling is the only
+    # update transport for this service; startup cleanup above is sufficient.
+    # A watchdog created from post_init runs before Application.start() and can
+    # interfere with startup/callback diagnostics.
 
     # ── Migrate existing hardcoded admins on first boot ──
     migrate_from_shifts(ADMINS, SUPER_ADMINS)
@@ -416,6 +428,7 @@ def main():
     app.bot_data["alert_handler"] = alert_h
     _register_sigterm(app)
 
+    app.add_handler(TypeHandler(Update, callback_trace_middleware), group=-2)
     app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
 
     private = filters.ChatType.PRIVATE
@@ -469,7 +482,6 @@ def main():
     app.add_handler(CallbackQueryHandler(alert_h.handle_assignment,  pattern=r'^(assign|assignrpt|ignore)\|'))
     app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,    pattern=r'^reassign_'))
     app.add_handler(CallbackQueryHandler(cb_done_pick,               pattern=r'^done_pick\|'))
-    app.add_handler(CallbackQueryHandler(cb_solve_start,             pattern=r'^solve\|'))
     app.add_handler(CallbackQueryHandler(cb_close_ask,               pattern=r'^close_ask\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,           pattern=r'^solve_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_cancel,            pattern=r'^solve_cancel\|'))
