@@ -405,7 +405,9 @@ class AlertHandler:
 
     async def _do_assign(self, admin, name, alert_id, record, ctx):
         lock = self._get_lock(alert_id)
+        logger.info("[ASSIGN] LOCK_WAIT case=%s user=%s", alert_id, admin.id)
         async with lock:
+            logger.info("[ASSIGN] LOCK_ACQUIRED case=%s user=%s", alert_id, admin.id)
             previous = record.get("taken_by")
             prev_agent_id = previous[0] if previous else None
             allow_reassign = bool(record.get("reassign_requested"))
@@ -418,13 +420,14 @@ class AlertHandler:
                 allow_reassign=allow_reassign,
             )
             if not claimed:
-                logger.info(f"Assignment rejected for {alert_id}; already owned or closed")
+                logger.info("[ASSIGN] REJECTED case=%s user=%s already owned/closed", alert_id, admin.id)
                 return False
+            logger.info("[ASSIGN] STORED case=%s user=%s", alert_id, admin.id)
             record["taken_by"] = [admin.id, name]
             record.pop("reassign_requested", None)
             await self._persist_async()
 
-        logger.info(f"Assignment callback completed for {alert_id} by {admin.id}")
+        logger.info("[ASSIGN] SUCCESS case=%s user=%s", alert_id, admin.id)
         task = asyncio.create_task(
             self._post_assignment_updates(dict(record), admin, name, alert_id, prev_agent_id, ctx)
         )
@@ -435,10 +438,23 @@ class AlertHandler:
         query  = update.callback_query
         admin  = update.effective_user
 
-        if not is_authorized(admin.id):
-            await query.answer("Not authorized.", show_alert=True)
+        if query is None or admin is None:
+            logger.error("[ASSIGN] Callback missing query/user")
             return
-        await query.answer("Processing...")
+
+        logger.info("[ASSIGN] CLICK data=%s user=%s", query.data, admin.id)
+        if not is_authorized(admin.id):
+            logger.warning("[ASSIGN] DENIED unauthorized user=%s", admin.id)
+            try:
+                await query.answer("Not authorized.", show_alert=True)
+            except TelegramError as e:
+                logger.warning("[ASSIGN] Could not answer unauthorized callback: %s", e)
+            return
+        try:
+            await query.answer("Processing...")
+        except TelegramError as e:
+            # Callback acknowledgement failure must not prevent the assignment.
+            logger.warning("[ASSIGN] callback answer failed, continuing: %s", e)
 
         name     = f"{admin.first_name} {admin.last_name or ''}".strip()
         parts    = query.data.split("|")
@@ -450,10 +466,12 @@ class AlertHandler:
 
         # If not in memory, try reloading from disk (happens after bot restart)
         if not record:
-            self.load_from_disk()
+            logger.info("[ASSIGN] case=%s not in memory; reloading active alerts", short_id)
+            await asyncio.to_thread(self.load_from_disk)
             alert_id, record = self._resolve(short_id)
 
         if not record:
+            logger.info("[ASSIGN] case=%s not in active alerts; restoring from case store", alert_id)
             alert_id, record = await self._restore_from_case(alert_id)
 
         if not record:

@@ -140,34 +140,9 @@ async def post_init(application: Application) -> None:
         logger.exception("[TELEGRAM] Could not force polling mode before startup")
         raise
 
-    # Runtime guard: another old deployment/service using the same token can
-    # call setWebhook after this process has already started. If that happens,
-    # remove it so PTB's getUpdates retry loop can recover automatically.
-    async def webhook_guard() -> None:
-        while True:
-            try:
-                await asyncio.sleep(15)
-                info = await application.bot.get_webhook_info()
-                if info.url:
-                    logger.error(
-                        "[TELEGRAM] Unexpected webhook detected while polling: %s; deleting it",
-                        info.url,
-                    )
-                    await application.bot.delete_webhook(drop_pending_updates=False)
-                    verify = await application.bot.get_webhook_info()
-                    if verify.url:
-                        logger.critical(
-                            "[TELEGRAM] Webhook could not be removed: %s. Another service is likely using this BOT_TOKEN.",
-                            verify.url,
-                        )
-                    else:
-                        logger.warning("[TELEGRAM] Unexpected webhook removed; polling can recover")
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.warning("[TELEGRAM] Webhook guard check failed: %s", exc)
-
-    application.create_task(webhook_guard(), name="telegram-webhook-guard")
+    # Polling is kept intentionally simple: webhook is cleared once at startup.
+    # A separate watchdog is not started here because post_init runs before the
+    # Application enters its running state.
 
     # ── Migrate existing hardcoded admins on first boot ──
     migrate_from_shifts(ADMINS, SUPER_ADMINS)
