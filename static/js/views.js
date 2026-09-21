@@ -10,8 +10,7 @@ async function loadStats() {
     var t = stats.today || {};
     var sg = document.getElementById("stat-grid");
     if (sg)
-      sg.innerHTML =
-        '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Today Total</div><div class="stat-value v-accent">' +
+      updateHTML(sg, '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Today Total</div><div class="stat-value v-accent">' +
         (t.total || 0) +
         "</div></div>" +
         '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-user-check"></i></div><div class="stat-label">Assigned</div><div class="stat-value v-blue">' +
@@ -28,7 +27,7 @@ async function loadStats() {
         "</div></div>" +
         '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-timer"></i></div><div class="stat-label">Avg response · all time</div><div class="stat-value v-sm v-yellow">' +
         ((stats.all_time || {}).avg_resp || "—") +
-        "</div></div>";
+        "</div></div>");
 
     var badge = document.getElementById("missed-badge");
     if (badge) {
@@ -40,19 +39,19 @@ async function loadStats() {
 
     var lb = (stats.leaderboard_day || []).slice(0, 5);
     var lbo = document.getElementById("lb-overview");
-    if (lbo) lbo.innerHTML = listRows(lb, lb[0] ? lb[0].count : 1);
+    if (lbo) updateHTML(lbo, listRows(lb, lb[0] ? lb[0].count : 1));
 
     var grps = stats.top_groups || [];
     var units = stats.top_problem_units || [];
     var uo = document.getElementById("units-overview");
-    if (uo) uo.innerHTML = unitProblemRows(units);
+    if (uo) updateHTML(uo, unitProblemRows(units));
 
     renderLeaderboard();
     renderAnalytics();
 
     var wc = document.getElementById("word-cloud");
     if (wc)
-      wc.innerHTML = (stats.top_words || []).length
+      updateHTML(wc, (stats.top_words || []).length
         ? '<div class="word-grid">' +
           (stats.top_words || [])
             .map(function (w) {
@@ -66,14 +65,14 @@ async function loadStats() {
             })
             .join("") +
           "</div>"
-        : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>';
+        : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>');
 
     var ulb = document.getElementById("units-lb");
-    if (ulb) ulb.innerHTML = unitProblemRows(units);
+    if (ulb) updateHTML(ulb, unitProblemRows(units));
   } catch (e) {
     if (e.name === "AbortError") return;
     if (!document.querySelector("#stat-grid .stat-card"))
-      document.getElementById("stat-grid").innerHTML = errorContent(e);
+      updateHTML(document.getElementById("stat-grid"), errorContent(e));
   }
 }
 
@@ -82,7 +81,7 @@ function renderLeaderboard() {
   var lb = stats["leaderboard_" + lbPeriod] || [];
   var el = document.getElementById("leaderboard-full");
   if (!el) return;
-  el.innerHTML = lb.length
+  updateHTML(el, lb.length
     ? lb
         .map(function (a, i) {
           return (
@@ -96,7 +95,7 @@ function renderLeaderboard() {
           );
         })
         .join("")
-    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>';
+    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>');
 }
 
 function renderAnalytics() {
@@ -105,8 +104,7 @@ function renderAnalytics() {
   var rate = d.total ? Math.round((d.done / d.total) * 100) : 0;
   var el = document.getElementById("analytics-stats");
   if (!el) return;
-  el.innerHTML =
-    '<div class="row"><span>Total Cases</span><span class="val">' +
+  updateHTML(el, '<div class="row"><span>Total Cases</span><span class="val">' +
     d.total +
     "</span></div>" +
     '<div class="row"><span>Resolved</span><span class="val" style="color:var(--green)">' +
@@ -120,7 +118,7 @@ function renderAnalytics() {
     "%</span></div>" +
     '<div class="row"><span>All Time Total</span><span class="val">' +
     ((stats.all_time || {}).total || 0) +
-    "</span></div>";
+    "</span></div>");
 }
 
 var caseLists = {
@@ -141,7 +139,7 @@ async function loadCaseList(kind, append, quiet) {
   state.busy = true;
   if (!append && !quiet) {
     state.rows = [];
-    el.innerHTML = '<div class="loading">Loading cases…</div>';
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading cases…</div>');
   }
   try {
     var params = new URLSearchParams({
@@ -165,8 +163,7 @@ async function loadCaseList(kind, append, quiet) {
       incoming = incoming.concat(d.cases || []);
     } while (quiet && d.has_more && incoming.length < target);
     state.rows = append ? state.rows.concat(incoming) : incoming;
-    el.innerHTML =
-      '<div class="table-count">Showing ' +
+    updateHTML(el, '<div class="table-count">Showing ' +
       state.rows.length +
       " of " +
       d.total +
@@ -176,10 +173,10 @@ async function loadCaseList(kind, append, quiet) {
         ? '<div class="load-more"><button class="btn" onclick="loadCaseList(\'' +
           kind +
           "',true)\">Load more ↓</button></div>"
-        : "");
+        : ""));
   } catch (e) {
     if (e.name === "AbortError") return;
-    if (!state.rows.length) el.innerHTML = errorContent(e);
+    if (!state.rows.length) if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   } finally {
     if (serial === state.serial) state.busy = false;
   }
@@ -188,11 +185,11 @@ async function loadCaseList(kind, append, quiet) {
 async function loadFleet() {
   var el = document.getElementById("fleet-content");
   if (!el) return;
-  el.innerHTML = '<div class="loading">Loading fleet stats...</div>';
+  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading fleet stats...</div>');
   try {
     var r = await apiFetch("/api/fleet");
     if (!r.ok) {
-      el.innerHTML = '<div class="loading">Error loading fleet stats.</div>';
+      updateHTML(el, '<div class="loading">Error loading fleet stats.</div>');
       return;
     }
     var d = await r.json();
@@ -235,8 +232,7 @@ async function loadFleet() {
         "</div>"
       );
     }
-    el.innerHTML =
-      '<div class="stat-grid" style="margin-bottom:20px">' +
+    updateHTML(el, '<div class="stat-grid" style="margin-bottom:20px">' +
       '<div class="stat-card c-accent" style="cursor:pointer" onclick="setFleetStatusFilter(\'all\')" title="Show all cases"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">' +
       d.total_reports +
       "</div></div>" +
@@ -275,12 +271,12 @@ async function loadFleet() {
         d.top_units,
       ) +
       unitCard('<i class="ph ph-warning"></i> Top Issues', d.top_issues) +
-      "</div>";
+      "</div>");
     renderFleetStatus();
   } catch (e) {
     if (e.name === "AbortError") return;
     console.error(e);
-    el.innerHTML = errorContent(e);
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 
@@ -360,8 +356,7 @@ function renderFleetStatusContent() {
       );
     })
     .join("");
-  wrap.innerHTML =
-    '<div class="card" style="margin-bottom:16px">' +
+  updateHTML(wrap, '<div class="card" style="margin-bottom:16px">' +
     '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>' +
     '<div class="toggle-tabs" style="margin-bottom:10px">' +
     vbtn("all", "All") +
@@ -369,7 +364,7 @@ function renderFleetStatusContent() {
     vbtn("trailer", "Trailer") +
     vbtn("reefer", "Reefer") +
     "</div>" +
-    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" placeholder="Search unit, issue, or driver..." value="' +
+    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" aria-label="Search fleet units, issues or drivers" placeholder="Search unit, issue, or driver..." value="' +
     attr(s.search || "") +
     '" oninput="fleetStatusState.search=this.value;renderFleetStatus()"></div>' +
     (filtered.length
@@ -377,23 +372,22 @@ function renderFleetStatusContent() {
         rows +
         "</tbody></table></div></div>"
       : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No units match this filter.</div>') +
-    "</div>";
+    "</div>");
 }
 
 async function loadMyProfile() {
   var el = document.getElementById("my-profile-content");
   if (!el) return;
-  el.innerHTML = '<div class="loading">Loading...</div>';
+  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading...</div>');
   try {
     var r = await apiFetch("/api/my_profile");
     if (!r.ok) {
-      el.innerHTML = '<div class="loading">Error loading profile.</div>';
+      updateHTML(el, '<div class="loading">Error loading profile.</div>');
       return;
     }
     var p = await r.json();
-    el.innerHTML =
-      '<div class="two-col" style="margin-bottom:16px">' +
-      '<div class="card">' +
+    updateHTML(el, '<div class="two-col profile-grid" style="margin-bottom:16px">' +
+      '<div class="card profile-identity">' +
       '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">' +
       '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">' +
       h((p.name || "?")[0]) +
@@ -414,9 +408,9 @@ async function loadMyProfile() {
       '</div><div class="agent-stat-label">Missed</div></div>' +
       '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' +
       p.rate +
-      '%</div><div class="agent-stat-label">Rate</div></div>' +
+      '%</div><div class="agent-stat-label">Resolution rate</div></div>' +
       "</div></div>" +
-      '<div class="card"><div class="card-title">Period Breakdown</div><div class="stats-list">' +
+      '<div class="card"><div class="card-title">Activity breakdown</div><div class="stats-list">' +
       '<div class="row"><span>Today assigned</span><span class="val">' +
       p.today_total +
       "</span></div>" +
@@ -433,34 +427,34 @@ async function loadMyProfile() {
       p.avg_resp +
       "</span></div>" +
       "</div></div></div>" +
-      '<div class="section-title" style="margin-bottom:10px">Recent Cases</div>' +
+      '<div class="section-title" style="margin-bottom:10px">Recent case activity</div>' +
       '<div class="table-wrap"><div class="table-scroll">' +
       caseTable(p.recent) +
-      "</div></div>";
+      "</div></div>");
   } catch (e) {
     if (e.name === "AbortError") return;
     console.error(e);
-    el.innerHTML = errorContent(e);
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 
 async function loadAgents() {
   var el = document.getElementById("agents-content");
   if (!el) return;
-  el.innerHTML = '<div class="loading">Loading...</div>';
+  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading...</div>');
   try {
     var r = await apiFetch("/api/agents");
     if (r.status === 403) {
-      el.innerHTML = '<div class="loading">Access denied.</div>';
+      updateHTML(el, '<div class="loading">Access denied.</div>');
       return;
     }
     if (!r.ok) {
-      el.innerHTML = '<div class="loading">Error loading agents.</div>';
+      updateHTML(el, '<div class="loading">Error loading agents.</div>');
       return;
     }
     var agents = await r.json();
     if (!agents.length) {
-      el.innerHTML = '<div class="empty-state">No agents found.</div>';
+      updateHTML(el, '<div class="empty-state">No agents found.</div>');
       return;
     }
     var cards = agents
@@ -474,7 +468,7 @@ async function loadAgents() {
               ? "var(--accent)"
               : "var(--red)";
         return (
-          '<div class="card agent-card" data-agent="' +
+          '<div class="card agent-card" role="button" tabindex="0" data-agent="' +
           attr(a.name || "") +
           '" data-username="' +
           attr(a.username || "") +
@@ -501,7 +495,7 @@ async function loadAgents() {
           '</div><div class="agent-card-statlabel">Total</div></div>' +
           '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--green)">' +
           (a.done || 0) +
-          '</div><div class="agent-card-statlabel">Done</div></div>' +
+          '</div><div class="agent-card-statlabel">Resolved</div></div>' +
           '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--red)">' +
           (a.missed || 0) +
           '</div><div class="agent-card-statlabel">Missed</div></div>' +
@@ -509,7 +503,7 @@ async function loadAgents() {
           rateColor +
           '">' +
           rate +
-          '%</div><div class="agent-card-statlabel">Rate</div></div>' +
+          '%</div><div class="agent-card-statlabel">Resolution rate</div></div>' +
           "</div>" +
           '<div class="agent-rate-track"><div class="agent-rate-fill" style="width:' +
           Math.min(rate, 100) +
@@ -521,14 +515,13 @@ async function loadAgents() {
         );
       })
       .join("");
-    el.innerHTML =
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px">' +
+    updateHTML(el, '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:18px">' +
       cards +
-      "</div>";
+      "</div>");
   } catch (e) {
     if (e.name === "AbortError") return;
     console.error(e);
-    el.innerHTML = '<div class="loading">Error: ' + h(e.message) + "</div>";
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 
@@ -537,8 +530,7 @@ async function openCase(el) {
   var caseId = typeof el === "string" ? el : el.dataset.id;
   document.getElementById("modal-overlay").classList.add("open");
   lockBodyScroll();
-  document.getElementById("modal-body").innerHTML =
-    '<div class="loading">Loading...</div>';
+  updateHTML(document.getElementById("modal-body"), '<div class="loading">Loading...</div>');
   document.getElementById("modal-title").textContent = "Loading...";
   try {
     var r = await apiFetch(
@@ -546,8 +538,7 @@ async function openCase(el) {
       "case-detail",
     );
     if (!r.ok) {
-      document.getElementById("modal-body").innerHTML =
-        '<div class="loading">Case not found.</div>';
+      updateHTML(document.getElementById("modal-body"), '<div class="loading">Case not found.</div>');
       return;
     }
     var c = await r.json();
@@ -571,8 +562,7 @@ async function openCase(el) {
         "</div></div>" +
         "</div>";
     }
-    document.getElementById("modal-body").innerHTML =
-      buildTimeline(c) +
+    updateHTML(document.getElementById("modal-body"), buildTimeline(c) +
       '<div class="detail-grid">' +
       '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">' +
       statusBadge(c.status) +
@@ -614,12 +604,11 @@ async function openCase(el) {
         ? '<div style="margin-top:14px;text-align:center"><button data-id="' +
           attr(c.full_id) +
           '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
-        : "");
+        : ""));
   } catch (e) {
     if (e.name === "AbortError") return;
     console.error("openCase error:", e);
-    document.getElementById("modal-body").innerHTML =
-      '<div class="loading">Error loading case.</div>';
+    updateHTML(document.getElementById("modal-body"), '<div class="loading">Error loading case.</div>');
   }
 }
 function closeModal() {

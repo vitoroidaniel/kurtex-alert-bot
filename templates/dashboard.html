@@ -7,7 +7,7 @@
 <script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
-<body>
+<body data-user-id="{{ user.id }}">
 
 
 <div class="mobile-header">
@@ -61,7 +61,7 @@
       {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
     </div>
-    <div class="sidebar-actions">
+    <button class="theme-btn" onclick="openLayoutSettings()">⚙ Overview settings</button><div class="sidebar-actions">
       <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light</span></button>
       <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Sign out</button>
     </div>
@@ -79,10 +79,10 @@
     </div>
   </div>
 
-  <header class="page-heading"><div><div class="eyebrow">MAINTENANCE, IN VIEW</div><h1 id="page-title">Overview</h1><p id="page-description">Today's activity, outstanding cases, and team performance.</p></div><button class="badge-btn btn-outline" id="refresh-button" onclick="refresh(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></header>
-  <div class="workspace-meta"><span id="today-label"></span><div class="live-pill" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Connecting…</span></div></div>
-  <div id="connection-banner" class="connection-banner" role="alert" hidden><span id="connection-message"></span><button onclick="window.location.reload()">Reload</button></div>
-  <div class="page active" id="page-overview">
+  <header class="page-heading"><div><div class="eyebrow">MAINTENANCE, IN VIEW</div><h1 id="page-title">Overview</h1><p id="page-description">Today's activity, outstanding cases, and team performance.</p></div><div class="heading-actions"><time id="today-label" class="chicago-calendar" aria-label="Current Chicago date and time"><span class="calendar-date-tile" aria-hidden="true"><span id="chicago-month"></span><strong id="chicago-day"></strong></span><span class="calendar-date-copy"><strong id="chicago-date"></strong><span>Chicago time <span aria-hidden="true">·</span> <span id="chicago-time"></span></span></span></time><button class="badge-btn btn-outline" id="refresh-button" onclick="refresh(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></header>
+  <div class="workspace-meta"><div class="live-pill" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Connecting…</span></div></div>
+  <div id="connection-banner" class="connection-banner" role="alert" hidden><span id="connection-message"></span><button onclick="refresh(true)">Retry</button></div>
+  <div class="page active" id="page-overview"><div class="overview-toolbar"><span>Your operations, at a glance</span><button class="badge-btn btn-outline" onclick="openLayoutSettings()">Customize overview</button></div>
     <div class="overview-label"><span>Today at a glance</span><small>Reassignments & response average cover all time</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
@@ -200,7 +200,7 @@
         <button class="toggle-btn" data-vtype="reefer" onclick="setIssueSearchVtype('reefer')">Reefer</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <input id="issue-search-input" type="text" placeholder="e.g. Box temp out of range" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <input id="issue-search-input" aria-label="Search issue history" type="text" placeholder="e.g. Box temp out of range" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
         <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
       </div>
       <div id="issue-search-results"></div>
@@ -222,6 +222,7 @@
 <script defer src="{{ url_for('static', filename='js/details.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/reports.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/layout.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

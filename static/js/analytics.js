@@ -9,6 +9,7 @@ function toggleGroup(id) {
 // ── Trends ───────────────────────────────────────────────────────────────────
 var trendPeriod = 7;
 var trendCharts = {};
+var trendSnapshot = "";
 
 function setTrendPeriod(days, btn) {
   trendPeriod = days;
@@ -25,11 +26,13 @@ async function loadTrends() {
     if (!r.ok) return;
     var d = await r.json();
 
+    var snapshot = JSON.stringify([d, trendPeriod, isDark]);
+    if (snapshot === trendSnapshot) return;
+    trendSnapshot = snapshot;
     var fallback = document.getElementById("chart-fallback");
     fallback.hidden = typeof Chart !== "undefined";
     if (typeof Chart === "undefined") {
-      fallback.innerHTML =
-        '<p class="empty-state">Charts are unavailable. Daily figures are shown below.</p><div class="table-scroll"><table><thead><tr><th>Date</th><th>Total</th><th>Resolved</th><th>Missed</th><th>Avg response (s)</th></tr></thead><tbody>' +
+      updateHTML(fallback, '<p class="empty-state">Charts are unavailable. Daily figures are shown below.</p><div class="table-scroll"><table><thead><tr><th>Date</th><th>Total</th><th>Resolved</th><th>Missed</th><th>Avg response (s)</th></tr></thead><tbody>' +
         d.labels
           .map(function (label, i) {
             return (
@@ -47,7 +50,7 @@ async function loadTrends() {
             );
           })
           .join("") +
-        "</tbody></table></div>";
+        "</tbody></table></div>");
       return;
     }
     // Destroy existing charts
@@ -172,14 +175,14 @@ async function loadTrends() {
   } catch (e) {
     if (e.name === "AbortError") return;
     document.getElementById("chart-fallback").hidden = false;
-    document.getElementById("chart-fallback").innerHTML = errorContent(e);
+    updateHTML(document.getElementById("chart-fallback"), errorContent(e));
   }
 }
 
 // ── Comparison ───────────────────────────────────────────────────────────────
 async function loadComparison() {
   var el = document.getElementById("comparison-content");
-  el.innerHTML = '<div class="loading">Loading comparison...</div>';
+  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading comparison...</div>');
   try {
     var r = await apiFetch("/api/comparison");
     var d = await r.json();
@@ -219,8 +222,7 @@ async function loadComparison() {
         "</tr>"
       );
     }
-    el.innerHTML =
-      '<div class="card">' +
+    updateHTML(el, '<div class="card">' +
       '<table style="width:100%;border-collapse:collapse">' +
       '<thead><tr style="background:var(--surface2)">' +
       '<th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase">Metric</th>' +
@@ -254,10 +256,10 @@ async function loadComparison() {
         d.last_week.avg_resp,
         d.delta_resp,
       ) +
-      "</tbody></table></div>";
+      "</tbody></table></div>");
   } catch (e) {
     if (e.name === "AbortError") return;
-    el.innerHTML = errorContent(e);
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 
@@ -278,10 +280,10 @@ async function searchIssue() {
   var vtype = issueSearchVtype;
   var el = document.getElementById("issue-search-results");
   if (!q) {
-    el.innerHTML = "";
+    updateHTML(el, "");
     return;
   }
-  el.innerHTML = '<div class="loading">Searching...</div>';
+  updateHTML(el, '<div class="loading">Searching...</div>');
   try {
     var r = await apiFetch(
       "/api/issue_search?q=" +
@@ -290,17 +292,14 @@ async function searchIssue() {
     );
     var d = await r.json();
     if (!r.ok) {
-      el.innerHTML =
-        '<div class="empty-state">' + h(d.error || "Error") + "</div>";
+      updateHTML(el, '<div class="empty-state">' + h(d.error || "Error") + "</div>");
       return;
     }
     if (!d.results.length) {
-      el.innerHTML =
-        '<div class="empty-state">No units found for "' + h(q) + '".</div>';
+      updateHTML(el, '<div class="empty-state">No units found for "' + h(q) + '".</div>');
       return;
     }
-    el.innerHTML =
-      '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
+    updateHTML(el, '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
       d.total_matches +
       " matching case(s) across " +
       d.results.length +
@@ -336,17 +335,17 @@ async function searchIssue() {
           );
         })
         .join("") +
-      "</tbody></table></div></div>";
+      "</tbody></table></div></div>");
   } catch (e) {
     if (e.name === "AbortError") return;
-    el.innerHTML = '<div class="loading">Error: ' + h(e.message) + "</div>";
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 
 // ── Fleet Intelligence ────────────────────────────────────────────────────────
 async function loadFleetIntel() {
   var el = document.getElementById("fleet-intel-content");
-  el.innerHTML = '<div class="loading">Loading fleet intelligence...</div>';
+  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading fleet intelligence...</div>');
   try {
     var r = await apiFetch("/api/fleet_intelligence");
     var d = await r.json();
@@ -378,8 +377,7 @@ async function loadFleetIntel() {
         : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>') +
       "</tbody></table></div></div>";
 
-    el.innerHTML =
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">' +
+    updateHTML(el, '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">' +
       '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">' +
       d.total_reports +
       "</div></div>" +
@@ -389,11 +387,11 @@ async function loadFleetIntel() {
       "</div>" +
       '<div id="intel-units-wrap"></div>' +
       '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>' +
-      driversHtml;
+      driversHtml);
     renderIntelUnits(intelFilter.vtype, intelFilter.search);
   } catch (e) {
     if (e.name === "AbortError") return;
-    el.innerHTML = '<div class="loading">Error: ' + h(e.message) + "</div>";
+    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 
@@ -460,15 +458,14 @@ function renderIntelUnitsContent(vtype, search) {
       );
     })
     .join("");
-  wrap.innerHTML =
-    '<div class="section-title" style="margin-bottom:10px">Most reported units · top 20</div>' +
+  updateHTML(wrap, '<div class="section-title" style="margin-bottom:10px">Most reported units · top 20</div>' +
     '<div class="toggle-tabs" style="margin-bottom:10px">' +
     vbtn("all", "All") +
     vbtn("truck", "Truck") +
     vbtn("trailer", "Trailer") +
     vbtn("reefer", "Reefer") +
     "</div>" +
-    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" placeholder="Search unit or issue..." value="' +
+    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" aria-label="Search intelligence units or issues" placeholder="Search unit or issue..." value="' +
     attr(search || "") +
     '" oninput="renderIntelUnits(\'' +
     vtype +
@@ -478,5 +475,5 @@ function renderIntelUnitsContent(vtype, search) {
     (filtered.length
       ? rows
       : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No units match this filter</td></tr>') +
-    "</tbody></table></div></div>";
+    "</tbody></table></div></div>");
 }

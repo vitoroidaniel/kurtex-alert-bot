@@ -19,135 +19,19 @@ async function viewFullReport(caseIdOrEl) {
     document.getElementById("report-view-title").textContent =
       "Report — " + (c.driver || "—") + " / " + (c.group || "—");
 
-    // case data loaded
-
-    // Parse the notes field which contains the bot report text
-    var notes = c.full_notes || "";
-    var isRealReport = notes && notes !== "case reported";
-
-    // Build report rows from case data
-    var vtype = c.vehicle_type || "";
-    var unitLabel =
-      vtype === "truck"
-        ? "Truck"
-        : vtype === "trailer"
-          ? "Trailer"
-          : vtype === "reefer"
-            ? "Reefer"
-            : "Unit";
-
-    function row(label, val) {
-      if (!val || val === "—") return "";
-      return (
-        '<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)">' +
-        '<div style="min-width:160px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0">' +
-        h(label) +
-        "</div>" +
-        '<div style="font-size:14px;font-weight:500;color:var(--text)">' +
-        h(val) +
-        "</div>" +
-        "</div>"
-      );
+    function field(label, value) {
+      return '<div class="report-field"><dt>' + h(label) + '</dt><dd>' + h(value || 'Not provided') + '</dd></div>';
     }
-
-    // Priority icon
-    var priorityIcon =
-      c.priority === "critical"
-        ? "🔴"
-        : c.priority === "high"
-          ? "🟠"
-          : c.priority === "medium"
-            ? "🟡"
-            : "🟢";
-    var priorityLabel = c.priority
-      ? priorityIcon +
-        " " +
-        c.priority.charAt(0).toUpperCase() +
-        c.priority.slice(1)
-      : "";
-
-    // Priority
-    var pIcons = { critical: "🔴", high: "🟠", medium: "🟡", low: "🟢" };
-    var pIcon = pIcons[c.priority] || "🟢";
-    var pText = c.priority
-      ? c.priority.charAt(0).toUpperCase() + c.priority.slice(1)
-      : "Low";
-
-    // Unit label
-    var vtypeLabel =
-      vtype === "truck"
-        ? "Truck"
-        : vtype === "trailer"
-          ? "Trailer"
-          : vtype === "reefer"
-            ? "Reefer"
-            : "";
-
-    // Load section
-    var loadType = c.load_type || "";
-    var loadIsEmpty = loadType.toLowerCase() === "empty";
-
-    function line(label, val) {
-      if (!val || val === "—") return "";
-      return (
-        '<div style="font-size:13px;margin-bottom:6px"><b>' +
-        h(label) +
-        ":</b> " +
-        h(val) +
-        "</div>"
-      );
+    function section(title, content) {
+      return '<section class="report-section"><h3>' + h(title) + '</h3><dl class="report-fields">' + content + '</dl></section>';
     }
+    var report = '<div class="report-summary">' + statusBadge(c.status) + '<span>Priority: <b>' + h(c.priority || 'Not specified') + '</b></span><span>' + h(c.vehicle_type || 'Vehicle') + ' ' + h(c.unit_number || '') + '</span></div>';
+    report += section('Issue & responsibility', field('Issue', c.issue_text || c.full_description) + field('Reported by', c.report_driver || c.driver) + field('Assigned to', c.agent) + field('Group', c.group));
+    report += section('Load & location', field('Load type', c.load_type) + field('Current location', c.location) + field('Pickup location / time', c.pickup) + field('Delivery location / time', c.delivery));
+    if (c.vehicle_type === 'reefer') report += section('Temperature', field('Setpoint', c.setpoint) + field('Current temperature', c.current_temp) + field('Recorder', c.temp_recorder));
+    report += section('Report notes', field('Comments', c.comments || (c.full_notes !== 'case reported' ? c.full_notes : '') ));
+    document.getElementById('report-view-body').innerHTML = report;
 
-    // Build report exactly like Telegram bot
-    var s =
-      '<div style="font-size:15px;font-weight:700;margin-bottom:2px">' +
-      pIcon +
-      " Case Report";
-    if (vtypeLabel) s += " — " + vtypeLabel;
-    s += "</div>";
-    s +=
-      '<div style="font-size:13px;margin-bottom:16px">Priority: <b>' +
-      h(pText) +
-      "</b></div>";
-
-    s += '<div style="margin-bottom:16px">';
-    if (vtypeLabel && c.unit_number) s += line(vtypeLabel, c.unit_number);
-    s += line("Reported by", c.report_driver || c.driver);
-    s += line("Issue", c.issue_text || c.full_description);
-    s += "</div>";
-
-    if (loadType) {
-      s += '<div style="margin-bottom:16px">';
-      s += line("JBS/Broker Load", loadType);
-      if (!loadIsEmpty) {
-        s += line("Pick up Location/Time", c.pickup);
-        s += line("Delivery Location/Time", c.delivery);
-      }
-      s += line("Current Location", c.location);
-      s += "</div>";
-    }
-
-    if (vtype === "reefer") {
-      s += '<div style="margin-bottom:16px">';
-      s += line("Setpoint", c.setpoint);
-      s += line("Current temp", c.current_temp);
-      s += line("Temp recorder", c.temp_recorder);
-      s += "</div>";
-    }
-
-    if (c.comments) {
-      s +=
-        '<div style="margin-bottom:16px">' +
-        line("Comments", c.comments) +
-        "</div>";
-    }
-
-    s += line("Handled by", c.agent);
-
-    document.getElementById("report-view-body").innerHTML =
-      '<div style="background:var(--surface2);border-radius:12px;padding:18px 20px;font-family:inherit;line-height:1">' +
-      s +
-      "</div>";
   } catch (e) {
     if (e.name === "AbortError") return;
     document.getElementById("report-view-body").innerHTML =
@@ -185,25 +69,7 @@ var agentModalState = {
 };
 
 function agentCaseRow(c) {
-  var cid = c.full_id || "";
-  return (
-    '<tr style="border-bottom:1px solid var(--border);cursor:pointer" data-id="' +
-    attr(cid) +
-    '" onclick="closeAgentModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)">' +
-    '<td style="padding:8px 10px;font-weight:500">' +
-    h(c.driver || "—") +
-    "</td>" +
-    '<td style="padding:8px 10px;color:var(--muted)">' +
-    h(c.group || "—") +
-    "</td>" +
-    '<td style="padding:8px 10px">' +
-    statusBadge(c.status) +
-    "</td>" +
-    '<td style="padding:8px 10px;color:var(--muted);font-size:11px">' +
-    h(c.opened || "—") +
-    "</td>" +
-    "</tr>"
-  );
+  return '<button class="agent-case-item" data-id="' + attr(c.full_id || '') + '" onclick="openCase(this.dataset.id)"><div class="case-item-heading"><strong>' + h(c.driver || 'Unknown reporter') + '</strong>' + statusBadge(c.status) + '</div><p>' + h(c.description || 'No description provided') + '</p><div class="case-item-meta"><span>' + h(c.group || 'No group') + '</span><span>' + h(c.opened || 'No date') + '</span><span>View case →</span></div></button>';
 }
 
 async function openAgentModal(nameOrEl, username, agentId) {
@@ -289,7 +155,7 @@ async function loadAgentProfileData(resetHeader) {
       );
     }
     body.innerHTML =
-      '<div class="mini-stat-grid" style="margin-bottom:16px">' +
+      '<p class="profile-context">All-time performance · Select a period to review case history.</p><div class="mini-stat-grid" style="margin-bottom:16px">' +
       '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' +
       a.total +
       '</div><div class="agent-stat-label">Total (all-time)</div></div>' +
@@ -322,15 +188,7 @@ async function loadAgentProfileData(resetHeader) {
       " missed</div>" +
       "</div>" +
       (s.rows
-        ? '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:400px">' +
-          '<thead><tr style="background:var(--surface2);border-bottom:1px solid var(--border)">' +
-          '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reported By</th>' +
-          '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>' +
-          '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Status</th>' +
-          '<th style="padding:8px 10px;text-align:left;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Date</th>' +
-          '</tr></thead><tbody id="agent-case-rows">' +
-          s.rows +
-          "</tbody></table></div>" +
+        ? '<div class="agent-case-list" id="agent-case-rows">' + s.rows + '</div>' +
           (a.has_more
             ? '<div style="text-align:center;margin-top:12px"><button class="btn" style="background:var(--surface2);color:var(--text)" onclick="loadAgentModalMore()"><i class="ph ph-arrow-down"></i> Load More</button></div>'
             : "")
@@ -418,7 +276,7 @@ async function openUnitModal(unitNumber, vtype) {
           .map(function (c) {
             var cid = c.full_id || "";
             return (
-              '<tr style="cursor:pointer" onclick="closeUnitModal();var id=this.dataset.id;setTimeout(function(){openCase(id);},200)" data-id="' +
+              '<tr style="cursor:pointer" onclick="openCase(this.dataset.id)" data-id="' +
               attr(cid) +
               '">' +
               "<td><b>" +

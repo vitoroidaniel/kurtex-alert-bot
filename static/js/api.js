@@ -115,3 +115,45 @@ function preserveInput(id, render) {
     next.setSelectionRange(start, end);
   }
 }
+
+// Patch existing nodes instead of replacing the view. Focus, selection and nested
+// scroll positions survive; unchanged nodes (including search controls) stay put.
+function updateHTML(target, html) {
+  if (!target) return;
+  var template = document.createElement('template');
+  template.innerHTML = html;
+  function key(node) {
+    return node.nodeType === 1 ? node.id || node.getAttribute('data-id') || node.getAttribute('data-agent-id') : null;
+  }
+  function patch(parent, desired) {
+    var cursor = parent.firstChild;
+    Array.from(desired.childNodes).forEach(function (next) {
+      var node = cursor, id = key(next);
+      if (id && key(node || {}) !== id) {
+        node = Array.from(parent.childNodes).find(function (item) { return key(item) === id; });
+        if (node) parent.insertBefore(node, cursor);
+      }
+      if (!node || node.nodeType !== next.nodeType || node.nodeName !== next.nodeName || (id && key(node) !== id)) {
+        parent.insertBefore(next.cloneNode(true), cursor);
+        return;
+      }
+      cursor = node.nextSibling;
+      if (node.nodeType === 3) {
+        if (node.nodeValue !== next.nodeValue) node.nodeValue = next.nodeValue;
+      } else if (node.nodeType === 1) {
+        // These slots are rendered independently. Keep their live children.
+        if (['fleet-status-wrap','intel-units-wrap'].includes(node.id) && !next.childNodes.length) return;
+        Array.from(node.attributes).forEach(function (attr) {
+          if (!next.hasAttribute(attr.name)) node.removeAttribute(attr.name);
+        });
+        Array.from(next.attributes).forEach(function (attr) {
+          if (node.getAttribute(attr.name) !== attr.value) node.setAttribute(attr.name, attr.value);
+        });
+        if (!node.matches('input,textarea,select')) patch(node, next);
+      }
+    });
+    while (cursor) { var following = cursor.nextSibling; parent.removeChild(cursor); cursor = following; }
+  }
+  patch(target, template.content);
+  if (typeof applyOverviewLayout === 'function' && target.id === 'stat-grid') applyOverviewLayout();
+}

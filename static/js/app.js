@@ -1,23 +1,17 @@
-// Poll the visible page; pause while hidden, typing, or viewing a dialog.
+// Quietly poll the visible page; keep controls and open dialogs in place.
 var refreshing = false;
+var refreshQueued = false;
 async function refresh(force) {
-  if (refreshing && !force) return;
-  if (
-    !force &&
-    (document.hidden ||
-      anyModalOpen() ||
-      activeRequests.size ||
-      document.activeElement.matches("input,select,textarea"))
-  )
-    return;
+  if (refreshing) { if (force) refreshQueued = true; return; }
+  if (!force && (document.hidden || activeRequests.size)) return;
   refreshing = true;
   var button = document.getElementById("refresh-button");
   button.disabled = true;
   try {
     var tasks = [loadStats()];
     if (currentPage === "overview") tasks.push(loadRecent());
-    else if (currentPage === "cases") tasks.push(loadCases(false, !force));
-    else if (currentPage === "missed") tasks.push(loadMissed(false, !force));
+    else if (currentPage === "cases") tasks.push(loadCases(false, true));
+    else if (currentPage === "missed") tasks.push(loadMissed(false, true));
     else if (currentPage === "fleet") tasks.push(loadFleet());
     else if (currentPage === "trends") tasks.push(loadTrends());
     else if (currentPage === "comparison") tasks.push(loadComparison());
@@ -28,6 +22,7 @@ async function refresh(force) {
   } finally {
     refreshing = false;
     button.disabled = false;
+    if (refreshQueued) { refreshQueued = false; refresh(true); }
   }
 }
 async function loadRecent() {
@@ -35,10 +30,10 @@ async function loadRecent() {
   try {
     var r = await apiFetch("/api/cases?filter=today&limit=10", "recent");
     var d = await r.json();
-    el.innerHTML = caseTable(d.cases);
+    updateHTML(el, caseTable(d.cases));
   } catch (e) {
     if (e.name !== "AbortError" && !el.querySelector("table"))
-      el.innerHTML = errorContent(e);
+      if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
 }
 function autoRefresh() {
@@ -85,15 +80,24 @@ document.addEventListener("keydown", function (e) {
     }
   }
 });
-document.getElementById("today-label").textContent =
-  new Date().toLocaleDateString("en-US", {
-    timeZone: "America/Chicago",
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  }) + " · Chicago time";
+function updateChicagoClock() {
+  var now = new Date();
+  var options = {timeZone: "America/Chicago"};
+  function setClockText(id, value) {
+    var el = document.getElementById(id);
+    if (el.textContent !== value) el.textContent = value;
+  }
+  setClockText("chicago-month", now.toLocaleDateString("en-US", {...options, month:"short"}));
+  setClockText("chicago-day", now.toLocaleDateString("en-US", {...options, day:"numeric"}));
+  setClockText("chicago-date", now.toLocaleDateString("en-US", {...options, weekday:"long", month:"short", day:"numeric"}));
+  setClockText("chicago-time", now.toLocaleTimeString("en-US", {...options, hour:"numeric", minute:"2-digit", timeZoneName:"short"}));
+  document.getElementById("today-label").dateTime = now.toISOString();
+}
+
+updateChicagoClock();
+setInterval(updateChicagoClock, 1000);
 showPage(preferences.get("kurtex-page") || "overview");
-setInterval(autoRefresh, 30000);
+setInterval(autoRefresh, 15000);
 document.addEventListener("visibilitychange", function () {
   if (!document.hidden) autoRefresh();
 });

@@ -145,9 +145,7 @@ function showPage(page) {
           " and case history.";
   currentPage = page;
   preferences.set("kurtex-page", page);
-  setTimeout(function () {
-    refresh(true);
-  }, 50);
+  refresh(true);
 }
 
 function setCaseFilter(f, btn) {
