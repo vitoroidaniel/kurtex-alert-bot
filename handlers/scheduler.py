@@ -5,13 +5,12 @@ handlers/scheduler.py
 """
 
 import logging
-from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo
+from datetime import timedelta
 
 from telegram.ext import Application
 
+from app_time import CENTRAL_TZ, CENTRAL_TIMEZONE_LABEL, parse_timestamp, utc_now
 from config import config
-from shifts import MAIN_ADMIN_ID, SUPER_ADMINS
 from storage.case_store import mark_missed
 from handlers.admin_handler import send_daily_report
 
@@ -26,11 +25,10 @@ logger = logging.getLogger(__name__)
 ESCALATION_FIRST_MINUTES  = 10
 ESCALATION_REPEAT_MINUTES = 10
 ESCALATION_MAX_ROUNDS     = 5
-ET = ZoneInfo("America/Chicago")
 
 
 async def job_daily_report(ctx) -> None:
-    dest = config.REPORTS_GROUP_ID or next(iter(MAIN_ADMIN_ID), None)
+    dest = config.REPORTS_GROUP_ID
     if not dest:
         logger.warning("No REPORTS_GROUP_ID — skipping daily report.")
         return
@@ -44,7 +42,7 @@ async def job_escalation_check(ctx) -> None:
     if not alert_handler:
         return
 
-    now    = datetime.now(timezone.utc)
+    now    = utc_now()
     first  = timedelta(minutes=ESCALATION_FIRST_MINUTES)
     repeat = timedelta(minutes=ESCALATION_REPEAT_MINUTES)
 
@@ -55,10 +53,9 @@ async def job_escalation_check(ctx) -> None:
         created_at = record.get("created_at")
         if not created_at:
             continue
-        if isinstance(created_at, str):
-            created_at = datetime.fromisoformat(created_at)
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = parse_timestamp(created_at)
+        if not created_at:
+            continue
 
         age = now - created_at
         if age < first:
@@ -66,10 +63,9 @@ async def job_escalation_check(ctx) -> None:
 
         last_esc = record.get("last_escalated_at")
         if last_esc:
-            if isinstance(last_esc, str):
-                last_esc = datetime.fromisoformat(last_esc)
-            if last_esc.tzinfo is None:
-                last_esc = last_esc.replace(tzinfo=timezone.utc)
+            last_esc = parse_timestamp(last_esc)
+            if not last_esc:
+                continue
             if (now - last_esc) < repeat:
                 continue
 
@@ -92,7 +88,11 @@ async def job_escalation_check(ctx) -> None:
             "⚠️ *Please respond!*"
         )
 
-        recipients = [{"id": aid} for aid in SUPER_ADMINS] if count >= ESCALATION_MAX_ROUNDS - 1 else get_all_admins()
+        if count >= ESCALATION_MAX_ROUNDS - 1:
+            from storage.user_store import get_all_user_dicts
+            recipients = [u for u in get_all_user_dicts() if u.get("role") == "super_admin"]
+        else:
+            recipients = get_all_admins()
         for admin in recipients:
             try:
                 sent = await ctx.bot.send_message(
@@ -115,10 +115,10 @@ async def job_escalation_check(ctx) -> None:
 def register_jobs(app: Application) -> None:
     jq = app.job_queue
 
-    report_time = datetime.now(ET).replace(hour=6, minute=50, second=0, microsecond=0).timetz()
+    report_time = utc_now().astimezone(CENTRAL_TZ).replace(hour=6, minute=50, second=0, microsecond=0).timetz()
     jq.run_daily(job_daily_report, time=report_time, name="daily_report")
     # Check every 30s so reminders land within ~30s of each 10-minute mark,
     # instead of drifting up to 5 minutes late.
     jq.run_repeating(job_escalation_check, interval=30, first=60, name="escalation_check")
 
-    logger.info("Jobs registered: daily_report @ 06:50 ET, escalation check every 30s")
+    logger.info(f"Jobs registered: daily_report @ 06:50 {CENTRAL_TIMEZONE_LABEL}, escalation check every 30s")

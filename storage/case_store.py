@@ -13,9 +13,11 @@ import json
 import logging
 import os
 import threading
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+from app_time import chicago_date_str, parse_timestamp, today_str, utc_now, week_start_str
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,7 @@ def _save(path: Path, data: list[dict] | dict) -> None:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_now().isoformat()
 
 
 # ── Cases — write ─────────────────────────────────────────────────────────────
@@ -123,9 +125,11 @@ def assign_case(
             if previous_agent_id is not None and not allow_reassign:
                 return None
             assigned_at   = now_iso()
+            opened_at_dt  = parse_timestamp(case.get("opened_at"))
+            assigned_at_dt = parse_timestamp(assigned_at)
             response_secs = int(
-                (datetime.fromisoformat(assigned_at) - datetime.fromisoformat(case["opened_at"])).total_seconds()
-            )
+                (assigned_at_dt - opened_at_dt).total_seconds()
+            ) if opened_at_dt and assigned_at_dt else None
             case.update({
                 "assigned_at":    assigned_at,
                 "agent_id":       agent_id,
@@ -162,9 +166,11 @@ def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
             closed_at       = now_iso()
             resolution_secs = None
             if case.get("assigned_at"):
+                closed_at_dt = parse_timestamp(closed_at)
+                assigned_at_dt = parse_timestamp(case.get("assigned_at"))
                 resolution_secs = int(
-                    (datetime.fromisoformat(closed_at) - datetime.fromisoformat(case["assigned_at"])).total_seconds()
-                )
+                    (closed_at_dt - assigned_at_dt).total_seconds()
+                ) if closed_at_dt and assigned_at_dt else None
             case.update({
                 "closed_at":       closed_at,
                 "status":          "done",
@@ -208,11 +214,11 @@ def get_case(case_id: str) -> Optional[dict]:
 
 
 def get_cases_for_agent_today(agent_id: int) -> list[dict]:
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = today_str()
     return [
         c for c in _load(CASES_FILE)
         if c.get("agent_id") == agent_id
-        and (c.get("assigned_at") or "").startswith(today)
+        and chicago_date_str(c.get("assigned_at")) == today
     ]
 
 
@@ -230,14 +236,13 @@ def get_active_case_for_agent(agent_id: int) -> Optional[dict]:
 
 
 def get_cases_today() -> list[dict]:
-    today = datetime.now(timezone.utc).date().isoformat()
-    return [c for c in _load(CASES_FILE) if c.get("opened_at", "").startswith(today)]
+    today = today_str()
+    return [c for c in _load(CASES_FILE) if chicago_date_str(c.get("opened_at")) == today]
 
 
 def get_cases_this_week() -> list[dict]:
-    now   = datetime.now(timezone.utc)
-    start = (now - timedelta(days=now.weekday())).date().isoformat()
-    return [c for c in _load(CASES_FILE) if c.get("opened_at", "") >= start]
+    start = week_start_str()
+    return [c for c in _load(CASES_FILE) if chicago_date_str(c.get("opened_at")) >= start]
 
 
 def get_all_cases() -> list[dict]:

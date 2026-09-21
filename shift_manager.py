@@ -5,7 +5,7 @@ Now reads users dynamically from user_store instead of hardcoded shifts.py.
 
 from datetime import datetime, time
 import zoneinfo
-from shifts import SHIFTS, TIMEZONE, MAIN_ADMIN_ID
+from shifts import SHIFTS, TIMEZONE
 
 
 def _get_all_alert_users() -> list[dict]:
@@ -19,7 +19,7 @@ def get_on_shift_admins() -> list[dict]:
     try:
         tz = zoneinfo.ZoneInfo(TIMEZONE)
     except Exception:
-        tz = zoneinfo.ZoneInfo("America/New_York")
+        tz = zoneinfo.ZoneInfo("America/Chicago")
 
     now      = datetime.now(tz)
     weekday  = now.weekday()
@@ -55,7 +55,7 @@ def get_current_shift_name() -> str:
     try:
         tz = zoneinfo.ZoneInfo(TIMEZONE)
     except Exception:
-        tz = zoneinfo.ZoneInfo("America/New_York")
+        tz = zoneinfo.ZoneInfo("America/Chicago")
 
     now      = datetime.now(tz)
     weekday  = now.weekday()

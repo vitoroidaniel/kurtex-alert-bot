@@ -20,7 +20,7 @@ from telegram.ext import (
 )
 
 from config import config
-from shifts import ADMINS, SUPER_ADMINS
+from app_time import CENTRAL_TIMEZONE_LABEL, chicago_timestamp
 from handlers.alert_handler import AlertHandler, TRIGGER_WORDS
 from handlers.report_handler import get_report_conversation
 from handlers.agent_handler import (
@@ -39,8 +39,7 @@ from handlers.admin_handler import (
 from handlers.scheduler import register_jobs
 from dashboard import start_dashboard_thread
 from storage.user_store import (
-    is_authorized, bootstrap_developer, migrate_from_shifts,
-    has_role,
+    is_authorized, has_role,
 )
 from storage.case_store import async_get_untouched_unassigned_cases
 
@@ -157,17 +156,6 @@ async def post_init(application: Application) -> None:
     # A watchdog created from post_init runs before Application.start() and can
     # interfere with startup/callback diagnostics.
 
-    # ── Migrate existing hardcoded admins on first boot ──
-    migrate_from_shifts(ADMINS, SUPER_ADMINS)
-
-    # ── Bootstrap developer from env var ──
-    dev_id_str = os.getenv("DEVELOPER_ID", "").strip()
-    if dev_id_str:
-        try:
-            bootstrap_developer(int(dev_id_str), os.getenv("DEVELOPER_NAME", "Developer"))
-        except ValueError:
-            logger.warning(f"DEVELOPER_ID is not a valid integer: {dev_id_str!r}")
-
     # Reload unassigned alerts from disk so admins can still accept after restart
     alert_h = application.bot_data.get("alert_handler")
     if alert_h:
@@ -278,13 +266,14 @@ async def cmd_unassigned(update: Update, ctx):
 
     for case in shown:
         case_id = case.get("id", "")
-        opened = (case.get("opened_at") or "").replace("T", " ")[:16]
+        opened_dt = chicago_timestamp(case.get("opened_at"))
+        opened = opened_dt.strftime("%Y-%m-%d %H:%M") if opened_dt else ""
         text = (
             "🔔 Unassigned Case\n\n"
             f"Group: {case.get('group_name') or '—'}\n"
             f"Driver: {case.get('driver_name') or '—'}\n"
             f"Issue: {(case.get('description') or '—')[:300]}\n"
-            f"Opened: {opened or '—'} UTC"
+            f"Opened: {opened or '—'} {CENTRAL_TIMEZONE_LABEL}"
         )
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Assign", callback_data=f"assign|{case_id}")

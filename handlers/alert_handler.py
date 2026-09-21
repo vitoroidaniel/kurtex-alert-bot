@@ -2,14 +2,14 @@
 handlers/alert_handler.py
 - Alerts persisted to /data/active_alerts.json (Railway Volume)
 - asyncio.Lock per alert prevents double-assignment race condition
-- Callback auth: only ADMINS can action buttons
+- Callback auth: only users registered in the Volume can action buttons
 """
 
 import asyncio
 import logging
 import random
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -23,6 +23,7 @@ from storage.case_store import (
     set_report_msg_id,
 )
 from storage.user_store import is_authorized
+from app_time import parse_timestamp, utc_now
 
 
 def _esc(t: str) -> str:
@@ -117,7 +118,7 @@ class AlertHandler:
                 [case.get("agent_id"), case.get("agent_name")]
                 if case.get("agent_id") is not None else None
             ),
-            "created_at": case.get("opened_at") or datetime.now(timezone.utc).isoformat(),
+            "created_at": case.get("opened_at") or utc_now().isoformat(),
             "last_escalated_at": None,
             "escalation_count": 0,
             "driver_id": 0,
@@ -180,15 +181,14 @@ class AlertHandler:
             driver_id = msg.sender_chat.id
         else:
             driver_id = update.effective_user.id
-        now = datetime.now(timezone.utc)
+        now = utc_now()
 
         cooldown_until = self._driver_cooldown_until.get(driver_id)
         if cooldown_until:
-            if isinstance(cooldown_until, str):
-                cooldown_until = datetime.fromisoformat(cooldown_until)
-            if cooldown_until.tzinfo is None:
-                cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
-            if now < cooldown_until:
+            cooldown_until = parse_timestamp(cooldown_until)
+            if not cooldown_until:
+                self._driver_cooldown_until.pop(driver_id, None)
+            elif now < cooldown_until:
                 # Driver is spamming #repairs/#maintenance within the cooldown
                 # window. Don't open a duplicate case for it — but if their
                 # last case is still sitting unassigned, that's a signal
@@ -282,7 +282,7 @@ class AlertHandler:
         if not record or record.get("taken_by") is not None:
             return  # already assigned (or already gone) — nothing to nudge about
 
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         last_nudge = self._last_nudge_at.get(alert_id)
         if last_nudge and (now - last_nudge).total_seconds() < UNASSIGNED_NUDGE_COOLDOWN_SECONDS:
             return
@@ -374,20 +374,16 @@ class AlertHandler:
                 logger.warning(f"Could not notify previous agent for {alert_id}: {e}")
 
         from config import config as cfg
-        from shifts import MAIN_ADMIN_ID
-        dest_id = cfg.REPORTS_GROUP_ID or next(iter(MAIN_ADMIN_ID), None)
+        dest_id = cfg.REPORTS_GROUP_ID
         if not dest_id:
             return
 
         created_at = record.get("created_at")
         try:
-            if isinstance(created_at, str):
-                created_at = datetime.fromisoformat(created_at)
-            if created_at and created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
+            created_at = parse_timestamp(created_at)
         except (TypeError, ValueError):
             created_at = None
-        secs = int((datetime.now(timezone.utc) - created_at).total_seconds()) if created_at else 0
+        secs = int((utc_now() - created_at).total_seconds()) if created_at else 0
         action = "Reassigned" if prev_agent_id else "Assigned"
         report_text = (
             f"✅ *Case {action}*\n\n"

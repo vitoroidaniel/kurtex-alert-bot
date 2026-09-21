@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kurtex Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/icons.css') }}">
+<script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+
+
+<div class="mobile-header">
+  <div class="mobile-logo"><img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:32px;height:32px;border-radius:50%;object-fit:cover"> Kurtex</div>
+  <div class="hamburger" role="button" tabindex="0" aria-label="Toggle navigation" onclick="toggleSidebar()"><i class="ph ph-list"></i></div>
+</div>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
+    <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
+  </div>
+  <nav aria-label="Main navigation"><div class="nav-section-label">Workspace</div>
+    <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-squares-four"></i> Overview</div>
+    <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
+    <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
+    <div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
+
+    <!-- Analytics group -->
+    <div class="nav-group">
+      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')">
+        <span><i class="ph ph-chart-bar"></i> Analytics</span>
+        <i class="ph ph-caret-down nav-caret open" id="caret-group-analytics"></i>
+      </div>
+      <div class="nav-group-items open" id="group-analytics">
+        <div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-trend-up"></i> Trends</div>
+        <div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-arrows-left-right"></i> Comparison</div>
+      </div>
+    </div>
+
+    <!-- Fleet group -->
+    <div class="nav-group">
+      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')">
+        <span><i class="ph ph-truck"></i> Fleet</span>
+        <i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i>
+      </div>
+      <div class="nav-group-items open" id="group-fleet">
+        <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
+        <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Intelligence</div>
+      </div>
+    </div>
+
+    <div class="nav-item" data-page="my_profile" role="button" tabindex="0" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
+    {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-chip">
+      {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
+      {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
+      <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
+    </div>
+    <div class="sidebar-actions">
+      <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light</span></button>
+      <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Sign out</button>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div class="breadcrumb">KURTEX <span>/</span> Operations workspace</div>
+    <div class="topbar-right">
+      <button class="badge-btn btn-outline" onclick="openReport()"><i class="ph ph-file-text"></i> <span>Report</span></button>
+      <button class="badge-btn btn-ghost" onclick="window.print()"><i class="ph ph-printer"></i> <span>Print</span></button>
+      <a class="badge-btn btn-primary" href="/api/export"><i class="ph ph-download-simple"></i> <span>Export</span></a>
+      
+    </div>
+  </div>
+
+  <header class="page-heading"><div><div class="eyebrow">MAINTENANCE, IN VIEW</div><h1 id="page-title">Overview</h1><p id="page-description">Today's activity, outstanding cases, and team performance.</p></div><button class="badge-btn btn-outline" id="refresh-button" onclick="refresh(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></header>
+  <div class="workspace-meta"><span id="today-label"></span><div class="live-pill" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Connecting…</span></div></div>
+  <div id="connection-banner" class="connection-banner" role="alert" hidden><span id="connection-message"></span><button onclick="window.location.reload()">Reload</button></div>
+  <div class="page active" id="page-overview">
+    <div class="overview-label"><span>Today at a glance</span><small>Reassignments & response average cover all time</small></div>
+    <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
+    <div class="two-col">
+      <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top agents <span class="card-meta">Today</span></div><div id="lb-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Problem units <span class="card-meta">All time</span></div><div id="units-overview"></div></div>
+    </div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Recent cases <small>Latest 10 from today</small></div><button class="text-button" onclick="showPage('cases')">View all cases →</button></div>
+      <div class="table-wrap"><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-cases">
+    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search cases" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">All Cases</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="filter-tabs">
+            <button class="tab-btn active" onclick="setCaseFilter('today',this)">Today</button>
+            <button class="tab-btn" onclick="setCaseFilter('week',this)">This Week</button>
+            <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
+            <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
+          </div>
+          <select aria-label="Case status" id="status-filter" onchange="loadCases()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
+            <option value="">All Statuses</option>
+            <option value="open">🔵 Open</option>
+            <option value="assigned">🟡 Assigned</option>
+            <option value="reported">🟣 Reported</option>
+            <option value="done">🟢 Done</option>
+            <option value="missed">🔴 Missed</option>
+          </select>
+          <input type="date" aria-label="Case date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none" onchange="setCaseDateFilter(this.value)">
+          <button class="tab-btn" id="cases-date-clear" onclick="clearDateFilter()" style="display:none">✕</button>
+        </div>
+      </div>
+      <div class="table-wrap"><div class="table-scroll" id="cases-table"><div class="loading">Loading...</div></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-missed">
+    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search missed cases" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
+    <div class="section">
+      <div class="section-header"><div class="section-title">Missed Cases</div></div>
+      <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-leaderboard">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="ph ph-trophy"></i>Agent Leaderboard</div>
+        <div class="toggle-tabs">
+          <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
+          <button class="toggle-btn" onclick="setLbPeriod('week',this)">Week</button>
+          <button class="toggle-btn" onclick="setLbPeriod('month',this)">Month</button>
+        </div>
+        <div id="leaderboard-full"></div>
+      </div>
+      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Problem units <span class="card-meta">All time</span></div><div id="units-lb"></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-analytics">
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title"><i class="ph ph-chart-bar"></i>Period Summary</div>
+        <div class="toggle-tabs">
+          <button class="toggle-btn active" onclick="setAnalyticsPeriod('week',this)">Week</button>
+          <button class="toggle-btn" onclick="setAnalyticsPeriod('month',this)">Month</button>
+        </div>
+        <div class="stats-list" id="analytics-stats"></div>
+      </div>
+      <div class="card"><div class="card-title"><i class="ph ph-hash"></i>Top Issue Keywords</div><div id="word-cloud"></div></div>
+    </div>
+  </div>
+
+  <div class="page" id="page-fleet">
+    <div id="fleet-content"><div class="loading">Loading fleet stats...</div></div>
+  </div>
+
+  <div class="page" id="page-my_profile">
+    <div id="my-profile-content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Trends -->
+  <div class="page" id="page-trends"><div id="chart-fallback" class="card" hidden></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="toggle-tabs" style="margin-bottom:0">
+        <button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7 Days</button>
+        <button class="toggle-btn" onclick="setTrendPeriod(30,this)">30 Days</button>
+        <button class="toggle-btn" onclick="setTrendPeriod(90,this)">90 Days</button>
+      </div>
+    </div>
+    <div class="two-col" style="margin-bottom:16px">
+      <div class="card"><div class="card-title"><i class="ph ph-chart-line"></i> Cases Over Time</div><canvas id="trend-cases-chart" height="180"></canvas></div>
+      <div class="card"><div class="card-title"><i class="ph ph-timer"></i> Avg Response Time</div><canvas id="trend-resp-chart" height="180"></canvas></div>
+    </div>
+    <div class="card"><div class="card-title"><i class="ph ph-chart-bar"></i> Daily Breakdown</div><canvas id="trend-bar-chart" height="120"></canvas></div>
+  </div>
+
+  <!-- Comparison -->
+  <div class="page" id="page-comparison">
+    <div id="comparison-content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Fleet Intelligence -->
+  <div class="page" id="page-fleet_intel">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><i class="ph ph-magnifying-glass"></i> Search by Issue</div>
+      <div class="toggle-tabs" style="margin-bottom:10px" id="issue-search-vtype-tabs">
+        <button class="toggle-btn active" data-vtype="" onclick="setIssueSearchVtype('')">All</button>
+        <button class="toggle-btn" data-vtype="truck" onclick="setIssueSearchVtype('truck')">Truck</button>
+        <button class="toggle-btn" data-vtype="trailer" onclick="setIssueSearchVtype('trailer')">Trailer</button>
+        <button class="toggle-btn" data-vtype="reefer" onclick="setIssueSearchVtype('reefer')">Reefer</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <input id="issue-search-input" type="text" placeholder="e.g. Box temp out of range" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
+      </div>
+      <div id="issue-search-results"></div>
+    </div>
+    <div id="fleet-intel-content"><div class="loading">Loading...</div></div>
+  </div>
+
+  <!-- Agent Profiles (manager only) -->
+  <div class="page" id="page-agents">
+    <div id="agents-content"><div class="loading">Loading...</div></div>
+  </div>
+</main>
+</div>
+
+{% include 'partials/modals.html' %}
+<script defer src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/views.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/details.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/reports.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/analytics.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

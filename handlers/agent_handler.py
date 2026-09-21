@@ -4,8 +4,6 @@ handlers/agent_handler.py
 
 import asyncio
 import logging
-from datetime import datetime
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler, CallbackQueryHandler,
@@ -22,6 +20,7 @@ from storage.case_store import (
 )
 
 from storage.user_store import has_role
+from app_time import chicago_date_str, chicago_timestamp, today_str, week_start_str
 
 
 def _esc(t: str) -> str:
@@ -50,7 +49,8 @@ def _fmt_dt(iso):
     if not iso:
         return "—"
     try:
-        return datetime.fromisoformat(iso).astimezone().strftime("%b %d %H:%M")
+        dt = chicago_timestamp(iso)
+        return dt.strftime("%b %d %H:%M") if dt else iso[:16]
     except Exception:
         return iso[:16]
 
@@ -119,14 +119,9 @@ async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Not authorized.")
         return
 
-    from datetime import timezone, timedelta
-    now       = datetime.now(timezone.utc)
-    today_str = now.date().isoformat()
-    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
-
     all_cases  = await get_all_cases_for_agent(user.id)
-    today      = [c for c in all_cases if (c.get("assigned_at") or "").startswith(today_str)]
-    this_week  = [c for c in all_cases if (c.get("assigned_at") or "") >= week_start]
+    today      = [c for c in all_cases if chicago_date_str(c.get("assigned_at")) == today_str()]
+    this_week  = [c for c in all_cases if chicago_date_str(c.get("assigned_at")) >= week_start_str()]
     done_all   = [c for c in all_cases if c["status"] == "done"]
     done_week  = [c for c in this_week if c["status"] == "done"]
 

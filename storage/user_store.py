@@ -113,34 +113,3 @@ def get_all_user_dicts() -> list[dict]:
         }
         for uid, u in _load().items()
     ]
-
-
-def bootstrap_developer(user_id: int, name: str = "Developer") -> None:
-    """
-    Called at startup. If DEVELOPER_ID env var is set and that user
-    isn't in the store yet, add them as developer automatically.
-    """
-    if not get_user(user_id):
-        add_user(user_id, name, "", "developer")
-        logger.info(f"Bootstrapped developer account: {user_id}")
-    else:
-        # Silently ensure the role stays developer even if someone changed it
-        users = _load()
-        if users[str(user_id)]["role"] != "developer":
-            users[str(user_id)]["role"] = "developer"
-            _save(users)
-
-
-def migrate_from_shifts(admins: dict, super_admins: set) -> None:
-    """
-    One-time migration: import existing hardcoded ADMINS from shifts.py.
-    Only runs if users.json is empty. Call this from bot startup.
-    """
-    existing = _load()
-    if existing:
-        return  # already have data, skip migration
-    logger.info("Migrating existing admins from shifts.py to user_store...")
-    for uid, info in admins.items():
-        role = "super_admin" if uid in super_admins else "agent"
-        add_user(uid, info["name"], info.get("username", ""), role)
-    logger.info(f"Migrated {len(admins)} users from shifts.py")

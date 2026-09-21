@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sign in · Kurtex Operations</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/login.css') }}">
+</head><body><main class="login-layout">
+<section class="story">
+  <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt=""><span>Kurtex<small>FLEET OPERATIONS</small></span></a>
+  <div class="story-copy"><span class="eyebrow">MAINTENANCE, IN VIEW</span><h1>Keep your fleet<br>moving forward.</h1><p>One workspace for case activity, maintenance history, and the people keeping things on track.</p>
+  <div class="features"><span>01 <b>Follow every case</b></span><span>02 <b>Know your fleet</b></span><span>03 <b>See team performance</b></span></div></div>
+  <footer>Kurtex Maintenance <span>Your Telegram workflow, connected.</span></footer>
+</section>
+<section class="sign-in"><div class="login-card"><div class="eyebrow">YOUR OPERATIONS WORKSPACE</div><h2>Welcome back.</h2><p>Sign in with your registered Telegram account to open the dashboard.</p>
+{% if error %}<div class="error" role="alert">We couldn't verify your account. Please try again or contact your administrator.</div>{% endif %}
+{% if bot_username %}
+<div class="tg-wrap"><script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="10" data-auth-url="/auth/telegram" data-request-access="write"></script></div>
+<p class="help">No sign-in button? Allow Telegram to load, then refresh this page.</p>
+{% else %}<div class="error" role="alert">Telegram sign-in isn't configured. Ask your administrator to set BOT_USERNAME.</div>{% endif %}
+<div class="note"><b>Same bot. Clearer picture.</b><span>Case assignment, alerts, and report submission stay in Telegram. Review activity and export reports here.</span></div></div>
+<footer>Kurtex Alert Dashboard · Sign in with Telegram</footer></section>
+</main></body></html>

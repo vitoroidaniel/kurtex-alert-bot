@@ -11,7 +11,6 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from config import config
-from shift_manager import MAIN_ADMIN_ID
 
 
 def _esc(t: str) -> str:
@@ -436,7 +435,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     data    = ctx.user_data.pop("report", {})
-    dest_id = config.REPORTS_GROUP_ID or MAIN_ADMIN_ID
+    dest_id = config.REPORTS_GROUP_ID
     if not dest_id:
         await query.edit_message_text("No reports group configured.", reply_markup=None)
         return ConversationHandler.END

@@ -4,7 +4,6 @@ All commands respond in <100ms.
 """
 import logging
 from collections import defaultdict
-from datetime import datetime
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -20,6 +19,7 @@ from storage.user_store import (
     get_all_users, get_user, add_user, remove_user, edit_role,
     has_role, VALID_ROLES,
 )
+from app_time import CENTRAL_TIMEZONE_LABEL, chicago_now, chicago_timestamp
 
 
 logger   = logging.getLogger(__name__)
@@ -44,7 +44,8 @@ def _fmt_dt(iso: str | None) -> str:
     if not iso:
         return "—"
     try:
-        return datetime.fromisoformat(iso).astimezone().strftime("%H:%M")
+        dt = chicago_timestamp(iso)
+        return dt.strftime("%H:%M") if dt else iso[:16]
     except Exception:
         return iso[:16]
 
@@ -91,8 +92,8 @@ async def cmd_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Access denied.")
         return
     cases  = await get_cases_today()
-    today  = datetime.now().strftime("%B %d, %Y")
-    report = _build_daily_report(cases, f"Daily Report — {today}")
+    today  = chicago_now().strftime("%B %d, %Y")
+    report = _build_daily_report(cases, f"Daily Report — {today} {CENTRAL_TIMEZONE_LABEL}")
     await update.message.reply_text(report, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -150,8 +151,8 @@ async def cmd_missed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def send_daily_report(bot, chat_id: int) -> None:
     cases  = await get_cases_today()
-    today  = datetime.now().strftime("%B %d, %Y")
-    report = _build_daily_report(cases, f"End of Day Report — {today}")
+    today  = chicago_now().strftime("%B %d, %Y")
+    report = _build_daily_report(cases, f"End of Day Report — {today} {CENTRAL_TIMEZONE_LABEL}")
     try:
         await bot.send_message(chat_id, report, parse_mode=ParseMode.MARKDOWN)
         logger.info(f"Daily report sent to {chat_id}")
