@@ -1,5 +1,6 @@
 var kurtexAIChatId=null,kurtexAIChats=[];
 
+function aiAttr(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' ')}
 function escapeAI(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function formatAIChatDate(v){if(!v)return'No date';try{var d=new Date(v);if(isNaN(d.getTime()))return'';return d.toLocaleDateString([], {month:'short',day:'numeric'})}catch(e){return''}}
 async function openKurtexAIChat(id){try{var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to open conversation');var chat=x.item||x.chat||x;kurtexAIChatId=chat.id||id;var t=document.getElementById('kurtex-ai-title');if(t)t.textContent=(chat.title||'Maintenance conversation');var box=document.getElementById('kurtex-ai-messages');if(box){box.innerHTML='';(chat.messages||[]).forEach(function(m){kurtexAIAdd(m.role==='assistant'?'assistant':'user',m.content||m.text||'')});if(!(chat.messages||[]).length)aiWelcome()}document.getElementById('kurtex-ai-panel').classList.remove('history-open');renderAIChatList()}catch(e){var el=document.getElementById('kurtex-ai-chat-list');if(el)el.innerHTML='<div class="ai-history-error"><i class="ph ph-warning-circle"></i><strong>Could not open conversation</strong><span>'+escapeAI(e.message||'Try again.')+'</span><button onclick="loadKurtexAIChats()">Retry</button></div>'}}
@@ -59,7 +60,7 @@ async function loadAIPageSidebar(){
  var list=document.getElementById('ai-page-sidebar-list');if(!list)return;
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
-  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" onclick="openAIPageSavedChat(\''+attr(c.id)+'\')"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
  }catch(e){list.innerHTML='<div class="ai-history-empty">Unable to load chats.</div>'}
 }
 async function newKurtexAIPageChat(){
@@ -77,7 +78,7 @@ async function openAIPageHistory(){
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
   var list=panel.querySelector('.ai-page-history-list');
-  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+attr(c.id)+'\')"><strong>'+escapeAI(c.title||'Maintenance conversation')+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><strong>'+escapeAI(c.title||'Maintenance conversation')+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
  }catch(e){panel.querySelector('.ai-page-history-list').textContent='Unable to load chat history.'}
 }
 async function openAIPageSavedChat(id){
@@ -136,3 +137,11 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 
 async function testKurtexAIConnection(){var el=document.getElementById('ai-test-result');if(!el)return;el.className='ai-test-result testing';el.textContent='Testing Workers AI...';try{var r=await apiFetch('/api/ai/test',{method:'POST'}),x=await r.json();if(!r.ok||!x.ok)throw new Error(x.error||'Connection failed');el.className='ai-test-result ok';el.textContent='Connected · '+(x.model||'Workers AI')+' · '+(x.response||'OK')}catch(e){el.className='ai-test-result bad';el.textContent='Failed · '+(e.message||'Unknown error')+'. Check Railway logs for the Cloudflare HTTP response.'}}
+
+document.addEventListener('click',function(e){
+ var n=e.target&&e.target.closest?e.target.closest('.nav-item[data-page="ai_assistant"]'):null;
+ if(n)setTimeout(loadAIPageSidebar,80);
+});
+document.addEventListener('DOMContentLoaded',function(){
+ if(document.getElementById('page-ai_assistant')&&document.getElementById('page-ai_assistant').classList.contains('active'))loadAIPageSidebar();
+});
