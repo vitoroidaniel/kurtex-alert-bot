@@ -3034,3 +3034,45 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 /* v60 notification center + UI cleanup */
 .connection-banner{display:none!important}.notification-center{position:relative;display:inline-flex}.notification-bell{position:relative;width:38px!important;padding:0!important;justify-content:center!important;background:#fff!important;color:#34383e!important}.notification-bell i{font-size:17px}.notification-count{position:absolute;right:-5px;top:-6px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:999px;background:#e53935;color:#fff;border:2px solid #fff;font:700 8px/13px Inter,sans-serif;text-align:center}.notification-panel{position:absolute;right:0;top:45px;z-index:1500;width:365px;max-height:520px;background:#fff;border:1px solid #dde0e4;border-radius:14px;box-shadow:0 22px 65px rgba(17,21,27,.2);overflow:hidden}.notification-panel>header{display:flex;align-items:center;padding:13px 14px 10px}.notification-panel>header>div{display:flex;flex-direction:column;gap:2px;flex:1}.notification-panel header strong{font-size:13px}.notification-panel header small{font-size:9px;color:#858a91}.notification-panel header button{border:0;background:transparent;color:#e53935;font:700 9px Inter,sans-serif;cursor:pointer}.notification-tabs{display:flex;gap:4px;padding:0 12px 9px;border-bottom:1px solid #eceef1}.notification-tabs button{border:0;background:transparent;border-radius:7px;padding:6px 8px;font:600 9px Inter,sans-serif;color:#777;cursor:pointer}.notification-tabs button.active{background:#f0f1f3;color:#25282d}.notification-list{overflow:auto;max-height:420px}.notification-item{width:100%;display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:0;border-bottom:1px solid #f0f1f2;background:#fff;text-align:left;cursor:pointer;position:relative}.notification-item:hover{background:#fafafa}.notification-item.unseen{background:#fffafb}.notification-icon{width:31px;height:31px;flex:none;border-radius:9px;background:#f1f2f4;display:grid;place-items:center}.notification-item.warning .notification-icon,.notification-item.error .notification-icon{background:#fff3e0;color:#a76600}.notification-copy{display:flex;flex-direction:column;gap:3px;min-width:0;padding-right:8px}.notification-copy strong{font-size:10.5px;color:#25282d}.notification-copy>span{font-size:9.5px;line-height:1.4;color:#666c74}.notification-copy small{font-size:8px;color:#a0a4aa}.notification-dot{position:absolute;right:10px;top:15px;width:6px;height:6px;border-radius:50%;background:#e53935}.notification-empty{padding:35px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;color:#888}.notification-empty i{font-size:24px}.notification-empty strong{font-size:11px;color:#444}.notification-empty span{font-size:9px}
 @media(max-width:760px){.notification-panel{position:fixed;top:64px;right:8px;left:8px;width:auto;max-height:calc(100svh - 80px)}.notification-list{max-height:calc(100svh - 190px)}}
+
+/* v61 Kurtex AI window polish */
+.kurtex-ai-panel{width:420px;height:min(660px,calc(100svh - 112px));border-radius:18px}
+.kurtex-ai-head{height:60px;padding:10px 12px;gap:7px}
+.kurtex-ai-head>div:nth-of-type(1){min-width:0}
+.kurtex-ai-head strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kurtex-ai-head small{font-size:9px!important}
+.kurtex-ai-head .ai-history-toggle{margin-right:2px}
+.kurtex-ai-head>button{flex:none}
+.kurtex-ai-messages{background:#f6f7f9}
+.kurtex-ai-welcome{max-width:300px}
+.kurtex-ai-welcome span{max-width:280px}
+.kurtex-ai-history{width:315px;max-width:82%;background:#fff;box-shadow:18px 0 45px rgba(20,24,31,.13);border-right:1px solid #e5e7eb}
+.ai-history-head{min-height:58px;box-sizing:border-box;padding:10px 11px;gap:8px}
+.ai-history-head>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ai-history-head strong{font-size:11.5px}
+.ai-history-head small{font-size:8.5px;color:#8a8f97}
+.ai-history-head button{white-space:nowrap;padding:7px 9px;border-radius:8px}
+#kurtex-ai-chat-list{padding:7px}
+.ai-chat-row{border:1px solid transparent;border-radius:10px;margin-bottom:4px;overflow:hidden}
+.ai-chat-row:hover{background:#f7f8fa;border-color:#eceef1}
+.ai-chat-row.active{background:#fff5f5;border-color:#f3d6d6}
+.ai-chat-row>button:first-child{display:flex;align-items:center;gap:8px;padding:8px 7px}
+.ai-chat-icon{width:30px;height:30px;border-radius:8px;background:#f0f1f3;display:grid;place-items:center;flex:none;color:#626871}
+.ai-chat-row.active .ai-chat-icon{background:#feecec;color:#d93632}
+.ai-chat-copy{display:block;min-width:0;flex:1}
+.ai-chat-copy strong{font-size:10.5px}
+.ai-chat-copy small{font-size:8.5px}
+.ai-chat-delete{opacity:0;transition:.15s}
+.ai-chat-row:hover .ai-chat-delete{opacity:1}
+.ai-no-chats,.ai-history-loading,.ai-history-error{min-height:180px;padding:30px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;color:#858a92}
+.ai-no-chats i,.ai-history-error i{font-size:24px;color:#b0b4ba}
+.ai-no-chats strong,.ai-history-error strong{font-size:11px;color:#44484f}
+.ai-no-chats span,.ai-history-error span{font-size:9px;line-height:1.45}
+.ai-history-error button{margin-top:4px;border:1px solid #ddd;background:#fff;border-radius:8px;padding:6px 10px;font-size:9px;cursor:pointer}
+.kurtex-ai-suggestions{padding-top:8px}
+.ai-compose-box{border-radius:14px}
+@media(max-width:760px){
+ .kurtex-ai-panel{inset:6px 6px 62px;width:auto;height:auto;border-radius:16px}
+ .kurtex-ai-history{width:min(86vw,330px);max-width:none}
+ .kurtex-ai-head strong{font-size:12px}
+}

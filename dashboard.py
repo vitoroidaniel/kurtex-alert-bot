@@ -215,22 +215,36 @@ def _cf_ai(messages, max_tokens=700, temperature=0.2):
         method="POST",headers={"Authorization":f"Bearer {CLOUDFLARE_API_TOKEN}","Content-Type":"application/json"})
     try:
         with urllib.request.urlopen(req,timeout=35) as resp: payload=json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try: detail=e.read().decode("utf-8","replace")[:2000]
+        except Exception: detail=""
+        logger.warning("Workers AI HTTP %s: %s",getattr(e,"code","?"),detail)
+        raise RuntimeError(f"Workers AI HTTP {getattr(e,'code','error')}")
     except Exception as e:
         logger.warning("Workers AI request failed: %s",e); raise RuntimeError("Workers AI request failed")
-    result=payload.get("result") or {}; text=result.get("response")
-    if not text and isinstance(result.get("choices"),list) and result["choices"]:
-        text=((result["choices"][0].get("message") or {}).get("content"))
-    # Workers AI response shape can vary by model/API revision. Normalize safely.
-    if isinstance(text,dict):
-        text=text.get("response") or text.get("content") or text.get("text") or json.dumps(text,ensure_ascii=False)
-    if isinstance(text,list):
-        parts=[]
-        for item in text:
-            if isinstance(item,str): parts.append(item)
-            elif isinstance(item,dict): parts.append(str(item.get("text") or item.get("content") or item.get("response") or ""))
-        text="\n".join(x for x in parts if x)
-    if text is None: raise RuntimeError("Workers AI returned no response")
-    if not isinstance(text,str): text=str(text)
+    if isinstance(payload,dict) and payload.get("success") is False:
+        logger.warning("Workers AI API error: %s",json.dumps(payload.get("errors") or payload,ensure_ascii=False)[:2000])
+        raise RuntimeError("Workers AI API returned an error")
+    def extract_text(value):
+        if value is None:return ""
+        if isinstance(value,str):return value
+        if isinstance(value,list):return "\n".join(filter(None,(extract_text(x) for x in value)))
+        if isinstance(value,dict):
+            for key in ("response","content","text","generated_text","output_text"):
+                if key in value:
+                    found=extract_text(value.get(key))
+                    if found:return found
+            if isinstance(value.get("choices"),list) and value["choices"]:
+                found=extract_text(value["choices"][0])
+                if found:return found
+            if value.get("message") is not None:
+                found=extract_text(value["message"])
+                if found:return found
+        return ""
+    text=extract_text((payload or {}).get("result") if isinstance(payload,dict) else payload)
+    if not text:
+        logger.warning("Workers AI unrecognized response shape: %s",json.dumps(payload,ensure_ascii=False)[:2000])
+        raise RuntimeError("Workers AI returned no readable response")
     return text.strip()
 
 def _ai_case_record(c):

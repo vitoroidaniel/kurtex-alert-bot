@@ -19,23 +19,16 @@ var preferences = {
 function connectionState() {
   var message = requestProblems.values().next().value;
   var banner = document.getElementById("connection-banner");
-  if (!banner) return;
-  banner.hidden = !message;
-  document.getElementById("connection-message").textContent = message || "";
-  document
-    .getElementById("connection-status")
-    .classList.toggle("is-stale", !!message);
-  document.getElementById("last-update").textContent = message
-    ? "Refresh needed"
-    : lastSuccessfulRead
-      ? "Updated " +
-        lastSuccessfulRead.toLocaleTimeString("en-US", {
-          timeZone: "America/Chicago",
-          hour: "2-digit",
-          minute: "2-digit",
-        }) +
-        " CT"
-      : "Connecting…";
+  if (banner) banner.hidden = true;
+  var status = document.getElementById("connection-status");
+  if (status) status.classList.toggle("is-stale", !!message);
+  var updated = document.getElementById("last-update");
+  if (updated) updated.textContent = message ? "Refresh needed" :
+    lastSuccessfulRead ? "Updated " + lastSuccessfulRead.toLocaleTimeString("en-US", {
+      timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit"
+    }) + " CT" : "Connecting…";
+  if (message && typeof pushLocalNotification === "function")
+    pushLocalNotification("system","Dashboard refresh issue",message,"warning");
 }
 async function apiFetch(url, key, options) {
   // Backward compatible: apiFetch(url, key) for reads and
