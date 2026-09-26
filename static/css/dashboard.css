@@ -4450,3 +4450,45 @@ body[data-current-page="ai_training"] .ai-library-card .ai-kb-source{width:20px!
 body[data-current-page="ai_training"] .ai-library-card .ai-kb-title-line strong{font-size:13px!important}
 body[data-current-page="ai_training"] .ai-library-card .ai-kb-item-copy small{font-size:9px!important;margin-top:1px!important}
 body[data-current-page="ai_training"] .ai-library-card .ai-kb-actions button{width:28px!important;height:28px!important}
+
+
+/* v119 — AI conversation cards */
+body[data-current-page="ai_assistant"] .ai-page-side-label{
+ border-bottom:0!important;padding:8px 12px 7px!important;margin:0!important
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-list{
+ padding:2px 9px 12px!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat{
+ position:relative!important;display:flex!important;align-items:stretch!important;
+ margin:0 0 7px!important;min-height:54px!important;
+ border:1px solid var(--border,#dedfe2)!important;border-radius:10px!important;
+ background:var(--surface,#fff)!important;overflow:hidden!important;
+ box-shadow:0 1px 2px rgba(17,24,39,.025)!important;
+ transition:background .12s ease,border-color .12s ease,box-shadow .12s ease,transform .12s ease!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat:first-child{border-top:1px solid var(--border,#dedfe2)!important}
+body[data-current-page="ai_assistant"] .ai-side-chat:hover{
+ background:var(--surface,#fff)!important;border-color:#c8cbd0!important;
+ box-shadow:0 3px 9px rgba(17,24,39,.06)!important;transform:translateY(-1px)!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat.active{
+ background:var(--surface,#fff)!important;border:1px solid #cfd2d6!important;
+ box-shadow:0 2px 7px rgba(17,24,39,.055)!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat.active:before{
+ content:""!important;position:absolute!important;left:0!important;top:8px!important;bottom:8px!important;
+ width:3px!important;border-radius:0 4px 4px 0!important;background:var(--accent,#d93632)!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat-open{
+ flex:1 1 auto!important;min-width:0!important;padding:9px 36px 9px 12px!important;border:0!important;background:transparent!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open{padding-left:14px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-delete{
+ right:7px!important;width:27px!important;height:27px!important;border-radius:7px!important;color:#777d85!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat:hover .ai-side-chat-delete,
+body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-delete{opacity:.72!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-delete:hover{
+ opacity:1!important;background:#fff0ef!important;color:#c93631!important
+}
