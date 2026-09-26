@@ -3,19 +3,56 @@
 <title>Sign in · Kurtex Operations</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/login.css') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
-</head><body><main class="login-layout">
-<section class="story">
-  <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt=""><span>Kurtex<small>FLEET OPERATIONS</small></span></a>
-  <div class="story-copy"><span class="eyebrow">MAINTENANCE, IN VIEW</span><h1>Keep your fleet<br>moving forward.</h1><p>One workspace for case activity, maintenance history, and the people keeping things on track.</p>
-  <div class="features"><span>01 <b>Follow every case</b></span><span>02 <b>Know your fleet</b></span><span>03 <b>See team performance</b></span></div></div>
-  <footer>Kurtex Maintenance <span>Your Telegram workflow, connected.</span></footer>
-</section>
-<section class="sign-in"><div class="login-card"><div class="eyebrow">YOUR OPERATIONS WORKSPACE</div><h2>Welcome back.</h2><p>Sign in with your registered Telegram account to open the dashboard.</p>
-{% if error %}<div class="error" role="alert">We couldn't verify your account. Please try again or contact your administrator.</div>{% endif %}
-{% if bot_username %}
-<div class="tg-wrap"><script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="10" data-auth-url="/auth/telegram" data-request-access="write"></script></div>
-<p class="help">No sign-in button? Allow Telegram to load, then refresh this page.</p>
-{% else %}<div class="error" role="alert">Telegram sign-in isn't configured. Ask your administrator to set BOT_USERNAME.</div>{% endif %}
-<div class="note"><b>Same bot. Clearer picture.</b><span>Case assignment, alerts, and report submission stay in Telegram. Review activity and export reports here.</span></div></div>
-<footer>Kurtex Alert Dashboard · Sign in with Telegram</footer></section>
-</main></body></html>
+</head><body>
+<main class="login-shell">
+  <section class="truck-hero" aria-label="Kurtex fleet maintenance">
+    <div class="hero-bg"></div><div class="hero-shade"></div><div class="hero-glow"></div>
+    <header class="hero-top">
+      <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt="Kurtex"><span>KURTEX<small>FLEET OPERATIONS</small></span></a>
+      <span class="live-pill"><i class="ph ph-wrench"></i> Maintenance workspace</span>
+    </header>
+    <div class="hero-copy">
+      <span class="eyebrow">MAINTENANCE, IN VIEW</span>
+      <h1>Keep your fleet<br><em>moving</em> forward.</h1>
+      <p>One workspace for case activity, maintenance history, parts intelligence, and the people keeping every unit on the road.</p>
+      <div class="hero-features">
+        <div><i class="ph ph-clipboard-text"></i><span><b>Follow every case</b><small>From report to resolution</small></span></div>
+        <div><i class="ph ph-truck"></i><span><b>Know your fleet</b><small>History, repairs and recurring issues</small></span></div>
+        <div><i class="ph ph-chart-bar"></i><span><b>See team performance</b><small>Keep operations moving</small></span></div>
+      </div>
+    </div>
+    <footer class="hero-footer"><span>Kurtex Maintenance</span><span>TRUCKS · TRAILERS · REEFERS · PEOPLE</span></footer>
+  </section>
+
+  <section class="login-side">
+    <div class="ambient-lines"></div>
+    <div class="login-card">
+      <div class="card-kicker">YOUR OPERATIONS WORKSPACE</div>
+      <h2>Welcome back.</h2>
+      <p class="intro">Sign in with your registered Telegram account to open the dashboard.</p>
+      {% if error %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>We couldn't verify your account. Please try again or contact your administrator.</span></div>{% endif %}
+      {% if bot_username %}
+      <div class="telegram-box"><div class="tg-wrap"><script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="10" data-auth-url="/auth/telegram" data-request-access="write"></script></div></div>
+      <p class="help"><i class="ph ph-info"></i> No sign-in button? Allow Telegram to load, then refresh this page.</p>
+      {% else %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>Telegram sign-in isn't configured. Ask your administrator to set BOT_USERNAME.</span></div>{% endif %}
+      <div class="divider"></div>
+      <div class="trust"><i class="ph ph-shield-check"></i><div><b>Same bot. Clearer picture.</b><span>Case assignment, alerts and report submission stay in Telegram. Review fleet activity and maintenance intelligence here.</span></div></div>
+      <div class="system-row"><span><i></i> Operations connected</span><span>Chicago time</span></div>
+    </div>
+    <footer class="side-footer">Kurtex Alert Dashboard · Secure Telegram sign-in</footer>
+  </section>
+</main>
+<script>
+(() => {
+  const hero = document.querySelector('.truck-hero');
+  const bg = document.querySelector('.hero-bg');
+  if (!hero || !bg || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  hero.addEventListener('pointermove', e => {
+    const r=hero.getBoundingClientRect();
+    const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5;
+    bg.style.transform=`scale(1.045) translate(${x*-10}px,${y*-7}px)`;
+  });
+  hero.addEventListener('pointerleave',()=>bg.style.transform='scale(1.035) translate(0,0)');
+})();
+</script>
+</body></html>
