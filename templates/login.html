@@ -5,10 +5,14 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 </head><body>
 <main class="login-shell">
-  <div class="scene" aria-hidden="true"></div><div class="scene-overlay" aria-hidden="true"></div><div class="scene-light" aria-hidden="true"></div>
+  <div class="scene-slider" aria-hidden="true">
+    <div class="scene-slide active" style="--bg:url('/static/images/login-fleet-service.png')"></div>
+    <div class="scene-slide" style="--bg:url('https://images.pexels.com/photos/7019372/pexels-photo-7019372.jpeg?auto=compress&dpr=1&h=1080&w=1920')"></div>
+    <div class="scene-slide" style="--bg:url('https://cdnmedia.endeavorsuite.com/images/ThumbGenerator/Thumb.aspx?img=http%3A%2F%2Fcdnmedia.endeavorsuite.com%2Fimages%2Forganizations%2F69697811-b34f-435b-913f-5f0aea1c02db%2FSEO+Images%2Ftksoutheast_trailerrepair_header.jpg&v=1648493416948%3Fv%3D20220516084723&w=1140')"></div>
+    <div class="scene-slide" style="--bg:url('https://images.pexels.com/photos/7541351/pexels-photo-7541351.jpeg?auto=compress&dpr=1&h=1080&w=1920')"></div>
+  </div><div class="scene-overlay" aria-hidden="true"></div><div class="scene-light" aria-hidden="true"></div>
   <header class="topbar">
     <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt="Kurtex"><span>KURTEX<small>FLEET OPERATIONS</small></span></a>
-    <span class="workspace-pill"><i class="ph ph-wrench"></i> Maintenance workspace</span>
   </header>
 
   <section class="hero-copy">
@@ -42,12 +46,14 @@
 </main>
 <script>
 (() => {
- const root=document.documentElement, scene=document.querySelector('.scene');
- if(!scene || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
- window.addEventListener('pointermove',e=>{
-   const x=e.clientX/innerWidth-.5,y=e.clientY/innerHeight-.5;
-   root.style.setProperty('--mx',`${x*-12}px`); root.style.setProperty('--my',`${y*-8}px`);
- });
+  const slides = [...document.querySelectorAll('.scene-slide')];
+  if (!slides.length) return;
+  let current = 0;
+  const show = (index) => {
+    current = (index + slides.length) % slides.length;
+    slides.forEach((el,i) => el.classList.toggle('active', i === current));
+  };
+  setInterval(() => show(current + 1), 8500);
 })();
 </script>
 </body></html>
