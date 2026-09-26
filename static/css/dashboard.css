@@ -2752,3 +2752,142 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 #page-fleet_intel .recurring-issue-line i{color:var(--muted)}
 #page-fleet_intel .recurring-issue-line b{color:var(--accent)}
 @media(max-width:700px){#page-fleet_intel .intelligence-search-shell{top:0!important;padding:8px!important}#page-fleet_intel .intel-search-btn{width:42px;font-size:0}#page-fleet_intel .intel-search-btn i{font-size:16px}}
+
+/* v53 — Parts Manual: scan-first troubleshooting design */
+#page-parts .part-detail,
+#page-parts .parts-detail,
+#page-parts #parts-detail-content{
+  --pm-soft:#f7f8fa;
+  --pm-line:#e2e5e9;
+  --pm-text:#20242a;
+  --pm-muted:#68707b;
+}
+#page-parts .troubleshooting-grid,
+#page-parts .part-troubleshooting-grid{
+  gap:12px!important;
+}
+#page-parts .part-info-card,
+#page-parts .troubleshooting-card{
+  border:1px solid var(--pm-line)!important;
+  border-radius:13px!important;
+  padding:15px 16px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+#page-parts .part-info-card:has(.ph-warning),
+#page-parts .part-info-card:has(.ph-warning-circle),
+#page-parts .part-info-card:has(.ph-warning-diamond){
+  background:#fffaf4!important;
+  border-color:#eadfce!important;
+}
+#page-parts .part-info-card:has(.ph-magnifying-glass),
+#page-parts .part-info-card:has(.ph-list-checks){
+  background:#f8fafc!important;
+}
+#page-parts .part-info-card h4,
+#page-parts .part-info-card .eyebrow,
+#page-parts .troubleshooting-card h4{
+  font-size:11px!important;
+  letter-spacing:.085em!important;
+  font-weight:800!important;
+  color:#555d68!important;
+}
+#page-parts .part-info-card p,
+#page-parts .part-info-card li,
+#page-parts .troubleshooting-card p,
+#page-parts .troubleshooting-card li{
+  font-size:12.5px!important;
+  line-height:1.55!important;
+  color:#555d68!important;
+}
+#page-parts .part-info-card ul,
+#page-parts .part-info-card ol{
+  margin:7px 0 0!important;
+  padding-left:22px!important;
+}
+#page-parts .part-info-card li{padding:2px 0!important}
+#page-parts .part-info-card ol li::marker{
+  color:#df2027;
+  font-weight:800;
+}
+#page-parts .part-action-block,
+#page-parts .part-fix-card,
+#page-parts [data-part-fix]{
+  border:1px solid #f0cfd1!important;
+  border-left:4px solid #df2027!important;
+  border-radius:12px!important;
+  background:#fff7f7!important;
+  padding:15px 17px!important;
+}
+#page-parts .part-action-block p,
+#page-parts .part-fix-card p,
+#page-parts [data-part-fix] p{
+  font-size:13px!important;
+  line-height:1.55!important;
+  color:#34383e!important;
+  font-weight:550!important;
+}
+#page-parts .part-reference-priority,
+#page-parts .part-reference,
+#page-parts [data-part-reference]{
+  background:#f7f8fa!important;
+  border:1px solid var(--pm-line)!important;
+  border-radius:11px!important;
+  padding:10px 13px!important;
+  margin:10px 0 12px!important;
+}
+#page-parts .part-reference-priority:hover,
+#page-parts .part-reference:hover{
+  border-color:#cfd3d9!important;
+  background:#f3f4f6!important;
+}
+#page-parts .part-reference-priority strong,
+#page-parts .part-reference strong{
+  font-size:12px!important;
+}
+#page-parts .part-reference-priority small,
+#page-parts .part-reference small{
+  font-size:10.5px!important;
+  color:var(--pm-muted)!important;
+}
+#page-parts .related-cases-panel,
+#page-parts .knowledge-notes-panel,
+#page-parts .part-cases,
+#page-parts .part-knowledge{
+  border-radius:13px!important;
+  background:#fff!important;
+}
+#page-parts .related-cases-panel h3,
+#page-parts .knowledge-notes-panel h3,
+#page-parts .part-cases h3,
+#page-parts .part-knowledge h3{
+  font-size:16px!important;
+}
+#page-parts .case-history-row{
+  padding:9px 4px!important;
+}
+#page-parts .case-history-row:hover{
+  background:#f8f9fa!important;
+}
+@media(min-width:900px){
+  #page-parts .part-info-card:has(.ph-gear),
+  #page-parts .part-info-card:has(.ph-gear-six){
+    opacity:.88;
+  }
+}
+@media(max-width:760px){
+  #page-parts .part-info-card,
+  #page-parts .troubleshooting-card{padding:13px!important}
+  #page-parts .part-info-card p,
+  #page-parts .part-info-card li{font-size:12px!important}
+}
+
+#page-parts .pm-issues{background:#fffaf3!important;border-color:#eadbc4!important}
+#page-parts .pm-issues li::marker{color:#d78b24}
+#page-parts .pm-checks{background:#f7f9fc!important;border-color:#dfe4eb!important}
+#page-parts .pm-checks li::marker{color:#df2027;font-weight:800}
+#page-parts .pm-action{background:#fff6f6!important;border-color:#efcfd1!important;border-left:4px solid #df2027!important}
+#page-parts .pm-action p{color:#30343a!important;font-weight:550!important}
+#page-parts .pm-how{background:#fafafa!important}
+#page-parts .pm-how p{color:#69717c!important}
+#page-parts .pm-reference{background:#f5f7f9!important;border-color:#dfe3e8!important;padding:10px 13px!important}

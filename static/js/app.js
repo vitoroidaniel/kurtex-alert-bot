@@ -119,3 +119,25 @@ window.addEventListener("online", autoRefresh);
     if(source&&window.MutationObserver){new MutationObserver(syncMobileUpdate).observe(source,{childList:true,subtree:true,characterData:true});}
   });
 })();
+
+// v53 Parts Manual semantic styling hook
+(function(){
+  function classifyPartsManual(){
+    var page=document.getElementById('page-parts'); if(!page)return;
+    page.querySelectorAll('div,section,article').forEach(function(el){
+      var head=el.querySelector(':scope > h3,:scope > h4,:scope > .eyebrow,:scope > div > .eyebrow');
+      if(!head)return;
+      var t=(head.textContent||'').trim().toUpperCase();
+      if(t.indexOf('COMMON ISSUES')!==-1) el.classList.add('pm-issues');
+      else if(t.indexOf('QUICK CHECKS')!==-1) el.classList.add('pm-checks');
+      else if(t.indexOf('FIX / NEXT ACTION')!==-1||t.indexOf('NEXT ACTION')!==-1) el.classList.add('pm-action');
+      else if(t.indexOf('HOW IT WORKS')!==-1) el.classList.add('pm-how');
+      else if(t.indexOf('OEM / TECHNICAL REFERENCE')!==-1) el.classList.add('pm-reference');
+    });
+  }
+  var obs=new MutationObserver(classifyPartsManual);
+  document.addEventListener('DOMContentLoaded',function(){
+    classifyPartsManual();
+    var p=document.getElementById('page-parts'); if(p)obs.observe(p,{childList:true,subtree:true});
+  });
+})();
