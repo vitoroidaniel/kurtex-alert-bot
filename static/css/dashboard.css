@@ -3373,3 +3373,36 @@ body[data-current-page="ai_training"] #page-ai_training .ai-training-side{width:
 .ai-page-compose textarea{flex:1;min-height:70px;max-height:180px;resize:vertical;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:14px}
 .ai-page-compose button{width:42px;height:42px;border:0;border-radius:11px;background:var(--red);color:#fff;font-size:18px;cursor:pointer}
 @media(max-width:760px){.ai-assistant-page-head{align-items:flex-start;flex-direction:column}.ai-assistant-page-shell{height:calc(100svh - 210px);min-height:500px}.ai-page-msg{max-width:94%;font-size:14px}.ai-page-messages{padding:18px 14px}}
+
+/* v85 — compact sidebar + fixed AI workspace */
+.sidebar{width:204px!important}
+.layout{grid-template-columns:204px minmax(0,1fr)!important}
+.sidebar-logo{padding:14px 14px 12px!important}
+.sidebar-logo img{width:38px!important;height:38px!important}
+.sidebar nav{padding:5px 9px 8px!important;overflow-y:auto!important;scrollbar-width:none!important;-ms-overflow-style:none!important}
+.sidebar nav::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}
+.nav-section-label{margin:7px 8px 6px!important;font-size:8px!important}
+.nav-item{min-height:35px!important;padding:7px 10px!important;gap:9px!important;font-size:11px!important;border-radius:8px!important}
+.nav-item i{font-size:15px!important}
+.nav-sub{padding-left:29px!important}
+.nav-group-header{min-height:35px!important;padding:7px 10px!important;font-size:11px!important}
+.nav-group-items{gap:1px!important}
+.sidebar-footer{padding:9px!important}
+.user-chip{padding:8px!important}
+.theme-btn,.logout-btn{font-size:10px!important;padding:7px 8px!important}
+
+body[data-current-page="ai_assistant"] .main{overflow:hidden!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 132px)!important;overflow:hidden!important}
+.ai-assistant-workspace{height:100%!important;max-width:none!important;margin:0!important;padding:0!important}
+.ai-assistant-page-shell{
+ height:100%!important;
+ min-height:0!important;
+ max-height:100%!important;
+ border-radius:14px!important;
+}
+.ai-page-messages{min-height:0!important}
+@media(max-width:900px){
+ .sidebar{width:260px!important}
+ .layout{grid-template-columns:1fr!important}
+ body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100svh - 150px)!important}
+}
