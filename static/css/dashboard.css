@@ -2027,17 +2027,49 @@ button, input, select, textarea { font: inherit; }
 .sidebar-actions .theme-btn,.sidebar-actions .logout-btn{width:100%!important;min-height:36px!important;margin:0!important;padding:9px 10px!important}
 @media(max-width:760px){.sidebar-footer>.theme-btn{margin-bottom:10px!important}.sidebar-actions{gap:10px!important}}
 
-/* === v9 unified Settings center === */
-.settings-launch svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
-#layout-settings-overlay .layout-settings{width:min(820px,calc(100vw - 32px));max-width:820px;height:min(650px,calc(100dvh - 48px))}
-.settings-shell{display:grid;grid-template-columns:180px minmax(0,1fr);min-height:0;flex:1;border-top:0}
-.settings-nav{padding:14px 10px;border-right:1px solid #ececef;background:#fafafa}
-.settings-nav button{width:100%;height:42px;display:flex;align-items:center;gap:10px;padding:0 12px;margin:2px 0;border:0;border-radius:9px;background:transparent;color:#55565c;text-align:left;font-weight:600}
-.settings-nav button i{font-size:17px;color:#777981}.settings-nav button:hover{background:#f0f0f2;color:#202124}.settings-nav button.active{background:#fff;color:#202124;box-shadow:0 0 0 1px #dedee2}.settings-nav button.active i{color:#d92d2d}
-.settings-content{min-width:0;overflow:auto}.settings-content #layout-settings-body{padding:4px 24px 24px!important;overflow:visible}
-.settings-section-head{margin:22px 0 10px}.settings-section-head h3{margin:0 0 4px!important;font-size:12px!important;color:#25262a!important}.settings-section-head p{margin:0;color:#85868d;font-size:12px;line-height:1.45}
-.settings-action-card{width:100%;display:grid;grid-template-columns:34px 1fr 18px;align-items:center;gap:10px;padding:12px;border:1px solid #e1e1e4;border-radius:11px;background:#fff;text-align:left;color:#33343a}.settings-action-card>i:first-child{font-size:20px;color:#696a71}.settings-action-card span{display:flex;flex-direction:column;gap:2px}.settings-action-card strong{font-size:13px}.settings-action-card small{font-size:11px;color:#85858c;font-weight:400}.settings-action-card:hover{background:#f8f8f9}
-.settings-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 2px;border-bottom:1px solid #ececef;cursor:pointer}.settings-toggle-row>span{display:flex;flex-direction:column;gap:3px}.settings-toggle-row strong{font-size:13px;color:#303136}.settings-toggle-row small{font-size:11px;color:#85858c}.settings-toggle-row input{position:absolute;opacity:0;pointer-events:none}.settings-toggle-row>i{position:relative;width:38px;height:22px;border-radius:999px;background:#d8d9dd;transition:.18s;flex:none}.settings-toggle-row>i:after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:.18s}.settings-toggle-row input:checked+i{background:#292a2e}.settings-toggle-row input:checked+i:after{transform:translateX(16px)}
-body.reduced-motion *,body.reduced-motion *:before,body.reduced-motion *:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
-@media(min-width:761px){body.nonsticky-sidebar .sidebar{position:absolute!important}}
-@media(max-width:760px){#layout-settings-overlay .layout-settings{height:min(90dvh,720px)!important}.settings-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}.settings-nav{display:flex;gap:6px;overflow-x:auto;padding:10px 14px;border-right:0;border-bottom:1px solid #ececef}.settings-nav button{width:auto;min-width:max-content;padding:0 12px}.settings-content #layout-settings-body{padding:2px 18px 20px!important}.settings-nav button span{display:inline}.settings-footer{flex:none}}
+/* v10 — mobile-first header / overview polish */
+@media (max-width:760px){
+  body{overflow-x:hidden}
+  .mobile-header{height:58px;padding:0 14px!important;background:#f7f7f8!important;border-bottom:1px solid #e2e2e5!important;color:#202126!important;box-shadow:none!important}
+  .mobile-logo{gap:8px;font-size:13px;font-weight:700;letter-spacing:-.01em}
+  .mobile-logo img{width:28px!important;height:28px!important}
+  .hamburger{width:38px;height:38px;border:1px solid #d5d5da!important;border-radius:10px;background:#fff!important;color:#33343a!important;box-shadow:none!important}
+  .hamburger i{font-size:18px}
+
+  .main{padding:0 12px 30px!important;overflow:hidden}
+  .topbar{min-height:auto!important;margin:0!important;padding:10px 0!important;border-bottom:1px solid #ededf0!important;justify-content:flex-end!important}
+  .breadcrumb{display:none!important}
+  .topbar-right{width:100%;display:flex!important;justify-content:flex-end!important;gap:8px!important}
+  .topbar-right .badge-btn{min-height:36px!important;margin:0!important;padding:0 12px!important;border-radius:9px!important;font-size:11px!important}
+  .topbar-right .btn-ghost{display:none!important}
+  .topbar-right .btn-outline{background:#fff!important;border-color:#dedee2!important;color:#4b4c52!important}
+  .topbar-right .btn-primary{background:#df2b2f!important;color:#fff!important}
+
+  .page-heading{position:relative!important;top:auto!important;display:block!important;margin:0 0 16px!important;padding:20px 0 16px!important;border-bottom:1px solid #ededf0!important;background:#fff!important}
+  .page-heading>div:first-child{width:100%}
+  .page-heading .eyebrow,.page-heading p{display:none!important}
+  .page-heading h1{margin:0 0 16px!important;font-size:22px!important;line-height:1.15!important;letter-spacing:-.035em!important;color:#202126!important}
+  .heading-actions{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-areas:"date refresh" "live live"!important;width:100%!important;gap:8px!important;margin:0!important;align-items:stretch!important}
+  .chicago-calendar{grid-area:date!important;width:100%!important;min-width:0!important;min-height:58px!important;padding:7px 9px!important;gap:9px!important;border:1px solid #dedee2!important;border-radius:12px!important;background:#fff!important;overflow:hidden!important}
+  .calendar-date-tile{min-width:42px!important;height:44px!important;border-radius:9px!important;flex:0 0 42px!important}
+  .calendar-date-copy{min-width:0!important;overflow:hidden!important}
+  .calendar-date-copy>strong{display:block!important;max-width:none!important;font-size:11px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;color:#25262b!important}
+  .calendar-date-copy>span{display:block!important;font-size:9px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;color:#77787f!important}
+  #refresh-button{grid-area:refresh!important;align-self:stretch!important;margin:0!important;min-width:74px!important;min-height:58px!important;padding:0 10px!important;border:1px solid #dedee2!important;border-radius:12px!important;background:#fff!important;color:#55565d!important;font-size:10px!important}
+  #refresh-button i{font-size:15px;color:#df2b2f!important}
+  .heading-actions .live-pill{grid-area:live!important;order:initial!important;width:100%!important;height:34px!important;margin:0!important;padding:0 10px!important;justify-content:flex-start!important;border:1px solid #e4e4e7!important;border-radius:10px!important;background:#fafafa!important;font-size:9px!important;color:#707178!important;overflow:hidden!important}
+  .heading-actions .live-pill #last-update{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .overview-toolbar{margin-top:0!important;padding:0!important;min-height:0!important}
+  .overview-toolbar>span{display:none!important}
+  .overview-toolbar .badge-btn{width:100%!important;margin-bottom:12px!important;background:#fff!important;border-color:#dedee2!important;color:#4a4b51!important}
+  .stat-grid{gap:8px!important}
+  .stat-card{border-radius:12px!important}
+  .card,.table-wrap{border-radius:12px!important}
+}
+@media(max-width:390px){
+  .topbar-right .badge-btn{padding:0 10px!important}
+  .heading-actions{grid-template-columns:minmax(0,1fr) 66px!important}
+  #refresh-button{min-width:66px!important}
+  .calendar-date-copy>strong{font-size:10px!important}
+}
