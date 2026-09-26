@@ -5,27 +5,24 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 </head><body>
 <main class="login-shell">
-  <section class="truck-hero" aria-label="Kurtex fleet maintenance">
-    <div class="hero-bg"></div><div class="hero-shade"></div><div class="hero-glow"></div>
-    <header class="hero-top">
-      <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt="Kurtex"><span>KURTEX<small>FLEET OPERATIONS</small></span></a>
-      <span class="live-pill"><i class="ph ph-wrench"></i> Maintenance workspace</span>
-    </header>
-    <div class="hero-copy">
-      <span class="eyebrow">MAINTENANCE, IN VIEW</span>
-      <h1>Keep your fleet<br><em>moving</em> forward.</h1>
-      <p>One workspace for case activity, maintenance history, parts intelligence, and the people keeping every unit on the road.</p>
-      <div class="hero-features">
-        <div><i class="ph ph-clipboard-text"></i><span><b>Follow every case</b><small>From report to resolution</small></span></div>
-        <div><i class="ph ph-truck"></i><span><b>Know your fleet</b><small>History, repairs and recurring issues</small></span></div>
-        <div><i class="ph ph-chart-bar"></i><span><b>See team performance</b><small>Keep operations moving</small></span></div>
-      </div>
+  <div class="scene" aria-hidden="true"></div><div class="scene-overlay" aria-hidden="true"></div><div class="scene-light" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt="Kurtex"><span>KURTEX<small>FLEET OPERATIONS</small></span></a>
+    <span class="workspace-pill"><i class="ph ph-wrench"></i> Maintenance workspace</span>
+  </header>
+
+  <section class="hero-copy">
+    <span class="eyebrow">MAINTENANCE, IN VIEW</span>
+    <h1>Keep your fleet<br><em>moving</em> forward.</h1>
+    <p>One workspace for case activity, maintenance history, parts intelligence, and the people keeping every unit on the road.</p>
+    <div class="hero-features">
+      <div><i class="ph ph-clipboard-text"></i><span><b>Follow every case</b><small>From report to resolution</small></span></div>
+      <div><i class="ph ph-truck"></i><span><b>Know your fleet</b><small>History, repairs and recurring issues</small></span></div>
+      <div><i class="ph ph-chart-bar"></i><span><b>See team performance</b><small>Keep operations moving</small></span></div>
     </div>
-    <footer class="hero-footer"><span>Kurtex Maintenance</span><span>TRUCKS · TRAILERS · REEFERS · PEOPLE</span></footer>
   </section>
 
-  <section class="login-side">
-    <div class="ambient-lines"></div>
+  <section class="login-card-wrap">
     <div class="login-card">
       <div class="card-kicker">YOUR OPERATIONS WORKSPACE</div>
       <h2>Welcome back.</h2>
@@ -39,20 +36,18 @@
       <div class="trust"><i class="ph ph-shield-check"></i><div><b>Same bot. Clearer picture.</b><span>Case assignment, alerts and report submission stay in Telegram. Review fleet activity and maintenance intelligence here.</span></div></div>
       <div class="system-row"><span><i></i> Operations connected</span><span>Chicago time</span></div>
     </div>
-    <footer class="side-footer">Kurtex Alert Dashboard · Secure Telegram sign-in</footer>
   </section>
+
+  <footer class="page-footer"><span>Kurtex Maintenance</span><span>TRUCKS&nbsp;&nbsp;·&nbsp;&nbsp;TRAILERS&nbsp;&nbsp;·&nbsp;&nbsp;REEFERS&nbsp;&nbsp;·&nbsp;&nbsp;PEOPLE&nbsp;&nbsp;·&nbsp;&nbsp;PERFORMANCE</span></footer>
 </main>
 <script>
 (() => {
-  const hero = document.querySelector('.truck-hero');
-  const bg = document.querySelector('.hero-bg');
-  if (!hero || !bg || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  hero.addEventListener('pointermove', e => {
-    const r=hero.getBoundingClientRect();
-    const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5;
-    bg.style.transform=`scale(1.045) translate(${x*-10}px,${y*-7}px)`;
-  });
-  hero.addEventListener('pointerleave',()=>bg.style.transform='scale(1.035) translate(0,0)');
+ const root=document.documentElement, scene=document.querySelector('.scene');
+ if(!scene || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+ window.addEventListener('pointermove',e=>{
+   const x=e.clientX/innerWidth-.5,y=e.clientY/innerHeight-.5;
+   root.style.setProperty('--mx',`${x*-12}px`); root.style.setProperty('--my',`${y*-8}px`);
+ });
 })();
 </script>
 </body></html>
