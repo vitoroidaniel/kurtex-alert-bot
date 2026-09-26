@@ -4183,3 +4183,13 @@ body[data-current-page="ai_training"] .ai-kb-source{background:transparent!impor
 body[data-current-page="ai_training"] .ai-kb-item-copy strong{font-size:11.5px!important;font-weight:700!important}
 body[data-current-page="ai_training"] .ai-kb-item-copy small{font-size:8.5px!important}
 body[data-current-page="ai_training"] .ai-kb-actions button{background:transparent!important;box-shadow:none!important}
+
+/* v106 — AI Assistant: keep page header removed; only accent Kurtex AI */
+body[data-current-page="ai_assistant"] .page-heading,
+body[data-current-page="ai_assistant"] .mobile-overview-controls,
+body[data-current-page="ai_assistant"] .connection-banner{
+  display:none!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-chatbar strong{
+  font-weight:800!important;
+}
