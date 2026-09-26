@@ -210,6 +210,14 @@ Rules:
 - Omit unavailable fields instead of writing "not provided", "unknown", or similar filler.
 - Do not pad a history answer with generic observations (for example, do not say that check-engine issues can occur on trucks).
 - If the agent asks for matching/history cases, answer with the matching case facts first. Ask diagnostic follow-up questions only when the agent is actually asking for diagnosis.
+- Similar cases must be genuinely relevant to the current symptom/system. Never include unrelated cases just to fill a section.
+- For diagnosis, behave like a maintenance triage workflow, not a generic chatbot: first identify what is known, then ask the highest-value missing questions, then give prioritized checks from easiest/most likely to more involved.
+- Give enough actionable diagnostic branches to be useful. Normally provide 5-8 prioritized checks when evidence supports them, not only 2-3 generic suggestions.
+- For every recommended check, explain what result to look for and what that result would indicate. Do not claim a repair is confirmed before testing.
+- Distinguish: OBSERVED (visible/provided), LIKELY (reasoned), VERIFIED (supported by Kurtex/source data).
+- Use current WEB SEARCH evidence when supplied, but treat snippets as supporting references rather than authoritative OEM procedures.
+- When manufacturer/model/fault code is missing and it materially changes diagnosis, explicitly ask for it.
+- Do not recommend replacing expensive components until simpler checks and evidence support replacement.
 """
 
 def _cf_ai(messages, max_tokens=700, temperature=0.2, image_data_url=None):
@@ -661,6 +669,28 @@ def api_ai_status():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
     return jsonify({"configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),"model":KURTEX_AI_MODEL,"can_train":_ai_is_trainer(),"knowledge_count":len(_read_ai_knowledge())})
 
+
+def _ai_web_search(query, limit=5):
+    """Search current public web sources for maintenance diagnostics using the existing server-side Serper key."""
+    api_key=os.getenv("SERPER_API_KEY","").strip()
+    if not api_key or not query:return []
+    q=re.sub(r"\s+"," ",str(query)).strip()[:350]
+    # Bias toward technical troubleshooting rather than generic consumer content.
+    search_q=q+" heavy duty truck trailer reefer troubleshooting service"
+    body=json.dumps({"q":search_q,"gl":"us","hl":"en","num":max(3,min(int(limit),8))}).encode("utf-8")
+    req=urllib.request.Request("https://google.serper.dev/search",data=body,
+        headers={"X-API-KEY":api_key,"Content-Type":"application/json","User-Agent":"KurtexDashboard/1.35"},method="POST")
+    try:
+        with urllib.request.urlopen(req,timeout=8) as resp:data=json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        logger.info("Kurtex AI web search failed for %r: %s",q,exc);return []
+    out=[]
+    for item in (data.get("organic") or [])[:limit]:
+        link=str(item.get("link") or "").strip()
+        if not link.startswith(("http://","https://")):continue
+        out.append({"title":_ai_clip(item.get("title"),180),"snippet":_ai_clip(item.get("snippet"),700),"url":link})
+    return out
+
 @app.route("/api/ai/chat",methods=["POST"])
 def api_ai_chat():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
@@ -688,10 +718,26 @@ def api_ai_chat():
         ctx["chat_attachments"]=attachments
         ctx["chat_selected_knowledge"]=selected
         ctx["parts_manual_matches"]=_ai_parts_matches(message,8)
+        # Fresh public technical context complements fleet history. Failure/no API key is non-fatal.
+        ctx["web_search_results"]=_ai_web_search(message,5)
         stage="prompt"
         messages=[{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"system","content":
           "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
-          json.dumps(ctx,ensure_ascii=False)}, {"role":"system","content":"Use PARTS MANUAL MATCHES, selected knowledge, and similar historical cases together. For an attached image, describe only what is actually visible, state uncertainty, and correlate it with the written symptom. Never invent an OEM/part number; only provide one if a verified source in context explicitly contains it. Structure diagnostic answers with Likely issue, Evidence, Recommended checks, Matching parts (when supported), Similar cases, and Sources used."}]
+          json.dumps(ctx,ensure_ascii=False)}, {"role":"system","content":"""Act as a professional maintenance triage assistant. Use the attached image/document, selected Knowledge, Parts Manual, relevant Kurtex history, and WEB SEARCH RESULTS together when available.
+
+For a diagnostic request, prefer this workflow:
+1. Quick assessment — 2-4 sentences stating what is observed vs what is only suspected.
+2. Questions to confirm — ask the few highest-value questions (unit make/model, reefer model, fault/alarm code, temperatures/pressures, when symptom started, recent work/damage) only when missing.
+3. Diagnostic checks — normally 5-8 prioritized checks. Start with safe/simple checks. For each check state: what to inspect/test -> what result matters -> what that result points to.
+4. Most likely causes — ranked by evidence, not a random list.
+5. Recommended next action — what to do now, when to stop operation/escalate, and what a technician should verify.
+6. Matching parts — only when a verified Parts Manual/Knowledge source explicitly supports the part/number. Never invent a part number.
+7. Similar Kurtex cases — include ONLY cases matching the same system/symptom or a clearly relevant failure mode. If there are no useful matches, say "No strong similar Kurtex cases found" instead of showing unrelated cases.
+8. Sources — compact one-line source list only. Do not add blank bullet lines or excessive spacing.
+
+For images: describe only what is actually visible; do not infer hidden damage as fact. For web results: use them to improve troubleshooting and identify useful technical references, but do not present a search snippet as an OEM procedure. If make/model or alarm code is needed for an exact procedure, ask for it.
+
+Formatting: use clean headings, compact numbered steps, and single-spaced bullets. Do not output literal backslashes before line breaks, bullet characters, or markdown punctuation. Avoid vague advice such as merely "inspect electrical" — say what should be checked and what the result means."""}]
         for item in history[-8:]:
             role=item.get("role"); content=_ai_clip(item.get("content"),1800)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
@@ -699,7 +745,7 @@ def api_ai_chat():
         stage="workers_ai"
         image_items=[a for a in (chat.get("attachments") or []) if a.get("kind")=="image" and a.get("data")]
         image_data=image_items[-1].get("data") if image_items else None
-        answer=_cf_ai(messages,1000,.2,image_data_url=image_data)
+        answer=_cf_ai(messages,1800,.18,image_data_url=image_data)
         stage="save_chat"
         history.extend([{"role":"user","content":message,"at":_now_iso(),"attachment_ids":requested_attachment_ids},
                         {"role":"assistant","content":answer,"at":_now_iso()}])

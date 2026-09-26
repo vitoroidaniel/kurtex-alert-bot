@@ -48,14 +48,21 @@ document.addEventListener('DOMContentLoaded',function(){initAITrainer();if(docum
 
 
 function kurtexAIFormat(text){
- var safe=escapeAI(String(text==null?'':text)).replace(/\r/g,'');
+ var raw=String(text==null?'':text)
+   .replace(/\\r\\n|\\n|\\r/g,'\n')
+   .replace(/\\\s*$/gm,'')
+   .replace(/&#x20;|&nbsp;/gi,' ')
+   .replace(/[ \t]+\n/g,'\n')
+   .replace(/\n[ \t]*\n[ \t]*\n+/g,'\n\n');
+ var safe=escapeAI(raw).replace(/\r/g,'');
  safe=safe.replace(/^#{1,6}\s+(.+)$/gm,'<div class="ai-md-heading">$1</div>');
  safe=safe.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
  safe=safe.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,'$1<em>$2</em>');
  safe=safe.replace(/^\s*[-*]\s+(.+)$/gm,'<div class="ai-md-bullet"><span>•</span><span>$1</span></div>');
+ safe=safe.replace(/^\s*(\d+)\.\s+(.+)$/gm,'<div class="ai-md-number"><span>$1.</span><span>$2</span></div>');
  safe=safe.replace(/^\s*\*+\s*$/gm,'');
  safe=safe.replace(/(^|\s)#{1,6}(?=\s|$)/g,'$1');
- safe=safe.replace(/\n{2,}/g,'<br><br>').replace(/\n/g,'<br>');
+ safe=safe.replace(/\n{2,}/g,'<br>').replace(/\n/g,'<br>');
  return safe
 }
 function toggleKurtexAIFullscreen(force){

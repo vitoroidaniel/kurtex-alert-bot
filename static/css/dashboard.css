@@ -4701,3 +4701,11 @@ body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open{p
   border-color:rgba(190,58,58,.26)!important;
   box-shadow:none!important;
 }
+
+/* v135 — compact professional AI diagnostic output */
+#page-ai_assistant .ai-page-msg.assistant .ai-msg-body{line-height:1.52}
+#page-ai_assistant .ai-page-msg.assistant .ai-md-heading{margin:14px 0 5px;font-weight:700}
+#page-ai_assistant .ai-page-msg.assistant .ai-md-heading:first-child{margin-top:0}
+#page-ai_assistant .ai-md-bullet,#page-ai_assistant .ai-md-number{display:grid;grid-template-columns:20px minmax(0,1fr);gap:5px;margin:3px 0}
+#page-ai_assistant .ai-md-number{grid-template-columns:24px minmax(0,1fr)}
+#page-ai_assistant .ai-md-bullet+br,#page-ai_assistant .ai-md-number+br{display:none}
