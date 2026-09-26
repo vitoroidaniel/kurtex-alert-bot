@@ -50,6 +50,33 @@ function toggleKurtexAIFullscreen(force){
  p.classList.toggle('ai-fullscreen',on);
  var b=p.querySelector('.ai-expand-btn i');if(b)b.className=on?'ph ph-arrows-in':'ph ph-arrows-out';
 }
+async function newKurtexAIPageChat(){
+ kurtexAIChatId=null;
+ var t=document.getElementById('ai-page-messages');
+ if(t)t.innerHTML='<div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div>';
+ var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}
+}
+async function openAIPageHistory(){
+ var shell=document.querySelector('#page-ai_assistant .ai-assistant-workspace');if(!shell)return;
+ var old=document.getElementById('ai-page-history');if(old){old.remove();return}
+ var panel=document.createElement('div');panel.id='ai-page-history';panel.className='ai-page-history';
+ panel.innerHTML='<div class="ai-page-history-head"><strong>Chat history</strong><button onclick="document.getElementById(\'ai-page-history\').remove()"><i class="ph ph-x"></i></button></div><div class="ai-page-history-list">Loading…</div>';
+ shell.appendChild(panel);
+ try{
+  var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
+  var list=panel.querySelector('.ai-page-history-list');
+  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+attr(c.id)+'\')"><strong>'+escapeAI(c.title||'Maintenance conversation')+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+ }catch(e){panel.querySelector('.ai-page-history-list').textContent='Unable to load chat history.'}
+}
+async function openAIPageSavedChat(id){
+ try{
+  var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to open conversation');
+  var chat=x.item||x.chat||x;kurtexAIChatId=chat.id||id;var box=document.getElementById('ai-page-messages');box.innerHTML='';
+  (chat.messages||[]).forEach(function(m){var d=document.createElement('div');d.className='ai-page-msg '+(m.role==='assistant'?'assistant':'user');d.innerHTML=m.role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');box.appendChild(d)});
+  if(!(chat.messages||[]).length)await newKurtexAIPageChat();
+  var p=document.getElementById('ai-page-history');if(p)p.remove();box.scrollTop=box.scrollHeight
+ }catch(e){}
+}
 function openKurtexAIPageChat(){
  if(typeof showPage==='function')showPage('ai_assistant');
  var p=document.getElementById('kurtex-ai-panel');if(p)p.classList.remove('open','ai-fullscreen','history-open');

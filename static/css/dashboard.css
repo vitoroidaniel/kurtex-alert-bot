@@ -3406,3 +3406,37 @@ body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 13
  .layout{grid-template-columns:1fr!important}
  body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100svh - 150px)!important}
 }
+
+/* v86 — compact AI Assistant workspace + working history controls */
+body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 215px)!important;min-height:470px!important}
+.ai-assistant-workspace{position:relative!important;max-width:1120px!important;margin:0 auto!important}
+.ai-page-toolbar{height:46px;display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.ai-page-toolbar>div:first-child{display:grid;gap:1px}.ai-page-toolbar strong{font-size:13px}.ai-page-toolbar small{font-size:9px;color:var(--muted)}
+.ai-page-toolbar-actions{display:flex;gap:7px}.ai-page-toolbar-actions button{height:32px;padding:0 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:10px;cursor:pointer}
+.ai-page-toolbar-actions button:hover{border-color:#d8a2a4;background:#fffafa}
+.ai-assistant-page-shell{height:calc(100% - 55px)!important;min-height:0!important}
+.ai-page-messages{padding-top:20px!important;padding-bottom:20px!important}
+.ai-page-welcome i{font-size:28px!important}.ai-page-welcome h3{font-size:20px!important;margin:8px 0 5px!important}.ai-page-welcome p{font-size:11px!important}
+.ai-page-history{position:absolute;z-index:20;right:0;top:52px;width:330px;max-width:92%;max-height:calc(100% - 60px);overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 45px rgba(20,24,30,.12)}
+.ai-page-history-head{height:46px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.ai-page-history-head strong{font-size:12px}.ai-page-history-head button{border:0;background:transparent;color:var(--text);cursor:pointer;font-size:16px}
+.ai-page-history-list{padding:7px;overflow:auto;max-height:460px;font-size:10px}
+.ai-page-history-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--text);cursor:pointer}
+.ai-page-history-row:hover{background:var(--surface-2,#f5f6f7)}.ai-page-history-row strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ai-page-history-row small{font-size:8px;color:var(--muted);flex:0 0 auto}
+@media(max-width:760px){body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100svh - 180px)!important}.ai-page-toolbar{height:auto;gap:8px;align-items:flex-start}.ai-page-toolbar-actions{margin-left:auto}.ai-assistant-page-shell{height:calc(100% - 48px)!important}}
+
+/* v87 — balanced sidebar sizing */
+.sidebar{width:226px!important}
+.layout{grid-template-columns:226px minmax(0,1fr)!important}
+.sidebar-logo{padding:16px 15px 14px!important}
+.sidebar-logo img{width:41px!important;height:41px!important}
+.sidebar nav{padding:7px 10px 10px!important}
+.nav-section-label{margin:8px 9px 7px!important;font-size:8.5px!important}
+.nav-item{min-height:39px!important;padding:8px 11px!important;gap:10px!important;font-size:12px!important;border-radius:9px!important}
+.nav-item i{font-size:16px!important}
+.nav-sub{padding-left:31px!important}
+.nav-group-header{min-height:39px!important;padding:8px 11px!important;font-size:12px!important}
+.sidebar-footer{padding:10px!important}
+.user-chip{padding:9px!important}
+.theme-btn,.logout-btn{font-size:10.5px!important;padding:8px 9px!important}
+@media(max-width:900px){.sidebar{width:260px!important}.layout{grid-template-columns:1fr!important}}
