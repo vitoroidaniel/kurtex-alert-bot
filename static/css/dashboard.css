@@ -3204,3 +3204,30 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 @media(max-width:1050px){#page-ai_training .ai-training-grid{grid-template-columns:1fr 270px}}
 @media(max-width:820px){#page-ai_training .ai-training-grid{grid-template-columns:1fr}#page-ai_training .ai-training-side{grid-template-columns:1fr 1fr}#page-ai_training .ai-status-card{grid-column:1/-1}}
 @media(max-width:600px){#page-ai_training .ai-training-header{align-items:flex-start;flex-direction:column}#page-ai_training .ai-training-header button{width:100%}#page-ai_training .ai-kb-form{grid-template-columns:1fr}#page-ai_training .ai-field-wide{grid-column:auto}#page-ai_training .ai-training-side{grid-template-columns:1fr}#page-ai_training .ai-status-card{grid-column:auto}}
+
+/* v68 notification center — notifications only */
+.notification-panel{width:370px!important;max-width:calc(100vw - 20px)!important;border:1px solid #e1e4e8!important;border-radius:14px!important;background:#fff!important;box-shadow:0 18px 50px rgba(22,26,31,.14)!important;overflow:hidden!important}
+.notification-panel .notification-panel-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;padding:14px 14px 11px!important;border-bottom:1px solid #eceef1!important;background:#fff!important}
+.notification-title{display:flex;align-items:center;gap:9px;min-width:0}
+.notification-title-icon{width:31px;height:31px;display:grid;place-items:center;border:1px solid #eceef1;border-radius:9px;background:#f7f8f9;color:#34383e;font-size:15px;flex:none}
+.notification-title strong{display:block;font-size:11px!important;line-height:1.2;color:#23262b}
+.notification-title small{display:block;margin-top:2px!important;font-size:8px!important;color:#8a9098!important}
+.notification-mark-all{display:flex!important;align-items:center!important;gap:5px!important;border:0!important;background:transparent!important;color:#d93632!important;padding:6px!important;font:700 8.5px Inter,sans-serif!important;white-space:nowrap!important;cursor:pointer}
+.notification-panel .notification-tabs{display:flex!important;gap:5px!important;padding:9px 12px!important;border-bottom:1px solid #eceef1!important;background:#fff!important}
+.notification-panel .notification-tabs button{border:0!important;border-radius:8px!important;background:transparent!important;color:#737981!important;padding:6px 9px!important;font:700 8.5px Inter,sans-serif!important}
+.notification-panel .notification-tabs button.active{background:#f0f1f3!important;color:#24272c!important}
+.notification-panel .notification-list{max-height:390px!important;min-height:190px!important;overflow-y:auto!important;background:#fafbfb!important;padding:7px!important}
+.notification-panel .notification-item{background:#fff!important;border:1px solid #e7e9ec!important;border-radius:10px!important;margin:0 0 6px!important;padding:10px!important}
+.notification-panel .notification-item:last-child{margin-bottom:0!important}
+.notification-panel .notification-item.unseen{border-left:2px solid #d93632!important;background:#fffafa!important}
+.notification-panel .notification-empty{min-height:176px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;padding:20px!important}
+@media(max-width:520px){.notification-panel{position:fixed!important;left:10px!important;right:10px!important;top:64px!important;width:auto!important;max-width:none!important}}
+
+/* v69 — AI Training starts at the top like every other workspace */
+#page-ai_training.page{padding-top:0!important;margin-top:0!important;align-content:start!important;justify-content:start!important}
+#page-ai_training .ai-training-page{margin-top:0!important;padding-top:0!important;transform:none!important}
+#page-ai_training.active{display:block!important}
+.main:has(#page-ai_training.active) .page-heading{margin-bottom:12px!important}
+.main:has(#page-ai_training.active) .content,
+.main:has(#page-ai_training.active) .pages,
+.main:has(#page-ai_training.active) .page-container{padding-top:0!important;align-items:start!important}
