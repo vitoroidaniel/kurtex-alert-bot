@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 :root {
   --bg: #f3f5fa;
   --surface: #fff;
@@ -55,7 +56,7 @@
   display: none !important;
 }
 body {
-  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -2011,3 +2012,17 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)!important;box
   .density-picker{grid-template-columns:1fr}
   .settings-footer{padding:12px 18px calc(12px + env(safe-area-inset-bottom))}
 }
+
+
+/* Cross-platform typography: keep desktop and mobile visually identical */
+html, body, button, input, select, textarea { font-family: "Inter", Arial, sans-serif; }
+button, input, select, textarea { font: inherit; }
+
+/* === v8 sidebar footer spacing + settings icon === */
+.sidebar-footer{padding-top:18px!important}
+.sidebar-footer .user-chip{padding:6px 9px 18px!important}
+.sidebar-footer>.theme-btn{width:100%!important;min-height:36px!important;margin:0 0 10px!important;justify-content:flex-start!important;padding:9px 11px!important;gap:8px!important}
+.sidebar-footer>.theme-btn i{font-size:16px!important}
+.sidebar-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;width:100%!important}
+.sidebar-actions .theme-btn,.sidebar-actions .logout-btn{width:100%!important;min-height:36px!important;margin:0!important;padding:9px 10px!important}
+@media(max-width:760px){.sidebar-footer>.theme-btn{margin-bottom:10px!important}.sidebar-actions{gap:10px!important}}
