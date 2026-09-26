@@ -3303,3 +3303,14 @@ body[data-current-page="ai_training"] #page-ai_training .ai-training-side{width:
 .notification-panel .notification-title>div{order:1!important;text-align:left!important}
 .notification-panel .notification-mark-all{order:2!important;margin-left:auto!important}
 .notification-panel .notification-tabs{justify-content:flex-start!important}
+
+/* v77 compact AI chat/history */
+.kurtex-ai-panel{width:min(430px,calc(100vw - 18px))!important}
+.kurtex-ai-body{position:relative!important}
+.kurtex-ai-history{position:absolute!important;z-index:5!important;inset:0 auto 0 0!important;width:285px!important;max-width:78%!important;background:#fff!important;border-right:1px solid #e5e7ea!important;box-shadow:8px 0 24px rgba(20,24,30,.06)!important;transform:translateX(-102%)!important;transition:transform .18s ease!important}
+.kurtex-ai-panel.history-open .kurtex-ai-history{transform:translateX(0)!important}
+.kurtex-ai-chat-main{width:100%!important;min-width:0!important}
+.ai-history-head{padding:11px!important}.ai-history-head>div strong{font-size:10.5px!important}.ai-history-head>div small{font-size:7.5px!important}.ai-history-head>button{height:31px!important;padding:0 9px!important;font-size:8.5px!important}
+#kurtex-ai-chat-list{padding:7px!important}.ai-chat-row{min-height:48px!important}.ai-chat-copy strong{max-width:165px!important;font-size:9.5px!important}.ai-chat-copy small{font-size:7.5px!important}
+.kurtex-ai-messages{padding:18px 15px!important}.kurtex-ai-msg{max-width:88%!important;font-size:9.5px!important;line-height:1.5!important}.kurtex-ai-suggestions{padding:7px 12px!important}.kurtex-ai-compose{padding:0 12px 12px!important}.ai-compose-box{min-height:92px!important}
+@media(max-width:520px){.kurtex-ai-panel{width:100vw!important;max-width:100vw!important}.kurtex-ai-history{width:270px!important;max-width:84%!important}}

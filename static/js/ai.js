@@ -32,8 +32,18 @@ function editAIKnowledge(id){var k=aiKnowledgeItems.find(function(x){return Stri
 function closeAIKnowledgeEdit(){document.getElementById('ai-edit-modal').hidden=true;document.body.classList.remove('modal-open')}
 async function updateAIKnowledge(e){e.preventDefault();var id=document.getElementById('ai-edit-id').value,btn=e.submitter||e.target.querySelector('button[type=submit]'),payload={title:document.getElementById('ai-edit-title').value.trim(),content:document.getElementById('ai-edit-content').value.trim(),tags:document.getElementById('ai-edit-tags').value.split(',').map(function(x){return x.trim()}).filter(Boolean)};if(btn)btn.disabled=true;try{var r=await apiFetch('/api/ai/knowledge/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),x=await r.json();if(!r.ok)throw new Error(x.error||'Update failed');closeAIKnowledgeEdit();aiKnowledgeStatus('Knowledge updated.','ok');await loadAIKnowledge()}catch(err){aiKnowledgeStatus(err.message||'Update failed','bad')}finally{if(btn)btn.disabled=false}}
 async function deleteAIKnowledge(id){var k=aiKnowledgeItems.find(function(x){return String(x.id)===String(id)});if(!confirm('Delete "'+((k&&k.title)||'this knowledge item')+'"? This removes it from Kurtex AI reference material.'))return;try{var r=await apiFetch('/api/ai/knowledge/'+id,{method:'DELETE'}),x=await r.json();if(!r.ok)throw new Error(x.error||'Delete failed');aiKnowledgeStatus('Knowledge deleted.','ok');await loadAIKnowledge()}catch(err){aiKnowledgeStatus(err.message||'Delete failed','bad')}}
-document.addEventListener('DOMContentLoaded',initAITrainer);
+document.addEventListener('DOMContentLoaded',function(){initAITrainer();if(document.getElementById('page-ai_training'))loadAIKnowledge();if(document.getElementById('ai-test-result'))setTimeout(testKurtexAIConnection,450)});
 
+
+async function sendKurtexAI(e){
+ if(e&&e.preventDefault)e.preventDefault();
+ var input=document.getElementById('kurtex-ai-input'),msg=(input&&input.value||'').trim();if(!msg)return false;
+ var panel=document.getElementById('kurtex-ai-panel');if(panel){panel.classList.add('open');panel.classList.remove('history-open')}
+ input.value='';var w=document.querySelector('#kurtex-ai-messages .kurtex-ai-welcome');if(w)w.remove();
+ kurtexAIAdd('user',msg);var wait=kurtexAIAdd('assistant','Thinking…');wait.classList.add('thinking');
+ try{var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:kurtexCurrentPage()})}),x=await r.json();if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.textContent=x.response||x.reply||x.message||'No response returned.';var t=document.getElementById('kurtex-ai-title');if(t&&x.title)t.textContent=x.title;loadKurtexAIChats()}catch(err){wait.remove();var box=document.getElementById('kurtex-ai-messages');if(box&&!box.querySelector('.ai-chat-failure')){var f=document.createElement('div');f.className='ai-chat-failure';f.textContent='Message was not sent. '+(err.message||'Check AI Training diagnostics.');box.appendChild(f)}if(typeof loadNotifications==='function')loadNotifications()}input.focus();return false
+}
+function kurtexAIQuick(text){var input=document.getElementById('kurtex-ai-input');if(!input)return;input.value=text;sendKurtexAI({preventDefault:function(){}})}
 document.addEventListener('DOMContentLoaded',function(){
  var box=document.getElementById('kurtex-ai-messages');
  if(box && box.children.length===1) aiWelcome();

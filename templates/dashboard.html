@@ -306,7 +306,7 @@
 <div class="kurtex-ai-notice"><i class="ph ph-shield-check"></i><span>Uses Kurtex history + approved maintenance knowledge. Verify critical repairs.</span></div>
 <div id="kurtex-ai-messages" class="kurtex-ai-messages"><div class="kurtex-ai-msg assistant">Ask about a truck, trailer, reefer, symptom, part, or previous Kurtex case. Romanian, English and Russian are OK.</div></div>
 <div class="kurtex-ai-suggestions"><button onclick="kurtexAIQuick('Find similar Kurtex cases for the issue I am viewing.')"><i class="ph ph-files"></i> Similar cases</button><button onclick="kurtexAIQuick('Help me diagnose this maintenance issue. Ask me for the missing symptoms first.')"><i class="ph ph-stethoscope"></i> Diagnose issue</button></div>
-<form class="kurtex-ai-compose" onsubmit="sendKurtexAI(event)"><div class="ai-compose-box"><textarea id="kurtex-ai-input" rows="2" placeholder="Ask Kurtex AI about a maintenance issue..."></textarea><div class="ai-compose-tools"><span>EN · RO · RU</span><button type="submit" title="Send"><i class="ph ph-paper-plane-tilt"></i></button></div></div></form>
+<form class="kurtex-ai-compose" onsubmit="sendKurtexAI(event); return false;"><div class="ai-compose-box"><textarea id="kurtex-ai-input" rows="2" placeholder="Ask Kurtex AI about a maintenance issue..."></textarea><div class="ai-compose-tools"><span>EN · RO · RU</span><button type="submit" title="Send"><i class="ph ph-paper-plane-tilt"></i></button></div></div></form>
 </section></div>
 </aside>
 <script defer src="{{ url_for('static', filename='js/api.js') }}"></script>
