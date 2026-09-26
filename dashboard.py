@@ -216,56 +216,123 @@ def logout():
 
 _PART_IMAGE_CACHE = {}
 
-def _commons_part_image(query: str):
-    """Find a representative real-world part photo on Wikimedia Commons.
+_PART_IMAGE_CONTEXT = {
+    "air": "heavy duty truck air brake pneumatic",
+    "brakes": "heavy duty truck air brake",
+    "suspension": "semi truck trailer suspension",
+    "electrical": "heavy duty diesel truck electrical",
+    "engine": "heavy duty diesel engine truck",
+    "aftertreatment": "diesel truck exhaust aftertreatment",
+    "trailer": "semi truck trailer",
+    "reefer": "refrigerated semi trailer reefer",
+}
+_PART_IMAGE_BAD_WORDS = {
+    "shell", "seashell", "snail", "mollusc", "mollusk", "gastropod", "animal", "plant",
+    "flower", "bird", "fish", "food", "toy", "art", "painting", "sculpture", "logo", "map",
+}
+_PART_IMAGE_TRUCK_WORDS = {
+    "truck", "semi", "tractor", "trailer", "diesel", "engine", "automotive", "vehicle", "lorry",
+    "brake", "suspension", "reefer", "refrigeration", "commercial vehicle", "heavy duty",
+}
 
-    Results are cached in-process to keep the Parts Manual fast. This is a
-    reference-photo lookup, not an exact-fitment claim.
+def _part_tokens(value: str):
+    words = re.findall(r"[a-z0-9]+", (value or "").lower())
+    stop = {"and", "the", "system", "assembly", "unit", "truck", "semi", "heavy", "duty", "part"}
+    return {w for w in words if len(w) >= 3 and w not in stop}
+
+def _commons_part_images(part_name: str, category: str = "", keywords: str = "", limit: int = 4):
+    """Return only high-confidence real photos for a heavy-duty truck component.
+
+    Wikimedia search is used for discovery, but results are scored locally. Generic or
+    unrelated matches are rejected; an empty result is preferable to a wrong photo.
     """
-    query = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (query or "")).strip()[:120]
-    if not query:
-        return None
-    key = query.lower()
-    cached = _PART_IMAGE_CACHE.get(key)
+    clean_name = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (part_name or "")).strip()[:100]
+    clean_keywords = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (keywords or "")).strip()[:160]
+    category = re.sub(r"[^a-zA-Z]+", "", (category or "").lower())[:30]
+    if not clean_name:
+        return []
+    cache_key = (clean_name + "|" + category + "|" + clean_keywords).lower()
+    cached = _PART_IMAGE_CACHE.get(cache_key)
     if cached and time.time() - cached[0] < 86400:
         return cached[1]
-    params = {
-        "action": "query", "format": "json", "generator": "search",
-        "gsrsearch": query, "gsrnamespace": "6", "gsrlimit": "8",
-        "prop": "imageinfo", "iiprop": "url|mime", "iiurlwidth": "1400",
-        "origin": "*",
-    }
-    url = "https://commons.wikimedia.org/w/api.php?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "KurtexDashboard/1.0 (parts reference image lookup)"})
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        pages = list((data.get("query") or {}).get("pages", {}).values())
-        pages.sort(key=lambda x: x.get("index", 9999))
-        for page in pages:
+
+    context = _PART_IMAGE_CONTEXT.get(category, "heavy duty diesel truck")
+    # Exact component wording comes first. Do not use a bare/generic fallback query.
+    queries = [
+        f'"{clean_name}" {context}',
+        f'{clean_name} {context} component',
+    ]
+    required = _part_tokens(clean_name)
+    hint_tokens = _part_tokens(clean_keywords)
+    candidates = {}
+
+    for search_query in queries:
+        params = {
+            "action": "query", "format": "json", "generator": "search",
+            "gsrsearch": f"filetype:bitmap {search_query}", "gsrnamespace": "6", "gsrlimit": "24",
+            "prop": "imageinfo", "iiprop": "url|mime|extmetadata", "iiurlwidth": "1200",
+            "iiextmetadatafilter": "ImageDescription|ObjectName|Categories|LicenseShortName|Artist|Credit",
+            "origin": "*",
+        }
+        url = "https://commons.wikimedia.org/w/api.php?" + urllib.parse.urlencode(params)
+        req = urllib.request.Request(url, headers={"User-Agent": "KurtexDashboard/1.1 (heavy-duty parts photo lookup)"})
+        try:
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            logger.info("Commons part image lookup failed for %r: %s", search_query, exc)
+            continue
+
+        for page in (data.get("query") or {}).get("pages", {}).values():
             info = (page.get("imageinfo") or [{}])[0]
-            mime = info.get("mime", "")
-            if mime not in {"image/jpeg", "image/png", "image/webp"}:
+            if info.get("mime", "") not in {"image/jpeg", "image/png", "image/webp"}:
                 continue
+            meta = info.get("extmetadata") or {}
+            meta_text = " ".join(str((meta.get(k) or {}).get("value", "")) for k in ("ImageDescription", "ObjectName", "Categories"))
+            hay = re.sub(r"<[^>]+>", " ", (page.get("title", "") + " " + meta_text)).lower()
+            hay_tokens = _part_tokens(hay)
+            if any(bad in hay for bad in _PART_IMAGE_BAD_WORDS):
+                continue
+            # Component identity is mandatory. This prevents e.g. "turbo" shells.
+            component_hits = len(required & hay_tokens)
+            if required and component_hits == 0:
+                continue
+            truck_hits = sum(1 for term in _PART_IMAGE_TRUCK_WORDS if term in hay)
+            hint_hits = len(hint_tokens & hay_tokens)
+            # For ambiguous one-word parts, require explicit vehicle/mechanical context.
+            if len(required) <= 1 and truck_hits == 0 and hint_hits < 2:
+                continue
+            score = component_hits * 12 + min(truck_hits, 4) * 4 + min(hint_hits, 5)
+            title = page.get("title", "").replace("File:", "")
+            if clean_name.lower() in title.lower():
+                score += 12
             image_url = info.get("thumburl") or info.get("url")
             source_url = info.get("descriptionurl")
-            if image_url and source_url:
-                result = {"image_url": image_url, "source_url": source_url, "title": page.get("title", "").replace("File:", "")}
-                _PART_IMAGE_CACHE[key] = (time.time(), result)
-                return result
-    except Exception as exc:
-        logger.info("Commons part image lookup failed for %r: %s", query, exc)
-    _PART_IMAGE_CACHE[key] = (time.time(), None)
-    return None
+            if not image_url or not source_url:
+                continue
+            key = source_url
+            item = {
+                "image_url": image_url, "source_url": source_url, "title": title,
+                "license": (meta.get("LicenseShortName") or {}).get("value", ""), "score": score,
+            }
+            if key not in candidates or score > candidates[key]["score"]:
+                candidates[key] = item
+
+    results = sorted(candidates.values(), key=lambda x: (-x["score"], x["title"].lower()))[:max(1, min(limit, 4))]
+    for item in results:
+        item.pop("score", None)
+    _PART_IMAGE_CACHE[cache_key] = (time.time(), results)
+    return results
 
 @app.route("/api/part_image")
 def api_part_image():
     q = (request.args.get("q") or "").strip()
+    cat = (request.args.get("cat") or "").strip()
+    keywords = (request.args.get("keywords") or "").strip()
     if not q:
         return jsonify({"ok": False, "error": "Missing part query"}), 400
-    # Heavy-duty context improves results for generic names such as battery or starter.
-    result = _commons_part_image("American heavy duty semi truck " + q) or _commons_part_image(q)
-    return jsonify({"ok": bool(result), "result": result})
+    results = _commons_part_images(q, cat, keywords, 4)
+    return jsonify({"ok": bool(results), "results": results, "result": results[0] if results else None})
 
 @app.route("/api/stats")
 def api_stats():
