@@ -250,13 +250,52 @@
 
 {% include 'partials/modals.html' %}
 <button id="kurtex-ai-fab" class="kurtex-ai-fab" type="button" onclick="toggleKurtexAI()" aria-label="Open Kurtex AI"><i class="ph ph-sparkle"></i><span>Kurtex AI</span></button>
-<div class="page" id="page-ai_training"><section class="ai-training-page">
-<header class="ai-training-header"><div><span class="eyebrow">ADMIN TOOLS</span><h2>Train Kurtex AI</h2><p>Manage approved maintenance knowledge used by the AI assistant.</p></div><button class="badge-btn btn-outline" onclick="loadAIKnowledge()"><i class="ph ph-arrows-clockwise"></i> Refresh</button></header>
-<div class="ai-trainer-info"><i class="ph ph-database"></i><div><strong>Approved knowledge</strong><span>Uploaded information becomes reference material for Kurtex AI. Chat messages do not automatically become trusted knowledge.</span></div></div>
-<div class="ai-trainer-stats"><span><b id="ai-kb-count">0</b> knowledge items</span><span><b id="ai-case-count">0</b> historical cases available</span></div>
-<form id="ai-kb-form" onsubmit="saveAIKnowledge(event)"><input id="ai-kb-title" placeholder="Title - e.g. Cascadia air system notes" required><textarea id="ai-kb-content" rows="6" placeholder="Paste approved mechanic knowledge, diagnostic notes, procedures, terminology..." required></textarea><input id="ai-kb-tags" placeholder="Tags (comma separated)"><button type="submit"><i class="ph ph-check"></i> Add approved knowledge</button></form>
-<div class="ai-upload-box"><strong>Feed AI from a file</strong><small>TXT, MD, CSV or JSON · max 2 MB</small><input id="ai-kb-file" type="file" accept=".txt,.md,.csv,.json"><button onclick="uploadAIKnowledge()"><i class="ph ph-upload-simple"></i> Upload & add</button></div>
-<div class="ai-kb-list-head">Knowledge library</div><div id="ai-kb-list" class="ai-kb-list"></div>
+<div class="page" id="page-ai_training">
+<section class="ai-training-page">
+  <header class="ai-training-header">
+    <div><span class="eyebrow">ADMIN TOOLS</span><h2>Train Kurtex AI</h2><p>Add verified maintenance knowledge and manage what the assistant can reference.</p></div>
+    <button class="badge-btn btn-outline" type="button" onclick="loadAIKnowledge()"><i class="ph ph-arrows-clockwise"></i> Refresh</button>
+  </header>
+
+  <div class="ai-training-grid">
+    <main class="ai-training-main">
+      <section class="ai-training-card ai-add-card">
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-brain"></i></span><div><h3>Add approved knowledge</h3><p>Only add verified mechanic notes, procedures, terminology or diagnostic guidance.</p></div></div>
+        <form id="ai-kb-form" class="ai-kb-form" onsubmit="saveAIKnowledge(event)">
+          <label><span>Title</span><input id="ai-kb-title" placeholder="e.g. Cascadia air system notes" required></label>
+          <label class="ai-field-wide"><span>Maintenance knowledge</span><textarea id="ai-kb-content" rows="6" placeholder="Paste approved mechanic knowledge, diagnostic notes, procedures, terminology..." required></textarea></label>
+          <label><span>Tags <em>optional</em></span><input id="ai-kb-tags" placeholder="air system, cascadia, brakes"></label>
+          <button class="ai-primary-btn" type="submit"><i class="ph ph-check"></i> Add to knowledge</button>
+        </form>
+      </section>
+
+      <section class="ai-training-card ai-library-card">
+        <div class="ai-card-head ai-card-head-row"><div><h3>Knowledge library</h3><p>Approved reference material currently available to Kurtex AI.</p></div><span class="ai-count-pill"><b id="ai-kb-count">0</b> items</span></div>
+        <div id="ai-kb-list" class="ai-kb-list"></div>
+      </section>
+    </main>
+
+    <aside class="ai-training-side">
+      <section class="ai-training-card ai-status-card">
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-database"></i></span><div><h3>AI reference data</h3><p>Current sources available to the assistant.</p></div></div>
+        <div class="ai-stat-row"><div><strong id="ai-case-count">0</strong><span>Historical cases</span></div><div><strong>EN · RO · RU</strong><span>Language support</span></div></div>
+        <div class="ai-trust-note"><i class="ph ph-shield-check"></i><span>Chat messages do not automatically become trusted knowledge.</span></div>
+      </section>
+
+      <section class="ai-training-card ai-upload-card">
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-file-arrow-up"></i></span><div><h3>Import from file</h3><p>TXT, MD, CSV or JSON · max 2 MB</p></div></div>
+        <label class="ai-file-picker" for="ai-kb-file"><i class="ph ph-upload-simple"></i><span><strong>Choose a file</strong><small id="ai-file-name">No file selected</small></span></label>
+        <input id="ai-kb-file" class="ai-native-file" type="file" accept=".txt,.md,.csv,.json" onchange="document.getElementById('ai-file-name').textContent=this.files[0]?this.files[0].name:'No file selected'">
+        <button class="ai-secondary-btn" type="button" onclick="uploadAIKnowledge()"><i class="ph ph-upload-simple"></i> Upload & add</button>
+      </section>
+
+      <section class="ai-training-card ai-diagnostic-card">
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-plugs-connected"></i></span><div><h3>Workers AI</h3><p>Test the Railway → Cloudflare connection.</p></div></div>
+        <button class="ai-secondary-btn" type="button" onclick="testKurtexAIConnection()"><i class="ph ph-wave-sine"></i> Test connection</button>
+        <div id="ai-test-result" class="ai-test-result" aria-live="polite"></div>
+      </section>
+    </aside>
+  </div>
 </section></div>
 <aside id="kurtex-ai-panel" class="kurtex-ai-panel" aria-hidden="true">
 <header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div><strong id="kurtex-ai-title">Kurtex AI</strong><small><span class="ai-online-dot"></span> Maintenance assistant</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>
