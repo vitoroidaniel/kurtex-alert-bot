@@ -4383,3 +4383,70 @@ body[data-current-page="ai_assistant"] .ai-side-chat-open,
 body[data-current-page="ai_assistant"] .ai-side-chat-open span{color:var(--text,#17171a)!important;-webkit-text-fill-color:var(--text,#17171a)!important;opacity:1!important}
 body[data-current-page="ai_assistant"] .ai-side-chat-open small{color:var(--muted,#6f737a)!important;-webkit-text-fill-color:var(--muted,#6f737a)!important;opacity:1!important}
 body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open span{color:var(--text,#17171a)!important}
+
+/* v117 — notification center redesign */
+.notification-panel{width:400px!important;max-height:540px!important;border-radius:14px!important;border:1px solid #e4e7eb!important;box-shadow:0 16px 42px rgba(20,24,31,.14)!important;background:#fff!important}
+.notification-panel .notification-panel-head{display:flex!important;align-items:center!important;justify-content:flex-start!important;padding:12px 14px!important;min-height:48px!important;border-bottom:1px solid #edf0f2!important}
+.notification-panel .notification-title{display:flex!important;align-items:center!important;gap:10px!important;flex:1!important;text-align:left!important}
+.notification-panel .notification-title-icon{width:30px!important;height:30px!important;border-radius:8px!important;background:#f5f6f7!important;border:1px solid #e4e7ea!important;color:#4c5259!important;font-size:14px!important}
+.notification-panel .notification-title strong{font-size:12px!important;font-weight:700!important;color:#20242a!important}
+.notification-panel .notification-title small{font-size:8px!important;color:#949aa2!important;margin-top:1px!important}
+.notification-panel .notification-mark-all{margin-left:auto!important;padding:5px 3px!important;font-size:8px!important}
+.notification-panel .notification-tabs{padding:7px 10px!important;gap:3px!important;background:#fff!important;border-bottom:1px solid #edf0f2!important}
+.notification-panel .notification-tabs button{padding:5px 8px!important;border-radius:6px!important;font-size:8px!important}
+.notification-panel .notification-tabs button.active{background:#f1f2f4!important}
+.notification-panel .notification-list{max-height:410px!important;min-height:160px!important;padding:5px 0!important;background:#fff!important}
+.notification-panel .notification-item{display:grid!important;grid-template-columns:32px minmax(0,1fr)!important;grid-template-rows:auto auto!important;column-gap:10px!important;row-gap:0!important;align-items:start!important;margin:0!important;padding:10px 14px!important;border:0!important;border-bottom:1px solid #f0f1f3!important;border-radius:0!important;background:#fff!important;box-shadow:none!important}
+.notification-panel .notification-item:last-child{border-bottom:0!important}
+.notification-panel .notification-item:hover{background:#fafbfc!important}
+.notification-panel .notification-item.unseen{border-left:0!important;background:#fff!important}
+.notification-panel .notification-item.unseen:before{content:"";position:absolute;left:4px;top:15px;width:3px;height:18px;border-radius:3px;background:#e04a45}
+.notification-panel .notification-icon{grid-column:1!important;grid-row:1 / span 2!important;width:32px!important;height:32px!important;margin:0!important;border-radius:8px!important;background:#f3f4f6!important;color:#626971!important;font-size:14px!important}
+.notification-panel .notification-item.warning .notification-icon,.notification-panel .notification-item.error .notification-icon,.notification-panel .notification-item.ai .notification-icon{background:#fff5e7!important;color:#bd7617!important}
+.notification-panel .notification-copy{grid-column:2!important;grid-row:1!important;display:block!important;padding:0 54px 0 0!important;min-width:0!important}
+.notification-panel .notification-copy strong{display:block!important;font-size:10px!important;line-height:1.25!important;color:#20242a!important;font-weight:700!important;margin:0 0 3px!important}
+.notification-panel .notification-copy>span{display:block!important;font-size:8.5px!important;line-height:1.4!important;color:#666d75!important;margin:0!important}
+.notification-panel .notification-copy small{display:block!important;font-size:7.5px!important;color:#a0a5ac!important;margin-top:5px!important}
+.notification-panel .notification-actions{position:absolute!important;right:14px!important;top:12px!important;align-self:auto!important}
+.notification-panel .notification-actions button{border:0!important;background:transparent!important;color:#d84a45!important;border-radius:5px!important;padding:3px 0!important;font-size:7.5px!important}
+.notification-panel .notification-seen{font-size:7.5px!important;color:#a0a5ac!important}
+.notification-panel .notification-empty{min-height:180px!important;border:0!important}
+@media(max-width:520px){.notification-panel{left:8px!important;right:8px!important;width:auto!important}.notification-panel .notification-item{padding-left:13px!important;padding-right:13px!important}}
+
+
+/* v118 — AI chat sidebar + compact readable AI Training */
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head .ai-side-new{
+ flex:1 1 auto!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;
+ padding:0 11px!important;gap:7px!important;color:var(--text,#17171a)!important;font-size:11px!important;font-weight:700!important
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head .ai-side-new span{display:inline!important;color:inherit!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head .ai-side-new i{font-size:14px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat{
+ margin:0!important;border:0!important;border-bottom:1px solid #34383e!important;border-radius:0!important;min-height:52px!important;background:transparent!important
+}
+body[data-current-page="ai_assistant"] .ai-side-chat:first-child{border-top:1px solid #34383e!important}
+body[data-current-page="ai_assistant"] .ai-side-chat:hover{background:var(--surface-2,#f5f5f6)!important}
+body[data-current-page="ai_assistant"] .ai-side-chat.active{background:var(--surface,#fff)!important;border-left:0!important;border-right:0!important;box-shadow:none!important}
+body[data-current-page="ai_assistant"] .ai-side-chat.active:before{left:2px!important;top:9px!important;bottom:9px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open{padding:9px 34px 9px 12px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open span{font-size:11.5px!important;font-weight:700!important;color:var(--text,#17171a)!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open small{font-size:9px!important;color:var(--muted,#70757c)!important}
+
+body[data-current-page="ai_training"] .ai-add-card{padding:14px!important}
+body[data-current-page="ai_training"] .ai-add-card .ai-card-head{margin-bottom:10px!important}
+body[data-current-page="ai_training"] .ai-add-card .ai-card-head h3{font-size:18px!important}
+body[data-current-page="ai_training"] .ai-add-card .ai-card-head p{font-size:12.5px!important}
+body[data-current-page="ai_training"] .ai-kb-form{gap:10px!important}
+body[data-current-page="ai_training"] .ai-kb-form label>span,
+body[data-current-page="ai_training"] .ai-tag-color-field>span{font-size:12px!important;font-weight:750!important}
+body[data-current-page="ai_training"] .ai-kb-form input{font-size:13px!important;min-height:42px!important}
+body[data-current-page="ai_training"] #ai-kb-content{font-size:13px!important;min-height:190px!important;height:190px!important}
+body[data-current-page="ai_training"] .ai-tag-color-field small{font-size:10.5px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head{padding:0 0 5px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head h3{font-size:18px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head p{font-size:11px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-item{min-height:38px!important;padding:4px 3px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-source{width:20px!important;height:20px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-title-line strong{font-size:13px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-item-copy small{font-size:9px!important;margin-top:1px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-actions button{width:28px!important;height:28px!important}
