@@ -2525,3 +2525,201 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
   #page-intelligence .intelligence-searchbar,
   #page-intelligence [data-intelligence-search-shell] { top:0 !important; padding-top:8px !important; padding-bottom:8px !important; }
 }
+
+/* v49 — compact recurring-problem cluster cards */
+#page-intelligence .recurring-problems-grid,
+#page-intelligence .recurring-grid,
+#page-intelligence [data-recurring-problems]{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:10px!important;
+  align-items:stretch;
+}
+#page-intelligence .recurring-problem-card,
+#page-intelligence .recurring-problems-grid > *,
+#page-intelligence .recurring-grid > *,
+#page-intelligence [data-recurring-problems] > *{
+  min-width:0;
+  padding:13px 14px!important;
+  border:1px solid var(--line,#e5e7eb)!important;
+  border-radius:12px!important;
+  background:var(--card,#fff)!important;
+  box-shadow:none!important;
+  min-height:0!important;
+}
+#page-intelligence .recurring-problem-card:hover,
+#page-intelligence .recurring-problems-grid > *:hover,
+#page-intelligence .recurring-grid > *:hover{
+  border-color:#d7d9de!important;
+  box-shadow:0 4px 14px rgba(17,24,39,.055)!important;
+}
+#page-intelligence .recurring-problem-card h3,
+#page-intelligence .recurring-problem-card h4,
+#page-intelligence .recurring-problems-grid h3,
+#page-intelligence .recurring-problems-grid h4{
+  font-size:13px!important;
+  line-height:1.25!important;
+  margin:0 0 6px!important;
+}
+#page-intelligence .recurring-problem-card p,
+#page-intelligence .recurring-problems-grid p{
+  font-size:11px!important;
+  line-height:1.4!important;
+  margin:3px 0!important;
+  color:var(--muted,#6b7280);
+}
+#page-intelligence .recurring-problem-card .chip,
+#page-intelligence .recurring-problem-card .tag,
+#page-intelligence .recurring-problems-grid .chip,
+#page-intelligence .recurring-problems-grid .tag{
+  font-size:10px!important;
+  padding:3px 7px!important;
+  border-radius:999px!important;
+}
+#page-intelligence .recurring-problem-card .bar,
+#page-intelligence .recurring-problem-card .progress,
+#page-intelligence .recurring-problems-grid .bar,
+#page-intelligence .recurring-problems-grid .progress{
+  height:3px!important;
+}
+@media(max-width:1100px){
+ #page-intelligence .recurring-problems-grid,
+ #page-intelligence .recurring-grid,
+ #page-intelligence [data-recurring-problems]{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:650px){
+ #page-intelligence .recurring-problems-grid,
+ #page-intelligence .recurring-grid,
+ #page-intelligence [data-recurring-problems]{grid-template-columns:1fr!important}
+}
+
+/* v50 — unit-first recurring problem tree */
+#page-intelligence .recurring-problems-grid,
+#page-intelligence .recurring-grid,
+#page-intelligence [data-recurring-problems]{
+  display:block!important;
+  border:1px solid var(--line,#e5e7eb);
+  border-radius:13px;
+  overflow:hidden;
+  background:var(--card,#fff);
+}
+#page-intelligence .recurring-problems-grid > *,
+#page-intelligence .recurring-grid > *,
+#page-intelligence [data-recurring-problems] > *,
+#page-intelligence .recurring-problem,
+#page-intelligence .recurring-item{
+  display:block!important;
+  width:100%!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:12px 15px!important;
+  border:0!important;
+  border-bottom:1px solid var(--line,#e9eaed)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+#page-intelligence .recurring-problems-grid > *:last-child,
+#page-intelligence .recurring-grid > *:last-child,
+#page-intelligence [data-recurring-problems] > *:last-child{border-bottom:0!important}
+#page-intelligence .recurring-problems-grid > *:hover,
+#page-intelligence .recurring-grid > *:hover,
+#page-intelligence [data-recurring-problems] > *:hover{
+  background:rgba(17,24,39,.025)!important;
+  box-shadow:none!important;
+}
+#page-intelligence .recurring-problems-grid h3,
+#page-intelligence .recurring-problems-grid h4,
+#page-intelligence .recurring-grid h3,
+#page-intelligence .recurring-grid h4{
+  font-size:13px!important;
+  line-height:1.25!important;
+  margin:0 0 5px!important;
+}
+#page-intelligence .recurring-problems-grid p,
+#page-intelligence .recurring-grid p{
+  font-size:11px!important;
+  line-height:1.45!important;
+  margin:2px 0!important;
+  color:var(--muted,#6b7280);
+}
+#page-intelligence .recurring-problems-grid .chip,
+#page-intelligence .recurring-problems-grid .tag,
+#page-intelligence .recurring-grid .chip,
+#page-intelligence .recurring-grid .tag{
+  display:inline-flex!important;
+  font-size:10px!important;
+  padding:3px 7px!important;
+  margin:3px 4px 0 0!important;
+  border-radius:999px!important;
+}
+#page-intelligence .recurring-problems-grid .bar,
+#page-intelligence .recurring-problems-grid .progress,
+#page-intelligence .recurring-grid .bar,
+#page-intelligence .recurring-grid .progress{height:2px!important}
+
+/* summary metrics should lead Intelligence immediately after sticky universal search */
+#page-intelligence .intelligence-summary,
+#page-intelligence .intelligence-stats,
+#page-intelligence .intel-summary{
+  order:-20!important;
+  margin-top:10px!important;
+}
+#page-intelligence .intelligence-summary .stat-card,
+#page-intelligence .intelligence-stats .stat-card,
+#page-intelligence .intel-summary .stat-card{
+  min-height:78px!important;
+}
+
+/* v51 — Intelligence: normal header, ONLY search is sticky */
+#page-intelligence{
+  overflow:visible!important;
+}
+#page-intelligence .page-header,
+#page-intelligence .page-head,
+#page-intelligence .view-header,
+#page-intelligence .page-titlebar,
+#page-intelligence .topbar{
+  position:static!important;
+  top:auto!important;
+  transform:none!important;
+  z-index:auto!important;
+}
+#page-intelligence .intelligence-search-shell,
+#page-intelligence .intelligence-search-wrap,
+#page-intelligence .intelligence-searchbar,
+#page-intelligence [data-intelligence-search-shell]{
+  position:sticky!important;
+  top:0!important;
+  z-index:100!important;
+  margin:0!important;
+  padding:10px 12px!important;
+  min-height:0!important;
+  background:#fff!important;
+  border:0!important;
+  border-bottom:1px solid #e3e5e8!important;
+  border-radius:0!important;
+  box-shadow:0 5px 14px rgba(17,24,39,.055)!important;
+  overflow:visible!important;
+}
+#page-intelligence .intelligence-search-shell::before,
+#page-intelligence .intelligence-search-wrap::before,
+#page-intelligence .intelligence-searchbar::before,
+#page-intelligence [data-intelligence-search-shell]::before{
+  content:none!important;
+  display:none!important;
+}
+#page-intelligence .intelligence-search-shell + .panel:empty,
+#page-intelligence .intelligence-search-wrap + .panel:empty,
+#page-intelligence .intelligence-searchbar + .panel:empty{
+  display:none!important;
+}
+@media(max-width:760px){
+  #page-intelligence .intelligence-search-shell,
+  #page-intelligence .intelligence-search-wrap,
+  #page-intelligence .intelligence-searchbar,
+  #page-intelligence [data-intelligence-search-shell]{
+    top:0!important;
+    padding:8px!important;
+  }
+}
