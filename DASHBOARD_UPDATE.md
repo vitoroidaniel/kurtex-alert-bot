@@ -19,3 +19,9 @@ JavaScript syntax and Python compilation passed. The authenticated Flask templat
 - Reworked Parts Manual into the primary mechanical reference workspace.
 - Preserved Serper live real-part photos and backend-only API key.
 - Improved desktop/mobile hierarchy, photo gallery, part index and troubleshooting cards.
+
+## v32
+- Compact 3x2 overview/fleet metric cards.
+- Compact Fleet Intelligence stats and Search by Issue.
+- Fixed All/Truck/Trailer/Reefer active tab highlight alignment.
+- Neutral search field with red focus state only.

@@ -334,6 +334,27 @@ def _serper_part_images(part_name: str, category: str = "", keywords: str = "", 
     _PART_IMAGE_CACHE[cache_key] = (time.time(), results)
     return results, "serper"
 
+@app.route("/api/part_search")
+def api_part_search():
+    """Live Parts Manual search for names, OEM numbers and manufacturer part numbers."""
+    if not session.get("user"):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"ok": False, "error": "Enter a part name or part number"}), 400
+    q = q[:120]
+    part_number_like = bool(len(q) >= 5 and re.search(r"[A-Za-z]", q) and re.search(r"\d", q) and re.fullmatch(r"[A-Za-z0-9._\-/]+", q))
+    keywords = "OEM part number exact match heavy duty truck" if part_number_like else "heavy duty truck component OEM replacement"
+    results, provider = _serper_part_images(q, "", keywords, 4)
+    return jsonify({
+        "ok": True,
+        "query": q,
+        "part_number_like": part_number_like,
+        "results": results,
+        "provider": provider,
+        "configured": bool(os.getenv("SERPER_API_KEY", "").strip()),
+    })
+
 @app.route("/api/part_image")
 def api_part_image():
     if not session.get("user"):

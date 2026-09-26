@@ -2294,3 +2294,106 @@ body[data-current-page="parts_manual"] .part-detail{padding:0;min-height:700px;b
   body[data-current-page="parts_manual"] .part-live-photo>a{height:190px}
   body[data-current-page="parts_manual"] .part-live-photo figcaption{padding:6px 8px}
 }
+/* v31 Parts Manual search */
+.parts-search-shell{display:flex;align-items:center;gap:8px;flex:1 1 520px;min-width:280px}
+.parts-search-shell .parts-search{flex:1;min-height:42px;border:1px solid var(--border);border-radius:10px;padding:0 10px;background:var(--surface2);box-shadow:none;transition:border-color .16s,box-shadow .16s,background .16s}
+.parts-search-shell .parts-search:focus-within{background:var(--surface);border-color:#aeb3ba;box-shadow:0 0 0 3px rgba(17,24,39,.06)}
+.parts-search-shell .parts-search>i{font-size:18px;color:var(--muted);flex:0 0 auto}
+.parts-search-shell .parts-search input{font-size:12px;padding:10px 0;min-width:0}
+.parts-search-clear{border:0;background:transparent;color:var(--muted);width:28px;height:28px;border-radius:7px;display:grid;place-items:center;cursor:pointer;flex:0 0 auto}
+.parts-search-clear:hover{background:var(--surface2);color:var(--text)}
+.parts-web-search-btn{height:42px;border:1px solid var(--border);border-radius:10px;padding:0 14px;background:var(--text);color:var(--surface);font:inherit;font-size:10px;font-weight:800;display:flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;transition:.16s}
+.parts-web-search-btn:hover{transform:translateY(-1px)}.parts-web-search-btn.suggested{box-shadow:0 0 0 2px rgba(220,38,38,.16);border-color:var(--accent)}.parts-web-search-btn:disabled{opacity:.6;cursor:wait;transform:none}
+.parts-spin{animation:partsSpin .8s linear infinite}@keyframes partsSpin{to{transform:rotate(360deg)}}
+.web-part-search-state,.web-no-results{min-height:260px;display:flex;align-items:center;justify-content:center;gap:14px;text-align:left;color:var(--muted)}.web-part-search-state>i,.web-no-results>i{font-size:28px}.web-part-search-state h2{margin:4px 0}.web-part-search-state p{margin:0}.web-no-results{flex-direction:column;text-align:center}.web-no-results strong{color:var(--text);font-size:13px}.web-no-results span{font-size:10px;max-width:420px}.web-search-badge{display:inline-flex!important;align-items:center;gap:4px}.web-result-hero{margin-bottom:4px}.part-live-photo figcaption small{display:block;color:var(--muted);font-size:9px;margin-top:3px}
+@media(max-width:760px){.parts-search-shell{width:100%;flex-basis:100%}.parts-web-search-btn{padding:0 11px}.parts-web-search-btn span{display:none}}
+
+/* === v32 compact overview + intelligence UX === */
+#page-overview .stat-grid,
+#page-fleet .stat-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:10px!important;
+  margin-bottom:16px!important;
+}
+#page-overview .stat-card,
+#page-fleet .stat-card,
+#page-fleet_intel .stat-card{
+  min-height:0!important;
+  padding:14px 16px!important;
+  border-radius:13px!important;
+}
+#page-overview .stat-icon,
+#page-fleet .stat-icon,
+#page-fleet_intel .stat-icon{
+  width:28px!important;height:28px!important;right:13px!important;top:13px!important;
+  border-radius:8px!important;font-size:16px!important;
+}
+#page-overview .stat-label,
+#page-fleet .stat-label,
+#page-fleet_intel .stat-label{
+  margin-bottom:10px!important;padding-right:32px!important;font-size:10px!important;
+}
+#page-overview .stat-value,
+#page-fleet .stat-value,
+#page-fleet_intel .stat-value{
+  font-size:26px!important;letter-spacing:-.6px!important;
+}
+
+/* Fleet intelligence: compact search block */
+#page-fleet_intel > .card:first-child{
+  padding:14px 16px!important;
+  margin-bottom:12px!important;
+  border-radius:14px!important;
+}
+#page-fleet_intel > .card:first-child .card-title{margin-bottom:10px!important;font-size:13px!important}
+#page-fleet_intel #issue-search-vtype-tabs,
+#page-fleet_intel #intel-units-wrap .toggle-tabs{
+  height:34px!important;padding:3px!important;margin-bottom:9px!important;
+  background:#f5f5f6!important;border:1px solid #ededee!important;border-radius:9px!important;
+  overflow:visible!important;
+}
+#page-fleet_intel .toggle-btn{
+  position:relative!important;display:flex!important;align-items:center!important;justify-content:center!important;
+  min-height:26px!important;padding:4px 10px!important;border:0!important;border-radius:6px!important;
+  background:transparent!important;color:#66676e!important;font-size:11px!important;font-weight:650!important;
+  box-shadow:none!important;
+}
+#page-fleet_intel .toggle-btn:hover{background:#ededee!important;color:#292a2e!important}
+#page-fleet_intel .toggle-btn.active{
+  background:#fff!important;color:#222328!important;box-shadow:0 1px 3px rgba(20,20,24,.08)!important;
+}
+#page-fleet_intel .toggle-btn.active:after{
+  content:""!important;position:absolute!important;left:34%!important;right:34%!important;bottom:-4px!important;
+  height:2px!important;background:var(--accent)!important;border-radius:2px!important;
+}
+#page-fleet_intel #issue-search-input{
+  min-height:40px!important;height:40px!important;padding:8px 12px!important;
+  border:1px solid #dedee2!important;border-radius:9px!important;background:#fff!important;
+  box-shadow:none!important;color:var(--text)!important;
+}
+#page-fleet_intel #issue-search-input:hover{border-color:#c7c7cc!important}
+#page-fleet_intel #issue-search-input:focus{
+  border-color:var(--accent)!important;outline:0!important;box-shadow:0 0 0 3px rgba(220,38,38,.08)!important;
+}
+#page-fleet_intel > .card:first-child .btn{
+  min-height:40px!important;height:40px!important;padding:0 15px!important;border-radius:9px!important;
+}
+#page-fleet_intel #fleet-intel-content > div:first-child{
+  gap:10px!important;margin-bottom:12px!important;
+}
+#page-fleet_intel .section-title{font-size:13px!important}
+
+@media(max-width:900px){
+  #page-overview .stat-grid,#page-fleet .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:520px){
+  #page-overview .stat-grid,#page-fleet .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  #page-overview .stat-card,#page-fleet .stat-card,#page-fleet_intel .stat-card{padding:12px!important}
+  #page-overview .stat-value,#page-fleet .stat-value,#page-fleet_intel .stat-value{font-size:23px!important}
+  #page-fleet_intel > .card:first-child{padding:12px!important}
+  #page-fleet_intel > .card:first-child > div[style*="display:flex"]{flex-wrap:nowrap!important}
+}
+[data-theme="dark"] #page-fleet_intel #issue-search-vtype-tabs,
+[data-theme="dark"] #page-fleet_intel #intel-units-wrap .toggle-tabs{background:var(--surface2)!important;border-color:var(--border)!important}
+[data-theme="dark"] #page-fleet_intel .toggle-btn.active{background:var(--surface)!important;color:var(--text)!important}
+[data-theme="dark"] #page-fleet_intel #issue-search-input{background:var(--surface)!important;border-color:var(--border)!important}
