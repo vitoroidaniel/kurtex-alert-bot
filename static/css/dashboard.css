@@ -4364,3 +4364,22 @@ body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-blue{background:#f
 body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-purple{background:#faf7ff!important;color:#7859ad!important;border:1px solid #d6c8ec!important}
 body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-teal{background:#f3fbfb!important;color:#347e82!important;border:1px solid #b9dcde!important}
 body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-gray{background:#fafafa!important;color:#686d74!important;border:1px solid #d4d7db!important}
+
+/* v116 — compact knowledge workspace + visible AI chat titles */
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head{padding:0 0 7px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head h3{font-size:19px!important;line-height:1.15!important;font-weight:800!important;margin:0 0 2px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head p{font-size:11.5px!important;margin:0!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-item{min-height:44px!important;padding:6px 4px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-source{width:22px!important;height:22px!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-kb-item-copy small{font-size:9.5px!important;margin-top:2px!important}
+body[data-current-page="ai_training"] .ai-kb-title-line{gap:7px!important}
+body[data-current-page="ai_training"] .ai-kb-title-line strong{font-size:14px!important}
+body[data-current-page="ai_training"] #ai-kb-content{min-height:220px!important;height:220px!important;resize:vertical!important;line-height:1.5!important;padding:12px!important}
+body[data-current-page="ai_training"] .ai-kb-form{gap:11px!important}
+body[data-current-page="ai_training"] .ai-kb-form label>span{margin-bottom:5px!important}
+body[data-current-page="ai_training"] .ai-add-card{padding:16px!important}
+body[data-current-page="ai_training"] .ai-add-card .ai-card-head{margin-bottom:12px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open,
+body[data-current-page="ai_assistant"] .ai-side-chat-open span{color:var(--text,#17171a)!important;-webkit-text-fill-color:var(--text,#17171a)!important;opacity:1!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open small{color:var(--muted,#6f737a)!important;-webkit-text-fill-color:var(--muted,#6f737a)!important;opacity:1!important}
+body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open span{color:var(--text,#17171a)!important}
