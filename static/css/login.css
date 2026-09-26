@@ -176,3 +176,37 @@
   .divider{margin:14px 0}
   .system-row{margin-top:12px}
 }
+
+
+/* v82 — Telegram widget: keep the third-party iframe on its natural button size.
+   Previous fixed 248x42 wrapper exposed empty iframe/background area. */
+.telegram-box{
+  justify-content:center!important;
+  min-height:42px!important;
+}
+.tg-wrap{
+  display:inline-block!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:100%!important;
+  height:auto!important;
+  min-height:0!important;
+  overflow:visible!important;
+  background:transparent!important;
+  border-radius:10px!important;
+  line-height:0!important;
+}
+.tg-wrap iframe{
+  display:block!important;
+  width:auto!important;
+  min-width:0!important;
+  max-width:100%!important;
+  height:40px!important;
+  margin:0 auto!important;
+  border:0!important;
+  border-radius:10px!important;
+  background:transparent!important;
+}
+@media(max-width:900px){
+  .tg-wrap,.tg-wrap iframe{width:auto!important;min-width:0!important;max-width:100%!important}
+}

@@ -8,7 +8,7 @@ async function deleteKurtexAIChat(e,id){if(e){e.preventDefault();e.stopPropagati
 function kurtexCurrentPage(){var p=document.querySelector('.page.active');return p?(p.id||'dashboard').replace(/^page-/,''):'dashboard'}
 function toggleKurtexAI(force){var p=document.getElementById('kurtex-ai-panel');if(!p)return;var open=typeof force==='boolean'?force:!p.classList.contains('open');p.classList.toggle('open',open);p.setAttribute('aria-hidden',open?'false':'true');if(open){loadKurtexAIChats();setTimeout(function(){document.getElementById('kurtex-ai-input').focus()},80)}}
 function toggleAIHistory(){var p=document.getElementById('kurtex-ai-panel');if(!p)return;var open=!p.classList.contains('history-open');p.classList.toggle('history-open',open);if(open)loadKurtexAIChats()}
-function kurtexAIAdd(role,text){var box=document.getElementById('kurtex-ai-messages'),d=document.createElement('div');d.className='kurtex-ai-msg '+role;d.textContent=text;box.appendChild(d);box.scrollTop=box.scrollHeight;return d}
+function kurtexAIAdd(role,text){var box=document.getElementById('kurtex-ai-messages'),d=document.createElement('div');d.className='kurtex-ai-msg '+role;d.innerHTML=role==='assistant'?kurtexAIFormat(text):escapeAI(text);box.appendChild(d);box.scrollTop=box.scrollHeight;return d}
 function aiWelcome(){document.getElementById('kurtex-ai-messages').innerHTML='<div class="kurtex-ai-welcome"><div class="ai-welcome-icon"><i class="ph ph-wrench"></i></div><strong>How can I help?</strong><span>Describe the issue naturally. I can review Kurtex history, approved maintenance knowledge, and help narrow down the problem.</span></div>'}
 function newKurtexAIChat(){kurtexAIChatId=null;var t=document.getElementById('kurtex-ai-title');if(t)t.textContent='Kurtex Maintenance AI';aiWelcome();document.getElementById('kurtex-ai-panel').classList.remove('history-open');document.getElementById('kurtex-ai-input').focus()}
 async function loadKurtexAIChats(){var el=document.getElementById('kurtex-ai-chat-list');if(el)el.innerHTML='<div class="ai-history-loading">Loading conversations...</div>';try{var r=await apiFetch('/api/ai/chats'),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to load chats');kurtexAIChats=Array.isArray(x)?x:(x.items||x.chats||[]);renderAIChatList()}catch(e){if(el)el.innerHTML='<div class="ai-history-error"><i class="ph ph-warning-circle"></i><strong>Could not load history</strong><span>'+escapeAI(e.message||'Try again.')+'</span><button onclick="loadKurtexAIChats()">Retry</button></div>'}}
@@ -35,13 +35,28 @@ async function deleteAIKnowledge(id){var k=aiKnowledgeItems.find(function(x){ret
 document.addEventListener('DOMContentLoaded',function(){initAITrainer();if(document.getElementById('page-ai_training'))loadAIKnowledge();if(document.getElementById('ai-test-result'))setTimeout(testKurtexAIConnection,450)});
 
 
+function kurtexAIFormat(text){
+ var safe=escapeAI(String(text==null?'':text));
+ safe=safe.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+ safe=safe.replace(/^###\s+(.+)$/gm,'<strong class="ai-md-heading">$1</strong>');
+ safe=safe.replace(/^##\s+(.+)$/gm,'<strong class="ai-md-heading">$1</strong>');
+ safe=safe.replace(/^#\s+(.+)$/gm,'<strong class="ai-md-heading">$1</strong>');
+ safe=safe.replace(/\n/g,'<br>');
+ return safe
+}
+function toggleKurtexAIFullscreen(force){
+ var p=document.getElementById('kurtex-ai-panel');if(!p)return;
+ var on=typeof force==='boolean'?force:!p.classList.contains('ai-fullscreen');
+ p.classList.toggle('ai-fullscreen',on);
+ var b=p.querySelector('.ai-expand-btn i');if(b)b.className=on?'ph ph-arrows-in':'ph ph-arrows-out';
+}
 async function sendKurtexAI(e){
  if(e&&e.preventDefault)e.preventDefault();
  var input=document.getElementById('kurtex-ai-input'),msg=(input&&input.value||'').trim();if(!msg)return false;
  var panel=document.getElementById('kurtex-ai-panel');if(panel){panel.classList.add('open');panel.classList.remove('history-open')}
  input.value='';var w=document.querySelector('#kurtex-ai-messages .kurtex-ai-welcome');if(w)w.remove();
  kurtexAIAdd('user',msg);var wait=kurtexAIAdd('assistant','Thinking…');wait.classList.add('thinking');
- try{var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:kurtexCurrentPage()})}),x=await r.json();if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.textContent=x.answer||x.response||x.reply||x.message||'No response returned.';var t=document.getElementById('kurtex-ai-title');if(t&&x.title)t.textContent=x.title;loadKurtexAIChats()}catch(err){wait.remove();var box=document.getElementById('kurtex-ai-messages');if(box&&!box.querySelector('.ai-chat-failure')){var f=document.createElement('div');f.className='ai-chat-failure';f.textContent='Message was not sent. '+(err.message||'Check AI Training diagnostics.');box.appendChild(f)}if(typeof loadNotifications==='function')loadNotifications()}input.focus();return false
+ try{var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:kurtexCurrentPage()})}),x=await r.json();if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.');var t=document.getElementById('kurtex-ai-title');if(t&&x.title)t.textContent=x.title;loadKurtexAIChats()}catch(err){wait.remove();var box=document.getElementById('kurtex-ai-messages');if(box&&!box.querySelector('.ai-chat-failure')){var f=document.createElement('div');f.className='ai-chat-failure';f.textContent='Message was not sent. '+(err.message||'Check AI Training diagnostics.');box.appendChild(f)}if(typeof loadNotifications==='function')loadNotifications()}input.focus();return false
 }
 function kurtexAIQuick(text){var input=document.getElementById('kurtex-ai-input');if(!input)return;input.value=text;sendKurtexAI({preventDefault:function(){}})}
 document.addEventListener('DOMContentLoaded',function(){
