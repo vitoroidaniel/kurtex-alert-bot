@@ -3501,3 +3501,104 @@ body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 17
  .ai-page-layout{grid-template-columns:210px minmax(0,1fr)}
  body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100svh - 145px)!important}
 }
+
+/* v90 — restore original sidebar feel, only slightly compacted */
+.sidebar{width:242px!important}
+.layout{grid-template-columns:242px minmax(0,1fr)!important}
+.sidebar-logo{padding:16px 16px 14px!important}
+.sidebar-logo img{width:43px!important;height:43px!important}
+.sidebar nav{padding:7px 11px 9px!important}
+.nav-item{
+ min-height:40px!important;
+ padding:8px 12px!important;
+ gap:11px!important;
+ font-size:12.5px!important;
+ border-radius:9px!important;
+}
+.nav-item i,.nav-group-header i{font-size:17px!important}
+.nav-group-header{
+ min-height:40px!important;
+ padding:8px 12px!important;
+ font-size:12.5px!important;
+ border-radius:9px!important;
+}
+.nav-sub{padding-left:34px!important}
+.nav-ai-cluster{margin-top:4px!important;padding-top:5px!important}
+.nav-bottom-cluster{padding-top:6px!important}
+.sidebar-footer{padding:9px 11px!important}
+.user-chip{padding:8px 9px!important}
+.theme-btn,.logout-btn{font-size:11px!important;padding:7px 9px!important}
+@media(max-height:800px) and (min-width:901px){
+ .sidebar-logo{padding-top:11px!important;padding-bottom:9px!important}
+ .sidebar-logo img{width:39px!important;height:39px!important}
+ .nav-item,.nav-group-header{min-height:36px!important;padding-top:6px!important;padding-bottom:6px!important;font-size:12px!important}
+ .nav-item i,.nav-group-header i{font-size:16px!important}
+ .nav-ai-cluster{margin-top:2px!important;padding-top:3px!important}
+ .nav-bottom-cluster{padding-top:4px!important}
+ .sidebar-footer{padding-top:6px!important;padding-bottom:6px!important}
+ .user-chip{padding:6px 8px!important}
+ .theme-btn,.logout-btn{padding-top:5px!important;padding-bottom:5px!important}
+}
+@media(max-height:700px) and (min-width:901px){
+ .nav-item,.nav-group-header{min-height:33px!important;padding-top:5px!important;padding-bottom:5px!important;font-size:11.5px!important}
+ .sidebar-logo img{width:35px!important;height:35px!important}
+}
+@media(max-width:900px){.sidebar{width:260px!important}.layout{grid-template-columns:1fr!important}}
+
+/* v91 — align AI workspace with page header; fixed viewport, internal chat scrolling */
+body[data-current-page="ai_assistant"] .main{overflow:hidden!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant{
+ height:calc(100vh - 154px)!important;
+ min-height:0!important;
+ overflow:hidden!important;
+ margin:0!important;
+ padding:0!important;
+}
+.ai-assistant-workspace{
+ width:100%!important;
+ max-width:none!important;
+ height:100%!important;
+ margin:0!important;
+ padding:0!important;
+}
+.ai-page-layout{
+ width:100%!important;
+ max-width:none!important;
+ height:100%!important;
+ margin:0!important;
+ grid-template-columns:220px minmax(0,1fr)!important;
+}
+.ai-page-layout.sidebar-collapsed{grid-template-columns:0 minmax(0,1fr)!important}
+.ai-page-sidebar{height:100%!important}
+.ai-page-chat-column{height:100%!important;overflow:hidden!important}
+.ai-page-chat-column .ai-assistant-page-shell{
+ flex:1 1 auto!important;
+ height:auto!important;
+ min-height:0!important;
+ max-height:none!important;
+ overflow:hidden!important;
+}
+.ai-page-messages{
+ flex:1 1 auto!important;
+ min-height:0!important;
+ overflow-y:auto!important;
+ overscroll-behavior:contain!important;
+ padding-left:clamp(24px,4vw,62px)!important;
+ padding-right:clamp(24px,4vw,62px)!important;
+}
+.ai-page-quick,.ai-page-compose{
+ width:auto!important;
+ max-width:980px!important;
+ margin-left:auto!important;
+ margin-right:auto!important;
+}
+.ai-page-compose{flex:0 0 auto!important;margin-bottom:12px!important}
+.ai-page-quick{flex:0 0 auto!important}
+@media(min-width:1500px){
+ .ai-page-layout{grid-template-columns:225px minmax(0,1fr)!important}
+ .ai-page-quick,.ai-page-compose{max-width:1040px!important}
+}
+@media(max-width:800px){
+ body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100svh - 140px)!important}
+ .ai-page-layout{grid-template-columns:205px minmax(0,1fr)!important}
+}
