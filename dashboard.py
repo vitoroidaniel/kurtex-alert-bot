@@ -375,12 +375,22 @@ def api_ai_knowledge_upload():
           "tags":["uploaded"],"source":"file","created_at":now,"updated_at":now,"created_by":_ai_user_key()}
     items.append(item); _write_ai_knowledge(items); return jsonify(item),201
 
-@app.route("/api/ai/knowledge/<item_id>",methods=["DELETE"])
+@app.route("/api/ai/knowledge/<item_id>",methods=["PUT","DELETE"])
 def api_ai_knowledge_delete(item_id):
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
     if not _ai_is_trainer():return jsonify({"error":"forbidden"}),403
-    items=_read_ai_knowledge(); new=[x for x in items if str(x.get("id"))!=item_id]
-    if len(new)==len(items):return jsonify({"error":"Not found"}),404
+    items=_read_ai_knowledge(); item=next((x for x in items if str(x.get("id"))==item_id),None)
+    if not item:return jsonify({"error":"Not found"}),404
+    if request.method=="PUT":
+        data=request.get_json(silent=True) or {}
+        content=str(data.get("content") if "content" in data else item.get("content") or "").strip()[:120000]
+        if not content:return jsonify({"error":"Knowledge content is required"}),400
+        item["title"]=str(data.get("title") if "title" in data else item.get("title") or "Maintenance knowledge").strip()[:120]
+        item["content"]=content
+        if "tags" in data:item["tags"]=[str(x).strip()[:50] for x in (data.get("tags") or []) if str(x).strip()][:12]
+        item["updated_at"]=_now_iso()
+        _write_ai_knowledge(items);return jsonify(item)
+    new=[x for x in items if str(x.get("id"))!=item_id]
     _write_ai_knowledge(new); return jsonify({"ok":True})
 
 AI_CHAT_FILE = DATA_DIR / "ai_chats.json"

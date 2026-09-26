@@ -3252,3 +3252,26 @@ body[data-current-page="ai_training"] #page-ai_training .ai-training-page{margin
 .notification-empty strong{font-size:10.5px!important;color:#34383d!important}
 .notification-empty>span:last-child{font-size:8.5px!important;color:#91969d!important}
 @media(max-width:520px){.notification-panel{width:auto!important}}
+
+/* v72 AI knowledge library */
+#page-ai_training .ai-kb-status{min-height:0;margin-top:9px;padding:0;font:700 8.5px Inter,sans-serif}
+#page-ai_training .ai-kb-status.ok,#page-ai_training .ai-kb-status.bad{padding:8px 10px;border-radius:8px}
+#page-ai_training .ai-kb-status.ok{background:#edf8f1;color:#34724b}#page-ai_training .ai-kb-status.bad{background:#fff1f0;color:#b23b37}
+#page-ai_training .ai-kb-list{display:grid!important;gap:8px!important;max-height:420px!important;overflow:auto!important}
+#page-ai_training .ai-kb-item{border:1px solid #e5e7ea;border-radius:10px;padding:11px;background:#fff}
+#page-ai_training .ai-kb-item-top{display:flex;align-items:center;gap:9px}.ai-kb-source{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;background:#fff6f5;color:#d93632;flex:none}
+#page-ai_training .ai-kb-item-copy{display:flex;flex-direction:column;min-width:0;flex:1}#page-ai_training .ai-kb-item-copy strong{font-size:10px;color:#272a2f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#page-ai_training .ai-kb-item-copy small{font-size:7.5px;color:#92979e;margin-top:2px}
+#page-ai_training .ai-kb-item p{font-size:8.7px;line-height:1.5;color:#666c74;margin:9px 0 0}
+#page-ai_training .ai-kb-actions{display:flex;gap:4px}#page-ai_training .ai-kb-actions button{width:29px;height:29px;border:1px solid #e7e9ec;border-radius:7px;background:#fff;color:#626870;cursor:pointer}#page-ai_training .ai-kb-actions button.danger{color:#d93632}
+#page-ai_training .ai-kb-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}#page-ai_training .ai-kb-tags span{padding:3px 6px;border-radius:6px;background:#f3f4f5;color:#747a82;font-size:7.5px}
+#page-ai_training .ai-kb-empty,#page-ai_training .ai-kb-error,#page-ai_training .ai-kb-loading{min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#92979e;gap:5px}
+#page-ai_training .ai-kb-empty>span{width:36px;height:36px;display:grid;place-items:center;border:1px solid #e6e8eb;border-radius:10px;background:#f7f8f9;font-size:17px}#page-ai_training .ai-kb-empty strong,#page-ai_training .ai-kb-error strong{font-size:10px;color:#4b5057}#page-ai_training .ai-kb-empty small,#page-ai_training .ai-kb-error small{font-size:8px}
+.ai-edit-modal[hidden]{display:none!important}.ai-edit-modal{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;padding:18px}.ai-edit-backdrop{position:absolute;inset:0;background:rgba(20,23,28,.35);backdrop-filter:blur(2px)}.ai-edit-dialog{position:relative;width:min(600px,calc(100vw - 30px));max-height:calc(100vh - 40px);overflow:auto;background:#fff;border:1px solid #dfe2e6;border-radius:14px;box-shadow:0 24px 70px rgba(20,23,28,.2);padding:16px}.ai-edit-dialog header{display:flex;justify-content:space-between;align-items:start;margin-bottom:13px}.ai-edit-dialog header h3{font-size:15px;margin:4px 0}.ai-edit-dialog header>button{width:30px;height:30px;border:1px solid #e4e6e9;border-radius:8px;background:#fff}.ai-edit-dialog form{display:grid;gap:11px}.ai-edit-dialog label{display:grid;gap:5px}.ai-edit-dialog label>span{font-size:8.5px;font-weight:700;color:#666c74}.ai-edit-dialog input,.ai-edit-dialog textarea{box-sizing:border-box;width:100%;border:1px solid #dfe2e6;border-radius:9px;background:#f8f9fa;padding:10px;font:500 9.5px/1.5 Inter,sans-serif;color:#272a2f}.ai-edit-dialog footer{display:flex;justify-content:flex-end;gap:7px;margin-top:3px}.ai-edit-dialog footer button{height:36px;padding:0 12px;border-radius:8px}
+
+/* v74 — AI Training is a normal page inside the dashboard main workspace */
+body[data-current-page="ai_training"] .main{overflow:auto!important;display:block!important;padding-top:0!important}
+body[data-current-page="ai_training"] #page-ai_training.page{display:none!important;position:static!important;inset:auto!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;width:100%!important;max-width:none!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;transform:none!important}
+body[data-current-page="ai_training"] #page-ai_training.page.active{display:block!important}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-page{position:static!important;width:100%!important;max-width:1180px!important;height:auto!important;min-height:0!important;margin:0 auto!important;padding:14px 0 28px!important;transform:none!important}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-header{margin-top:0!important}
+@media(max-width:760px){body[data-current-page="ai_training"] #page-ai_training .ai-training-page{padding:10px 0 22px!important}}
