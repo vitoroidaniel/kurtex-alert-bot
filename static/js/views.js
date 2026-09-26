@@ -446,7 +446,17 @@ async function loadAgents(){
  renderAgentCards(agents);
  }catch(e){console.error(e);el.innerHTML='<div class="loading">Unable to load agents.</div>';}}
 function filterAgents(q){q=(q||'').toLowerCase();renderAgentCards(agentsWorkspace.agents.filter(function(a){return ((a.name||'')+' '+(a.username||'')).toLowerCase().includes(q)}));}
-function renderAgentCards(rows){var el=document.getElementById('agents-card-grid');if(!el)return;el.innerHTML=rows.map(function(a){var rate=Math.max(0,Math.min(100,Number(a.rate||0)));return '<button class="agent-overview-card" onclick="openAgentModal('+JSON.stringify(a.name)+','+JSON.stringify(a.username||'')+','+JSON.stringify(a.id||'')+')"><div class="agent-overview-top"><span class="agent-overview-avatar">'+h((a.name||'?')[0].toUpperCase())+'</span><span class="agent-overview-id"><strong>'+h(a.name||'')+'</strong><small>'+(a.username?'@'+h(a.username):'Team member')+'</small></span><i class="ph ph-arrow-up-right"></i></div><div class="agent-overview-metrics"><span><b>'+Number(a.total||0)+'</b><small>Cases</small></span><span><b>'+Number(a.done||0)+'</b><small>Resolved</small></span><span><b>'+Number(a.missed||0)+'</b><small>Missed</small></span></div><div class="agent-overview-rate"><span><small>Resolution</small><b>'+rate+'%</b></span><div class="agent-overview-track"><i style="width:'+rate+'%"></i></div></div><div class="agent-overview-foot"><span><i class="ph ph-timer"></i> Avg response '+h(a.avg_resp||'—')+'</span><span>View activity <i class="ph ph-caret-right"></i></span></div></button>'}).join('')||'<div class="empty-state">No matching agents.</div>';}
+function renderAgentCards(rows){
+ var el=document.getElementById('agents-card-grid');if(!el)return;
+ el.innerHTML=rows.map(function(a){
+   var rate=Math.max(0,Math.min(100,Number(a.rate||0)));
+   return '<button type="button" class="agent-overview-card" data-agent="'+attr(a.name||'')+'" data-username="'+attr(a.username||'')+'" data-agent-id="'+attr(a.id||'')+'" onclick="openAgentModal(this.dataset.agent,this.dataset.username,this.dataset.agentId)">'+
+     '<div class="agent-overview-top"><span class="agent-overview-avatar">'+h((a.name||'?')[0].toUpperCase())+'</span><span class="agent-overview-id"><strong>'+h(a.name||'')+'</strong><small>'+(a.username?'@'+h(a.username):'Team member')+'</small></span><i class="ph ph-arrow-up-right"></i></div>'+
+     '<div class="agent-overview-metrics"><span><b>'+Number(a.total||0)+'</b><small>Cases</small></span><span><b>'+Number(a.done||0)+'</b><small>Resolved</small></span><span><b>'+Number(a.missed||0)+'</b><small>Missed</small></span></div>'+
+     '<div class="agent-overview-rate"><span><small>Resolution</small><b>'+rate+'%</b></span><div class="agent-overview-track"><i style="width:'+rate+'%"></i></div></div>'+
+     '<div class="agent-overview-foot"><span><i class="ph ph-timer"></i> Avg response '+h(a.avg_resp||'—')+'</span><span>View activity <i class="ph ph-caret-right"></i></span></div></button>';
+ }).join('')||'<div class="empty-state">No matching agents.</div>';
+}
 
 // ── Modals ─────────────────────────────────────────────────────────────────
 async function openCase(el) {

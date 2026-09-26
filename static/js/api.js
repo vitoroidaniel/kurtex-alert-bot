@@ -37,7 +37,14 @@ function connectionState() {
         " CT"
       : "Connecting…";
 }
-async function apiFetch(url, key) {
+async function apiFetch(url, key, options) {
+  // Backward compatible: apiFetch(url, key) for reads and
+  // apiFetch(url, {method, headers, body}) for mutations.
+  if (key && typeof key === "object") {
+    options = key;
+    key = null;
+  }
+  options = options || {};
   key = key || url.split("?")[0];
   if (activeRequests.has(key)) activeRequests.get(key).abort();
   var controller = new AbortController(),
@@ -48,11 +55,12 @@ async function apiFetch(url, key) {
     controller.abort();
   }, 12000);
   try {
-    var response = await fetch(url, {
+    var fetchOptions = Object.assign({}, options, {
       signal: controller.signal,
       cache: "no-store",
       credentials: "same-origin",
     });
+    var response = await fetch(url, fetchOptions);
     if (response.status === 401) {
       window.location.assign("/login");
       throw new Error("Please sign in again.");
