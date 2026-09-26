@@ -3440,3 +3440,30 @@ body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 21
 .user-chip{padding:9px!important}
 .theme-btn,.logout-btn{font-size:10.5px!important;padding:8px 9px!important}
 @media(max-width:900px){.sidebar{width:260px!important}.layout{grid-template-columns:1fr!important}}
+
+/* v88 — fixed no-scroll navigation hierarchy */
+.sidebar{overflow:hidden!important}
+.sidebar nav{
+ display:flex!important;flex-direction:column!important;
+ flex:1 1 auto!important;min-height:0!important;
+ overflow:hidden!important;scrollbar-width:none!important;
+ padding:6px 10px 8px!important;
+}
+.sidebar nav::-webkit-scrollbar{display:none!important}
+.nav-item{min-height:36px!important;padding:7px 11px!important;font-size:11.5px!important}
+.nav-group-header{min-height:36px!important;padding:7px 11px!important;font-size:11.5px!important}
+.nav-item i,.nav-group-header i{font-size:15px!important}
+.nav-group-items.open{gap:0!important}
+.nav-ai-cluster{margin-top:3px!important;padding-top:4px!important;border-top:1px solid var(--border)!important}
+.nav-bottom-cluster{margin-top:auto!important;padding-top:5px!important;border-top:1px solid var(--border)!important}
+.nav-section-label{display:none!important}
+.sidebar-footer{flex:0 0 auto!important;padding:8px 10px!important}
+.user-chip{padding:7px 8px!important}
+.theme-btn,.logout-btn{padding:6px 8px!important}
+@media(max-height:760px) and (min-width:901px){
+ .nav-item,.nav-group-header{min-height:32px!important;padding-top:5px!important;padding-bottom:5px!important;font-size:11px!important}
+ .sidebar-logo{padding-top:10px!important;padding-bottom:8px!important}
+ .sidebar-logo img{width:36px!important;height:36px!important}
+ .sidebar-footer{padding-top:5px!important;padding-bottom:5px!important}
+ .user-chip{padding:5px 7px!important}
+}

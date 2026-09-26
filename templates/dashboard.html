@@ -22,41 +22,34 @@
     <img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
     <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
   </div>
-  <nav aria-label="Main navigation"><div class="nav-section-label">Workspace</div>
+  <nav aria-label="Main navigation">
     <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-squares-four"></i> Overview</div>
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     <div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
-
-    <!-- Analytics group -->
     <div class="nav-group">
-      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')">
-        <span><i class="ph ph-chart-bar"></i> Analytics</span>
-        <i class="ph ph-caret-down nav-caret open" id="caret-group-analytics"></i>
-      </div>
+      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')"><span><i class="ph ph-chart-bar"></i> Analytics</span><i class="ph ph-caret-down nav-caret open" id="caret-group-analytics"></i></div>
       <div class="nav-group-items open" id="group-analytics">
         <div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-trend-up"></i> Trends</div>
         <div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-arrows-left-right"></i> Comparison</div>
       </div>
     </div>
-
-    <!-- Fleet group -->
     <div class="nav-group">
-      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')">
-        <span><i class="ph ph-truck"></i> Fleet</span>
-        <i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i>
-      </div>
+      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')"><span><i class="ph ph-truck"></i> Fleet</span><i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i></div>
       <div class="nav-group-items open" id="group-fleet">
         <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
         <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Intelligence</div>
         <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
       </div>
     </div>
-
-    <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
-    <div class="nav-item" data-page="my_profile" role="button" tabindex="0" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
-    {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
-    {% if is_manager %}<div class="nav-item" data-page="ai_training" role="button" tabindex="0" onclick="showPage('ai_training')"><i class="ph ph-brain"></i> AI Training</div>{% endif %}
+    <div class="nav-ai-cluster">
+      <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
+      {% if is_manager %}<div class="nav-item" data-page="ai_training" role="button" tabindex="0" onclick="showPage('ai_training')"><i class="ph ph-brain"></i> AI Training</div>{% endif %}
+    </div>
+    <div class="nav-bottom-cluster">
+      <div class="nav-item" data-page="my_profile" role="button" tabindex="0" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
+      {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
+    </div>
   </nav>
   <div class="sidebar-footer">
     <div class="user-chip">
