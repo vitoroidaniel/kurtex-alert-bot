@@ -19,6 +19,7 @@ var pages = [
   "comparison",
   "fleet",
   "fleet_intel",
+  "truck_lab",
   "my_profile",
   "agents",
 ];
@@ -31,6 +32,7 @@ var titles = {
   comparison: "Week Comparison",
   fleet: "Fleet Stats",
   fleet_intel: "Fleet Intelligence",
+  truck_lab: "Truck 3D Lab",
   my_profile: "My Profile",
   agents: "Agent Profiles",
 };
@@ -140,6 +142,8 @@ function showPage(page) {
       ? "Today’s activity, outstanding cases, and team performance."
       : page === "cases"
         ? "Find cases and review progress. Assign and resolve cases in Telegram."
+        : page === "truck_lab"
+          ? "Explore real 3D truck assets, systems, faults, and quick diagnostic guidance."
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";
