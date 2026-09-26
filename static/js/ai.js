@@ -62,11 +62,13 @@ async function loadAIPageSidebar(){
  var list=document.getElementById('ai-page-sidebar-list');if(!list)return;
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
-  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" data-chat-id="'+escapeAI(c.id)+'" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\',this)"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
  }catch(e){list.innerHTML='<div class="ai-history-empty">Unable to load chats.</div>'}
 }
 async function newKurtexAIPageChat(){
  kurtexAIChatId=null;
+ var side=document.getElementById('ai-page-sidebar-list');
+ if(side)side.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
  var t=document.getElementById('ai-page-messages');
  if(t)t.innerHTML='<div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div>';
  var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}loadAIPageSidebar()
@@ -83,7 +85,12 @@ async function openAIPageHistory(){
   list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><strong>'+escapeAI(c.title||'Maintenance conversation')+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
  }catch(e){panel.querySelector('.ai-page-history-list').textContent='Unable to load chat history.'}
 }
-async function openAIPageSavedChat(id){
+async function openAIPageSavedChat(id,clicked){
+ var list=document.getElementById('ai-page-sidebar-list');
+ if(list){
+  list.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
+  if(clicked)clicked.classList.add('active');
+ }
  try{
   var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to open conversation');
   var chat=x.item||x.chat||x;kurtexAIChatId=chat.id||id;var box=document.getElementById('ai-page-messages');box.innerHTML='';

@@ -4193,3 +4193,15 @@ body[data-current-page="ai_assistant"] .connection-banner{
 body[data-current-page="ai_assistant"] .ai-page-chatbar strong{
   font-weight:800!important;
 }
+
+/* v107 — polished AI sidebar controls + instant chat highlight */
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head{gap:8px!important;padding:10px 9px 8px!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head button{height:36px!important;border-radius:9px!important;border:1px solid var(--border)!important;background:var(--surface)!important;box-shadow:none!important}
+body[data-current-page="ai_assistant"] .ai-side-toggle{width:36px!important;flex:0 0 36px!important;display:grid!important;place-items:center!important;padding:0!important}
+body[data-current-page="ai_assistant"] .ai-side-toggle i{font-size:17px!important;line-height:1!important}
+body[data-current-page="ai_assistant"] .ai-side-new{gap:7px!important;font-size:10.5px!important;font-weight:650!important}
+body[data-current-page="ai_assistant"] .ai-side-new i{font-size:14px!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head button:hover{background:var(--surface-2,#f6f6f7)!important}
+body[data-current-page="ai_assistant"] .ai-side-chat{transition:background-color .06s linear,border-color .06s linear!important;will-change:auto!important}
+body[data-current-page="ai_assistant"] .ai-side-chat.active{background:var(--surface,#fff)!important;border-color:var(--border)!important;box-shadow:0 1px 3px rgba(0,0,0,.055)!important}
+body[data-current-page="ai_assistant"] .ai-side-chat.active span{font-weight:750!important}
