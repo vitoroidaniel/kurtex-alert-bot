@@ -97,8 +97,9 @@ async function newKurtexAIPageChat(){
  var side=document.getElementById('ai-page-sidebar-list');
  if(side)side.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
  var t=document.getElementById('ai-page-messages');
- refreshAIChatContext();if(t)t.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick(\'Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.\')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div>';
- var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}loadAIPageSidebar()
+ if(t)t.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick(\'Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.\')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div>';
+ var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}
+ try{await aiEnsureChat()}catch(e){console.error('AI new chat failed',e);if(t)t.insertAdjacentHTML('beforeend','<div class="ai-chat-failure">'+escapeAI(e.message||'Unable to create a new chat.')+' <button type="button" onclick="newKurtexAIPageChat()">Retry</button></div>')}
 }
 async function openAIPageHistory(){
  var shell=document.querySelector('#page-ai_assistant .ai-assistant-workspace');if(!shell)return;
@@ -118,14 +119,44 @@ async function openAIPageSavedChat(id,clicked){
   list.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
   if(clicked)clicked.classList.add('active');
  }
+ // Switch identity before loading context so the previous chat's knowledge/files
+ // can never visually bleed into the newly selected conversation.
+ kurtexAIChatId=String(id);
+ aiChatKnowledgeSelected=[];
+ var contextBox=document.getElementById('ai-chat-context');
+ var inlineKnowledge=document.getElementById('ai-chat-knowledge-inline');
+ if(contextBox)contextBox.innerHTML='';
+ if(inlineKnowledge)inlineKnowledge.innerHTML='';
  try{
-  var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to open conversation');
-  var chat=x.item||x.chat||x;kurtexAIChatId=chat.id||id;var box=document.getElementById('ai-page-messages');box.innerHTML='';
-  (chat.messages||[]).forEach(function(m){var d=document.createElement('div');d.className='ai-page-msg '+(m.role==='assistant'?'assistant':'user');d.innerHTML=m.role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');box.appendChild(d)});
-  if(!(chat.messages||[]).length)await newKurtexAIPageChat();
-  var p=document.getElementById('ai-page-history');if(p)p.remove();box.scrollTop=box.scrollHeight;loadAIPageSidebar();refreshAIChatContext()
- }catch(e){}
+  var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)),x=await r.json();
+  if(!r.ok)throw new Error(x.error||'Unable to open conversation');
+  var chat=x.item||x.chat||x;
+  kurtexAIChatId=String(chat.id||id);
+  var box=document.getElementById('ai-page-messages');box.innerHTML='';
+  (chat.messages||[]).forEach(function(m){
+   var d=document.createElement('div');
+   d.className='ai-page-msg '+(m.role==='assistant'?'assistant':'user');
+   d.innerHTML=m.role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');
+   box.appendChild(d)
+  });
+  // Important: an empty saved chat remains the SAME saved chat.
+  // Do not call newKurtexAIPageChat() here; that used to create a second chat
+  // and made chat-scoped knowledge appear to jump between conversations.
+  if(!(chat.messages||[]).length){
+   box.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>This conversation is ready. Attached knowledge and files stay with this chat only.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="openAIChatKnowledge()"><i class="ph ph-book-open-text"></i><span>Use knowledge</span></button></div></div>';
+  }
+  var p=document.getElementById('ai-page-history');if(p)p.remove();
+  box.scrollTop=box.scrollHeight;
+  await refreshAIChatContext();
+  await loadAIPageSidebar();
+ }catch(e){
+  console.error('AI saved chat open failed',e);
+  kurtexAIChatId=null;
+  if(contextBox)contextBox.innerHTML='';
+  if(inlineKnowledge)inlineKnowledge.innerHTML='';
+ }
 }
+
 function openKurtexAIPageChat(){
  if(typeof showPage==='function')showPage('ai_assistant');
  var p=document.getElementById('kurtex-ai-panel');if(p)p.classList.remove('open','ai-fullscreen','history-open');
@@ -196,13 +227,24 @@ document.addEventListener('click',function(e){
 
 // v124 — chat-scoped files + verified knowledge context
 var aiChatKnowledgeOptions=[], aiChatKnowledgeSelected=[];
-function aiEnsureChat(){
- if(kurtexAIChatId)return Promise.resolve(kurtexAIChatId);
- return apiFetch('/api/ai/chats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New maintenance chat'})}).then(function(r){return r.json()}).then(function(x){kurtexAIChatId=x.id;loadAIPageSidebar();return x.id})
+async function aiEnsureChat(){
+ if(kurtexAIChatId)return kurtexAIChatId;
+ var r=await apiFetch('/api/ai/chats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New maintenance chat'})});
+ var x={};try{x=await r.json()}catch(_e){}
+ if(!r.ok||!x.id)throw new Error(x.error||'Unable to create a new chat.');
+ kurtexAIChatId=x.id;
+ await loadAIPageSidebar();
+ await refreshAIChatContext();
+ return x.id;
+}
+async function prepareAIChatUpload(file){
+ if(!file||!/^image\/(jpeg|png|webp)$/i.test(file.type||""))return file;
+ if(file.size<=1800000)return file;
+ return new Promise(function(resolve){var img=new Image(),url=URL.createObjectURL(file);img.onload=function(){try{var max=1600,scale=Math.min(1,max/Math.max(img.naturalWidth||1,img.naturalHeight||1)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.naturalWidth*scale));c.height=Math.max(1,Math.round(img.naturalHeight*scale));c.getContext("2d").drawImage(img,0,0,c.width,c.height);c.toBlob(function(blob){URL.revokeObjectURL(url);resolve(blob?new File([blob],file.name.replace(/\.(png|webp)$/i,".jpg"),{type:"image/jpeg"}):file)},"image/jpeg",.82)}catch(e){URL.revokeObjectURL(url);resolve(file)}};img.onerror=function(){URL.revokeObjectURL(url);resolve(file)};img.src=url})
 }
 async function uploadAIChatFiles(input){
  var files=Array.from((input&&input.files)||[]);if(!files.length)return;
- try{var id=await aiEnsureChat();for(var i=0;i<files.length;i++){var fd=new FormData();fd.append('file',files[i]);var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)+'/files',{method:'POST',body:fd}),x=await r.json();if(!r.ok)throw new Error(x.error||'Could not attach '+files[i].name)}await refreshAIChatContext()}catch(e){alert(e.message||'Could not attach file')}finally{if(input)input.value=''}
+ try{var id=await aiEnsureChat();for(var i=0;i<files.length;i++){var upload=await prepareAIChatUpload(files[i]);var fd=new FormData();fd.append('file',upload,upload.name||files[i].name);var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)+'/files',{method:'POST',body:fd}),x=await r.json();if(!r.ok)throw new Error(x.error||'Could not attach '+files[i].name)}await refreshAIChatContext()}catch(e){alert(e.message||'Could not attach file')}finally{if(input)input.value=''}
 }
 async function refreshAIChatContext(){
  var box=document.getElementById('ai-chat-context'),inline=document.getElementById('ai-chat-knowledge-inline');
@@ -211,7 +253,7 @@ async function refreshAIChatContext(){
   var results=await Promise.all([apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),apiFetch('/api/ai/knowledge/options')]);
   var x=await results[0].json(), ox=await results[1].json(), chat=x.item||x.chat||x,files=chat.attachments||[],kids=chat.knowledge_ids||[];
   aiChatKnowledgeSelected=kids.slice();aiChatKnowledgeOptions=ox.items||aiChatKnowledgeOptions||[];
-  if(box){var chips=[];files.forEach(function(a){chips.push('<span class="ai-context-chip"><i class="ph ph-file-text"></i>'+escapeAI(a.name)+'<button type="button" onclick="removeAIChatFile(&quot;'+aiAttr(a.id)+'&quot;)"><i class="ph ph-x"></i></button></span>')});box.innerHTML=chips.join('')}
+  if(box){var chips=[];files.forEach(function(a){var isImg=a.kind==='image'||/^image\//.test(a.mime||'');chips.push('<span class="ai-context-chip '+(isImg?'ai-image-chip':'')+'"><i class="ph '+(isImg?'ph-image':'ph-file-text')+'"></i><span>'+escapeAI(a.name)+'</span>'+(isImg?'<small>photo</small>':'')+'<button type="button" onclick="removeAIChatFile(&quot;'+aiAttr(a.id)+'&quot;)"><i class="ph ph-x"></i></button></span>')});box.innerHTML=chips.join('')}
   if(inline){var selected=aiChatKnowledgeOptions.filter(function(k){return kids.indexOf(k.id)>=0});inline.innerHTML=selected.map(function(k){var colors=k.tag_colors||{},tags=k.tags||[],color=(tags.length&&colors[tags[0]])||k.tag_color||'blue';return '<button type="button" class="ai-inline-kb ai-tag-color-'+escapeAI(color)+'" onclick="openAIChatKnowledge()" title="'+escapeAI(k.title||'Maintenance knowledge')+'"><span class="ai-inline-kb-dot"></span><span>'+escapeAI(k.title||'Maintenance knowledge')+'</span></button>'}).join('')}
  }catch(e){}
 }

@@ -111,3 +111,5 @@
     .modal:not(.report-workspace),.ai-edit-dialog,.ai-chat-kb-dialog{max-height:96dvh!important}
   }
 }
+/* v130 — mobile visual diagnostic attachments */
+@media(max-width:760px){.ai-context-chip.ai-image-chip{max-width:220px}.ai-context-chip.ai-image-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px}}

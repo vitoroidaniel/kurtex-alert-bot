@@ -2,7 +2,7 @@
 dashboard.py — Kurtex Alert Bot Web Dashboard
 Routes and read-only API. Presentation lives in templates/ and static/.
 """
-import csv, hashlib, hmac, io, json, logging, os, re, secrets, time, uuid, urllib.parse, urllib.request
+import base64, csv, hashlib, hmac, io, json, logging, os, re, secrets, time, uuid, urllib.parse, urllib.request
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -212,11 +212,13 @@ Rules:
 - If the agent asks for matching/history cases, answer with the matching case facts first. Ask diagnostic follow-up questions only when the agent is actually asking for diagnosis.
 """
 
-def _cf_ai(messages, max_tokens=700, temperature=0.2):
+def _cf_ai(messages, max_tokens=700, temperature=0.2, image_data_url=None):
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("Workers AI is not configured")
     url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{KURTEX_AI_MODEL}"
-    req=urllib.request.Request(url,data=json.dumps({"messages":messages,"max_tokens":max_tokens,"temperature":temperature}).encode("utf-8"),
+    payload_body={"messages":messages,"max_tokens":max_tokens,"temperature":temperature}
+    if image_data_url: payload_body["image"]=image_data_url
+    req=urllib.request.Request(url,data=json.dumps(payload_body).encode("utf-8"),
         method="POST",headers={"Authorization":f"Bearer {CLOUDFLARE_API_TOKEN}","Content-Type":"application/json"})
     try:
         with urllib.request.urlopen(req,timeout=35) as resp: payload=json.loads(resp.read().decode("utf-8"))
@@ -310,6 +312,32 @@ def _ai_context(query="",limit=18):
           "tags":(x.get("tags") or [])[:8],"content":_ai_clip(x.get("content"),2200)})
     return {"cases":compact,"knowledge_notes":notes,"approved_maintenance_knowledge":approved,
             "retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved)}}
+
+
+AI_PARTS_FILE = Path(__file__).resolve().parent / "data" / "parts_manual_ai.json"
+def _read_ai_parts_manual():
+    try:
+        data=json.loads(AI_PARTS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data,list) else []
+    except Exception as e:
+        logger.warning("AI parts manual read failed: %s",e); return []
+
+def _ai_parts_matches(query,limit=8):
+    terms=_maintenance_tokens(query) if "_maintenance_tokens" in globals() else set(re.findall(r"[a-z0-9_-]{3,}",str(query).lower()))
+    generic={"truck","trailer","unit","issue","problem","repair","service","check","maintenance","part","system"}
+    terms={x for x in terms if x not in generic}
+    ranked=[]
+    for p in _read_ai_parts_manual():
+        name=str(p.get("name") or ""); issues=" ".join(str(x) for x in (p.get("issues") or []))
+        hay=" ".join([name,str(p.get("cat") or ""),str(p.get("keywords") or ""),issues,str(p.get("what") or ""),str(p.get("works") or "")]).lower()
+        score=sum((5 if t in name.lower() else 3 if t in str(p.get("keywords") or "").lower() else 1) for t in terms if t in hay)
+        if score: ranked.append((score,p))
+    ranked.sort(key=lambda x:(-x[0],str(x[1].get("name") or "")))
+    out=[]
+    for score,p in ranked[:limit]:
+        out.append({"name":p.get("name"),"category":p.get("cat"),"location":p.get("loc"),"issues":p.get("issues") or [],
+                    "checks":p.get("checks") or [],"guidance":p.get("fix") or "","source":p.get("source") or "","source_url":p.get("url") or ""})
+    return out
 
 
 NOTIFICATIONS_FILE = DATA_DIR / "dashboard_notifications.json"
@@ -448,6 +476,10 @@ def _extract_ai_chat_file(f):
     name=Path(f.filename or "attachment").name
     ext=Path(name).suffix.lower(); raw=f.read(5_000_001)
     if len(raw)>5_000_000: raise ValueError("File is too large (5 MB max)")
+    if ext in (".jpg",".jpeg",".png",".webp"):
+        if not raw: raise ValueError("Image is empty")
+        mime={".jpg":"image/jpeg",".jpeg":"image/jpeg",".png":"image/png",".webp":"image/webp"}[ext]
+        return name, {"kind":"image","mime":mime,"data":"data:"+mime+";base64,"+base64.b64encode(raw).decode("ascii")}
     if ext in (".txt",".md",".csv",".json"):
         try: text=raw.decode("utf-8")
         except UnicodeDecodeError: text=raw.decode("latin-1")
@@ -457,10 +489,10 @@ def _extract_ai_chat_file(f):
     elif ext==".docx":
         from docx import Document
         doc=Document(io.BytesIO(raw)); text="\n".join(p.text for p in doc.paragraphs)
-    else: raise ValueError("Supported files: PDF, DOCX, TXT, MD, CSV and JSON")
+    else: raise ValueError("Supported files: JPG, PNG, WEBP, PDF, DOCX, TXT, MD, CSV and JSON")
     text=text.strip()
     if not text: raise ValueError("No readable text was found in this file")
-    return name, text[:120000]
+    return name, {"kind":"document","content":text[:120000]}
 
 AI_CHAT_FILE = DATA_DIR / "ai_chats.json"
 
@@ -511,7 +543,12 @@ def api_ai_chats():
     data=request.get_json(silent=True) or {}; title=str(data.get("title") or "New maintenance chat")[:80]
     cid=uuid.uuid4().hex
     chat={"id":cid,"title":title,"created_at":_now_iso(),"updated_at":_now_iso(),"messages":[]}
-    chats.append(chat); _save_user_chats(chats)
+    chats.append(chat)
+    try:
+        _save_user_chats(chats)
+    except Exception as e:
+        logger.exception("AI chat create/save failed")
+        return jsonify({"error":"Unable to create chat. Chat storage is not writable.","detail":str(e)[:240]}),500
     return jsonify(chat),201
 
 @app.route("/api/ai/chats/<chat_id>",methods=["GET","DELETE","PATCH"])
@@ -519,7 +556,9 @@ def api_ai_chat_item(chat_id):
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
     chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if not chat:return jsonify({"error":"Chat not found"}),404
-    if request.method=="GET":return jsonify(chat)
+    if request.method=="GET":
+        safe=dict(chat); safe["attachments"]=[{k:a.get(k) for k in ("id","name","kind","mime","created_at") if a.get(k) is not None} for a in (chat.get("attachments") or [])]
+        return jsonify(safe)
     if request.method=="DELETE":
         _save_user_chats([c for c in chats if str(c.get("id"))!=chat_id]); return jsonify({"ok":True})
     data=request.get_json(silent=True) or {}; title=str(data.get("title") or "").strip()
@@ -530,7 +569,7 @@ def api_ai_chat_item(chat_id):
 def api_ai_knowledge_options():
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
     items=_read_ai_knowledge()
-    return jsonify({"items":[{"id":x.get("id"),"title":x.get("title"),"tags":x.get("tags") or [],"source":x.get("source")} for x in items]})
+    return jsonify({"items":[{"id":x.get("id"),"title":x.get("title"),"tags":x.get("tags") or [],"tag_colors":x.get("tag_colors") or {},"source":x.get("source")} for x in items]})
 
 @app.route("/api/ai/chats/<chat_id>/files",methods=["POST"])
 def api_ai_chat_file(chat_id):
@@ -539,9 +578,9 @@ def api_ai_chat_file(chat_id):
     if not chat:return jsonify({"error":"Chat not found"}),404
     f=request.files.get("file")
     if not f or not f.filename:return jsonify({"error":"File is required"}),400
-    try:name,content=_extract_ai_chat_file(f)
+    try:name,parsed=_extract_ai_chat_file(f)
     except Exception as e:return jsonify({"error":str(e)}),400
-    item={"id":uuid.uuid4().hex,"name":name,"content":content,"created_at":_now_iso()}
+    item={"id":uuid.uuid4().hex,"name":name,"created_at":_now_iso(),**parsed}
     chat.setdefault("attachments",[]).append(item);chat["attachments"]=chat["attachments"][-12:];chat["updated_at"]=_now_iso();_save_user_chats(chats)
     return jsonify({"id":item["id"],"name":name}),201
 
@@ -585,7 +624,7 @@ def api_ai_chat():
         # Chat-scoped context: explicitly attached files and verified knowledge stay with this conversation.
         attachments=[]
         for a in (chat.get("attachments") or [])[:12]:
-            attachments.append({"name":_ai_clip(a.get("name"),180),"content":_ai_clip(a.get("content"),5000)})
+            attachments.append({"name":_ai_clip(a.get("name"),180),"content":_ai_clip(a.get("content"),5000)}) if a.get("kind")!="image" else None
         selected_ids=set(str(x) for x in (chat.get("knowledge_ids") or []))
         selected=[]
         for k in _read_ai_knowledge():
@@ -593,16 +632,19 @@ def api_ai_chat():
                 selected.append({"id":k.get("id"),"title":_ai_clip(k.get("title"),160),"tags":(k.get("tags") or [])[:10],"content":_ai_clip(k.get("content"),5000)})
         ctx["chat_attachments"]=attachments
         ctx["chat_selected_knowledge"]=selected
+        ctx["parts_manual_matches"]=_ai_parts_matches(message,8)
         stage="prompt"
         messages=[{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"system","content":
           "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
-          json.dumps(ctx,ensure_ascii=False)}]
+          json.dumps(ctx,ensure_ascii=False)}, {"role":"system","content":"Use PARTS MANUAL MATCHES, selected knowledge, and similar historical cases together. For an attached image, describe only what is actually visible, state uncertainty, and correlate it with the written symptom. Never invent an OEM/part number; only provide one if a verified source in context explicitly contains it. Structure diagnostic answers with Likely issue, Evidence, Recommended checks, Matching parts (when supported), Similar cases, and Sources used."}]
         for item in history[-8:]:
             role=item.get("role"); content=_ai_clip(item.get("content"),1800)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
         messages.append({"role":"user","content":message})
         stage="workers_ai"
-        answer=_cf_ai(messages,850,.2)
+        image_items=[a for a in (chat.get("attachments") or []) if a.get("kind")=="image" and a.get("data")]
+        image_data=image_items[-1].get("data") if image_items else None
+        answer=_cf_ai(messages,1000,.2,image_data_url=image_data)
         stage="save_chat"
         history.extend([{"role":"user","content":message,"at":_now_iso()},{"role":"assistant","content":answer,"at":_now_iso()}])
         chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
