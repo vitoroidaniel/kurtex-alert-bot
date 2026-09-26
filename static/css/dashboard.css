@@ -2903,3 +2903,99 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 #page-parts .part-case-copy small{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #page-parts .part-case-copy small b{color:var(--text);font-weight:700}
 @media(max-width:700px){.fleet-list-footer.fleet-pager{align-items:flex-start;flex-direction:column}.fleet-pager-controls{width:100%;justify-content:flex-start}.pager-btn{font-size:0}.pager-btn i{font-size:15px}#page-parts .part-case-copy small{white-space:normal}}
+
+
+/* v55 — mobile dashboard overhaul: same Kurtex, phone-native layout */
+@media(max-width:760px){
+  html,body{max-width:100%;overflow-x:hidden}
+  body{font-size:14px}
+  .app-shell,.dashboard-shell,.app{min-width:0!important;max-width:100vw!important}
+  .main,.main-content,.content,.page-wrap{min-width:0!important;width:100%!important;margin-left:0!important}
+  .page{min-width:0!important;width:100%!important;padding:12px!important}
+  .page-header,.section-header,.page-top{
+    gap:10px!important;align-items:flex-start!important;flex-wrap:wrap!important;
+    padding:12px 0!important;margin-bottom:10px!important;
+  }
+  .page-header h1,.page-title h1,.section-header h1{font-size:25px!important;line-height:1.08!important}
+  .eyebrow{font-size:9px!important;letter-spacing:1.5px!important}
+  .page-subtitle,.page-header p{font-size:12px!important;line-height:1.45!important}
+  .date-widget,.header-date,.calendar-widget{transform:none!important;max-width:100%!important}
+  .btn,button,input,select,textarea{min-height:40px}
+  input,select,textarea{font-size:16px!important} /* prevents iOS zoom */
+  .btn{padding:0 12px!important}
+  .card,.panel,.section-card{border-radius:12px!important}
+  .stat-grid,.overview-grid,.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  .stat-card{min-width:0!important;padding:12px!important;min-height:82px!important}
+  .stat-label{font-size:10px!important}
+  .stat-value{font-size:24px!important}
+  .stat-icon{width:30px!important;height:30px!important}
+  .toggle-tabs{
+    display:flex!important;overflow-x:auto!important;white-space:nowrap!important;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .toggle-tabs::-webkit-scrollbar{display:none}
+  .toggle-btn{flex:0 0 auto!important;min-height:36px!important;padding:0 13px!important}
+  .search-wrap,.search-box{width:100%!important}
+  .table-wrap{
+    overflow:auto!important;-webkit-overflow-scrolling:touch!important;
+    border-radius:11px!important;max-width:100%!important;
+  }
+  table{min-width:720px}
+  th{font-size:9px!important}
+  td{font-size:11px!important}
+  .modal,.modal-card,.dialog,.detail-modal{
+    width:calc(100vw - 12px)!important;max-width:none!important;
+    max-height:calc(100svh - 12px)!important;margin:6px!important;border-radius:16px!important;
+  }
+  .modal-body,.detail-body{overflow:auto!important;padding:14px!important}
+  .modal-header,.modal-footer{padding:12px 14px!important}
+  .two-col,.detail-grid,.split-grid,.case-detail-grid{grid-template-columns:1fr!important}
+  .fleet-status-card{padding:10px!important}
+  .fleet-status-card .table-wrap{max-height:55svh!important}
+  .fleet-list-footer.fleet-pager{padding-top:9px!important}
+  .fleet-pager-controls{gap:5px!important}
+  .pager-size span{display:none}
+  .pager-size select{min-width:62px!important}
+  #page-fleet_intel .intel-summary-top{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  #page-fleet_intel .intel-summary-top .stat-card{min-height:72px!important}
+  #page-fleet_intel .intelligence-search-shell{
+    top:0!important;margin-left:-12px!important;margin-right:-12px!important;
+    border-left:0!important;border-right:0!important;border-radius:0 0 12px 12px!important;
+    padding:9px 12px!important;
+  }
+  #page-fleet_intel .intel-search-row{gap:6px!important}
+  #page-fleet_intel .intel-search-btn{width:42px!important;padding:0!important}
+  #page-fleet_intel .intel-search-btn{font-size:0!important}
+  #page-fleet_intel .intel-search-btn i{font-size:17px!important}
+  #page-fleet_intel .recurring-unit-tree summary{padding:11px 10px!important}
+  #page-fleet_intel .recurring-issue-tree{padding:0 10px 10px 35px!important}
+  #page-parts .parts-workspace,#page-parts .parts-layout,#page-parts .parts-manual-layout{
+    display:block!important;height:auto!important;min-height:0!important;overflow:visible!important;
+  }
+  #page-parts .parts-sidebar,#page-parts .parts-list-panel{
+    width:100%!important;max-width:none!important;height:auto!important;max-height:34svh!important;
+    position:relative!important;overflow:auto!important;margin-bottom:10px!important;
+  }
+  #page-parts .parts-detail,#page-parts .parts-detail-panel,#page-parts #parts-detail-content{
+    width:100%!important;height:auto!important;max-height:none!important;overflow:visible!important;
+  }
+  #page-parts .troubleshooting-grid,#page-parts .part-troubleshooting-grid{
+    grid-template-columns:1fr!important;gap:8px!important;
+  }
+  #page-parts .part-info-card,#page-parts .troubleshooting-card{padding:12px!important}
+  #page-parts .part-info-card p,#page-parts .part-info-card li{font-size:12px!important;line-height:1.5!important}
+  #page-parts .part-action-block,#page-parts .part-fix-card{padding:12px 13px!important}
+  #page-parts .related-cases-panel,#page-parts .knowledge-notes-panel,
+  #page-parts .part-cases,#page-parts .part-knowledge{width:100%!important}
+  #page-parts .part-case-copy small{white-space:normal!important}
+  .agent-grid,.agents-grid{grid-template-columns:1fr!important;gap:9px!important}
+  .agent-card{min-width:0!important;padding:13px!important}
+  .report-grid,.intelligence-grid,.widget-grid{grid-template-columns:1fr!important}
+}
+@media(max-width:420px){
+  .page{padding:10px!important}
+  .stat-grid,.overview-grid,.stats-grid{gap:6px!important}
+  .stat-card{padding:10px!important}
+  .stat-value{font-size:22px!important}
+  #page-fleet_intel .intelligence-search-shell{margin-left:-10px!important;margin-right:-10px!important;padding-left:10px!important;padding-right:10px!important}
+}
