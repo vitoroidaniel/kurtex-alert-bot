@@ -20,6 +20,7 @@ var pages = [
   "fleet",
   "fleet_intel",
   "parts_manual",
+  "ai_assistant",
   "ai_training",
   "my_profile",
   "agents",
@@ -34,6 +35,7 @@ var titles = {
   fleet: "Fleet Stats",
   fleet_intel: "Fleet Intelligence",
   parts_manual: "Parts Manual",
+  ai_assistant: "AI Assistant",
   ai_training: "AI Training",
   my_profile: "My Profile",
   agents: "Agent Profiles",
@@ -141,7 +143,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_training:"ph-brain",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
+    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_training:"ph-brain",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var descriptionEl = document.getElementById("page-description");
@@ -152,6 +154,8 @@ function showPage(page) {
         ? "Find cases and review progress. Assign and resolve cases in Telegram."
         : page === "parts_manual"
           ? "Look up truck and reefer parts, how they work, common symptoms, checks, and source material."
+        : page === "ai_assistant"
+          ? "Full workspace for maintenance diagnosis, Kurtex history and approved knowledge."
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";

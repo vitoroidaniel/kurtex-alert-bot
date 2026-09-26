@@ -3351,3 +3351,25 @@ body[data-current-page="ai_training"] #page-ai_training .ai-training-side{width:
  .kurtex-ai-panel.ai-fullscreen{inset:0!important;border-radius:0!important}
  .kurtex-ai-msg{font-size:12.5px!important}
 }
+
+/* v84 — dedicated AI Assistant workspace */
+.ai-assistant-workspace{max-width:1280px;margin:0 auto;padding:4px 0 28px}
+.ai-assistant-page-head{display:flex;justify-content:space-between;gap:24px;align-items:flex-end;margin-bottom:18px}
+.ai-assistant-page-head h2{font-size:28px;margin:5px 0 4px}
+.ai-assistant-page-head p{margin:0;color:var(--muted);font-size:12px}
+.ai-assistant-actions{display:flex;gap:8px}
+.ai-assistant-page-shell{height:calc(100vh - 245px);min-height:560px;border:1px solid var(--border);border-radius:18px;background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+.ai-page-messages{flex:1;overflow:auto;padding:28px clamp(22px,5vw,70px);display:flex;flex-direction:column;gap:14px}
+.ai-page-welcome{margin:auto;text-align:center;max-width:520px;color:var(--muted)}
+.ai-page-welcome i{font-size:34px;color:var(--red)}
+.ai-page-welcome h3{font-size:24px;color:var(--text);margin:12px 0 8px}
+.ai-page-msg{font-size:15px;line-height:1.7;padding:13px 16px;border-radius:14px;max-width:min(900px,86%);white-space:normal}
+.ai-page-msg.user{align-self:flex-end;background:#24272d;color:#fff}
+.ai-page-msg.assistant{align-self:flex-start;background:var(--surface-2,#f6f7f8);border:1px solid var(--border);color:var(--text)}
+.ai-page-msg strong{font-weight:700}
+.ai-page-quick{display:flex;gap:8px;padding:10px clamp(18px,4vw,50px) 0}
+.ai-page-quick button{border:1px solid var(--border);background:var(--surface);border-radius:9px;padding:8px 12px;color:var(--text);cursor:pointer}
+.ai-page-compose{margin:10px clamp(18px,4vw,50px) 18px;border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;align-items:flex-end;gap:10px;background:var(--surface)}
+.ai-page-compose textarea{flex:1;min-height:70px;max-height:180px;resize:vertical;border:0;outline:0;background:transparent;color:var(--text);font:inherit;font-size:14px}
+.ai-page-compose button{width:42px;height:42px;border:0;border-radius:11px;background:var(--red);color:#fff;font-size:18px;cursor:pointer}
+@media(max-width:760px){.ai-assistant-page-head{align-items:flex-start;flex-direction:column}.ai-assistant-page-shell{height:calc(100svh - 210px);min-height:500px}.ai-page-msg{max-width:94%;font-size:14px}.ai-page-messages{padding:18px 14px}}

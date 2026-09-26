@@ -53,6 +53,7 @@
       </div>
     </div>
 
+    <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
     <div class="nav-item" data-page="my_profile" role="button" tabindex="0" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
     {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
     {% if is_manager %}<div class="nav-item" data-page="ai_training" role="button" tabindex="0" onclick="showPage('ai_training')"><i class="ph ph-brain"></i> AI Training</div>{% endif %}
@@ -118,7 +119,21 @@
     </div>
   </div>
 
-  <div class="page" id="page-cases">
+  <div class="page" id="page-ai_assistant">
+  <section class="ai-assistant-workspace">
+    <div class="ai-assistant-page-head">
+      <div><span class="part-label">KURTEX MAINTENANCE AI</span><h2>AI Assistant</h2><p>Maintenance diagnosis, Kurtex history, approved knowledge and matching cases.</p></div>
+      <div class="ai-assistant-actions"><button class="btn secondary" onclick="toggleAIHistory();document.getElementById('kurtex-ai-panel').classList.add('open')"><i class="ph ph-clock-counter-clockwise"></i> Chat history</button><button class="btn primary" onclick="newKurtexAIChat();openKurtexAIPageChat()"><i class="ph ph-plus"></i> New chat</button></div>
+    </div>
+    <div class="ai-assistant-page-shell">
+      <div id="ai-page-messages" class="ai-page-messages"><div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div></div>
+      <div class="ai-page-quick"><button onclick="aiPageQuick('Find similar Kurtex cases for the issue I am viewing.')">Similar cases</button><button onclick="aiPageQuick('Help me diagnose this maintenance issue. Ask me only for information you actually need.')">Diagnose issue</button></div>
+      <form class="ai-page-compose" onsubmit="sendKurtexAIPage(event);return false"><textarea id="ai-page-input" placeholder="Ask Kurtex AI about a maintenance issue..."></textarea><button type="submit" aria-label="Send"><i class="ph ph-paper-plane-tilt"></i></button></form>
+    </div>
+  </section>
+</div>
+
+<div class="page" id="page-cases">
     <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search cases" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
     <div class="section">
       <div class="section-header">
@@ -300,7 +315,7 @@
 {% include 'partials/modals.html' %}
 <button id="kurtex-ai-fab" class="kurtex-ai-fab" type="button" onclick="toggleKurtexAI()" aria-label="Open Kurtex AI"><i class="ph ph-sparkle"></i><span>Kurtex AI</span></button><div id="ai-edit-modal" class="ai-edit-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgeEdit()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-edit-heading"><header><div><span class="eyebrow">APPROVED KNOWLEDGE</span><h3 id="ai-edit-heading">Edit knowledge</h3></div><button type="button" onclick="closeAIKnowledgeEdit()"><i class="ph ph-x"></i></button></header><form onsubmit="updateAIKnowledge(event)"><input id="ai-edit-id" type="hidden"><label><span>Title</span><input id="ai-edit-title" required></label><label><span>Maintenance knowledge</span><textarea id="ai-edit-content" rows="9" required></textarea></label><label><span>Tags</span><input id="ai-edit-tags" placeholder="comma separated"></label><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <aside id="kurtex-ai-panel" class="kurtex-ai-panel" aria-hidden="true">
-<header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div><strong id="kurtex-ai-title">Kurtex AI</strong><small><span class="ai-online-dot"></span> Maintenance assistant</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" class="ai-expand-btn" onclick="toggleKurtexAIFullscreen()" title="Expand AI"><i class="ph ph-arrows-out"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>
+<header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div><strong id="kurtex-ai-title">Kurtex AI</strong><small><span class="ai-online-dot"></span> Maintenance assistant</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" class="ai-expand-btn" onclick="openKurtexAIPageChat()" title="Open AI Assistant"><i class="ph ph-arrows-out"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>
 <div class="kurtex-ai-body"><aside id="kurtex-ai-history" class="kurtex-ai-history"><div class="ai-history-head"><div><strong>Chat history</strong><small>Your saved maintenance conversations</small></div><button onclick="newKurtexAIChat()"><i class="ph ph-plus"></i> New chat</button></div>
 <div id="kurtex-ai-chat-list"></div></aside><section class="kurtex-ai-chat-main">
 <div class="kurtex-ai-notice"><i class="ph ph-shield-check"></i><span>Uses Kurtex history + approved maintenance knowledge. Verify critical repairs.</span></div>

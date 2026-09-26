@@ -50,6 +50,36 @@ function toggleKurtexAIFullscreen(force){
  p.classList.toggle('ai-fullscreen',on);
  var b=p.querySelector('.ai-expand-btn i');if(b)b.className=on?'ph ph-arrows-in':'ph ph-arrows-out';
 }
+function openKurtexAIPageChat(){
+ if(typeof showPage==='function')showPage('ai_assistant');
+ var p=document.getElementById('kurtex-ai-panel');if(p)p.classList.remove('open','ai-fullscreen','history-open');
+ syncKurtexAIPageFromPanel();
+ setTimeout(function(){var i=document.getElementById('ai-page-input');if(i)i.focus()},50)
+}
+function syncKurtexAIPageFromPanel(){
+ var src=document.getElementById('kurtex-ai-messages'),dst=document.getElementById('ai-page-messages');if(!src||!dst)return;
+ var msgs=src.querySelectorAll('.kurtex-ai-msg');
+ if(!msgs.length)return;
+ dst.innerHTML='';
+ msgs.forEach(function(m){var d=document.createElement('div');d.className='ai-page-msg '+(m.classList.contains('user')?'user':'assistant');d.innerHTML=m.innerHTML;dst.appendChild(d)});
+ dst.scrollTop=dst.scrollHeight
+}
+async function sendKurtexAIPage(e){
+ if(e&&e.preventDefault)e.preventDefault();
+ var input=document.getElementById('ai-page-input'),msg=(input&&input.value||'').trim();if(!msg)return false;
+ input.value='';
+ var dst=document.getElementById('ai-page-messages');var welcome=dst&&dst.querySelector('.ai-page-welcome');if(welcome)welcome.remove();
+ var u=document.createElement('div');u.className='ai-page-msg user';u.textContent=msg;dst.appendChild(u);
+ var wait=document.createElement('div');wait.className='ai-page-msg assistant thinking';wait.textContent='Thinking…';dst.appendChild(wait);dst.scrollTop=dst.scrollHeight;
+ try{
+  var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:'ai_assistant'})}),x=await r.json();
+  if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');
+  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.');
+  loadKurtexAIChats()
+ }catch(err){wait.classList.remove('thinking');wait.textContent='Message was not sent. '+(err.message||'Check AI Training diagnostics.')}
+ input.focus();dst.scrollTop=dst.scrollHeight;return false
+}
+function aiPageQuick(text){var i=document.getElementById('ai-page-input');if(!i)return;i.value=text;sendKurtexAIPage({preventDefault:function(){}})}
 async function sendKurtexAI(e){
  if(e&&e.preventDefault)e.preventDefault();
  var input=document.getElementById('kurtex-ai-input'),msg=(input&&input.value||'').trim();if(!msg)return false;
