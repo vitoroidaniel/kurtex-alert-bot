@@ -167,6 +167,9 @@ def serialize_case(c):
             "driver":      c.get("driver_name") or "—",
             "group":       c.get("group_name") or "—",
             "agent":       c.get("agent_name") or "—",
+            "report_driver": c.get("report_driver") or c.get("driver_name") or "",
+            "unit_number": c.get("unit_number") or "",
+            "vehicle_type": (c.get("vehicle_type") or "").lower(),
             "status":      c.get("status") or "open",
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
@@ -1106,7 +1109,7 @@ def api_part_cases():
             text=_case_search_text(c); hit=[k for k in keys if k in text]
             if hit: rows.append((len(hit),c,hit))
         rows.sort(key=lambda x:(-x[0],x[1].get("opened_at","") or ""),reverse=False)
-        return jsonify({"items":[{"matched":h[:5],"case":serialize_case(c)} for _,c,h in rows[:8]]})
+        return jsonify({"items":[{"matched":h[:5],"case":serialize_case(c)} for _,c,h in rows[:30]]})
     except Exception as e:
         logger.error("part cases error: %s",e); return jsonify({"items":[]})
 

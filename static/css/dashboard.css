@@ -2891,3 +2891,15 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 #page-parts .pm-how{background:#fafafa!important}
 #page-parts .pm-how p{color:#69717c!important}
 #page-parts .pm-reference{background:#f5f7f9!important;border-color:#dfe3e8!important;padding:10px 13px!important}
+
+/* v54 — paged long lists */
+.fleet-list-footer.fleet-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 2px 0;color:var(--muted);font-size:11px}
+.fleet-pager-controls{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.pager-size{display:flex;align-items:center;gap:6px}.pager-size select{height:34px;min-width:66px;padding:0 26px 0 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit}
+.pager-btn{height:34px!important;padding:0 10px!important}.pager-btn:disabled{opacity:.4;cursor:not-allowed}.pager-page{min-width:48px;text-align:center;font-weight:700;color:var(--text)}
+/* v54 — reporting context in Parts Manual case history */
+#page-parts .part-case-link{grid-template-columns:auto minmax(0,1fr) auto!important;align-items:center!important}
+#page-parts .part-case-copy{min-width:0}#page-parts .part-case-copy strong{display:block;font-size:12.5px;line-height:1.25}
+#page-parts .part-case-copy small{display:block;margin-top:3px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-parts .part-case-copy small b{color:var(--text);font-weight:700}
+@media(max-width:700px){.fleet-list-footer.fleet-pager{align-items:flex-start;flex-direction:column}.fleet-pager-controls{width:100%;justify-content:flex-start}.pager-btn{font-size:0}.pager-btn i{font-size:15px}#page-parts .part-case-copy small{white-space:normal}}

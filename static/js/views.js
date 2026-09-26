@@ -278,11 +278,11 @@ async function loadFleet() {
   }
 }
 
-var fleetStatusState = { vtype: "all", search: "", limit: 10 };
+var fleetStatusState = { vtype: "all", search: "", page: 1, perPage: 20 };
 
 function setFleetStatusFilter(vtype) {
   fleetStatusState.vtype = vtype;
-  fleetStatusState.limit = 10;
+  fleetStatusState.page = 1;
   renderFleetStatus();
   var wrap = document.getElementById("fleet-status-wrap");
   if (wrap) wrap.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -315,12 +315,16 @@ function renderFleetStatusContent() {
       (s.vtype === v ? " active" : "") +
       '" onclick="fleetStatusState.vtype=\'' +
       v +
-      "';renderFleetStatus()\">" +
+      "';fleetStatusState.page=1;renderFleetStatus()\">" +
       label +
       "</button>"
     );
   }
-  var visible = filtered.slice(0, s.limit || 10);
+  var perPage = Number(s.perPage || 20);
+  var totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  s.page = Math.max(1, Math.min(Number(s.page || 1), totalPages));
+  var startIndex = (s.page - 1) * perPage;
+  var visible = filtered.slice(startIndex, startIndex + perPage);
   var rows = visible
     .map(function (item) {
       var badge =
@@ -366,13 +370,18 @@ function renderFleetStatusContent() {
     "</div>" +
     '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" aria-label="Search fleet units, issues or drivers" placeholder="Search unit, issue, or driver..." value="' +
     attr(s.search || "") +
-    '" oninput="fleetStatusState.search=this.value;fleetStatusState.limit=10;renderFleetStatus()"></div>' +
+    '" oninput="fleetStatusState.search=this.value;fleetStatusState.page=1;renderFleetStatus()"></div>' +
     (filtered.length
       ? '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>' +
         rows +
         "</tbody></table></div></div>" +
-        '<div class="fleet-list-footer"><span>Showing ' + visible.length + ' of ' + filtered.length + '</span>' +
-        (visible.length < filtered.length ? '<button class="btn secondary" onclick="fleetStatusState.limit+=10;renderFleetStatus()">Show 10 more</button>' : '') + '</div>'
+        '<div class="fleet-list-footer fleet-pager"><span>Showing ' + (filtered.length ? startIndex + 1 : 0) + '–' + Math.min(startIndex + visible.length, filtered.length) + ' of ' + filtered.length + '</span>' +
+        '<div class="fleet-pager-controls"><label class="pager-size"><span>Rows</span><select aria-label="Rows per page" onchange="fleetStatusState.perPage=Number(this.value);fleetStatusState.page=1;renderFleetStatus()">' +
+        [10,20,30,50,100].map(function(n){return '<option value="'+n+'"'+(perPage===n?' selected':'')+'>'+n+'</option>';}).join('') +
+        '</select></label>' +
+        '<button class="btn secondary pager-btn" '+(s.page<=1?'disabled':'')+' onclick="fleetStatusState.page=Math.max(1,fleetStatusState.page-1);renderFleetStatus()"><i class="ph ph-arrow-left"></i> Previous</button>' +
+        '<span class="pager-page">'+s.page+' / '+totalPages+'</span>' +
+        '<button class="btn secondary pager-btn" '+(s.page>=totalPages?'disabled':'')+' onclick="fleetStatusState.page=Math.min('+totalPages+',fleetStatusState.page+1);renderFleetStatus()">Next <i class="ph ph-arrow-right"></i></button></div></div>'
       : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No units match this filter.</div>') +
     "</div>");
 }
@@ -726,7 +735,7 @@ function setPartsCategory(cat,btn){partsCategory=cat;document.querySelectorAll('
 function selectPart(id){var p=partsDB.find(function(x){return x.id===id});if(!p)return;selectedPart=id;var d=document.getElementById('part-detail');if(!d)return;d.dataset.ready='1';d.innerHTML='<div class="part-hero"><div class="part-hero-copy"><div class="part-meta"><span>'+h(p.cat)+'</span><span><i class="ph ph-map-pin"></i> '+h(p.loc)+'</span></div><h2>'+h(p.name)+'</h2><p>'+h(p.what)+'</p></div></div><div class="part-section part-photo-section"><div class="part-section-head"><div><span class="part-label">REAL PART PHOTOS</span><h3>What it looks like</h3></div><small>Live web references · actual installed model may vary</small></div>'+partPhoto(p)+'</div><div class="part-section"><div class="part-section-head"><div><span class="part-label">TROUBLESHOOTING</span><h3>Understand the part</h3></div></div><div class="part-info-grid"><article class="part-how"><div class="part-card-icon"><i class="ph ph-gear-six"></i></div><span class="part-label">HOW IT WORKS</span><p>'+h(p.works)+'</p></article><article><div class="part-card-icon"><i class="ph ph-warning"></i></div><span class="part-label">COMMON ISSUES</span><ul>'+p.issues.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ul></article><article><div class="part-card-icon"><i class="ph ph-magnifying-glass"></i></div><span class="part-label">QUICK CHECKS</span><ol>'+p.checks.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ol></article><article class="part-fix"><div class="part-card-icon"><i class="ph ph-wrench"></i></div><span class="part-label">FIX / NEXT ACTION</span><p>'+h(p.fix)+'</p></article></div></div><a class="part-source" href="'+p.url+'" target="_blank" rel="noopener"><i class="ph ph-book-open-text"></i><span><strong>OEM / technical reference</strong><small>'+h(p.source)+'</small></span><i class="ph ph-arrow-square-out part-source-arrow"></i></a><div class="part-intel-grid"><section class="part-intel-card"><div class="part-section-head"><div><span class="part-label">KURTEX CASES</span><h3>Related case history</h3></div></div><div id="part-case-history" class="intel-mini-list"><div class="loading">Finding related cases...</div></div></section><section class="part-intel-card"><div class="part-section-head"><div><span class="part-label">KNOWLEDGE NOTES</span><h3>Team knowledge</h3></div></div><div id="part-knowledge-list" class="intel-mini-list"></div><div class="knowledge-add"><textarea id="knowledge-note-input" placeholder="Add a useful troubleshooting note..."></textarea><button class="btn secondary" onclick="saveKnowledgeNote()">Save note</button></div></section></div>';loadLivePartPhoto(p);loadPartCases(p);loadKnowledgeNotes(p);renderPartsManual(document.getElementById('parts-search')?document.getElementById('parts-search').value:'');}
 setTimeout(function(){renderCommonParts();renderPartsManual('');updateTruckIssuePins();},0);
 
-async function loadPartCases(p){var el=document.getElementById('part-case-history');if(!el)return;try{var q=[p.name,p.keywords].join(' '),r=await apiFetch('/api/part_cases?q='+encodeURIComponent(q)),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.slice(0,5).map(function(x){var c=x.case;return '<button class="intel-case-link" data-id="'+attr(c.full_id||c.id)+'" onclick="openCase(this)"><span>'+statusBadge(c.status)+'</span><span><strong>'+h(c.driver||c.group||'Case')+'</strong><small>'+h(c.description||'')+'</small></span><i class="ph ph-arrow-right"></i></button>'}).join(''):'<div class="intel-empty">No matching Kurtex cases yet.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Case history unavailable.</div>';}}
+async function loadPartCases(p){var el=document.getElementById('part-case-history');if(!el)return;try{var q=[p.name,p.keywords].join(' '),r=await apiFetch('/api/part_cases?q='+encodeURIComponent(q)),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.slice(0,8).map(function(x){var c=x.case,driver=c.report_driver||c.driver||'Driver unavailable',unit=c.unit_number||'Unit unavailable',type=(c.vehicle_type||'').toLowerCase(),typeLabel=type?type.charAt(0).toUpperCase()+type.slice(1):'Unit';return '<button class="intel-case-link part-case-link" data-id="'+attr(c.full_id||c.id)+'" onclick="openCase(this)"><span>'+statusBadge(c.status)+'</span><span class="part-case-copy"><strong>'+h(driver)+'</strong><small><b>'+h(typeLabel)+' '+h(unit)+'</b><span> · '+h(c.description||'No issue description')+'</span></small></span><i class="ph ph-arrow-right"></i></button>'}).join(''):'<div class="intel-empty">No matching Kurtex cases yet.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Case history unavailable.</div>';}}
 async function loadKnowledgeNotes(p){var el=document.getElementById('part-knowledge-list');if(!el)return;try{var r=await apiFetch('/api/knowledge_notes?part='+encodeURIComponent(p.id));if(!r.ok)throw new Error('notes');var x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.slice(0,20).map(function(n){return '<div class="knowledge-note" data-note-id="'+attr(n.id)+'"><div class="knowledge-note-copy"><p>'+h(n.note)+'</p><small>'+h(n.author||'Agent')+' · '+h(n.updated||n.created||'')+'</small></div><div class="knowledge-note-actions"><button type="button" title="Edit note" onclick="editKnowledgeNote('+JSON.stringify(n.id)+')"><i class="ph ph-pencil-simple"></i></button><button type="button" class="danger" title="Delete note" onclick="deleteKnowledgeNote('+JSON.stringify(n.id)+')"><i class="ph ph-trash"></i></button></div></div>'}).join(''):'<div class="intel-empty">No team notes yet.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Notes unavailable.</div>';}}
 async function saveKnowledgeNote(){var p=partsDB.find(function(x){return x.id===selectedPart}),i=document.getElementById('knowledge-note-input');if(!p||!i||!i.value.trim())return;var b=i.parentElement.querySelector('button');if(b)b.disabled=true;try{var r=await apiFetch('/api/knowledge_notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:p.id,note:i.value.trim()})});if(!r.ok)throw new Error('save');i.value='';await loadKnowledgeNotes(p);}catch(e){alert('Could not save the note. Please try again.');}finally{if(b)b.disabled=false;}}
 function editKnowledgeNote(id){var row=document.querySelector('.knowledge-note[data-note-id="'+CSS.escape(id)+'"]');if(!row)return;var p=row.querySelector('p'),copy=row.querySelector('.knowledge-note-copy'),actions=row.querySelector('.knowledge-note-actions');var current=p?p.textContent:'';copy.innerHTML='<textarea class="knowledge-edit-input"></textarea>';copy.querySelector('textarea').value=current;actions.innerHTML='<button type="button" class="knowledge-save-edit" onclick="saveKnowledgeEdit('+JSON.stringify(id)+')"><i class="ph ph-check"></i><span>Save</span></button><button type="button" onclick="loadKnowledgeNotes(partsDB.find(function(x){return x.id===selectedPart}))"><i class="ph ph-x"></i><span>Cancel</span></button>';copy.querySelector('textarea').focus();}
