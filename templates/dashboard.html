@@ -258,12 +258,7 @@
 
 <div class="page" id="page-ai_training">
 <section class="ai-training-page">
-  <header class="ai-training-header">
-    <div><span class="eyebrow">ADMIN TOOLS</span><h2>Train Kurtex AI</h2><p>Add verified maintenance knowledge and manage what the assistant can reference.</p></div>
-    <button class="badge-btn btn-outline" type="button" onclick="loadAIKnowledge()"><i class="ph ph-arrows-clockwise"></i> Refresh</button>
-  </header>
-
-  <div class="ai-training-grid">
+<div class="ai-training-grid">
     <main class="ai-training-main">
       <section class="ai-training-card ai-add-card">
         <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-brain"></i></span><div><h3>Add approved knowledge</h3><p>Only add verified mechanic notes, procedures, terminology or diagnostic guidance.</p></div></div>
@@ -276,7 +271,7 @@
       </section>
 
       <section class="ai-training-card ai-library-card">
-        <div class="ai-card-head ai-card-head-row"><div><h3>Knowledge library</h3><p>Approved reference material currently available to Kurtex AI.</p></div><span class="ai-count-pill"><b id="ai-kb-count">0</b> items</span></div>
+        <div class="ai-card-head ai-card-head-row"><div><h3>Knowledge library</h3><p>Verified reference material Kurtex AI can use when answering maintenance questions.</p></div><div class="ai-library-actions"><span class="ai-count-pill"><b id="ai-kb-count">0</b> items</span><button class="ai-icon-action" type="button" onclick="loadAIKnowledge()" title="Refresh library"><i class="ph ph-arrows-clockwise"></i></button></div></div>
         <div id="ai-kb-list" class="ai-kb-list"></div>
       </section>
     </main>
