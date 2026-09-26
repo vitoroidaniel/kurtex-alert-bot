@@ -3992,3 +3992,72 @@ body[data-current-page="ai_assistant"] .ai-page-msg{
  max-width:min(820px,88%)!important;
  padding:11px 13px!important;
 }
+
+/* v100 — Knowledge Library is a true case-style list, not a large card */
+body[data-current-page="ai_training"] .ai-library-card{
+ min-height:0!important;
+ padding:0!important;
+ border:0!important;
+ border-radius:0!important;
+ box-shadow:none!important;
+ background:transparent!important;
+}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head{
+ padding:0 0 10px!important;
+ margin:0!important;
+}
+body[data-current-page="ai_training"] .ai-kb-list{
+ border:1px solid var(--border)!important;
+ border-radius:10px!important;
+ overflow:hidden!important;
+ gap:0!important;
+ background:var(--surface)!important;
+}
+body[data-current-page="ai_training"] .ai-kb-item{
+ min-height:52px!important;
+ margin:0!important;
+ padding:8px 10px!important;
+ border:0!important;
+ border-bottom:1px solid var(--border)!important;
+ border-radius:0!important;
+ background:var(--surface)!important;
+}
+body[data-current-page="ai_training"] .ai-kb-item:last-child{border-bottom:0!important}
+body[data-current-page="ai_training"] .ai-kb-item:hover{background:var(--surface-2,#fafafa)!important}
+body[data-current-page="ai_training"] .ai-kb-tags{margin-top:3px!important}
+
+/* v100 — AI Assistant is the workspace: no dashboard/top page header */
+body[data-current-page="ai_assistant"] .topbar,
+body[data-current-page="ai_assistant"] .header{
+ display:none!important;
+}
+body[data-current-page="ai_assistant"] .main{
+ height:100vh!important;
+ padding:10px 12px!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] #page-ai_assistant{
+ height:calc(100vh - 20px)!important;
+ max-height:calc(100vh - 20px)!important;
+ width:100%!important;
+ margin:0!important;
+ padding:0!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] .ai-assistant-workspace{
+ width:100%!important;
+ height:100%!important;
+ margin:0!important;
+ padding:0!important;
+ max-width:none!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-layout{
+ width:100%!important;
+ height:100%!important;
+ max-height:100%!important;
+ border-radius:12px!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar,
+body[data-current-page="ai_assistant"] .ai-page-chat-column{height:100%!important}
+body[data-current-page="ai_assistant"] .ai-page-messages,
+body[data-current-page="ai_assistant"] .ai-page-sidebar-list{overflow-y:auto!important}
