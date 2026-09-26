@@ -156,6 +156,11 @@ function showPage(page) {
           (titles[page] || page).toLowerCase() +
           " and case history.";
   if (page === "ai_training" && typeof loadAIKnowledge === "function") loadAIKnowledge();
+  // Every workspace opens at its top. Prevent a previous page's scroll position
+  // from making AI Training (or any other tab) appear hundreds of pixels down.
+  var mainScroll=document.querySelector(".main");
+  if(mainScroll && typeof mainScroll.scrollTo==="function") mainScroll.scrollTo({top:0,left:0,behavior:"auto"});
+  window.scrollTo(0,0);
   currentPage = page;
   document.body.setAttribute("data-current-page", page);
   preferences.set("kurtex-page", page);

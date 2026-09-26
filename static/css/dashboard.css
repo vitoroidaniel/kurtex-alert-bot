@@ -3231,3 +3231,24 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 .main:has(#page-ai_training.active) .content,
 .main:has(#page-ai_training.active) .pages,
 .main:has(#page-ai_training.active) .page-container{padding-top:0!important;align-items:start!important}
+
+/* v70: page positioning + notification usability */
+body[data-current-page="ai_training"] .main{scroll-behavior:auto!important}
+body[data-current-page="ai_training"] #page-ai_training{position:relative!important;top:auto!important;min-height:0!important;margin-top:0!important;padding-top:0!important}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-page{margin:0 auto!important}
+.notification-panel{width:410px!important}
+.notification-panel .notification-list{padding:8px!important;background:#f7f8f9!important}
+.notification-panel .notification-item{position:relative!important;display:grid!important;grid-template-columns:34px minmax(0,1fr) auto!important;gap:9px!important;align-items:start!important;width:100%!important;box-sizing:border-box!important;text-align:left!important;padding:11px!important;margin:0 0 7px!important;border:1px solid #e4e7ea!important;border-radius:11px!important;background:#fff!important}
+.notification-panel .notification-item.unseen{border-left:3px solid #d93632!important;background:#fff!important}
+.notification-panel .notification-copy{padding:0!important;min-width:0!important}
+.notification-panel .notification-copy strong{font-size:10px!important;line-height:1.3!important;color:#23262b!important}
+.notification-panel .notification-copy>span{font-size:9px!important;line-height:1.45!important;color:#656b73!important;margin-top:2px!important}
+.notification-panel .notification-copy small{font-size:7.5px!important;color:#9a9fa6!important;margin-top:4px!important}
+.notification-actions{align-self:center}
+.notification-actions button{border:1px solid #e3e5e8;background:#fff;color:#d93632;border-radius:7px;padding:5px 7px;font:700 8px Inter,sans-serif;cursor:pointer;white-space:nowrap}
+.notification-seen{font:600 8px Inter,sans-serif;color:#989da4;white-space:nowrap}
+.notification-empty{min-height:210px!important;background:#fff!important}
+.notification-empty-icon{width:38px;height:38px;display:grid;place-items:center;border:1px solid #e7e9ec;border-radius:11px;background:#f7f8f9;color:#7d838b;font-size:18px;margin-bottom:4px}
+.notification-empty strong{font-size:10.5px!important;color:#34383d!important}
+.notification-empty>span:last-child{font-size:8.5px!important;color:#91969d!important}
+@media(max-width:520px){.notification-panel{width:auto!important}}
