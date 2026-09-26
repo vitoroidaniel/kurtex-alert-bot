@@ -1881,3 +1881,80 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)!important;box
   #report-view-overlay .modal>div:last-child{padding:12px 18px!important}
   #report-view-body{padding-bottom:22px!important}
 }
+
+/* === v4 UI polish: neutral surfaces, restrained red accent === */
+.nav-section-label{color:#8b8b92!important;font-weight:700!important;letter-spacing:.09em!important}
+.nav-section-label i,.nav-group-toggle>i{color:#9a9aa1!important}
+.nav-group-toggle{color:#5d5d64!important}
+.nav-group-toggle:hover{color:#202024!important}
+
+/* Footer controls must match the light sidebar instead of old dark button styles. */
+.sidebar-footer .badge-btn,.sidebar-footer .btn-ghost,.sidebar-footer button{
+  background:#fff!important;color:#3f3f45!important;border:1px solid #d8d8dc!important;box-shadow:none!important;
+}
+.sidebar-footer .badge-btn:hover,.sidebar-footer .btn-ghost:hover,.sidebar-footer button:hover{
+  background:#ededf0!important;border-color:#c9c9ce!important;color:#17171a!important;
+}
+.sidebar-footer .badge-btn i,.sidebar-footer .btn-ghost i,.sidebar-footer button i{color:#77777f!important}
+
+/* Search: neutral by default; red is a focus/action cue, not a permanent outline. */
+.search-wrap{background:#fff!important;border:1px solid #d9d9de!important;border-radius:11px!important;box-shadow:0 1px 2px rgba(20,20,25,.02)!important}
+.search-wrap i{color:#7d7d85!important}
+.search-wrap:focus-within{border-color:#c9c9cf!important;box-shadow:0 0 0 3px rgba(224,38,38,.08)!important}
+.search-wrap:focus-within i{color:var(--accent)!important}
+
+/* Tabs: soft gray selection with a small red indicator. */
+.tab-btn,.toggle-btn{position:relative!important;border-color:transparent!important;background:transparent!important;color:#606068!important;box-shadow:none!important}
+.tab-btn.active,.toggle-btn.active{background:#f1f1f3!important;color:#202024!important;border-color:transparent!important;box-shadow:none!important;font-weight:700!important}
+.tab-btn.active:after,.toggle-btn.active:after{content:"";position:absolute;left:30%;right:30%;bottom:0;height:2px;background:var(--accent);border-radius:2px}
+
+/* Agents: quieter cards, stronger hierarchy, less red saturation. */
+.agent-card{border:1px solid #dedee2!important;border-radius:14px!important;padding:20px!important;box-shadow:0 1px 2px rgba(20,20,25,.025)!important;background:#fff!important}
+.agent-card:hover{border-color:#c9c9ce!important;box-shadow:0 8px 24px rgba(20,20,25,.07)!important;transform:translateY(-1px)!important}
+.agent-card-avatar{background:#f2f2f4!important;color:#303036!important;border:1px solid #e4e4e7!important}
+.agent-card-rank{background:#f5f5f6!important;color:#77777e!important}
+.agent-card-statbox{background:#fafafa!important;border:1px solid #e3e3e6!important;padding:12px 7px!important}
+.agent-card-statval{color:#26262b!important}
+.agent-card-statlabel{color:#77777f!important}
+.agent-rate-track{background:#ededf0!important;height:5px!important}
+.agent-rate-fill{background:#b8b8be!important}
+.agent-card-footer{border-top-color:#e5e5e8!important}
+.agent-card-footer span{color:#3f3f45!important}
+.agent-card:hover .agent-card-footer span{color:var(--accent)!important}
+
+/* Red remains for primary actions, alerts and focused controls. */
+.btn-primary{background:var(--accent)!important;border-color:var(--accent)!important;color:#fff!important}
+
+@media(max-width:760px){
+  .sidebar-footer .badge-btn,.sidebar-footer .btn-ghost,.sidebar-footer button{min-height:42px!important}
+  .agent-card{padding:16px!important}
+  .mini-stat-grid{gap:7px!important}
+  .agent-card-statbox{padding:10px 5px!important}
+}
+
+/* === v5 overview settings redesign === */
+#layout-settings-overlay{background:rgba(24,24,27,.34);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#layout-settings-overlay .layout-settings{width:min(760px,calc(100vw - 32px));max-width:760px;border-radius:18px;border:1px solid #e2e2e5;box-shadow:0 24px 70px rgba(20,20,24,.16);background:#fff}
+#layout-settings-overlay .layout-settings>h2{padding:24px 70px 18px 28px;font-size:20px;font-weight:700;color:#202124;background:#fff}
+#layout-settings-overlay .settings-description{margin:0;padding:18px 28px 8px;color:#6f7178;font-size:13px}
+#layout-settings-body{padding:0 28px 4px}
+.layout-settings h3{margin:22px 0 10px;color:#27282c;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.layout-settings .setting-row{min-height:58px;padding:10px 12px;border:1px solid #e7e7e9;border-bottom:0;background:#fff}
+.layout-settings .setting-row:first-of-type{border-radius:12px 12px 0 0}
+.layout-settings .setting-row:nth-of-type(4){border-bottom:1px solid #e7e7e9;border-radius:0 0 12px 12px}
+.layout-settings .setting-row label,.layout-settings .metric-options label{display:flex;align-items:center;gap:10px;color:#303136;font-size:13px}
+.layout-settings input[type="checkbox"]{appearance:none;-webkit-appearance:none;width:18px;height:18px;margin:0;border:1.5px solid #c9cacf;border-radius:5px;background:#fff;display:grid;place-content:center;cursor:pointer}
+.layout-settings input[type="checkbox"]:checked{background:#26272b;border-color:#26272b}
+.layout-settings input[type="checkbox"]:checked:after{content:'✓';color:#fff;font-size:12px;font-weight:800;line-height:1}
+.layout-settings .setting-row button{width:34px;height:34px;padding:0;margin-left:5px;border:1px solid #dedee2;border-radius:9px;background:#f7f7f8;color:#55575d}
+.layout-settings .setting-row button:hover:not(:disabled){border-color:#bbbcc1;background:#efeff1;color:#202124}
+.layout-settings .setting-row button:disabled{opacity:.28}
+.layout-settings .metric-options{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:4px 0 8px}
+.layout-settings .metric-options label{padding:12px;border:1px solid #e7e7e9;border-radius:10px;background:#fafafa}
+.layout-settings .metric-options label:hover{background:#f5f5f6}
+.layout-settings #layout-density{min-width:150px;height:38px;background:#fafafa;border-radius:9px}
+#layout-settings-overlay .layout-settings>.btn{margin:18px 0 22px 10px;border-radius:9px}
+#layout-settings-overlay .layout-settings>.btn:first-of-type{margin-left:28px;background:#fff;color:#3f4045;border:1px solid #d9d9dd}
+#layout-settings-overlay .layout-settings>.btn:last-of-type{background:#26272b;color:#fff;border-color:#26272b}
+#layout-settings-overlay .modal-close{background:#f6f6f7;border:1px solid #e1e1e4;color:#44454a}
+@media(max-width:700px){#layout-settings-overlay{padding:0;align-items:flex-end}.layout-settings .metric-options{grid-template-columns:1fr 1fr}#layout-settings-overlay .layout-settings{width:100%;max-width:none;border-radius:20px 20px 0 0}.layout-settings #layout-settings-body{padding:0 18px}.layout-settings .settings-description{padding:16px 18px 6px}#layout-settings-overlay .layout-settings>.btn:first-of-type{margin-left:18px}}

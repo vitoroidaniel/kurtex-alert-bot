@@ -107,10 +107,10 @@ function renderAnalytics() {
   updateHTML(el, '<div class="row"><span>Total Cases</span><span class="val">' +
     d.total +
     "</span></div>" +
-    '<div class="row"><span>Resolved</span><span class="val" style="color:var(--green)">' +
+    '<div class="row"><span>Resolved</span><span class="val" style="color:var(--text)">' +
     d.done +
     "</span></div>" +
-    '<div class="row"><span>Missed</span><span class="val" style="color:var(--red)">' +
+    '<div class="row"><span>Missed</span><span class="val" style="color:var(--text)">' +
     d.missed +
     "</span></div>" +
     '<div class="row"><span>Resolution Rate</span><span class="val">' +
@@ -400,13 +400,13 @@ async function loadMyProfile() {
       "</div></div>" +
       "</div>" +
       '<div class="mini-stat-grid">' +
-      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--green)">' +
+      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--text)">' +
       p.done +
       '</div><div class="agent-stat-label">Resolved</div></div>' +
-      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--red)">' +
+      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--text)">' +
       p.missed +
       '</div><div class="agent-stat-label">Missed</div></div>' +
-      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--accent)">' +
+      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--text)">' +
       p.rate +
       '%</div><div class="agent-stat-label">Resolution rate</div></div>' +
       "</div></div>" +
@@ -414,13 +414,13 @@ async function loadMyProfile() {
       '<div class="row"><span>Today assigned</span><span class="val">' +
       p.today_total +
       "</span></div>" +
-      '<div class="row"><span>Today resolved</span><span class="val" style="color:var(--green)">' +
+      '<div class="row"><span>Today resolved</span><span class="val" style="color:var(--text)">' +
       p.today_done +
       "</span></div>" +
       '<div class="row"><span>This week assigned</span><span class="val">' +
       p.week_total +
       "</span></div>" +
-      '<div class="row"><span>This week resolved</span><span class="val" style="color:var(--green)">' +
+      '<div class="row"><span>This week resolved</span><span class="val" style="color:var(--text)">' +
       p.week_done +
       "</span></div>" +
       '<div class="row"><span>Avg response</span><span class="val">' +
@@ -461,12 +461,7 @@ async function loadAgents() {
       .map(function (a, i) {
         var init = (a.name || "?")[0].toUpperCase();
         var rate = a.rate || 0;
-        var rateColor =
-          rate >= 80
-            ? "var(--green)"
-            : rate >= 50
-              ? "var(--accent)"
-              : "var(--red)";
+        var rateColor = "var(--text)";
         return (
           '<div class="card agent-card" role="button" tabindex="0" data-agent="' +
           attr(a.name || "") +
@@ -490,13 +485,13 @@ async function loadAgents() {
           "</div></div>" +
           "</div>" +
           '<div class="mini-stat-grid">' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--accent)">' +
+          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--text)">' +
           (a.total || 0) +
           '</div><div class="agent-card-statlabel">Total</div></div>' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--green)">' +
+          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--text)">' +
           (a.done || 0) +
           '</div><div class="agent-card-statlabel">Resolved</div></div>' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--red)">' +
+          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--text)">' +
           (a.missed || 0) +
           '</div><div class="agent-card-statlabel">Missed</div></div>' +
           '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:' +
@@ -515,7 +510,7 @@ async function loadAgents() {
         );
       })
       .join("");
-    updateHTML(el, '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:18px">' +
+    updateHTML(el, '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:18px">' +
       cards +
       "</div>");
   } catch (e) {
