@@ -4539,3 +4539,74 @@ body[data-current-page="ai_training"] .topbar-report-action{display:none!importa
 @media(min-width:701px){.report-modal-overlay{padding:32px!important}.report-workspace{height:min(900px,92vh)!important}.report-workspace .report-body{overflow:auto!important}.report-workspace #report-content{max-width:900px;margin:0 auto}.report-period-bar,#report-sections-bar{max-width:900px;margin-left:auto!important;margin-right:auto!important}}
 /* Mobile is intentionally a separate interaction/layout, not a squeezed desktop modal. */
 @media(max-width:700px){.report-modal-overlay{padding:0!important;align-items:stretch!important;background:#fff!important;backdrop-filter:none!important}.report-workspace{width:100%!important;max-width:none!important;height:100dvh!important;max-height:none!important;border:0!important;border-radius:0!important;box-shadow:none!important;display:flex!important;flex-direction:column!important}.report-workspace .report-header{padding:14px 16px!important;min-height:70px!important;position:sticky;top:0;z-index:4}.report-seal{width:36px;height:36px;border-radius:8px;font-size:17px}.report-kicker{font-size:8px}.report-brand h2{font-size:16px!important}.report-brand p{display:none}.report-header>div:last-child{gap:5px!important}.report-tabs{display:none!important}.report-close{width:36px!important;height:36px!important}.report-body{padding:0 0 88px!important;background:#fff!important;overflow:auto!important}.report-period-bar{display:flex!important;position:sticky;top:0;z-index:3;border-width:0 0 1px!important;border-radius:0!important;padding:10px 12px!important;gap:8px!important;overflow-x:auto}.report-period-bar select,.report-period-bar input{min-width:128px!important}.report-generate-btn{height:38px!important;white-space:nowrap}.report-workspace #report-content{border:0!important;border-radius:0!important;box-shadow:none!important;padding:18px 16px!important}.report-workspace #report-sections-bar{margin:10px 12px!important;border-radius:10px!important;padding:10px!important;gap:8px 12px!important;overflow-x:auto;flex-wrap:nowrap!important}.report-workspace #report-sections-bar>label:first-child{display:none!important}.report-workspace #report-sections-bar label{white-space:nowrap;font-size:11px!important}.report-workspace .report-stat-grid{grid-template-columns:1fr 1fr!important}.report-workspace .report-section{margin:12px 0!important;border-radius:8px!important}.report-workspace .report-row{padding:10px 12px!important}.report-footer{position:fixed!important;bottom:0;left:0;right:0;z-index:6;padding:10px 12px!important;box-shadow:0 -5px 18px rgba(15,23,42,.08)}.report-footer .ts{display:none}.report-footer-actions{width:100%;display:grid;grid-template-columns:1fr 1.35fr;gap:8px}.report-export-btn,.print-report-btn{height:42px;padding:0 10px}.report-workspace #report-content>div:first-child{margin-top:0!important}}
+
+/* v122 — AI Assistant control cleanup */
+body[data-current-page="ai_assistant"] .ai-page-chatbar .ai-chat-title{
+  width:auto!important;
+  min-width:104px!important;
+  max-width:none!important;
+  height:34px!important;
+  padding:0 11px!important;
+  display:inline-flex!important;
+  flex:0 0 auto!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  white-space:nowrap!important;
+  border:1px solid transparent!important;
+  border-radius:9px!important;
+  background:transparent!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-chatbar .ai-chat-title strong{
+  flex:0 0 auto!important;
+  white-space:nowrap!important;
+  font-size:12px!important;
+  line-height:1!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-chatbar .ai-chat-title:hover{
+  background:#f7f7f8!important;
+  border-color:#ececef!important;
+}
+body[data-current-page="ai_assistant"] .ai-compose-left{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+}
+body[data-current-page="ai_assistant"] .ai-compose-left button{
+  width:auto!important;
+  min-width:0!important;
+  height:30px!important;
+  margin:0!important;
+  padding:0 10px!important;
+  border:1px solid #e5e7eb!important;
+  border-radius:8px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+  color:#454a52!important;
+  display:inline-flex!important;
+  flex:0 0 auto!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:6px!important;
+  white-space:nowrap!important;
+  font-size:10px!important;
+  line-height:1!important;
+}
+body[data-current-page="ai_assistant"] .ai-compose-left button:hover{
+  background:#f8f8f9!important;
+  border-color:#d7d9dd!important;
+  color:#202329!important;
+}
+body[data-current-page="ai_assistant"] .ai-compose-left button:active{
+  transform:translateY(1px);
+}
+body[data-current-page="ai_assistant"] .ai-compose-left button i{
+  margin:0!important;
+  font-size:13px!important;
+  line-height:1!important;
+}
+@media (max-width: 640px){
+  body[data-current-page="ai_assistant"] .ai-page-chatbar .ai-chat-title{min-width:96px!important;padding:0 9px!important}
+  body[data-current-page="ai_assistant"] .ai-compose-left{gap:6px!important}
+  body[data-current-page="ai_assistant"] .ai-compose-left button{height:32px!important;padding:0 9px!important}
+}
