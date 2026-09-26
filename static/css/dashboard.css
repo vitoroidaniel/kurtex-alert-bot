@@ -3704,3 +3704,90 @@ body[data-current-page="ai_assistant"] #page-ai_assistant{
  .ai-page-layout{grid-template-columns:215px minmax(0,1fr)!important}
  .ai-page-quick,.ai-page-compose{width:min(820px,calc(100% - 44px))!important;max-width:820px!important}
 }
+
+/* v94 — truly adaptive sidebar: preserve every item, never scroll */
+.sidebar{height:100vh!important;overflow:hidden!important}
+.sidebar nav{
+ display:flex!important;flex-direction:column!important;
+ flex:1 1 auto!important;min-height:0!important;
+ overflow:hidden!important;
+ padding:clamp(4px,0.8vh,8px) 12px!important;
+}
+.nav-item,.nav-group-header{
+ min-height:clamp(31px,4.25vh,42px)!important;
+ height:auto!important;
+ padding-top:clamp(4px,.75vh,9px)!important;
+ padding-bottom:clamp(4px,.75vh,9px)!important;
+ font-size:clamp(11.5px,1.42vh,13px)!important;
+}
+.nav-item i,.nav-group-header span>i{
+ font-size:clamp(15px,1.95vh,18px)!important;
+}
+.nav-group-items .nav-item.nav-sub{
+ min-height:clamp(29px,3.85vh,39px)!important;
+ padding-top:clamp(3px,.6vh,8px)!important;
+ padding-bottom:clamp(3px,.6vh,8px)!important;
+ padding-left:42px!important;
+ font-size:clamp(11px,1.35vh,12.5px)!important;
+}
+.nav-group-items .nav-item.nav-sub i{font-size:clamp(14px,1.75vh,16px)!important}
+.nav-group-items{margin:0!important}
+.nav-ai-cluster{margin-top:clamp(1px,.45vh,5px)!important;padding-top:clamp(2px,.55vh,6px)!important}
+.nav-bottom-cluster{margin-top:auto!important;padding-top:clamp(2px,.6vh,7px)!important}
+.sidebar-logo{
+ flex:0 0 auto!important;
+ padding-top:clamp(7px,1.4vh,16px)!important;
+ padding-bottom:clamp(6px,1.15vh,14px)!important;
+}
+.sidebar-logo img{width:clamp(34px,4.6vh,43px)!important;height:clamp(34px,4.6vh,43px)!important}
+.sidebar-footer{
+ flex:0 0 auto!important;
+ padding-top:clamp(4px,.8vh,9px)!important;
+ padding-bottom:clamp(4px,.8vh,9px)!important;
+}
+.user-chip{padding-top:clamp(4px,.7vh,8px)!important;padding-bottom:clamp(4px,.7vh,8px)!important}
+.theme-btn,.logout-btn{padding-top:clamp(4px,.65vh,7px)!important;padding-bottom:clamp(4px,.65vh,7px)!important}
+
+/* Extra compression only for genuinely short laptop viewports. */
+@media(max-height:760px) and (min-width:901px){
+ .sidebar nav{padding-top:3px!important;padding-bottom:3px!important}
+ .nav-item,.nav-group-header{min-height:30px!important;padding-top:3px!important;padding-bottom:3px!important;font-size:11.5px!important}
+ .nav-group-items .nav-item.nav-sub{min-height:27px!important;padding-top:2px!important;padding-bottom:2px!important}
+ .nav-ai-cluster,.nav-bottom-cluster{padding-top:2px!important}
+ .sidebar-logo{padding-top:6px!important;padding-bottom:5px!important}
+ .sidebar-footer{padding-top:3px!important;padding-bottom:3px!important}
+}
+@media(max-height:660px) and (min-width:901px){
+ .nav-item,.nav-group-header{min-height:27px!important;font-size:11px!important}
+ .nav-item i,.nav-group-header span>i{font-size:15px!important}
+ .nav-group-items .nav-item.nav-sub{min-height:24px!important;font-size:10.5px!important}
+ .sidebar-logo img{width:30px!important;height:30px!important}
+ .user-chip{padding-top:2px!important;padding-bottom:2px!important}
+ .theme-btn,.logout-btn{padding-top:3px!important;padding-bottom:3px!important}
+}
+
+/* v95 — slightly smaller AI Assistant workspace */
+body[data-current-page="ai_assistant"] #page-ai_assistant{
+ height:calc(100vh - 205px)!important;
+ min-height:450px!important;
+}
+.ai-assistant-workspace{
+ width:calc(100% - 36px)!important;
+ max-width:none!important;
+ margin:0 18px!important;
+}
+.ai-page-layout{
+ height:100%!important;
+ grid-template-columns:205px minmax(0,1fr)!important;
+}
+.ai-page-layout.sidebar-collapsed{grid-template-columns:0 minmax(0,1fr)!important}
+.ai-page-chatbar{height:42px!important;flex-basis:42px!important}
+.ai-page-quick,.ai-page-compose{
+ width:min(720px,calc(100% - 40px))!important;
+ max-width:720px!important;
+}
+.ai-page-compose{min-height:72px!important;margin-bottom:10px!important}
+.ai-page-compose textarea{min-height:48px!important}
+@media(min-width:1500px){
+ .ai-page-quick,.ai-page-compose{width:min(760px,calc(100% - 44px))!important;max-width:760px!important}
+}
