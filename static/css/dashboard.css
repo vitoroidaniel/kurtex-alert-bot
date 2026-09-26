@@ -2188,3 +2188,19 @@ body[data-current-page="parts_manual"] .part-detail{padding:0;min-height:700px;b
 @media(max-width:1180px){.part-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.part-live-photo>a{height:240px}}
 @media(max-width:900px){body[data-current-page="parts_manual"] .main{padding:14px 14px 28px!important}.parts-manual-header{align-items:flex-start}.parts-manual-header h2{font-size:26px}body[data-current-page="parts_manual"] .parts-layout{grid-template-columns:1fr}.parts-index{position:relative;top:auto;max-height:300px}.part-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){body[data-current-page="parts_manual"] .main{padding:11px 10px 24px!important}.parts-manual-header{flex-direction:column;gap:10px}.parts-manual-header h2{font-size:24px}.parts-db-stat{display:flex;align-items:center;gap:7px;padding:7px 10px;text-align:left!important}.parts-db-stat strong{font-size:18px}.parts-db-stat span{margin:0}.parts-section-title>div small{display:none}.part-hero{padding:18px 16px}.part-hero h2{font-size:23px}.part-section{padding:17px 14px}.part-section-head{align-items:flex-start;flex-direction:column;gap:4px}.part-section-head small{text-align:left}.part-photo-grid{grid-template-columns:1fr}.part-live-photo>a{height:250px}.part-info-grid{grid-template-columns:1fr}.part-info-grid article.part-fix{grid-column:auto}.part-source{margin:14px 14px 18px}.parts-common{padding:11px}.parts-toolbar{padding-top:5px!important}}
+
+/* v28 Parts Manual — fixed controls + independent detail scrolling */
+@media(min-width:901px){
+  body[data-current-page="parts_manual"]{overflow:hidden}
+  body[data-current-page="parts_manual"] .main{height:100vh;overflow:hidden!important}
+  body[data-current-page="parts_manual"] #page-parts_manual{height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden}
+  body[data-current-page="parts_manual"] .parts-manual-header,
+  body[data-current-page="parts_manual"] .parts-common,
+  body[data-current-page="parts_manual"] .parts-toolbar{flex:0 0 auto}
+  body[data-current-page="parts_manual"] .parts-toolbar{position:relative;top:auto;z-index:8}
+  body[data-current-page="parts_manual"] .parts-layout{flex:1 1 auto;min-height:0;overflow:hidden;align-items:stretch}
+  body[data-current-page="parts_manual"] .parts-index{position:relative;top:auto;height:100%;max-height:none;overflow:hidden;display:flex;flex-direction:column}
+  body[data-current-page="parts_manual"] .parts-index-head{flex:0 0 auto}
+  body[data-current-page="parts_manual"] #parts-list{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+  body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;scroll-behavior:smooth}
+}
