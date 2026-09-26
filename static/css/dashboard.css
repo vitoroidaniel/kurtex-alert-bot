@@ -4139,24 +4139,85 @@ body[data-current-page="ai_training"] .ai-library-card{min-height:0!important;he
 body[data-current-page="ai_training"] .ai-library-card .ai-card-head{flex:0 0 auto!important}
 body[data-current-page="ai_training"] .ai-kb-list{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;padding-right:4px!important}
 
-
-/* v104 — minimal safe AI workspace patch */
-body[data-current-page="ai_assistant"] > .app .main > .topbar,
-body[data-current-page="ai_assistant"] > .app .main > .page-heading,
-body[data-current-page="ai_assistant"] > .app .main > .mobile-overview-controls,
-body[data-current-page="ai_assistant"] > .app .main > .connection-banner{display:none!important}
-body[data-current-page="ai_assistant"] .main{height:100vh!important;overflow:hidden!important;padding:12px 16px!important}
-body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 24px)!important;max-height:calc(100vh - 24px)!important;overflow:hidden!important}
+/* v103 — definitive AI Assistant workspace: remove global page chrome */
+body[data-current-page="ai_assistant"] .page-heading,
+body[data-current-page="ai_assistant"] .mobile-overview-controls,
+body[data-current-page="ai_assistant"] .connection-banner{
+ display:none!important;
+}
+body[data-current-page="ai_assistant"] .main{
+ height:100vh!important;
+ padding:12px 16px!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] #page-ai_assistant{
+ display:block!important;
+ height:calc(100vh - 24px)!important;
+ max-height:calc(100vh - 24px)!important;
+ min-height:0!important;
+ margin:0!important;
+ padding:0!important;
+ overflow:hidden!important;
+}
 body[data-current-page="ai_assistant"] .ai-assistant-workspace,
 body[data-current-page="ai_assistant"] .ai-page-layout,
-body[data-current-page="ai_assistant"] .ai-page-chat-column{height:100%!important;min-height:0!important;overflow:hidden!important}
-body[data-current-page="ai_assistant"] .ai-assistant-page-shell{height:calc(100% - 40px)!important;min-height:0!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
-body[data-current-page="ai_assistant"] .ai-page-messages{flex:1 1 0!important;min-height:0!important;overflow-y:auto!important}
-body[data-current-page="ai_assistant"] .ai-page-quick{flex:0 0 auto!important;display:flex!important}
-body[data-current-page="ai_assistant"] .ai-page-compose{flex:0 0 70px!important;min-height:70px!important;display:flex!important;margin-bottom:10px!important}
+body[data-current-page="ai_assistant"] .ai-page-chat-column{
+ height:100%!important;min-height:0!important;max-height:100%!important;overflow:hidden!important
+}
+body[data-current-page="ai_assistant"] .ai-page-layout{
+ border:1px solid var(--border)!important;border-radius:12px!important
+}
+body[data-current-page="ai_assistant"] .ai-page-chat-column{display:flex!important;flex-direction:column!important}
+body[data-current-page="ai_assistant"] .ai-page-chatbar{flex:0 0 40px!important;height:40px!important}
+body[data-current-page="ai_assistant"] .ai-assistant-page-shell{
+ flex:1 1 auto!important;display:flex!important;flex-direction:column!important;
+ height:auto!important;min-height:0!important;overflow:hidden!important
+}
+body[data-current-page="ai_assistant"] .ai-page-messages{
+ flex:1 1 0!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important
+}
+body[data-current-page="ai_assistant"] .ai-page-quick{
+ flex:0 0 auto!important;display:flex!important;visibility:visible!important;
+ padding:7px 0 5px!important;background:var(--surface)!important
+}
+body[data-current-page="ai_assistant"] .ai-page-compose{
+ flex:0 0 70px!important;display:flex!important;visibility:visible!important;
+ min-height:70px!important;max-height:70px!important;margin:0 auto 10px!important;
+ background:var(--surface)!important
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar{
+ height:100%!important;min-height:0!important;overflow:hidden!important
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-list{
+ height:auto!important;min-height:0!important;overflow-y:auto!important
+}
 
-/* v104 — plain Knowledge Library rows */
-body[data-current-page="ai_training"] .ai-library-card,
-body[data-current-page="ai_training"] .ai-kb-list{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important}
-body[data-current-page="ai_training"] .ai-kb-item{background:transparent!important;border:0!important;border-bottom:1px solid var(--border)!important;border-radius:0!important;box-shadow:none!important;margin:0!important;padding:8px 4px!important;min-height:48px!important}
-body[data-current-page="ai_training"] .ai-kb-item:first-child{border-top:1px solid var(--border)!important}
+/* v103 — Knowledge Library rebuilt as a plain case-style list */
+body[data-current-page="ai_training"] .ai-library-card{
+ display:flex!important;flex-direction:column!important;
+ height:100%!important;min-height:0!important;
+ margin:0!important;padding:0!important;
+ border:0!important;border-radius:0!important;box-shadow:none!important;
+ background:none!important;overflow:hidden!important
+}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head{
+ flex:0 0 auto!important;margin:0!important;padding:0 0 9px!important;
+ border-bottom:1px solid var(--border)!important;background:none!important
+}
+body[data-current-page="ai_training"] .ai-kb-list{
+ flex:1 1 auto!important;display:block!important;
+ min-height:0!important;margin:0!important;padding:0!important;
+ border:0!important;border-radius:0!important;box-shadow:none!important;
+ background:none!important;overflow-y:auto!important;overflow-x:hidden!important
+}
+body[data-current-page="ai_training"] .ai-kb-item{
+ display:block!important;width:100%!important;min-height:50px!important;
+ margin:0!important;padding:8px 6px!important;
+ border:0!important;border-bottom:1px solid var(--border)!important;
+ border-radius:0!important;box-shadow:none!important;background:none!important
+}
+body[data-current-page="ai_training"] .ai-kb-item:hover{background:rgba(0,0,0,.018)!important}
+body[data-current-page="ai_training"] .ai-kb-item-top{width:100%!important}
+body[data-current-page="ai_training"] .ai-kb-source{
+ background:transparent!important;border:0!important;border-radius:0!important
+}
