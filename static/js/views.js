@@ -245,8 +245,6 @@ async function loadFleet() {
       '<div class="stat-card c-green"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Repaired Units</div><div class="stat-value v-green">' +
       d.repaired_units +
       "</div></div>" +
-      "</div>" +
-      '<div class="stat-grid" style="margin-bottom:20px">' +
       '<div class="stat-card c-yellow" style="cursor:pointer" onclick="setFleetStatusFilter(\'trailer\')" title="Show trailer cases"><div class="stat-icon"><i class="ph ph-package"></i></div><div class="stat-label">Trailers</div><div class="stat-value v-yellow">' +
       d.trailer_count +
       "</div></div>" +
