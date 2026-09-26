@@ -4235,54 +4235,6 @@ body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-delete
 body[data-current-page="ai_assistant"] .ai-side-chat-delete:hover{opacity:1!important;background:var(--surface-2,#f3f3f4)!important}
 body[data-current-page="ai_assistant"] .ai-side-chat-delete i{font-size:14px!important}
 
-/* v110 — ChatGPT-inspired Kurtex AI history sidebar */
-body[data-current-page="ai_assistant"] .ai-page-sidebar{
- width:248px!important;transition:width .22s ease,opacity .18s ease,transform .22s ease!important;
- background:var(--surface)!important
-}
-body[data-current-page="ai_assistant"] .ai-page-layout.sidebar-hidden .ai-page-sidebar,
-body[data-current-page="ai_assistant"] .ai-page-layout.ai-sidebar-hidden .ai-page-sidebar{
- width:0!important;opacity:0!important;transform:translateX(-10px)!important;border-right:0!important
-}
-body[data-current-page="ai_assistant"] .ai-page-sidebar-head-v110{
- height:52px!important;padding:8px 10px!important;display:flex!important;align-items:center!important;
- justify-content:space-between!important;border:0!important;gap:8px!important
-}
-body[data-current-page="ai_assistant"] .ai-side-brand{font-size:15px!important;font-weight:750!important;letter-spacing:-.2px!important}
-body[data-current-page="ai_assistant"] .ai-side-head-actions{display:flex!important;align-items:center!important;gap:2px!important}
-body[data-current-page="ai_assistant"] .ai-side-head-actions button{
- width:32px!important;height:32px!important;display:grid!important;place-items:center!important;
- padding:0!important;border:0!important;border-radius:8px!important;background:transparent!important
-}
-body[data-current-page="ai_assistant"] .ai-side-head-actions button:hover{background:var(--surface-2,#f3f3f4)!important}
-body[data-current-page="ai_assistant"] .ai-side-head-actions i{font-size:17px!important}
-body[data-current-page="ai_assistant"] .ai-side-new-row{
- width:calc(100% - 16px)!important;height:36px!important;margin:2px 8px 10px!important;padding:0 10px!important;
- display:flex!important;align-items:center!important;gap:9px!important;border:0!important;border-radius:8px!important;
- background:transparent!important;font-size:12px!important;font-weight:550!important;text-align:left!important;cursor:pointer!important
-}
-body[data-current-page="ai_assistant"] .ai-side-new-row:hover{background:var(--surface-2,#f3f3f4)!important}
-body[data-current-page="ai_assistant"] .ai-side-new-row i{font-size:16px!important}
-body[data-current-page="ai_assistant"] .ai-page-side-label{
- padding:7px 14px 5px!important;font-size:10px!important;font-weight:650!important;letter-spacing:.06em!important;opacity:.58!important
-}
-body[data-current-page="ai_assistant"] .ai-page-sidebar-list{padding:0 6px 12px!important}
-body[data-current-page="ai_assistant"] .ai-side-chat{
- min-height:42px!important;margin:1px 0!important;border:0!important;border-radius:8px!important;background:transparent!important;
- box-shadow:none!important;transition:background-color .12s ease!important
-}
-body[data-current-page="ai_assistant"] .ai-side-chat:hover{background:var(--surface-2,#f3f3f4)!important}
-body[data-current-page="ai_assistant"] .ai-side-chat.active{background:var(--surface-2,#ececed)!important;border:0!important;box-shadow:none!important}
-body[data-current-page="ai_assistant"] .ai-side-chat-open{padding:7px 36px 7px 9px!important}
-body[data-current-page="ai_assistant"] .ai-side-chat-open span{font-size:11.5px!important;font-weight:500!important}
-body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open span{font-weight:600!important}
-body[data-current-page="ai_assistant"] .ai-side-chat-open small{font-size:9.5px!important;margin-top:2px!important;opacity:.55!important}
-body[data-current-page="ai_assistant"] .ai-side-chat-delete{right:5px!important;width:28px!important;height:28px!important}
-body[data-current-page="ai_assistant"] .ai-side-show{
- width:32px!important;height:32px!important;border:0!important;border-radius:8px!important;background:transparent!important;
- transition:background-color .12s ease,transform .18s ease!important
-}
-body[data-current-page="ai_assistant"] .ai-side-show:hover{background:var(--surface-2,#f3f3f4)!important;transform:scale(1.03)!important}
 
 /* v111 — Full-HD readability pass for AI Training only */
 body[data-current-page="ai_training"] #page-ai_training{
@@ -4358,3 +4310,57 @@ body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-blue{background:#e
 body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-purple{background:#f4efff!important;color:#65469a!important;border-color:#d9ccf0!important}
 body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-teal{background:#ebf8f8!important;color:#2c6e72!important;border-color:#c3e2e3!important}
 body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-gray{background:#f1f2f3!important;color:#555b63!important;border-color:#d7dade!important}
+
+/* v114 — AI Training workspace: no global header, page scroll enabled */
+body[data-current-page="ai_training"] .page-heading,
+body[data-current-page="ai_training"] .mobile-overview-controls,
+body[data-current-page="ai_training"] .connection-banner{display:none!important}
+body[data-current-page="ai_training"] .main{
+ height:100vh!important;overflow-y:auto!important;overflow-x:hidden!important;
+ padding:14px 18px 24px!important
+}
+body[data-current-page="ai_training"] #page-ai_training{
+ height:auto!important;max-height:none!important;min-height:calc(100vh - 28px)!important;
+ overflow:visible!important;padding:0!important
+}
+body[data-current-page="ai_training"] .ai-training-page,
+body[data-current-page="ai_training"] .ai-training-main{
+ height:auto!important;max-height:none!important;overflow:visible!important
+}
+body[data-current-page="ai_training"] .ai-library-card,
+body[data-current-page="ai_training"] .ai-kb-list{
+ height:auto!important;max-height:none!important;overflow:visible!important
+}
+/* Knowledge title + larger tags on one line */
+body[data-current-page="ai_training"] .ai-kb-main{min-width:0!important;flex:1 1 auto!important}
+body[data-current-page="ai_training"] .ai-kb-title-line{
+ display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;min-width:0!important
+}
+body[data-current-page="ai_training"] .ai-kb-title-line strong{
+ font-size:14px!important;font-weight:750!important;line-height:1.35!important
+}
+body[data-current-page="ai_training"] .ai-kb-tags-inline{
+ display:inline-flex!important;align-items:center!important;gap:5px!important;flex-wrap:wrap!important
+}
+body[data-current-page="ai_training"] .ai-kb-tags-inline .ai-kb-tag{
+ min-height:26px!important;padding:4px 9px!important;margin:0!important;
+ font-size:12px!important;font-weight:700!important;border-radius:999px!important
+}
+
+/* v115 — compact outlined Knowledge Library tag pills */
+body[data-current-page="ai_training"] .ai-kb-tags-inline .ai-kb-tag,
+body[data-current-page="ai_training"] .ai-kb-tag{
+ min-height:20px!important;height:20px!important;
+ padding:2px 7px!important;margin:0!important;
+ border-radius:999px!important;
+ font-size:10.5px!important;line-height:14px!important;font-weight:600!important;
+ box-shadow:none!important
+}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-red{background:#fff7f7!important;color:#e23b3b!important;border:1px solid #f2bcbc!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-orange{background:#fff9f2!important;color:#d87922!important;border:1px solid #efc99f!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-yellow{background:#fffcef!important;color:#a98112!important;border:1px solid #eadb98!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-green{background:#f5fbf6!important;color:#3c8b52!important;border:1px solid #bfe0c7!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-blue{background:#f5f9ff!important;color:#477bc2!important;border:1px solid #bfd2ec!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-purple{background:#faf7ff!important;color:#7859ad!important;border:1px solid #d6c8ec!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-teal{background:#f3fbfb!important;color:#347e82!important;border:1px solid #b9dcde!important}
+body[data-current-page="ai_training"] .ai-kb-tag.ai-tag-color-gray{background:#fafafa!important;color:#686d74!important;border:1px solid #d4d7db!important}
