@@ -3602,3 +3602,59 @@ body[data-current-page="ai_assistant"] #page-ai_assistant{
  body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100svh - 140px)!important}
  .ai-page-layout{grid-template-columns:205px minmax(0,1fr)!important}
 }
+
+/* v92 — restore the fuller original navigation visual scale */
+.sidebar{width:242px!important}
+.layout{grid-template-columns:242px minmax(0,1fr)!important}
+.sidebar nav{padding:8px 12px 10px!important}
+.nav-item{
+ min-height:42px!important;
+ padding:9px 13px!important;
+ gap:12px!important;
+ font-size:13px!important;
+ font-weight:450!important;
+ border-radius:10px!important;
+}
+.nav-item i{
+ width:20px!important;
+ min-width:20px!important;
+ font-size:18px!important;
+ text-align:center!important;
+}
+.nav-group-header{
+ min-height:42px!important;
+ padding:9px 13px!important;
+ font-size:13px!important;
+ border-radius:10px!important;
+}
+.nav-group-header span{gap:12px!important}
+.nav-group-header span>i{
+ width:20px!important;
+ min-width:20px!important;
+ font-size:18px!important;
+ text-align:center!important;
+}
+.nav-caret{font-size:13px!important;width:auto!important;min-width:0!important}
+.nav-group-items .nav-item.nav-sub{
+ min-height:39px!important;
+ padding:8px 12px 8px 42px!important;
+ font-size:12.5px!important;
+ gap:10px!important;
+}
+.nav-group-items .nav-item.nav-sub i{
+ width:18px!important;
+ min-width:18px!important;
+ font-size:16px!important;
+}
+.nav-group-items{margin-top:1px!important;margin-bottom:2px!important}
+.nav-ai-cluster{margin-top:5px!important;padding-top:6px!important}
+.nav-bottom-cluster{padding-top:7px!important}
+@media(max-height:800px) and (min-width:901px){
+ .nav-item,.nav-group-header{min-height:38px!important;padding-top:7px!important;padding-bottom:7px!important;font-size:12.5px!important}
+ .nav-item i,.nav-group-header span>i{font-size:17px!important}
+ .nav-group-items .nav-item.nav-sub{min-height:35px!important;padding-top:6px!important;padding-bottom:6px!important;padding-left:41px!important;font-size:12px!important}
+}
+@media(max-height:700px) and (min-width:901px){
+ .nav-item,.nav-group-header{min-height:35px!important;padding-top:5px!important;padding-bottom:5px!important}
+ .nav-group-items .nav-item.nav-sub{min-height:32px!important;padding-top:5px!important;padding-bottom:5px!important}
+}
