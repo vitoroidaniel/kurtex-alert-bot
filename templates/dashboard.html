@@ -76,6 +76,7 @@
       <button class="badge-btn btn-outline" onclick="openReport()"><i class="ph ph-file-text"></i> <span>Report</span></button>
       <button class="badge-btn btn-ghost" onclick="window.print()"><i class="ph ph-printer"></i> <span>Print</span></button>
       <a class="badge-btn btn-primary" href="/api/export"><i class="ph ph-download-simple"></i> <span>Export</span></a>
+      <div class="notification-center"><button id="notification-bell" class="badge-btn notification-bell" onclick="toggleNotifications()" aria-label="Notifications"><i class="ph ph-bell"></i><span id="notification-count" class="notification-count" hidden>0</span></button><div id="notification-panel" class="notification-panel" hidden><header><div><strong>Notifications</strong><small id="notification-summary">All caught up</small></div><button onclick="markAllNotificationsSeen()">Mark all seen</button></header><div class="notification-tabs"><button class="active" data-filter="all" onclick="filterNotifications('all',this)">All</button><button data-filter="unseen" onclick="filterNotifications('unseen',this)">Unseen</button><button data-filter="alerts" onclick="filterNotifications('alerts',this)">Alerts & issues</button></div><div id="notification-list" class="notification-list"></div></div></div>
       
     </div>
   </div>
@@ -102,7 +103,7 @@
     </div>
     <div class="mobile-update-row"><span class="dot"></span><span class="mobile-last-update">Updated just now</span></div>
   </div>
-  <div id="connection-banner" class="connection-banner" role="alert" hidden><span id="connection-message"></span><button onclick="refresh(true)">Retry</button></div>
+  <div id="connection-banner" class="connection-banner" role="alert" hidden></div>
   <div class="page active" id="page-overview"><div class="overview-toolbar"><span>Your operations, at a glance</span><button class="badge-btn btn-outline" onclick="openLayoutSettings()">Customize overview</button></div>
     <div class="overview-label"><span>Today at a glance</span><small>Reassignments & response average cover all time</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
@@ -249,13 +250,22 @@
 {% include 'partials/modals.html' %}
 <button id="kurtex-ai-fab" class="kurtex-ai-fab" type="button" onclick="toggleKurtexAI()" aria-label="Open Kurtex AI"><i class="ph ph-sparkle"></i><span>Kurtex AI</span></button>
 <aside id="kurtex-ai-panel" class="kurtex-ai-panel" aria-hidden="true">
-<header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div class="kurtex-ai-avatar"><i class="ph ph-wrench"></i></div><div><strong id="kurtex-ai-title">Kurtex Maintenance AI</strong><small>Truck · Trailer · Reefer</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>
-<div class="kurtex-ai-body"><aside id="kurtex-ai-history" class="kurtex-ai-history"><div class="ai-history-head"><strong>Chats</strong><button onclick="newKurtexAIChat()"><i class="ph ph-plus"></i> New</button></div><div id="kurtex-ai-chat-list"></div></aside><section class="kurtex-ai-chat-main">
-<div class="kurtex-ai-notice"><i class="ph ph-shield-warning"></i><span>Diagnostic helper. Double-check safety-critical advice and repairs with a qualified technician.</span></div>
+<header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div class="kurtex-ai-avatar"><i class="ph ph-wrench"></i></div><div><strong id="kurtex-ai-title">Kurtex AI</strong><small><span class="ai-online-dot"></span> Maintenance assistant</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>
+<div class="kurtex-ai-body"><aside id="kurtex-ai-history" class="kurtex-ai-history"><div class="ai-history-head"><strong>Chats</strong><button onclick="newKurtexAIChat()"><i class="ph ph-plus"></i> New</button></div>
+<button id="ai-trainer-open" class="ai-trainer-open" hidden onclick="toggleAITrainer(true)"><i class="ph ph-brain"></i> Teach Kurtex AI</button><div id="kurtex-ai-chat-list"></div></aside><section class="kurtex-ai-chat-main">
+<div class="kurtex-ai-notice"><i class="ph ph-shield-check"></i><span>Uses Kurtex history + approved maintenance knowledge. Verify critical repairs.</span></div>
 <div id="kurtex-ai-messages" class="kurtex-ai-messages"><div class="kurtex-ai-msg assistant">Ask about a truck, trailer, reefer, symptom, part, or previous Kurtex case. Romanian, English and Russian are OK.</div></div>
-<div class="kurtex-ai-quick"><button onclick="kurtexAIQuick('Find similar Kurtex cases for the issue I am viewing.')">Similar cases</button><button onclick="kurtexAIQuick('Help me diagnose this maintenance issue. Ask me for the missing symptoms first.')">Diagnose</button></div>
-<form class="kurtex-ai-compose" onsubmit="sendKurtexAI(event)"><textarea id="kurtex-ai-input" rows="2" placeholder="ex: camion 202 pierde aer cand apasa frana"></textarea><button type="submit"><i class="ph ph-paper-plane-tilt"></i></button></form>
-</section></div></aside>
+<div class="kurtex-ai-suggestions"><button onclick="kurtexAIQuick('Find similar Kurtex cases for the issue I am viewing.')"><i class="ph ph-files"></i> Similar cases</button><button onclick="kurtexAIQuick('Help me diagnose this maintenance issue. Ask me for the missing symptoms first.')"><i class="ph ph-stethoscope"></i> Diagnose issue</button></div>
+<form class="kurtex-ai-compose" onsubmit="sendKurtexAI(event)"><div class="ai-compose-box"><textarea id="kurtex-ai-input" rows="2" placeholder="Ask Kurtex AI about a maintenance issue..."></textarea><div class="ai-compose-tools"><span>EN · RO · RU</span><button type="submit" title="Send"><i class="ph ph-paper-plane-tilt"></i></button></div></div></form>
+</section></div>
+<section id="kurtex-ai-trainer" class="kurtex-ai-trainer" hidden>
+<header><div><strong>Maintenance Knowledge</strong><small>Super admins & developers only</small></div><button onclick="toggleAITrainer(false)"><i class="ph ph-x"></i></button></header>
+<div class="ai-trainer-info"><i class="ph ph-database"></i><div><strong>Approved knowledge</strong><span>Uploaded information becomes reference material for Kurtex AI. Chat messages do not automatically become trusted knowledge.</span></div></div>
+<div class="ai-trainer-stats"><span><b id="ai-kb-count">0</b> knowledge items</span><span><b id="ai-case-count">0</b> historical cases available</span></div>
+<form id="ai-kb-form" onsubmit="saveAIKnowledge(event)"><input id="ai-kb-title" placeholder="Title - e.g. Cascadia air system notes" required><textarea id="ai-kb-content" rows="6" placeholder="Paste approved mechanic knowledge, diagnostic notes, procedures, terminology..." required></textarea><input id="ai-kb-tags" placeholder="Tags (comma separated)"><button type="submit"><i class="ph ph-check"></i> Add approved knowledge</button></form>
+<div class="ai-upload-box"><strong>Feed AI from a file</strong><small>TXT, MD, CSV or JSON · max 2 MB</small><input id="ai-kb-file" type="file" accept=".txt,.md,.csv,.json"><button onclick="uploadAIKnowledge()"><i class="ph ph-upload-simple"></i> Upload & add</button></div>
+<div class="ai-kb-list-head">Knowledge library</div><div id="ai-kb-list" class="ai-kb-list"></div>
+</section></aside>
 <script defer src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/core.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/views.js') }}"></script>
@@ -265,5 +275,6 @@
 <script defer src="{{ url_for('static', filename='js/layout.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/ai.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 </body>
 </html>

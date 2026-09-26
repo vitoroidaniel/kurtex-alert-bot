@@ -220,7 +220,17 @@ def _cf_ai(messages, max_tokens=700, temperature=0.2):
     result=payload.get("result") or {}; text=result.get("response")
     if not text and isinstance(result.get("choices"),list) and result["choices"]:
         text=((result["choices"][0].get("message") or {}).get("content"))
-    if not text: raise RuntimeError("Workers AI returned no response")
+    # Workers AI response shape can vary by model/API revision. Normalize safely.
+    if isinstance(text,dict):
+        text=text.get("response") or text.get("content") or text.get("text") or json.dumps(text,ensure_ascii=False)
+    if isinstance(text,list):
+        parts=[]
+        for item in text:
+            if isinstance(item,str): parts.append(item)
+            elif isinstance(item,dict): parts.append(str(item.get("text") or item.get("content") or item.get("response") or ""))
+        text="\n".join(x for x in parts if x)
+    if text is None: raise RuntimeError("Workers AI returned no response")
+    if not isinstance(text,str): text=str(text)
     return text.strip()
 
 def _ai_case_record(c):
@@ -236,8 +246,128 @@ def _ai_context(query="",limit=60):
         return (sum(1 for t in terms if t in txt),c.get("opened_at") or "")
     cases=sorted(cases,key=rank,reverse=True)[:limit]
     notes=_read_knowledge()[-30:] if "_read_knowledge" in globals() else []
-    return {"cases":[_ai_case_record(c) for c in cases],"knowledge_notes":notes}
+    return {"cases":[_ai_case_record(c) for c in cases],"knowledge_notes":notes,"approved_maintenance_knowledge":_ai_knowledge_matches(query,12) if "_ai_knowledge_matches" in globals() else []}
 
+
+NOTIFICATIONS_FILE = DATA_DIR / "dashboard_notifications.json"
+
+def _read_notifications():
+    try:
+        if NOTIFICATIONS_FILE.exists():
+            data=json.loads(NOTIFICATIONS_FILE.read_text(encoding="utf-8")); return data if isinstance(data,list) else []
+    except Exception as e: logger.warning("Notification read failed: %s",e)
+    return []
+
+def _write_notifications(items):
+    NOTIFICATIONS_FILE.parent.mkdir(parents=True,exist_ok=True); tmp=NOTIFICATIONS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(items[-1000:],ensure_ascii=False,indent=2),encoding="utf-8"); tmp.replace(NOTIFICATIONS_FILE)
+
+def _notify_user(kind,title,message,severity="info"):
+    try:
+        items=_read_notifications(); now=datetime.now().astimezone().isoformat(timespec="seconds")
+        # de-dupe identical system failures within the latest entries
+        key=_ai_user_key() if "_ai_user_key" in globals() else "user"
+        for n in reversed(items[-30:]):
+            if n.get("user")==key and n.get("title")==title and n.get("message")==message and not n.get("seen"):
+                return
+        items.append({"id":uuid.uuid4().hex,"user":key,"kind":kind,"title":title,"message":message,
+                      "severity":severity,"seen":False,"created_at":now})
+        _write_notifications(items)
+    except Exception as e: logger.warning("Notification write failed: %s",e)
+
+@app.route("/api/notifications")
+def api_notifications():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    key=_ai_user_key(); items=[n for n in _read_notifications() if n.get("user")==key]
+    items.sort(key=lambda x:x.get("created_at") or "",reverse=True)
+    return jsonify({"items":items[:100],"unseen":sum(1 for n in items if not n.get("seen"))})
+
+@app.route("/api/notifications/<nid>/seen",methods=["POST"])
+def api_notification_seen(nid):
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    key=_ai_user_key(); items=_read_notifications()
+    for n in items:
+        if n.get("id")==nid and n.get("user")==key:n["seen"]=True
+    _write_notifications(items); return jsonify({"ok":True})
+
+@app.route("/api/notifications/seen-all",methods=["POST"])
+def api_notifications_seen_all():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    key=_ai_user_key(); items=_read_notifications()
+    for n in items:
+        if n.get("user")==key:n["seen"]=True
+    _write_notifications(items); return jsonify({"ok":True})
+
+AI_KNOWLEDGE_FILE = DATA_DIR / "ai_maintenance_knowledge.json"
+
+def _ai_is_trainer():
+    user=session.get("user") or {}
+    return isinstance(user,dict) and user.get("role","agent") in ("developer","super_admin")
+
+def _read_ai_knowledge():
+    try:
+        if AI_KNOWLEDGE_FILE.exists():
+            data=json.loads(AI_KNOWLEDGE_FILE.read_text(encoding="utf-8"))
+            return data if isinstance(data,list) else []
+    except Exception as e: logger.warning("AI knowledge read failed: %s",e)
+    return []
+
+def _write_ai_knowledge(items):
+    AI_KNOWLEDGE_FILE.parent.mkdir(parents=True,exist_ok=True)
+    tmp=AI_KNOWLEDGE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(items,ensure_ascii=False,indent=2),encoding="utf-8"); tmp.replace(AI_KNOWLEDGE_FILE)
+
+def _ai_knowledge_matches(query,limit=12):
+    items=_read_ai_knowledge(); q=set(re.findall(r"[\w-]{3,}",str(query).lower(),flags=re.UNICODE))
+    def score(x):
+        txt=(str(x.get("title") or "")+" "+str(x.get("content") or "")+" "+" ".join(x.get("tags") or [])).lower()
+        return sum(1 for t in q if t in txt)
+    ranked=sorted(items,key=lambda x:(score(x),x.get("updated_at") or x.get("created_at") or ""),reverse=True)
+    hits=[x for x in ranked if score(x)>0]
+    return (hits or ranked[:4])[:limit]
+
+@app.route("/api/ai/knowledge",methods=["GET","POST"])
+def api_ai_knowledge():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    if not _ai_is_trainer():return jsonify({"error":"forbidden"}),403
+    items=_read_ai_knowledge()
+    if request.method=="GET":
+        return jsonify({"items":sorted(items,key=lambda x:x.get("updated_at") or x.get("created_at") or "",reverse=True),
+                        "case_count":len([c for c in load_cases() if not is_testing(c)])})
+    data=request.get_json(silent=True) or {}; content=str(data.get("content") or "").strip()[:50000]
+    if not content:return jsonify({"error":"Knowledge content is required"}),400
+    now=_now_iso() if "_now_iso" in globals() else datetime.now().astimezone().isoformat(timespec="seconds")
+    item={"id":uuid.uuid4().hex,"title":str(data.get("title") or "Maintenance knowledge")[:120],
+          "content":content,"tags":[str(x)[:50] for x in (data.get("tags") or []) if str(x).strip()][:12],
+          "source":"manual","created_at":now,"updated_at":now,"created_by":_ai_user_key() if "_ai_user_key" in globals() else "admin"}
+    items.append(item); _write_ai_knowledge(items); return jsonify(item),201
+
+@app.route("/api/ai/knowledge/upload",methods=["POST"])
+def api_ai_knowledge_upload():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    if not _ai_is_trainer():return jsonify({"error":"forbidden"}),403
+    f=request.files.get("file")
+    if not f or not f.filename:return jsonify({"error":"File is required"}),400
+    ext=Path(f.filename).suffix.lower()
+    if ext not in (".txt",".md",".csv",".json"):return jsonify({"error":"Use TXT, MD, CSV or JSON for this version"}),400
+    raw=f.read(2_000_001)
+    if len(raw)>2_000_000:return jsonify({"error":"File is too large (2 MB max)"}),400
+    try: content=raw.decode("utf-8")
+    except UnicodeDecodeError:
+        try: content=raw.decode("latin-1")
+        except Exception:return jsonify({"error":"Could not read text file"}),400
+    now=datetime.now().astimezone().isoformat(timespec="seconds"); items=_read_ai_knowledge()
+    item={"id":uuid.uuid4().hex,"title":Path(f.filename).name[:120],"content":content[:120000],
+          "tags":["uploaded"],"source":"file","created_at":now,"updated_at":now,"created_by":_ai_user_key()}
+    items.append(item); _write_ai_knowledge(items); return jsonify(item),201
+
+@app.route("/api/ai/knowledge/<item_id>",methods=["DELETE"])
+def api_ai_knowledge_delete(item_id):
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    if not _ai_is_trainer():return jsonify({"error":"forbidden"}),403
+    items=_read_ai_knowledge(); new=[x for x in items if str(x.get("id"))!=item_id]
+    if len(new)==len(items):return jsonify({"error":"Not found"}),404
+    _write_ai_knowledge(new); return jsonify({"ok":True})
 
 AI_CHAT_FILE = DATA_DIR / "ai_chats.json"
 
@@ -306,7 +436,7 @@ def api_ai_chat_item(chat_id):
 @app.route("/api/ai/status")
 def api_ai_status():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
-    return jsonify({"configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),"model":KURTEX_AI_MODEL})
+    return jsonify({"configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),"model":KURTEX_AI_MODEL,"can_train":_ai_is_trainer(),"knowledge_count":len(_read_ai_knowledge())})
 
 @app.route("/api/ai/chat",methods=["POST"])
 def api_ai_chat():
@@ -336,7 +466,8 @@ def api_ai_chat():
         return jsonify({"answer":answer,"chat_id":chat["id"],"title":chat["title"]})
     except Exception as e:
         logger.warning("Kurtex AI chat failed: %s",e)
-        return jsonify({"error":"Kurtex AI unavailable. Check Cloudflare credentials/model access."}),503
+        _notify_user("ai","Kurtex AI unavailable","The AI request failed. Check Workers AI access or try again later.","warning")
+        return jsonify({"error":"Kurtex AI is temporarily unavailable."}),503
 
 @app.route("/api/ai/related_cases",methods=["POST"])
 def api_ai_related_cases():
@@ -367,7 +498,7 @@ CANDIDATES:
                 out.append({"case":serialize_case(by_id[cid]),"score":min(score,100),"reason":str(m.get("reason") or "")[:180]})
         out.sort(key=lambda x:-x["score"]); return jsonify({"items":out[:8],"ai":True})
     except Exception as e:
-        logger.warning("AI related cases failed: %s",e); return jsonify({"error":"AI matching unavailable","items":[]}),503
+        logger.warning("AI related cases failed: %s",e); _notify_user("ai","AI case matching unavailable","Parts Manual could not verify related cases. No unverified fallback was shown.","warning"); return jsonify({"error":"AI matching unavailable","items":[]}),503
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
