@@ -48,12 +48,14 @@ document.addEventListener('DOMContentLoaded',function(){initAITrainer();if(docum
 
 
 function kurtexAIFormat(text){
- var safe=escapeAI(String(text==null?'':text));
+ var safe=escapeAI(String(text==null?'':text)).replace(/\r/g,'');
+ safe=safe.replace(/^#{1,6}\s+(.+)$/gm,'<div class="ai-md-heading">$1</div>');
  safe=safe.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
- safe=safe.replace(/^###\s+(.+)$/gm,'<strong class="ai-md-heading">$1</strong>');
- safe=safe.replace(/^##\s+(.+)$/gm,'<strong class="ai-md-heading">$1</strong>');
- safe=safe.replace(/^#\s+(.+)$/gm,'<strong class="ai-md-heading">$1</strong>');
- safe=safe.replace(/\n/g,'<br>');
+ safe=safe.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g,'$1<em>$2</em>');
+ safe=safe.replace(/^\s*[-*]\s+(.+)$/gm,'<div class="ai-md-bullet"><span>•</span><span>$1</span></div>');
+ safe=safe.replace(/^\s*\*+\s*$/gm,'');
+ safe=safe.replace(/(^|\s)#{1,6}(?=\s|$)/g,'$1');
+ safe=safe.replace(/\n{2,}/g,'<br><br>').replace(/\n/g,'<br>');
  return safe
 }
 function toggleKurtexAIFullscreen(force){
@@ -95,7 +97,7 @@ async function newKurtexAIPageChat(){
  var side=document.getElementById('ai-page-sidebar-list');
  if(side)side.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
  var t=document.getElementById('ai-page-messages');
- if(t)t.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick(\'Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.\')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div>';
+ refreshAIChatContext();if(t)t.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick(\'Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.\')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div>';
  var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}loadAIPageSidebar()
 }
 async function openAIPageHistory(){
@@ -121,7 +123,7 @@ async function openAIPageSavedChat(id,clicked){
   var chat=x.item||x.chat||x;kurtexAIChatId=chat.id||id;var box=document.getElementById('ai-page-messages');box.innerHTML='';
   (chat.messages||[]).forEach(function(m){var d=document.createElement('div');d.className='ai-page-msg '+(m.role==='assistant'?'assistant':'user');d.innerHTML=m.role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');box.appendChild(d)});
   if(!(chat.messages||[]).length)await newKurtexAIPageChat();
-  var p=document.getElementById('ai-page-history');if(p)p.remove();box.scrollTop=box.scrollHeight;loadAIPageSidebar()
+  var p=document.getElementById('ai-page-history');if(p)p.remove();box.scrollTop=box.scrollHeight;loadAIPageSidebar();refreshAIChatContext()
  }catch(e){}
 }
 function openKurtexAIPageChat(){
@@ -190,3 +192,27 @@ document.addEventListener('click',function(e){
  var picker=b.closest('.ai-tag-color-picker'),input=picker&&document.getElementById(picker.dataset.target);if(!input)return;
  input.value=b.dataset.color;syncAITagColorPicker(input.id);
 });
+
+
+// v124 — chat-scoped files + verified knowledge context
+var aiChatKnowledgeOptions=[], aiChatKnowledgeSelected=[];
+function aiEnsureChat(){
+ if(kurtexAIChatId)return Promise.resolve(kurtexAIChatId);
+ return apiFetch('/api/ai/chats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New maintenance chat'})}).then(function(r){return r.json()}).then(function(x){kurtexAIChatId=x.id;loadAIPageSidebar();return x.id})
+}
+async function uploadAIChatFiles(input){
+ var files=Array.from((input&&input.files)||[]);if(!files.length)return;
+ try{var id=await aiEnsureChat();for(var i=0;i<files.length;i++){var fd=new FormData();fd.append('file',files[i]);var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)+'/files',{method:'POST',body:fd}),x=await r.json();if(!r.ok)throw new Error(x.error||'Could not attach '+files[i].name)}await refreshAIChatContext()}catch(e){alert(e.message||'Could not attach file')}finally{if(input)input.value=''}
+}
+async function refreshAIChatContext(){
+ var box=document.getElementById('ai-chat-context');if(!box)return;if(!kurtexAIChatId){box.innerHTML='';return}
+ try{var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),x=await r.json(),chat=x.item||x.chat||x,files=chat.attachments||[],kids=chat.knowledge_ids||[];aiChatKnowledgeSelected=kids.slice();var chips=[];files.forEach(function(a){chips.push('<span class="ai-context-chip"><i class="ph ph-file-text"></i>'+escapeAI(a.name)+'<button type="button" onclick="removeAIChatFile(\''+aiAttr(a.id)+'\')"><i class="ph ph-x"></i></button></span>')});if(kids.length)chips.push('<button type="button" class="ai-context-chip knowledge" onclick="openAIChatKnowledge()"><i class="ph ph-books"></i>'+kids.length+' knowledge source'+(kids.length===1?'':'s')+'</button>');box.innerHTML=chips.join('')}catch(e){}
+}
+async function removeAIChatFile(fid){if(!kurtexAIChatId)return;await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
+async function openAIChatKnowledge(){
+ try{await aiEnsureChat();var r=await apiFetch('/api/ai/knowledge/options'),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to load knowledge');aiChatKnowledgeOptions=x.items||[];var cr=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),chat=await cr.json();aiChatKnowledgeSelected=(chat.knowledge_ids||[]).slice();document.getElementById('ai-chat-knowledge-modal').hidden=false;renderAIChatKnowledgeOptions()}catch(e){alert(e.message||'Unable to load knowledge')}
+}
+function closeAIChatKnowledge(){var m=document.getElementById('ai-chat-knowledge-modal');if(m)m.hidden=true}
+function renderAIChatKnowledgeOptions(){var list=document.getElementById('ai-chat-kb-list');if(!list)return;var q=((document.getElementById('ai-chat-kb-search')||{}).value||'').toLowerCase();var items=aiChatKnowledgeOptions.filter(function(k){return !q||((k.title||'')+' '+(k.tags||[]).join(' ')).toLowerCase().includes(q)});list.innerHTML=items.length?items.map(function(k){var on=aiChatKnowledgeSelected.indexOf(k.id)>=0;return '<label class="ai-chat-kb-option"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleAIChatKnowledge(\''+aiAttr(k.id)+'\',this.checked)"><span><strong>'+escapeAI(k.title||'Maintenance knowledge')+'</strong><small>'+escapeAI((k.tags||[]).join(' · ')||'Verified knowledge')+'</small></span></label>'}).join(''):'<div class="ai-history-empty">No matching knowledge.</div>';var c=document.getElementById('ai-chat-kb-count');if(c)c.textContent=aiChatKnowledgeSelected.length+' source'+(aiChatKnowledgeSelected.length===1?'':'s')+' selected'}
+function toggleAIChatKnowledge(id,on){var i=aiChatKnowledgeSelected.indexOf(id);if(on&&i<0)aiChatKnowledgeSelected.push(id);if(!on&&i>=0)aiChatKnowledgeSelected.splice(i,1);renderAIChatKnowledgeOptions()}
+async function applyAIChatKnowledge(){if(!kurtexAIChatId)return;var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/context',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_ids:aiChatKnowledgeSelected})});if(r.ok){closeAIChatKnowledge();refreshAIChatContext()}}

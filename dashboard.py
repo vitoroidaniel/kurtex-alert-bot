@@ -444,6 +444,24 @@ def api_ai_knowledge_delete(item_id):
     new=[x for x in items if str(x.get("id"))!=item_id]
     _write_ai_knowledge(new); return jsonify({"ok":True})
 
+def _extract_ai_chat_file(f):
+    name=Path(f.filename or "attachment").name
+    ext=Path(name).suffix.lower(); raw=f.read(5_000_001)
+    if len(raw)>5_000_000: raise ValueError("File is too large (5 MB max)")
+    if ext in (".txt",".md",".csv",".json"):
+        try: text=raw.decode("utf-8")
+        except UnicodeDecodeError: text=raw.decode("latin-1")
+    elif ext==".pdf":
+        from pypdf import PdfReader
+        reader=PdfReader(io.BytesIO(raw)); text="\n".join((p.extract_text() or "") for p in reader.pages[:80])
+    elif ext==".docx":
+        from docx import Document
+        doc=Document(io.BytesIO(raw)); text="\n".join(p.text for p in doc.paragraphs)
+    else: raise ValueError("Supported files: PDF, DOCX, TXT, MD, CSV and JSON")
+    text=text.strip()
+    if not text: raise ValueError("No readable text was found in this file")
+    return name, text[:120000]
+
 AI_CHAT_FILE = DATA_DIR / "ai_chats.json"
 
 def _ai_user_key():
@@ -508,6 +526,43 @@ def api_ai_chat_item(chat_id):
     if title:chat["title"]=title[:80];chat["updated_at"]=_now_iso();_save_user_chats(chats)
     return jsonify(chat)
 
+@app.route("/api/ai/knowledge/options")
+def api_ai_knowledge_options():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    items=_read_ai_knowledge()
+    return jsonify({"items":[{"id":x.get("id"),"title":x.get("title"),"tags":x.get("tags") or [],"source":x.get("source")} for x in items]})
+
+@app.route("/api/ai/chats/<chat_id>/files",methods=["POST"])
+def api_ai_chat_file(chat_id):
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
+    if not chat:return jsonify({"error":"Chat not found"}),404
+    f=request.files.get("file")
+    if not f or not f.filename:return jsonify({"error":"File is required"}),400
+    try:name,content=_extract_ai_chat_file(f)
+    except Exception as e:return jsonify({"error":str(e)}),400
+    item={"id":uuid.uuid4().hex,"name":name,"content":content,"created_at":_now_iso()}
+    chat.setdefault("attachments",[]).append(item);chat["attachments"]=chat["attachments"][-12:];chat["updated_at"]=_now_iso();_save_user_chats(chats)
+    return jsonify({"id":item["id"],"name":name}),201
+
+@app.route("/api/ai/chats/<chat_id>/files/<file_id>",methods=["DELETE"])
+def api_ai_chat_file_delete(chat_id,file_id):
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
+    if not chat:return jsonify({"error":"Chat not found"}),404
+    chat["attachments"]=[x for x in (chat.get("attachments") or []) if str(x.get("id"))!=file_id];chat["updated_at"]=_now_iso();_save_user_chats(chats);return jsonify({"ok":True})
+
+@app.route("/api/ai/chats/<chat_id>/context",methods=["PATCH"])
+def api_ai_chat_context(chat_id):
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
+    if not chat:return jsonify({"error":"Chat not found"}),404
+    data=request.get_json(silent=True) or {}; valid={str(x.get("id")) for x in _read_ai_knowledge()};ids=[]
+    for x in data.get("knowledge_ids") or []:
+        x=str(x)
+        if x in valid and x not in ids:ids.append(x)
+    chat["knowledge_ids"]=ids[:20];chat["updated_at"]=_now_iso();_save_user_chats(chats);return jsonify({"ok":True,"knowledge_ids":chat["knowledge_ids"]})
+
 @app.route("/api/ai/status")
 def api_ai_status():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
@@ -527,6 +582,17 @@ def api_ai_chat():
     stage="context"
     try:
         ctx=_ai_context(message,18)
+        # Chat-scoped context: explicitly attached files and verified knowledge stay with this conversation.
+        attachments=[]
+        for a in (chat.get("attachments") or [])[:12]:
+            attachments.append({"name":_ai_clip(a.get("name"),180),"content":_ai_clip(a.get("content"),5000)})
+        selected_ids=set(str(x) for x in (chat.get("knowledge_ids") or []))
+        selected=[]
+        for k in _read_ai_knowledge():
+            if str(k.get("id")) in selected_ids:
+                selected.append({"id":k.get("id"),"title":_ai_clip(k.get("title"),160),"tags":(k.get("tags") or [])[:10],"content":_ai_clip(k.get("content"),5000)})
+        ctx["chat_attachments"]=attachments
+        ctx["chat_selected_knowledge"]=selected
         stage="prompt"
         messages=[{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"system","content":
           "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
