@@ -205,6 +205,11 @@ Rules:
 - If evidence is weak, say so. Better no match than an unrelated match.
 - Keep answers practical and concise for dispatch/maintenance agents.
 - Reply in the language used by the agent unless asked otherwise.
+- Never show internal Kurtex case IDs/UUIDs unless the agent explicitly asks for an ID.
+- When citing fleet history, prioritize useful operations fields: Driver / Group, Unit, Reported issue, Solved by, and Resolution.
+- Omit unavailable fields instead of writing "not provided", "unknown", or similar filler.
+- Do not pad a history answer with generic observations (for example, do not say that check-engine issues can occur on trucks).
+- If the agent asks for matching/history cases, answer with the matching case facts first. Ask diagnostic follow-up questions only when the agent is actually asking for diagnosis.
 """
 
 def _cf_ai(messages, max_tokens=700, temperature=0.2):
@@ -248,10 +253,21 @@ def _cf_ai(messages, max_tokens=700, temperature=0.2):
     return text.strip()
 
 def _ai_case_record(c):
-    return {"id":c.get("id") or "","driver":c.get("report_driver") or c.get("driver_name") or "",
-      "unit":c.get("unit_number") or "","type":(c.get("vehicle_type") or "").lower(),
-      "issue":c.get("issue_text") or c.get("description") or "","description":c.get("description") or "",
-      "notes":c.get("notes") or "","status":c.get("status") or "","opened":c.get("opened_at") or ""}
+    return {
+      "id":c.get("id") or "",
+      "driver":c.get("report_driver") or c.get("driver_name") or "",
+      "group":c.get("group_name") or c.get("group") or "",
+      "unit":c.get("unit_number") or "",
+      "type":(c.get("vehicle_type") or "").lower(),
+      "issue":c.get("issue_text") or c.get("description") or "",
+      "description":c.get("description") or "",
+      "notes":c.get("notes") or "",
+      "solved_by":c.get("closed_by_name") or c.get("closed_by") or c.get("resolved_by") or c.get("agent_name") or "",
+      "resolution":c.get("resolution") or c.get("solution") or c.get("close_notes") or c.get("closing_notes") or c.get("resolution_notes") or "",
+      "status":c.get("status") or "",
+      "opened":c.get("opened_at") or "",
+      "closed":c.get("closed_at") or ""
+    }
 
 def _ai_clip(value,limit):
     text=re.sub(r"\s+"," ",str(value or "")).strip()
@@ -274,9 +290,12 @@ def _ai_context(query="",limit=18):
     compact=[]
     for c in matched:
         r=_ai_case_record(c)
-        compact.append({"id":r["id"],"unit":r["unit"],"type":r["type"],"driver":r["driver"],
-          "issue":_ai_clip(r["issue"],420),"description":_ai_clip(r["description"],700),
-          "notes":_ai_clip(r["notes"],500),"status":r["status"],"opened":r["opened"]})
+        item={"unit":r["unit"],"type":r["type"],"driver":r["driver"],"group":r["group"],
+          "issue":_ai_clip(r["issue"],500),"description":_ai_clip(r["description"],700),
+          "notes":_ai_clip(r["notes"],650),"solved_by":r["solved_by"],
+          "resolution":_ai_clip(r["resolution"],900),"status":r["status"],
+          "opened":r["opened"],"closed":r["closed"]}
+        compact.append({k:v for k,v in item.items() if v not in ("",None,[])})
     notes=[]
     if "_read_knowledge" in globals():
         raw=_read_knowledge() or []
