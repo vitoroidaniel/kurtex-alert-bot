@@ -3867,3 +3867,128 @@ body[data-current-page="ai_training"] .ai-test-result{font-size:10.5px!important
  body[data-current-page="ai_training"] .ai-kb-list{grid-template-columns:1fr!important}
  body[data-current-page="ai_training"] .ai-training-card{padding:14px!important}
 }
+
+/* v97 — compact knowledge library list + preview modal */
+body[data-current-page="ai_training"] .ai-library-card{min-height:0!important}
+body[data-current-page="ai_training"] .ai-kb-list{display:flex!important;flex-direction:column!important;gap:6px!important}
+body[data-current-page="ai_training"] .ai-kb-item{
+ min-height:58px!important;padding:9px 10px!important;border-radius:9px!important;
+ display:block!important;background:var(--surface)!important
+}
+body[data-current-page="ai_training"] .ai-kb-item-top{align-items:center!important}
+body[data-current-page="ai_training"] .ai-kb-source{width:32px!important;height:32px!important;min-width:32px!important;border-radius:8px!important}
+body[data-current-page="ai_training"] .ai-kb-item-copy strong{font-size:11.5px!important}
+body[data-current-page="ai_training"] .ai-kb-item-copy small{font-size:8.5px!important}
+body[data-current-page="ai_training"] .ai-kb-item>p{display:none!important}
+body[data-current-page="ai_training"] .ai-kb-tags{margin:5px 0 0 42px!important;gap:4px!important}
+body[data-current-page="ai_training"] .ai-kb-tags span{font-size:7.5px!important;padding:2px 5px!important}
+body[data-current-page="ai_training"] .ai-kb-actions{gap:5px!important}
+body[data-current-page="ai_training"] .ai-kb-actions button{width:30px!important;height:30px!important;border-radius:7px!important}
+.ai-preview-modal .ai-edit-dialog{width:min(760px,calc(100vw - 36px))!important;max-height:min(720px,calc(100vh - 48px))!important}
+.ai-preview-modal .ai-edit-dialog header small{display:block;margin-top:4px;font-size:9px;color:var(--muted)}
+.ai-preview-content{padding:18px 20px 22px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:12.5px;line-height:1.65;color:var(--text);max-height:560px}
+
+/* v98 — tighter AI Assistant viewport, no page scroll/dead header space */
+body[data-current-page="ai_assistant"]{
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] .main{
+ height:100vh!important;
+ overflow:hidden!important;
+ padding-top:0!important;
+}
+body[data-current-page="ai_assistant"] .topbar{
+ height:42px!important;
+ min-height:42px!important;
+ margin:0 0 6px!important;
+ padding-top:0!important;
+ padding-bottom:0!important;
+}
+body[data-current-page="ai_assistant"] .header{
+ padding-top:4px!important;
+ padding-bottom:7px!important;
+ margin-bottom:8px!important;
+ min-height:0!important;
+}
+body[data-current-page="ai_assistant"] .header .eyebrow{
+ margin-bottom:3px!important;
+}
+body[data-current-page="ai_assistant"] #page-ai_assistant{
+ height:calc(100vh - 184px)!important;
+ min-height:0!important;
+ max-height:calc(100vh - 184px)!important;
+ overflow:hidden!important;
+ padding:0!important;
+ margin:0!important;
+}
+body[data-current-page="ai_assistant"] .ai-assistant-workspace{
+ width:calc(100% - 44px)!important;
+ height:100%!important;
+ max-height:100%!important;
+ margin:0 22px!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-layout{
+ height:100%!important;
+ max-height:100%!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar,
+body[data-current-page="ai_assistant"] .ai-page-chat-column,
+body[data-current-page="ai_assistant"] .ai-assistant-page-shell{
+ min-height:0!important;
+ max-height:100%!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-list,
+body[data-current-page="ai_assistant"] .ai-page-messages{
+ overflow-y:auto!important;
+ overscroll-behavior:contain!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-chatbar{
+ height:40px!important;
+ flex-basis:40px!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-quick,
+body[data-current-page="ai_assistant"] .ai-page-compose{
+ width:min(700px,calc(100% - 44px))!important;
+ max-width:700px!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-compose{
+ min-height:68px!important;
+ margin-top:6px!important;
+ margin-bottom:8px!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-compose textarea{
+ min-height:44px!important;
+ max-height:90px!important;
+}
+@media(min-width:1500px){
+ body[data-current-page="ai_assistant"] .ai-page-quick,
+ body[data-current-page="ai_assistant"] .ai-page-compose{
+  width:min(740px,calc(100% - 48px))!important;
+  max-width:740px!important;
+ }
+}
+
+/* v99 — readable but compact AI Assistant conversation typography */
+body[data-current-page="ai_assistant"] .ai-page-msg,
+body[data-current-page="ai_assistant"] .ai-page-msg p,
+body[data-current-page="ai_assistant"] .ai-page-msg li{
+ font-size:12px!important;
+ line-height:1.55!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-msg h1{font-size:16px!important;line-height:1.35!important}
+body[data-current-page="ai_assistant"] .ai-page-msg h2{font-size:14.5px!important;line-height:1.4!important}
+body[data-current-page="ai_assistant"] .ai-page-msg h3,
+body[data-current-page="ai_assistant"] .ai-page-msg h4{
+ font-size:13px!important;line-height:1.4!important
+}
+body[data-current-page="ai_assistant"] .ai-page-msg strong{font-size:inherit!important}
+body[data-current-page="ai_assistant"] .ai-page-msg ul,
+body[data-current-page="ai_assistant"] .ai-page-msg ol{margin:6px 0 8px 18px!important}
+body[data-current-page="ai_assistant"] .ai-page-msg p{margin:5px 0!important}
+body[data-current-page="ai_assistant"] .ai-page-msg{
+ max-width:min(820px,88%)!important;
+ padding:11px 13px!important;
+}
