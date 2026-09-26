@@ -116,12 +116,19 @@
   <section class="ai-assistant-workspace">
     <div class="ai-page-layout">
       <aside id="ai-page-sidebar" class="ai-page-sidebar">
-        <div class="ai-page-sidebar-head"><button type="button" class="ai-side-toggle" onclick="toggleAIPageSidebar()" title="Hide chat history"><i class="ph ph-sidebar-simple"></i></button><button type="button" class="ai-side-new" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i><span>New chat</span></button></div>
-        <div class="ai-page-side-label">Chats</div>
+        <div class="ai-page-sidebar-head ai-page-sidebar-head-v110">
+  <strong class="ai-side-brand">Kurtex AI</strong>
+  <div class="ai-side-head-actions">
+    <button type="button" class="ai-side-new-icon" onclick="newKurtexAIPageChat()" title="New chat" aria-label="New chat"><i class="ph ph-note-pencil"></i></button>
+    <button type="button" class="ai-side-toggle" onclick="toggleAIPageSidebar()" title="Collapse sidebar" aria-label="Collapse sidebar"><i class="ph ph-sidebar-simple"></i></button>
+  </div>
+</div>
+<button type="button" class="ai-side-new-row" onclick="newKurtexAIPageChat()"><i class="ph ph-note-pencil"></i><span>New chat</span></button>
+<div class="ai-page-side-label">Chats</div>
         <div id="ai-page-sidebar-list" class="ai-page-sidebar-list"><div class="ai-history-empty">Loading conversations...</div></div>
       </aside>
       <div class="ai-page-chat-column">
-        <div class="ai-page-chatbar"><button type="button" class="ai-side-show" onclick="toggleAIPageSidebar(true)" title="Show chat history"><i class="ph ph-sidebar-simple"></i></button><strong>Kurtex AI</strong><button type="button" onclick="newKurtexAIPageChat()" title="New chat"><i class="ph ph-plus"></i></button></div>
+        <div class="ai-page-chatbar"><button type="button" class="ai-side-show" onclick="toggleAIPageSidebar(true)" title="Expand sidebar"><i class="ph ph-sidebar-simple"></i></button><strong>Kurtex AI</strong><button type="button" onclick="newKurtexAIPageChat()" title="New chat"><i class="ph ph-plus"></i></button></div>
         <div class="ai-assistant-page-shell">
       <div id="ai-page-messages" class="ai-page-messages"><div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div></div>
       <div class="ai-page-quick"><button onclick="aiPageQuick('Find similar Kurtex cases for the issue I am viewing.')">Similar cases</button><button onclick="aiPageQuick('Help me diagnose this maintenance issue. Ask me only for information you actually need.')">Diagnose issue</button></div>
@@ -265,7 +272,10 @@
         <form id="ai-kb-form" class="ai-kb-form" onsubmit="saveAIKnowledge(event)">
           <label><span>Title</span><input id="ai-kb-title" placeholder="e.g. Cascadia air system notes" required></label>
           <label class="ai-field-wide"><span>Maintenance knowledge</span><textarea id="ai-kb-content" rows="6" placeholder="Paste approved mechanic knowledge, diagnostic notes, procedures, terminology..." required></textarea></label>
-          <label><span>Tags <em>optional</em></span><input id="ai-kb-tags" placeholder="air system, cascadia, brakes"></label>
+          <label><span>Tags <em>optional</em></span><input id="ai-kb-tags" placeholder="air system, cascadia, brakes"></label><div class="ai-tag-color-field"><span>Tag color</span><div class="ai-tag-color-picker" data-target="ai-kb-tag-color">
+<input id="ai-kb-tag-color" type="hidden" value="blue">
+<button type="button" class="ai-color-swatch red" data-color="red" title="Red"></button><button type="button" class="ai-color-swatch orange" data-color="orange" title="Orange"></button><button type="button" class="ai-color-swatch yellow" data-color="yellow" title="Yellow"></button><button type="button" class="ai-color-swatch green" data-color="green" title="Green"></button><button type="button" class="ai-color-swatch blue selected" data-color="blue" title="Blue"></button><button type="button" class="ai-color-swatch purple" data-color="purple" title="Purple"></button><button type="button" class="ai-color-swatch teal" data-color="teal" title="Teal"></button><button type="button" class="ai-color-swatch gray" data-color="gray" title="Gray"></button>
+</div><small>Selected color applies to the tags in this entry.</small></div>
           <button class="ai-primary-btn" type="submit"><i class="ph ph-check"></i> Add to knowledge</button>
         </form><div id="ai-kb-status" class="ai-kb-status" aria-live="polite"></div>
       </section>
@@ -307,7 +317,10 @@
 </div>
 
 {% include 'partials/modals.html' %}
-<button id="kurtex-ai-fab" class="kurtex-ai-fab" type="button" onclick="toggleKurtexAI()" aria-label="Open Kurtex AI"><i class="ph ph-sparkle"></i><span>Kurtex AI</span></button><div id="ai-edit-modal" class="ai-edit-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgeEdit()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-edit-heading"><header><div><span class="eyebrow">APPROVED KNOWLEDGE</span><h3 id="ai-edit-heading">Edit knowledge</h3></div><button type="button" onclick="closeAIKnowledgeEdit()"><i class="ph ph-x"></i></button></header><form onsubmit="updateAIKnowledge(event)"><input id="ai-edit-id" type="hidden"><label><span>Title</span><input id="ai-edit-title" required></label><label><span>Maintenance knowledge</span><textarea id="ai-edit-content" rows="9" required></textarea></label><label><span>Tags</span><input id="ai-edit-tags" placeholder="comma separated"></label><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
+<button id="kurtex-ai-fab" class="kurtex-ai-fab" type="button" onclick="toggleKurtexAI()" aria-label="Open Kurtex AI"><i class="ph ph-sparkle"></i><span>Kurtex AI</span></button><div id="ai-edit-modal" class="ai-edit-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgeEdit()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-edit-heading"><header><div><span class="eyebrow">APPROVED KNOWLEDGE</span><h3 id="ai-edit-heading">Edit knowledge</h3></div><button type="button" onclick="closeAIKnowledgeEdit()"><i class="ph ph-x"></i></button></header><form onsubmit="updateAIKnowledge(event)"><input id="ai-edit-id" type="hidden"><label><span>Title</span><input id="ai-edit-title" required></label><label><span>Maintenance knowledge</span><textarea id="ai-edit-content" rows="9" required></textarea></label><label><span>Tags</span><input id="ai-edit-tags" placeholder="comma separated"></label><div class="ai-tag-color-field"><span>Tag color</span><div class="ai-tag-color-picker" data-target="ai-edit-tag-color">
+<input id="ai-edit-tag-color" type="hidden" value="blue">
+<button type="button" class="ai-color-swatch red" data-color="red" title="Red"></button><button type="button" class="ai-color-swatch orange" data-color="orange" title="Orange"></button><button type="button" class="ai-color-swatch yellow" data-color="yellow" title="Yellow"></button><button type="button" class="ai-color-swatch green" data-color="green" title="Green"></button><button type="button" class="ai-color-swatch blue selected" data-color="blue" title="Blue"></button><button type="button" class="ai-color-swatch purple" data-color="purple" title="Purple"></button><button type="button" class="ai-color-swatch teal" data-color="teal" title="Teal"></button><button type="button" class="ai-color-swatch gray" data-color="gray" title="Gray"></button>
+</div><small>Selected color applies to the tags in this entry.</small></div><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <div id="ai-preview-modal" class="ai-edit-modal ai-preview-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgePreview()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true"><header><div><span class="eyebrow">KNOWLEDGE PREVIEW</span><h3 id="ai-preview-title">Maintenance knowledge</h3><small id="ai-preview-meta"></small></div><button type="button" onclick="closeAIKnowledgePreview()"><i class="ph ph-x"></i></button></header><div id="ai-preview-content" class="ai-preview-content"></div></section></div>
 <aside id="kurtex-ai-panel" class="kurtex-ai-panel" aria-hidden="true">
 <header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div><strong id="kurtex-ai-title">Kurtex AI</strong><small><span class="ai-online-dot"></span> Maintenance assistant</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" class="ai-expand-btn" onclick="openKurtexAIPageChat()" title="Open AI Assistant"><i class="ph ph-arrows-out"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>

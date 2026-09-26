@@ -401,7 +401,8 @@ def api_ai_knowledge():
     if not content:return jsonify({"error":"Knowledge content is required"}),400
     now=_now_iso() if "_now_iso" in globals() else datetime.now().astimezone().isoformat(timespec="seconds")
     item={"id":uuid.uuid4().hex,"title":str(data.get("title") or "Maintenance knowledge")[:120],
-          "content":content,"tags":[str(x)[:50] for x in (data.get("tags") or []) if str(x).strip()][:12],
+          "content":content, "tags":[str(x)[:50] for x in (data.get("tags") or []) if str(x).strip()][:12],
+          "tag_colors":{str(k)[:50]:str(v) for k,v in (data.get("tag_colors") or {}).items() if str(v) in {"red","orange","yellow","green","blue","purple","teal","gray"}},
           "source":"manual","created_at":now,"updated_at":now,"created_by":_ai_user_key() if "_ai_user_key" in globals() else "admin"}
     items.append(item); _write_ai_knowledge(items); return jsonify(item),201
 
@@ -437,6 +438,7 @@ def api_ai_knowledge_delete(item_id):
         item["title"]=str(data.get("title") if "title" in data else item.get("title") or "Maintenance knowledge").strip()[:120]
         item["content"]=content
         if "tags" in data:item["tags"]=[str(x).strip()[:50] for x in (data.get("tags") or []) if str(x).strip()][:12]
+        if "tag_colors" in data:item["tag_colors"]={str(k)[:50]:str(v) for k,v in (data.get("tag_colors") or {}).items() if str(v) in {"red","orange","yellow","green","blue","purple","teal","gray"}}
         item["updated_at"]=_now_iso()
         _write_ai_knowledge(items);return jsonify(item)
     new=[x for x in items if str(x.get("id"))!=item_id]
