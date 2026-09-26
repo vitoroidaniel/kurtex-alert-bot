@@ -2,7 +2,7 @@
 dashboard.py — Kurtex Alert Bot Web Dashboard
 Routes and read-only API. Presentation lives in templates/ and static/.
 """
-import csv, hashlib, hmac, io, json, logging, os, re, secrets, time
+import csv, hashlib, hmac, io, json, logging, os, re, secrets, time, urllib.parse, urllib.request
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -212,6 +212,60 @@ def logout():
 
 
 # ── API ───────────────────────────────────────────────────────────────────────
+
+
+_PART_IMAGE_CACHE = {}
+
+def _commons_part_image(query: str):
+    """Find a representative real-world part photo on Wikimedia Commons.
+
+    Results are cached in-process to keep the Parts Manual fast. This is a
+    reference-photo lookup, not an exact-fitment claim.
+    """
+    query = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (query or "")).strip()[:120]
+    if not query:
+        return None
+    key = query.lower()
+    cached = _PART_IMAGE_CACHE.get(key)
+    if cached and time.time() - cached[0] < 86400:
+        return cached[1]
+    params = {
+        "action": "query", "format": "json", "generator": "search",
+        "gsrsearch": query, "gsrnamespace": "6", "gsrlimit": "8",
+        "prop": "imageinfo", "iiprop": "url|mime", "iiurlwidth": "1400",
+        "origin": "*",
+    }
+    url = "https://commons.wikimedia.org/w/api.php?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "KurtexDashboard/1.0 (parts reference image lookup)"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        pages = list((data.get("query") or {}).get("pages", {}).values())
+        pages.sort(key=lambda x: x.get("index", 9999))
+        for page in pages:
+            info = (page.get("imageinfo") or [{}])[0]
+            mime = info.get("mime", "")
+            if mime not in {"image/jpeg", "image/png", "image/webp"}:
+                continue
+            image_url = info.get("thumburl") or info.get("url")
+            source_url = info.get("descriptionurl")
+            if image_url and source_url:
+                result = {"image_url": image_url, "source_url": source_url, "title": page.get("title", "").replace("File:", "")}
+                _PART_IMAGE_CACHE[key] = (time.time(), result)
+                return result
+    except Exception as exc:
+        logger.info("Commons part image lookup failed for %r: %s", query, exc)
+    _PART_IMAGE_CACHE[key] = (time.time(), None)
+    return None
+
+@app.route("/api/part_image")
+def api_part_image():
+    q = (request.args.get("q") or "").strip()
+    if not q:
+        return jsonify({"ok": False, "error": "Missing part query"}), 400
+    # Heavy-duty context improves results for generic names such as battery or starter.
+    result = _commons_part_image("American heavy duty semi truck " + q) or _commons_part_image(q)
+    return jsonify({"ok": bool(result), "result": result})
 
 @app.route("/api/stats")
 def api_stats():

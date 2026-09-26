@@ -2119,3 +2119,31 @@ button, input, select, textarea { font: inherit; }
 @media(max-width:900px){.parts-intro{align-items:flex-start}.parts-layout{grid-template-columns:1fr}.parts-index{max-height:280px}.part-detail{min-height:0}}
 @media(max-width:560px){.parts-intro{flex-direction:column;gap:8px}.parts-db-stat{text-align:left}.parts-common{margin-left:-2px;margin-right:-2px}.part-quick-summary{grid-template-columns:1fr 1fr}.part-quick-summary>div:last-child{grid-column:1/-1}.parts-intro h2{font-size:19px}}
 .part-visual-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:18px 0 10px}.part-visual-head>div{display:flex;flex-direction:column;gap:3px}.part-visual-head strong{font-size:17px;color:var(--text,#24262a)}.part-visual-head small{max-width:520px;text-align:right;color:var(--muted,#73767c);font-size:12px;line-height:1.45}.part-diagram{background:#f7f8f9;border:1px solid #e1e4e7;border-radius:18px;overflow:hidden;padding:10px}.part-diagram svg{display:block;width:100%;height:auto;max-height:360px}@media(max-width:640px){.part-visual-head{align-items:flex-start;flex-direction:column}.part-visual-head small{text-align:left}.part-diagram{padding:4px}}
+
+/* v21 Parts Manual focus mode - remove operations chrome and give reference content the canvas */
+body[data-current-page="parts_manual"] .topbar,
+body[data-current-page="parts_manual"] .page-heading,
+body[data-current-page="parts_manual"] .mobile-overview-controls{display:none!important}
+body[data-current-page="parts_manual"] .main{padding-top:22px!important;padding-left:28px!important;padding-right:28px!important}
+body[data-current-page="parts_manual"] #page-parts_manual{max-width:none;width:100%}
+body[data-current-page="parts_manual"] .parts-intro{margin:0 0 18px;padding:0}
+body[data-current-page="parts_manual"] .parts-intro h2{font-size:28px;letter-spacing:-.035em}
+body[data-current-page="parts_manual"] .parts-intro p{font-size:12px;max-width:760px}
+body[data-current-page="parts_manual"] .parts-common{padding:14px 16px}
+body[data-current-page="parts_manual"] .parts-toolbar{position:sticky;top:0;z-index:35;background:var(--bg);padding:8px 0 12px;margin-bottom:4px}
+body[data-current-page="parts_manual"] .parts-layout{grid-template-columns:minmax(220px,.38fr) minmax(0,2.25fr);gap:16px}
+body[data-current-page="parts_manual"] .part-detail{padding:22px;min-height:650px}
+body[data-current-page="parts_manual"] .part-diagram{max-width:980px}
+body[data-current-page="parts_manual"] .part-diagram svg{max-height:440px}
+@media(max-width:900px){
+ body[data-current-page="parts_manual"] .main{padding:14px 14px 28px!important}
+ body[data-current-page="parts_manual"] .parts-toolbar{top:0}
+ body[data-current-page="parts_manual"] .parts-layout{grid-template-columns:1fr}
+ body[data-current-page="parts_manual"] .part-detail{padding:16px;min-height:0}
+}
+@media(max-width:560px){
+ body[data-current-page="parts_manual"] .main{padding:10px 10px 24px!important}
+ body[data-current-page="parts_manual"] .parts-intro h2{font-size:23px}
+}
+/* v22 - real parts photography */
+.part-photo{margin:0;background:#f6f7f8;border:1px solid #e1e4e7;border-radius:18px;overflow:hidden}.part-photo>a{display:flex;align-items:center;justify-content:center;min-height:360px;max-height:560px;background:#eef0f2}.part-photo img{display:block;width:100%;height:100%;max-height:560px;object-fit:contain;background:#eef0f2}.part-photo figcaption{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 14px;border-top:1px solid #e1e4e7;background:#fff;color:var(--muted,#73767c);font-size:12px}.part-photo figcaption span,.part-photo figcaption a{display:flex;align-items:center;gap:6px}.part-photo figcaption a{color:var(--text,#24262a);font-weight:650;text-decoration:none}.part-photo figcaption a:hover{text-decoration:underline}.part-diagram{display:none!important}@media(max-width:640px){.part-photo>a{min-height:230px;max-height:390px}.part-photo img{max-height:390px}.part-photo figcaption{align-items:flex-start;flex-direction:column}}

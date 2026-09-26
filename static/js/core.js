@@ -152,6 +152,7 @@ function showPage(page) {
           (titles[page] || page).toLowerCase() +
           " and case history.";
   currentPage = page;
+  document.body.setAttribute("data-current-page", page);
   preferences.set("kurtex-page", page);
   refresh(true);
 }
