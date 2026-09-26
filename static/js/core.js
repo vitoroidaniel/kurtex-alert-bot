@@ -19,7 +19,6 @@ var pages = [
   "comparison",
   "fleet",
   "fleet_intel",
-  "truck_lab",
   "parts_manual",
   "my_profile",
   "agents",
@@ -33,7 +32,6 @@ var titles = {
   comparison: "Week Comparison",
   fleet: "Fleet Stats",
   fleet_intel: "Fleet Intelligence",
-  truck_lab: "Truck 3D Lab",
   parts_manual: "Parts Manual",
   my_profile: "My Profile",
   agents: "Agent Profiles",
@@ -144,8 +142,6 @@ function showPage(page) {
       ? "Today’s activity, outstanding cases, and team performance."
       : page === "cases"
         ? "Find cases and review progress. Assign and resolve cases in Telegram."
-        : page === "truck_lab"
-          ? "Explore real 3D truck assets, systems, faults, and quick diagnostic guidance."
         : page === "parts_manual"
           ? "Look up truck and reefer parts, how they work, common symptoms, checks, and source material."
         : "Review " +

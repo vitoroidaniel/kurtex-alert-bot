@@ -13,3 +13,9 @@ Deploy this complete project using the existing workflow. No new production depe
 
 ## Validation
 JavaScript syntax and Python compilation passed. The authenticated Flask template rendered successfully. DOM integration checks with synthetic data passed for polling, preserved input identity/focus/caret, layered dialogs, saved layout settings, pagination, API error recovery, rapid tab navigation, and keyed node reconciliation. Browser screenshot and physical drag/scroll checks could not run because the browser download was unavailable in the test environment. Production data and deployment were not accessed.
+
+## v27
+- Removed Truck 3D Lab navigation/page.
+- Reworked Parts Manual into the primary mechanical reference workspace.
+- Preserved Serper live real-part photos and backend-only API key.
+- Improved desktop/mobile hierarchy, photo gallery, part index and troubleshooting cards.

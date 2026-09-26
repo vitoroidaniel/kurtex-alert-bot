@@ -2156,3 +2156,35 @@ body[data-current-page="parts_manual"] .part-diagram svg{max-height:440px}
 .truck-viewer-pro{min-height:500px;background:#111315}.truck-viewer-pro iframe{background:#111315}.truck-issue-detail.compact{min-height:57px}.truck-issue-pin{min-width:26px;width:26px;height:26px;padding:0;justify-content:center;border-radius:50%;font-size:10px}.truck-issue-pin span{display:block}.truck-issue-pin:hover{transform:translate(-50%,-50%) scale(1.12)}
 @media(max-width:1100px){.truck-system-tabs{width:100%}.truck-lab-search{flex-basis:100%}.truck-viewer-pro{min-height:420px}}
 @media(max-width:560px){.truck-system-tabs{grid-template-columns:1fr 1fr}.truck-viewer-pro{min-height:310px}.truck-workspace-note{font-size:10px}}
+
+/* v27 Parts Manual workspace — content-first, no 3D dependency */
+body[data-current-page="parts_manual"] .main{padding:24px 30px 34px!important}
+body[data-current-page="parts_manual"] #page-parts_manual{max-width:1560px;margin:0 auto}
+.parts-manual-header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin:0 0 18px;padding:0 2px}
+.parts-manual-header h2{margin:5px 0 6px;font-size:30px;line-height:1.08;letter-spacing:-.04em;color:var(--text)}
+.parts-manual-header p{margin:0;max-width:780px;color:var(--muted);font-size:12px;line-height:1.55}
+.parts-db-stat{padding:10px 13px;border:1px solid var(--border);border-radius:12px;background:var(--surface);min-width:108px;text-align:center!important}
+.parts-db-stat strong{font-size:22px}.parts-db-stat span{display:block;margin-top:3px}
+.parts-common{padding:13px 14px;margin-bottom:14px;border-radius:14px}
+.parts-section-title{margin-bottom:10px}.parts-section-title>div{display:flex;align-items:baseline;gap:8px}.parts-section-title>div span{font-size:12px}.parts-section-title>div small{font-size:9px;color:var(--muted)}
+.parts-common-list button{background:transparent;border-radius:10px;padding:8px 11px}.parts-common-list button:hover{background:var(--surface2)}
+body[data-current-page="parts_manual"] .parts-toolbar{top:0;padding:9px 0 13px;background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(10px);gap:9px}
+.parts-search{border-radius:12px;min-height:46px;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.025)}
+.parts-search i{font-size:17px}.parts-search input{font-size:12px}
+.parts-cats button{padding:7px 10px;border-radius:9px}.parts-cats button.active{box-shadow:inset 0 -2px 0 var(--accent)}
+body[data-current-page="parts_manual"] .parts-layout{grid-template-columns:285px minmax(0,1fr);gap:14px;align-items:start}
+.parts-index{position:sticky;top:70px;max-height:calc(100vh - 100px);border-radius:14px;background:var(--surface)}
+.parts-index-head{position:sticky;top:0;z-index:2;background:var(--surface);padding:13px 14px}
+.part-row{grid-template-columns:30px minmax(0,1fr) 14px;padding:12px 13px}.part-row>i:first-child{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:var(--surface2);font-size:16px}.part-row strong{font-size:11px}.part-row small{font-size:9px;line-height:1.35}.part-row.active{background:var(--surface2);box-shadow:inset 3px 0 0 var(--accent)}
+body[data-current-page="parts_manual"] .part-detail{padding:0;min-height:700px;border-radius:14px;overflow:hidden}
+.part-hero{padding:24px 26px 21px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--surface2))}
+.part-hero-copy{max-width:920px}.part-meta{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.part-meta span{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:9px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;background:var(--surface)}
+.part-hero h2{margin:0 0 7px;font-size:27px;letter-spacing:-.035em}.part-hero p{margin:0;font-size:12px;line-height:1.65;max-width:880px}
+.part-section{padding:21px 24px;border-bottom:1px solid var(--border)}.part-section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:12px}.part-section-head h3{margin:3px 0 0;font-size:16px;letter-spacing:-.02em}.part-section-head small{font-size:10px;color:var(--muted);text-align:right}
+.part-photo-section{background:var(--surface)}.part-live-photos{padding:10px;border-radius:13px;background:var(--surface2)}.part-photo-status{min-height:30px;font-size:11px;padding:0 2px}.part-photo-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}.part-live-photo{border-radius:11px}.part-live-photo>a{height:205px}.part-live-photo figcaption{display:block;padding:8px 9px}.part-live-photo figcaption span{display:block;font-size:9px;margin-bottom:5px}.part-live-photo figcaption a{font-size:9px}
+.part-info-grid{gap:10px}.part-info-grid article{position:relative;padding:15px 15px 15px 44px;border-radius:11px;background:var(--surface2)}.part-info-grid article.part-fix{grid-column:1/-1;border-left:3px solid var(--accent)}.part-card-icon{position:absolute;left:13px;top:14px;width:23px;height:23px;border-radius:7px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border);font-size:13px}.part-info-grid p,.part-info-grid li{font-size:11px;line-height:1.6}.part-info-grid ul,.part-info-grid ol{margin-top:7px}
+.part-source{margin:16px 24px 22px;padding:12px 13px;border-radius:11px}.part-source>i:first-child{font-size:18px}.part-source-arrow{margin-left:auto;color:var(--muted)}.part-source strong{font-size:11px}.part-source small{font-size:9px}
+.parts-disclaimer{border:0;background:transparent;margin-top:10px;padding:8px 4px}
+@media(max-width:1180px){.part-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.part-live-photo>a{height:240px}}
+@media(max-width:900px){body[data-current-page="parts_manual"] .main{padding:14px 14px 28px!important}.parts-manual-header{align-items:flex-start}.parts-manual-header h2{font-size:26px}body[data-current-page="parts_manual"] .parts-layout{grid-template-columns:1fr}.parts-index{position:relative;top:auto;max-height:300px}.part-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){body[data-current-page="parts_manual"] .main{padding:11px 10px 24px!important}.parts-manual-header{flex-direction:column;gap:10px}.parts-manual-header h2{font-size:24px}.parts-db-stat{display:flex;align-items:center;gap:7px;padding:7px 10px;text-align:left!important}.parts-db-stat strong{font-size:18px}.parts-db-stat span{margin:0}.parts-section-title>div small{display:none}.part-hero{padding:18px 16px}.part-hero h2{font-size:23px}.part-section{padding:17px 14px}.part-section-head{align-items:flex-start;flex-direction:column;gap:4px}.part-section-head small{text-align:left}.part-photo-grid{grid-template-columns:1fr}.part-live-photo>a{height:250px}.part-info-grid{grid-template-columns:1fr}.part-info-grid article.part-fix{grid-column:auto}.part-source{margin:14px 14px 18px}.parts-common{padding:11px}.parts-toolbar{padding-top:5px!important}}
