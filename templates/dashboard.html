@@ -221,50 +221,54 @@
   <!-- Truck 3D Diagnostics Lab -->
   <div class="page" id="page-truck_lab">
     <div class="truck-lab-toolbar">
-      <div class="truck-lab-tabs" role="tablist" aria-label="3D asset views">
-        <button class="truck-lab-tab active" data-model="tractor" onclick="setTruckLabModel('tractor',this)"><i class="ph ph-truck"></i> Tractor</button>
-        <button class="truck-lab-tab" data-model="reefer" onclick="setTruckLabModel('reefer',this)"><i class="ph ph-package"></i> Reefer</button>
+      <div class="truck-lab-tabs truck-system-tabs" role="tablist" aria-label="Mechanical 3D views">
+        <button class="truck-lab-tab active" data-model="tractor" onclick="setTruckLabModel('tractor',this)"><i class="ph ph-truck"></i> Exterior</button>
+        <button class="truck-lab-tab" data-model="suspension" onclick="setTruckLabModel('suspension',this)"><i class="ph ph-gear"></i> Axle / Suspension</button>
         <button class="truck-lab-tab" data-model="engine" onclick="setTruckLabModel('engine',this)"><i class="ph ph-engine"></i> Engine</button>
-        <button class="truck-lab-tab" data-model="hood" onclick="setTruckLabModel('hood',this)"><i class="ph ph-wrench"></i> Open hood</button>
+        <button class="truck-lab-tab" data-model="hood" onclick="setTruckLabModel('hood',this)"><i class="ph ph-wrench"></i> Engine Bay</button>
+        <button class="truck-lab-tab" data-model="trailerchassis" onclick="setTruckLabModel('trailerchassis',this)"><i class="ph ph-frame-corners"></i> Trailer Chassis</button>
+        <button class="truck-lab-tab" data-model="reefer" onclick="setTruckLabModel('reefer',this)"><i class="ph ph-snowflake"></i> Reefer</button>
       </div>
-      <div class="truck-lab-search"><i class="ph ph-magnifying-glass"></i><input id="truck-lab-search" type="search" placeholder="Search air bag, low air, engine, reefer..." oninput="filterTruckGuide(this.value)"></div>
+      <div class="truck-lab-search"><i class="ph ph-magnifying-glass"></i><input id="truck-lab-search" type="search" placeholder="Search system or symptom..." oninput="filterTruckGuide(this.value)"></div>
     </div>
+
+    <div class="truck-workspace-note"><i class="ph ph-info"></i><span><strong>Mechanical workspace</strong> — switch views instead of trying to diagnose everything from one complete truck. Use 3D for location/orientation, then open the Parts Manual for real photos and troubleshooting.</span></div>
 
     <div class="truck-lab-grid">
       <section class="truck-viewer-card">
-        <div class="truck-viewer-head"><div><strong id="truck-model-title">American semi tractor</strong><span id="truck-model-note">Real CC-licensed web 3D asset · drag to rotate, scroll/pinch to zoom</span></div><a id="truck-model-source" class="truck-source-link" href="https://sketchfab.com/3d-models/american-semi-truck-11f3b663616a4ff5956a7d86a74c009a" target="_blank" rel="noopener"><i class="ph ph-arrow-square-out"></i> Source / license</a></div>
+        <div class="truck-viewer-head"><div><div class="truck-model-meta"><span class="truck-detail-badge" id="truck-model-badge">1.7M tris</span><span class="eyebrow">3D REFERENCE</span></div><strong id="truck-model-title">Detailed American semi tractor</strong><span id="truck-model-note">High-detail 1.7M-triangle American tractor · exterior orientation and component location</span></div><a id="truck-model-source" class="truck-source-link" href="https://sketchfab.com/3d-models/amarican-semi-truck-6dbb0eaf08ba4fff94d87fb4ceaa83c7" target="_blank" rel="noopener"><i class="ph ph-arrow-square-out"></i> Source / license</a></div>
         <div class="truck-issue-controls">
-          <label class="truck-issue-switch"><input id="truck-issues-toggle" type="checkbox" checked onchange="toggleTruckIssues(this.checked)"><span></span> Common issues</label>
-          <div class="truck-issue-filters" id="truck-issue-filters">
+          <label class="truck-issue-switch"><input id="truck-issues-toggle" type="checkbox" onchange="toggleTruckIssues(this.checked)"><span></span> Show issue locations</label>
+          <div class="truck-issue-filters disabled" id="truck-issue-filters">
             <button class="active" data-issue-filter="all" onclick="filterTruckIssues('all',this)">All</button><button data-issue-filter="engine" onclick="filterTruckIssues('engine',this)">Engine</button><button data-issue-filter="air" onclick="filterTruckIssues('air',this)">Air</button><button data-issue-filter="brakes" onclick="filterTruckIssues('brakes',this)">Brakes</button><button data-issue-filter="suspension" onclick="filterTruckIssues('suspension',this)">Suspension</button><button data-issue-filter="electrical" onclick="filterTruckIssues('electrical',this)">Electrical</button><button data-issue-filter="reefer" onclick="filterTruckIssues('reefer',this)">Reefer</button>
           </div>
         </div>
-        <div class="truck-viewer-shell">
-          <iframe id="truck-model-frame" title="Interactive American semi tractor 3D model" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen src="https://sketchfab.com/models/11f3b663616a4ff5956a7d86a74c009a/embed?autostart=1&ui_theme=dark&ui_infos=0&ui_watermark=0"></iframe>
-          <div class="truck-issue-layer" id="truck-issue-layer" aria-label="Common issue locations">
-            <button class="truck-issue-pin sev-high" data-cat="engine" data-models="tractor hood engine" style="--x:28%;--y:47%" onclick="openTruckIssue('overheat')"><i class="ph ph-thermometer-hot"></i><span>Overheating</span></button>
-            <button class="truck-issue-pin sev-med" data-cat="electrical" data-models="tractor hood" style="--x:20%;--y:68%" onclick="openTruckIssue('nostart')"><i class="ph ph-battery-warning"></i><span>No start</span></button>
-            <button class="truck-issue-pin sev-high" data-cat="air brakes" data-models="tractor" style="--x:62%;--y:69%" onclick="openTruckIssue('lowair')"><i class="ph ph-warning"></i><span>Low air</span></button>
-            <button class="truck-issue-pin sev-med" data-cat="suspension air" data-models="tractor reefer" style="--x:72%;--y:75%" onclick="openTruckIssue('airbag')"><i class="ph ph-waves"></i><span>Air bag leak</span></button>
-            <button class="truck-issue-pin sev-med" data-cat="brakes" data-models="tractor reefer" style="--x:82%;--y:72%" onclick="openTruckIssue('brakeheat')"><i class="ph ph-disc"></i><span>Brake heat</span></button>
-            <button class="truck-issue-pin sev-med" data-cat="reefer" data-models="reefer" style="--x:17%;--y:31%" onclick="openTruckIssue('reefercool')"><i class="ph ph-snowflake"></i><span>Not cooling</span></button>
+        <div class="truck-viewer-shell truck-viewer-pro">
+          <iframe id="truck-model-frame" title="Interactive detailed American semi tractor 3D model" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen src="https://sketchfab.com/models/6dbb0eaf08ba4fff94d87fb4ceaa83c7/embed?autostart=1&ui_theme=dark&ui_infos=0&ui_watermark=0"></iframe>
+          <div class="truck-issue-layer off" id="truck-issue-layer" aria-label="Issue locations">
+            <button class="truck-issue-pin sev-high" data-cat="engine" data-models="tractor hood engine" style="--x:30%;--y:50%" onclick="openTruckIssue('overheat')"><span>1</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="electrical" data-models="tractor hood" style="--x:24%;--y:64%" onclick="openTruckIssue('nostart')"><span>2</span></button>
+            <button class="truck-issue-pin sev-high" data-cat="air brakes" data-models="tractor suspension" style="--x:66%;--y:70%" onclick="openTruckIssue('lowair')"><span>3</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="suspension air" data-models="tractor suspension trailerchassis reefer" style="--x:73%;--y:76%" onclick="openTruckIssue('airbag')"><span>4</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="brakes" data-models="tractor suspension trailerchassis reefer" style="--x:82%;--y:73%" onclick="openTruckIssue('brakeheat')"><span>5</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="reefer" data-models="reefer" style="--x:17%;--y:31%" onclick="openTruckIssue('reefercool')"><span>6</span></button>
           </div>
         </div>
-        <div class="truck-issue-detail" id="truck-issue-detail"><i class="ph ph-info"></i><div><strong>Select an issue marker</strong><span>Markers are a location guide over the selected 3D asset. Rotate the model for inspection, then use the linked manual for diagnosis.</span></div></div>
-        <div class="truck-viewer-help"><span><i class="ph ph-cursor-click"></i> Drag: rotate</span><span><i class="ph ph-magnifying-glass-plus"></i> Wheel/pinch: zoom</span><span><i class="ph ph-arrows-out"></i> Viewer controls: pan/fullscreen</span></div>
+        <div class="truck-issue-detail compact" id="truck-issue-detail"><i class="ph ph-cursor-click"></i><div><strong>Issues are hidden by default</strong><span>Turn on Show issue locations when needed. Markers stay small so they do not cover the model.</span></div></div>
+        <div class="truck-viewer-help"><span><i class="ph ph-cursor-click"></i> Drag to rotate</span><span><i class="ph ph-magnifying-glass-plus"></i> Scroll / pinch to zoom</span><span><i class="ph ph-arrows-out"></i> Fullscreen for inspection</span></div>
       </section>
 
       <aside class="truck-guide-card">
-        <div class="truck-guide-head"><div><span class="eyebrow">QUICK MANUAL</span><h3>Systems & common faults</h3></div><span class="truck-guide-count" id="truck-guide-count">8 systems</span></div>
+        <div class="truck-guide-head"><div><span class="eyebrow">SYSTEM NAVIGATOR</span><h3>What are you looking at?</h3></div><span class="truck-guide-count" id="truck-guide-count">8 systems</span></div>
         <div id="truck-guide-list" class="truck-guide-list">
-          <button class="truck-guide-item" data-search="air suspension air bag airbags ride height leak low air suspension" onclick="openTruckGuide('air')"><i class="ph ph-waves"></i><span><strong>Air suspension / bags</strong><small>Sagging corner, air leak, ride-height issue</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="air brakes brake chamber low air pressure compressor dryer leak" onclick="openTruckGuide('brakes')"><i class="ph ph-disc"></i><span><strong>Air & brakes</strong><small>Low-air warning, slow build, brake chamber</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="engine diesel coolant oil turbo overheating no start crank" onclick="openTruckGuide('engine')"><i class="ph ph-engine"></i><span><strong>Engine</strong><small>No-start, overheating, oil/coolant checks</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="battery alternator electrical no crank charging voltage starter" onclick="openTruckGuide('electrical')"><i class="ph ph-battery-charging"></i><span><strong>Starting & charging</strong><small>No crank, weak batteries, charging faults</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="reefer refrigeration temperature cooling unit fuel alarm thermoking carrier" onclick="openTruckGuide('reefer')"><i class="ph ph-snowflake"></i><span><strong>Reefer system</strong><small>Not cooling, temp alarm, unit won't start</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="tires wheel tire flat pressure tread lug hub bearing" onclick="openTruckGuide('tires')"><i class="ph ph-circle"></i><span><strong>Tires & wheels</strong><small>Pressure, damage, heat, loose hardware</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="fifth wheel kingpin coupling jaws trailer lock grease" onclick="openTruckGuide('fifth')"><i class="ph ph-link"></i><span><strong>Fifth wheel / coupling</strong><small>Lock check, kingpin, release mechanism</small></span><i class="ph ph-caret-right"></i></button>
-          <button class="truck-guide-item" data-search="dashboard warning abs check engine def dpf regen lights fault" onclick="openTruckGuide('dash')"><i class="ph ph-gauge"></i><span><strong>Dashboard warnings</strong><small>ABS, engine, DEF/DPF and warning lamps</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="air suspension air bag airbags ride height leak low air suspension" onclick="setTruckLabModel('suspension',document.querySelector('[data-model=suspension]'));openTruckGuide('air')"><i class="ph ph-waves"></i><span><strong>Air suspension / bags</strong><small>Open axle & suspension view</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="air brakes brake chamber low air pressure compressor dryer leak" onclick="setTruckLabModel('suspension',document.querySelector('[data-model=suspension]'));openTruckGuide('brakes')"><i class="ph ph-disc"></i><span><strong>Air & brakes</strong><small>Wheel-end / axle orientation</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="engine diesel coolant oil turbo overheating no start crank" onclick="setTruckLabModel('engine',document.querySelector('[data-model=engine]'));openTruckGuide('engine')"><i class="ph ph-engine"></i><span><strong>Engine</strong><small>Dedicated mechanical engine</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="battery alternator electrical no crank charging voltage starter" onclick="setTruckLabModel('hood',document.querySelector('[data-model=hood]'));openTruckGuide('electrical')"><i class="ph ph-battery-charging"></i><span><strong>Starting & charging</strong><small>Open engine-bay view</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="reefer refrigeration temperature cooling unit fuel alarm thermoking carrier" onclick="setTruckLabModel('reefer',document.querySelector('[data-model=reefer]'));openTruckGuide('reefer')"><i class="ph ph-snowflake"></i><span><strong>Reefer system</strong><small>Trailer / refrigeration orientation</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="tires wheel tire flat pressure tread lug hub bearing" onclick="setTruckLabModel('suspension',document.querySelector('[data-model=suspension]'));openTruckGuide('tires')"><i class="ph ph-circle"></i><span><strong>Tires & wheel ends</strong><small>Detailed axle close-up</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="fifth wheel kingpin coupling jaws trailer lock grease" onclick="setTruckLabModel('tractor',document.querySelector('[data-model=tractor]'));openTruckGuide('fifth')"><i class="ph ph-link"></i><span><strong>Fifth wheel / coupling</strong><small>Tractor chassis orientation</small></span><i class="ph ph-caret-right"></i></button>
+          <button class="truck-guide-item" data-search="dashboard warning abs check engine def dpf regen lights fault" onclick="openTruckGuide('dash')"><i class="ph ph-gauge"></i><span><strong>Dashboard warnings</strong><small>Use warning + fault-code workflow</small></span><i class="ph ph-caret-right"></i></button>
         </div>
       </aside>
     </div>
@@ -276,7 +280,7 @@
       </div>
     </div>
 
-    <div class="truck-credits"><i class="ph ph-info"></i><div><strong>3D asset credits</strong><p>Models are displayed from their original Sketchfab pages and remain credited to their creators. Tractor: rudransh17feb · 53' Reefer Trailer: mcskinssketchfab · Truck Engine: andreviewport · Open Hood Semi Truck: jfessayedestrucs. Use the Source / license link above for the original artwork and current license details.</p></div></div>
+    <div class="truck-credits"><i class="ph ph-info"></i><div><strong>3D asset credits</strong><p>Models remain hosted by their original Sketchfab creators. Detailed American Semi: PixelFog 3D · Semi Truck Axle: GaseousSkate870 · Trailer Chassis: fabio.ardito · Truck Engine: andreviewport · Open Hood Semi: jfessayedestrucs · 53' Reefer: mcskinssketchfab. Use Source / license for each selected model.</p></div></div>
   </div>
 
 

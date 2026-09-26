@@ -217,122 +217,138 @@ def logout():
 _PART_IMAGE_CACHE = {}
 
 _PART_IMAGE_CONTEXT = {
-    "air": "heavy duty truck air brake pneumatic",
-    "brakes": "heavy duty truck air brake",
-    "suspension": "semi truck trailer suspension",
-    "electrical": "heavy duty diesel truck electrical",
-    "engine": "heavy duty diesel engine truck",
-    "aftertreatment": "diesel truck exhaust aftertreatment",
-    "trailer": "semi truck trailer",
-    "reefer": "refrigerated semi trailer reefer",
+    "air": "heavy duty semi truck air brake pneumatic component",
+    "brakes": "heavy duty semi truck air brake component",
+    "suspension": "American semi truck trailer suspension component",
+    "electrical": "heavy duty diesel semi truck electrical component",
+    "engine": "heavy duty diesel semi truck engine component",
+    "aftertreatment": "heavy duty diesel truck DPF DEF aftertreatment component",
+    "trailer": "American semi truck trailer component",
+    "reefer": "Thermo King Carrier refrigerated semi trailer reefer component",
 }
 _PART_IMAGE_BAD_WORDS = {
     "shell", "seashell", "snail", "mollusc", "mollusk", "gastropod", "animal", "plant",
-    "flower", "bird", "fish", "food", "toy", "art", "painting", "sculpture", "logo", "map",
+    "flower", "bird", "fish", "food", "toy", "artwork", "painting", "sculpture", "logo", "map",
 }
-_PART_IMAGE_TRUCK_WORDS = {
-    "truck", "semi", "tractor", "trailer", "diesel", "engine", "automotive", "vehicle", "lorry",
-    "brake", "suspension", "reefer", "refrigeration", "commercial vehicle", "heavy duty",
-}
+_PART_IMAGE_GOOD_DOMAINS = (
+    "bendix", "cummins", "detroit", "freightliner", "paccar", "kenworth", "peterbilt", "volvo",
+    "mack", "thermoking", "carrier", "fleetpride", "finditparts", "hendrickson", "safholland",
+    "meritor", "wabco", "haldex", "dorman", "dayco", "gates", "denso", "delco", "bosch",
+)
 
 def _part_tokens(value: str):
     words = re.findall(r"[a-z0-9]+", (value or "").lower())
-    stop = {"and", "the", "system", "assembly", "unit", "truck", "semi", "heavy", "duty", "part"}
+    stop = {"and", "the", "system", "assembly", "unit", "truck", "semi", "heavy", "duty", "part", "component"}
     return {w for w in words if len(w) >= 3 and w not in stop}
 
-def _commons_part_images(part_name: str, category: str = "", keywords: str = "", limit: int = 4):
-    """Return only high-confidence real photos for a heavy-duty truck component.
+def _serper_part_images(part_name: str, category: str = "", keywords: str = "", limit: int = 4):
+    """Find real heavy-duty component photos through Serper's Google Images endpoint.
 
-    Wikimedia search is used for discovery, but results are scored locally. Generic or
-    unrelated matches are rejected; an empty result is preferable to a wrong photo.
+    Results stay remote: Kurtex stores only short-lived search metadata, never the image bytes.
+    The API key is read server-side from SERPER_API_KEY and is never exposed to the browser.
     """
+    api_key = os.getenv("SERPER_API_KEY", "").strip()
+    if not api_key:
+        return [], "serper_not_configured"
+
     clean_name = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (part_name or "")).strip()[:100]
-    clean_keywords = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (keywords or "")).strip()[:160]
+    clean_keywords = re.sub(r"[^a-zA-Z0-9 /+&()._-]+", " ", (keywords or "")).strip()[:180]
     category = re.sub(r"[^a-zA-Z]+", "", (category or "").lower())[:30]
     if not clean_name:
-        return []
-    cache_key = (clean_name + "|" + category + "|" + clean_keywords).lower()
-    cached = _PART_IMAGE_CACHE.get(cache_key)
-    if cached and time.time() - cached[0] < 86400:
-        return cached[1]
+        return [], "missing_query"
 
-    context = _PART_IMAGE_CONTEXT.get(category, "heavy duty diesel truck")
-    # Exact component wording comes first. Do not use a bare/generic fallback query.
+    cache_key = ("serper|" + clean_name + "|" + category + "|" + clean_keywords).lower()
+    cached = _PART_IMAGE_CACHE.get(cache_key)
+    if cached and time.time() - cached[0] < 30 * 86400:
+        return cached[1], "serper_cache"
+
+    context = _PART_IMAGE_CONTEXT.get(category, "American heavy duty diesel semi truck component")
+    # Component name remains first so Google Images understands what object must be visible.
     queries = [
-        f'"{clean_name}" {context}',
-        f'{clean_name} {context} component',
+        f'{clean_name} {context}',
+        f'{clean_name} heavy duty truck part',
     ]
     required = _part_tokens(clean_name)
-    hint_tokens = _part_tokens(clean_keywords)
     candidates = {}
 
     for search_query in queries:
-        params = {
-            "action": "query", "format": "json", "generator": "search",
-            "gsrsearch": f"filetype:bitmap {search_query}", "gsrnamespace": "6", "gsrlimit": "24",
-            "prop": "imageinfo", "iiprop": "url|mime|extmetadata", "iiurlwidth": "1200",
-            "iiextmetadatafilter": "ImageDescription|ObjectName|Categories|LicenseShortName|Artist|Credit",
-            "origin": "*",
-        }
-        url = "https://commons.wikimedia.org/w/api.php?" + urllib.parse.urlencode(params)
-        req = urllib.request.Request(url, headers={"User-Agent": "KurtexDashboard/1.1 (heavy-duty parts photo lookup)"})
+        body = json.dumps({"q": search_query, "gl": "us", "hl": "en", "num": 20}).encode("utf-8")
+        req = urllib.request.Request(
+            "https://google.serper.dev/images",
+            data=body,
+            headers={"X-API-KEY": api_key, "Content-Type": "application/json", "User-Agent": "KurtexDashboard/1.2"},
+            method="POST",
+        )
         try:
-            with urllib.request.urlopen(req, timeout=6) as resp:
+            with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
-            logger.info("Commons part image lookup failed for %r: %s", search_query, exc)
+            logger.info("Serper part image lookup failed for %r: %s", search_query, exc)
             continue
 
-        for page in (data.get("query") or {}).get("pages", {}).values():
-            info = (page.get("imageinfo") or [{}])[0]
-            if info.get("mime", "") not in {"image/jpeg", "image/png", "image/webp"}:
+        for item in data.get("images") or []:
+            title = str(item.get("title") or "").strip()
+            source = str(item.get("source") or "").strip()
+            source_url = str(item.get("link") or "").strip()
+            image_url = str(item.get("imageUrl") or item.get("thumbnailUrl") or "").strip()
+            thumb_url = str(item.get("thumbnailUrl") or image_url).strip()
+            if not image_url or not source_url or not source_url.startswith(("http://", "https://")):
                 continue
-            meta = info.get("extmetadata") or {}
-            meta_text = " ".join(str((meta.get(k) or {}).get("value", "")) for k in ("ImageDescription", "ObjectName", "Categories"))
-            hay = re.sub(r"<[^>]+>", " ", (page.get("title", "") + " " + meta_text)).lower()
-            hay_tokens = _part_tokens(hay)
+            hay = (title + " " + source + " " + source_url).lower()
             if any(bad in hay for bad in _PART_IMAGE_BAD_WORDS):
                 continue
-            # Component identity is mandatory. This prevents e.g. "turbo" shells.
-            component_hits = len(required & hay_tokens)
-            if required and component_hits == 0:
+            tokens = _part_tokens(hay)
+            component_hits = len(required & tokens)
+            # Multi-word names can tolerate one omitted word; one-word parts must match exactly.
+            minimum_hits = 1 if len(required) <= 2 else 2
+            if required and component_hits < minimum_hits:
                 continue
-            truck_hits = sum(1 for term in _PART_IMAGE_TRUCK_WORDS if term in hay)
-            hint_hits = len(hint_tokens & hay_tokens)
-            # For ambiguous one-word parts, require explicit vehicle/mechanical context.
-            if len(required) <= 1 and truck_hits == 0 and hint_hits < 2:
-                continue
-            score = component_hits * 12 + min(truck_hits, 4) * 4 + min(hint_hits, 5)
-            title = page.get("title", "").replace("File:", "")
+            automotive = any(x in hay for x in ("truck", "diesel", "semi", "tractor", "trailer", "automotive", "engine", "brake", "suspension", "reefer"))
+            trusted = any(domain in hay for domain in _PART_IMAGE_GOOD_DOMAINS)
+            score = component_hits * 12 + (8 if automotive else 0) + (10 if trusted else 0)
             if clean_name.lower() in title.lower():
                 score += 12
-            image_url = info.get("thumburl") or info.get("url")
-            source_url = info.get("descriptionurl")
-            if not image_url or not source_url:
+            # Serper already searched with heavy-duty context; accept a strong exact-name result even
+            # when the merchant title itself omits words such as "truck".
+            if not automotive and not trusted and component_hits < max(1, len(required)):
                 continue
-            key = source_url
-            item = {
-                "image_url": image_url, "source_url": source_url, "title": title,
-                "license": (meta.get("LicenseShortName") or {}).get("value", ""), "score": score,
+            key = image_url
+            candidate = {
+                "image_url": image_url,
+                "thumbnail_url": thumb_url,
+                "source_url": source_url,
+                "title": title or clean_name,
+                "source": source,
+                "provider": "Serper / Google Images",
+                "score": score,
             }
             if key not in candidates or score > candidates[key]["score"]:
-                candidates[key] = item
+                candidates[key] = candidate
+
+        if len(candidates) >= limit:
+            break
 
     results = sorted(candidates.values(), key=lambda x: (-x["score"], x["title"].lower()))[:max(1, min(limit, 4))]
     for item in results:
         item.pop("score", None)
     _PART_IMAGE_CACHE[cache_key] = (time.time(), results)
-    return results
+    return results, "serper"
 
 @app.route("/api/part_image")
 def api_part_image():
+    if not session.get("user"):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
     q = (request.args.get("q") or "").strip()
     cat = (request.args.get("cat") or "").strip()
     keywords = (request.args.get("keywords") or "").strip()
     if not q:
         return jsonify({"ok": False, "error": "Missing part query"}), 400
-    results = _commons_part_images(q, cat, keywords, 4)
-    return jsonify({"ok": bool(results), "results": results, "result": results[0] if results else None})
+    results, provider = _serper_part_images(q, cat, keywords, 4)
+    return jsonify({
+        "ok": bool(results), "results": results, "result": results[0] if results else None,
+        "provider": provider,
+        "configured": bool(os.getenv("SERPER_API_KEY", "").strip()),
+    })
 
 @app.route("/api/stats")
 def api_stats():

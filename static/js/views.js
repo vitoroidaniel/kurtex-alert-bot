@@ -616,16 +616,18 @@ function closeModal() {
 
 // ── Truck 3D Lab ───────────────────────────────────────────────────────────
 var truckLabModels = {
-  tractor: {title:'American semi tractor', note:'Real CC Attribution web 3D asset · drag to rotate, scroll/pinch to zoom', id:'11f3b663616a4ff5956a7d86a74c009a', source:'https://sketchfab.com/3d-models/american-semi-truck-11f3b663616a4ff5956a7d86a74c009a'},
-  reefer: {title:"53' reefer trailer", note:'Separate CC Attribution reefer asset · inspect trailer exterior and running gear', id:'904c9af9277d410c98c395fd9f8f9250', source:'https://sketchfab.com/3d-models/53-reefer-trailer-904c9af9277d410c98c395fd9f8f9250'},
-  engine: {title:'Truck diesel engine', note:'Dedicated CC Attribution mechanical asset · inspect engine separately', id:'d7ff313ff1e64c4db803e39b600a0fbf', source:'https://sketchfab.com/3d-models/truck-engine-d7ff313ff1e64c4db803e39b600a0fbf'},
-  hood: {title:'Open-hood semi reference', note:'CC Attribution open-engine-bay reference · useful for hood/engine orientation', id:'ea0c42d238c44a8abc53edc03779ad72', source:'https://sketchfab.com/3d-models/open-hood-semi-truck-ea0c42d238c44a8abc53edc03779ad72'}
+  tractor: {title:'Detailed American semi tractor', note:'High-detail 1.7M-triangle American tractor · exterior orientation and component location', id:'6dbb0eaf08ba4fff94d87fb4ceaa83c7', source:'https://sketchfab.com/3d-models/amarican-semi-truck-6dbb0eaf08ba4fff94d87fb4ceaa83c7', badge:'1.7M tris'},
+  suspension: {title:'Semi truck axle / suspension close-up', note:'Dedicated 1.3M-triangle mechanical axle model · use for wheel-end, axle and suspension orientation', id:'ada81260bc904bd88cb801a3c306866f', source:'https://sketchfab.com/3d-models/semi-truck-axle-ada81260bc904bd88cb801a3c306866f', badge:'1.3M tris'},
+  engine: {title:'Heavy-duty truck diesel engine', note:'Dedicated mechanical engine model · rotate and zoom for engine-side component orientation', id:'d7ff313ff1e64c4db803e39b600a0fbf', source:'https://sketchfab.com/3d-models/truck-engine-d7ff313ff1e64c4db803e39b600a0fbf', badge:'186k tris'},
+  hood: {title:'Open-hood semi / engine bay', note:'Open-hood reference view · use to understand engine-bay location before opening the Parts Manual', id:'ea0c42d238c44a8abc53edc03779ad72', source:'https://sketchfab.com/3d-models/open-hood-semi-truck-ea0c42d238c44a8abc53edc03779ad72', badge:'1.1M tris'},
+  trailerchassis: {title:'Trailer chassis / running gear', note:'Detailed 663k-triangle trailer chassis · exposes frame, running gear and structural layout', id:'4179e400ef464b958bcf8416e11f87df', source:'https://sketchfab.com/3d-models/container-trailer-chassis-4179e400ef464b958bcf8416e11f87df', badge:'663k tris'},
+  reefer: {title:"53' reefer trailer", note:'Reefer exterior reference · use Parts Manual for refrigeration and running-gear component detail', id:'904c9af9277d410c98c395fd9f8f9250', source:'https://sketchfab.com/3d-models/53-reefer-trailer-904c9af9277d410c98c395fd9f8f9250', badge:'Exterior'}
 };
 function setTruckLabModel(key, btn){
   var m=truckLabModels[key]; if(!m)return;
   document.querySelectorAll('.truck-lab-tab').forEach(function(b){b.classList.toggle('active',b===btn)});
   document.getElementById('truck-model-title').textContent=m.title;
-  document.getElementById('truck-model-note').textContent=m.note;
+  document.getElementById('truck-model-note').textContent=m.note; var badge=document.getElementById('truck-model-badge'); if(badge)badge.textContent=m.badge||'';
   var a=document.getElementById('truck-model-source'); a.href=m.source;
   var f=document.getElementById('truck-model-frame'); f.title='Interactive '+m.title+' 3D model';
   f.src='https://sketchfab.com/models/'+m.id+'/embed?autostart=1&ui_theme=dark&ui_infos=0&ui_watermark=0';
@@ -644,7 +646,7 @@ function openTruckGuide(key){var g=truckGuides[key];if(!g)return;document.queryS
 function filterTruckGuide(q){q=(q||'').trim().toLowerCase();var shown=0;document.querySelectorAll('.truck-guide-item').forEach(function(el){var ok=!q||(el.dataset.search+' '+el.textContent).toLowerCase().indexOf(q)>=0;el.style.display=ok?'':'none';if(ok)shown++});document.getElementById('truck-guide-count').textContent=shown+' system'+(shown===1?'':'s');}
 
 // ── Truck common-issue overlay + Parts Manual ─────────────────────────────
-var truckIssueFilter='all', truckIssuesEnabled=true, currentTruckModel='tractor';
+var truckIssueFilter='all', truckIssuesEnabled=false, currentTruckModel='tractor';
 var truckIssues={
  overheat:{title:'Engine overheating',part:'thermostat',text:'High coolant temperature can involve coolant loss, airflow restriction, fan-drive, thermostat or other cooling-system faults.',severity:'Stop / diagnose',icon:'ph-thermometer-hot'},
  nostart:{title:'No crank / weak start',part:'battery',text:'Check the symptom first: no response, clicking, slow crank, or normal crank/no start. Battery condition and high-current connections are common starting points.',severity:'Check before dispatch',icon:'ph-battery-warning'},
@@ -755,8 +757,8 @@ function loadLivePartPhoto(p){
   fetch('/api/part_image?'+params.toString()).then(function(r){if(!r.ok)throw new Error('lookup failed');return r.json()}).then(function(data){
     if(requestId!==partImageRequest)return;var current=document.getElementById('part-photo-'+p.id);if(!current)return;
     var status=current.querySelector('.part-photo-status'),grid=current.querySelector('.part-photo-grid'),items=(data&&data.results)||[];
-    if(!items.length){status.innerHTML='<i class="ph ph-image-broken"></i><span>No verified live photo found. Try the OEM/source reference below.</span>';grid.innerHTML='';return;}
-    status.innerHTML='<i class="ph ph-check-circle"></i><span>'+items.length+' verified live reference photo'+(items.length===1?'':'s')+' found · actual installed model may vary</span>';
+    if(!items.length){status.innerHTML='<i class="ph ph-image-broken"></i><span>No relevant live truck-part photo found. Try another part name or the OEM/source reference below.</span>';grid.innerHTML='';return;}
+    status.innerHTML='<i class="ph ph-check-circle"></i><span>'+items.length+' live heavy-duty reference photo'+(items.length===1?'':'s')+' found via Serper · actual installed model may vary</span>';
     grid.innerHTML=items.map(function(x,i){return '<figure class="part-live-photo"><a href="'+h(x.source_url)+'" target="_blank" rel="noopener" title="Open original photo and license"><img src="'+h(x.image_url)+'" alt="'+h(p.name)+' real-world reference photo '+(i+1)+'" loading="lazy" referrerpolicy="no-referrer"></a><figcaption><span>'+h(x.title||p.name)+'</span><a href="'+h(x.source_url)+'" target="_blank" rel="noopener">Source'+(x.license?' · '+h(x.license):'')+' <i class="ph ph-arrow-square-out"></i></a></figcaption></figure>';}).join('');
   }).catch(function(){var current=document.getElementById('part-photo-'+p.id);if(!current)return;current.querySelector('.part-photo-status').innerHTML='<i class="ph ph-warning-circle"></i><span>Live photo search is temporarily unavailable.</span>';});
 }
