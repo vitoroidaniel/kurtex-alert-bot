@@ -102,3 +102,20 @@ document.addEventListener("visibilitychange", function () {
   if (!document.hidden) autoRefresh();
 });
 window.addEventListener("online", autoRefresh);
+
+// v13: mirror the existing connection timestamp into the mobile status row.
+(function(){
+  function syncMobileUpdate(){
+    const source=document.getElementById('last-update');
+    const target=document.querySelector('.mobile-last-update');
+    if(source&&target){
+      const text=(source.textContent||'').trim();
+      target.textContent=text || 'Updated just now';
+    }
+  }
+  document.addEventListener('DOMContentLoaded',function(){
+    syncMobileUpdate();
+    const source=document.getElementById('last-update');
+    if(source&&window.MutationObserver){new MutationObserver(syncMobileUpdate).observe(source,{childList:true,subtree:true,characterData:true});}
+  });
+})();
