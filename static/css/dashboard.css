@@ -1818,3 +1818,66 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent)!important;box
 .tab-btn.active,.toggle-btn.active{border-color:var(--accent)!important;color:var(--accent)!important;background:var(--accent-bg)!important}
 .badge-btn:not(.btn-outline),.report-generate-btn,.print-report-btn{background:var(--accent);color:#fff}
 @media(max-width:760px){.main{background:#fff}.mobile-header{background:#1b1b1e}.sidebar{position:fixed}}
+
+/* === v3 light navigation + report modal overflow fix === */
+:root,
+[data-theme="dark"]{
+  --sidebar-bg:#f4f4f5;
+  --sidebar-border:#dedee1;
+  --sidebar-text:#202024;
+  --sidebar-muted:#68686f;
+}
+.sidebar{
+  background:var(--sidebar-bg)!important;
+  color:var(--sidebar-text)!important;
+  border-right:1px solid var(--sidebar-border)!important;
+}
+.sidebar-logo{border-bottom-color:var(--sidebar-border)!important}
+.logo-text,.logo-text strong,.sidebar .user-info strong{color:var(--sidebar-text)!important}
+.logo-text small,.sidebar .user-info span,.nav-section-label{color:var(--sidebar-muted)!important}
+.nav-item{color:#34343a!important}
+.nav-item i{color:#626269!important}
+.nav-item:hover:not(.active){background:#e9e9eb!important;color:#17171a!important}
+.nav-item:hover:not(.active) i{color:var(--accent)!important}
+.nav-item.active{background:#fff!important;color:#17171a!important;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.nav-item.active i{color:var(--accent)!important}
+.sidebar-footer{border-top-color:var(--sidebar-border)!important}
+.sidebar .badge-btn,.sidebar .btn-ghost,.sidebar button{color:#34343a}
+.mobile-header{background:#f4f4f5!important;color:#202024!important;border-bottom:1px solid var(--sidebar-border)!important}
+
+/* Report viewer: body owns scrolling; footer remains inside the modal without covering content. */
+#report-view-overlay .modal{
+  display:flex!important;
+  flex-direction:column!important;
+  max-height:92vh!important;
+  overflow:hidden!important;
+}
+#report-view-overlay .modal>h2{flex:0 0 auto}
+#report-view-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  padding-bottom:30px!important;
+}
+#report-view-overlay .modal>div:last-child{
+  position:relative!important;
+  bottom:auto!important;
+  flex:0 0 auto!important;
+  width:100%!important;
+  box-sizing:border-box!important;
+  z-index:4!important;
+  margin:0!important;
+  padding:14px 26px!important;
+  background:#fff!important;
+  border-top:1px solid var(--border)!important;
+}
+.report-section:last-child{margin-bottom:8px!important}
+.report-field dd{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+
+@media(max-width:760px){
+  .sidebar{background:var(--sidebar-bg)!important}
+  #report-view-overlay .modal{max-height:96dvh!important}
+  #report-view-overlay .modal>div:last-child{padding:12px 18px!important}
+  #report-view-body{padding-bottom:22px!important}
+}
