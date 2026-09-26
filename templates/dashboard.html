@@ -68,9 +68,9 @@
   <div class="topbar">
     <div class="breadcrumb">KURTEX <span>/</span> Operations workspace</div>
     <div class="topbar-right">
-      <button class="badge-btn btn-outline" onclick="openReport()"><i class="ph ph-file-text"></i> <span>Report</span></button>
-      <button class="badge-btn btn-ghost" onclick="window.print()"><i class="ph ph-printer"></i> <span>Print</span></button>
-      <a class="badge-btn btn-primary" href="/api/export"><i class="ph ph-download-simple"></i> <span>Export</span></a>
+      <button class="badge-btn btn-outline topbar-report-action" onclick="openReport()"><i class="ph ph-file-text"></i> <span>Report</span></button>
+      <button class="badge-btn btn-ghost topbar-report-action" onclick="window.print()"><i class="ph ph-printer"></i> <span>Print</span></button>
+      <a class="badge-btn btn-primary topbar-report-action" href="/api/export"><i class="ph ph-download-simple"></i> <span>Export</span></a>
       <div class="notification-center"><button id="notification-bell" class="badge-btn notification-bell" onclick="toggleNotifications()" aria-label="Notifications"><i class="ph ph-bell"></i><span id="notification-count" class="notification-count" hidden>0</span></button><div id="notification-panel" class="notification-panel" hidden><header class="notification-panel-head"><div class="notification-title"><span class="notification-title-icon"><i class="ph ph-bell"></i></span><div><strong>Notifications</strong><small id="notification-summary">All caught up</small></div></div><button class="notification-mark-all" type="button" onclick="markAllNotificationsSeen()"><i class="ph ph-checks"></i> Mark all seen</button></header><div class="notification-tabs"><button class="active" data-filter="all" onclick="filterNotifications('all',this)">All</button><button data-filter="unseen" onclick="filterNotifications('unseen',this)">Unseen</button><button data-filter="alerts" onclick="filterNotifications('alerts',this)">Alerts & issues</button></div><div id="notification-list" class="notification-list"></div></div></div>
       
     </div>
@@ -121,11 +121,10 @@
         <div id="ai-page-sidebar-list" class="ai-page-sidebar-list"><div class="ai-history-empty">Loading conversations...</div></div>
       </aside>
       <div class="ai-page-chat-column">
-        <div class="ai-page-chatbar"><button type="button" class="ai-side-show" onclick="toggleAIPageSidebar(true)" title="Show chat history"><i class="ph ph-sidebar-simple"></i></button><strong>Kurtex AI</strong></div>
+        <div class="ai-page-chatbar"><button type="button" class="ai-side-show" onclick="toggleAIPageSidebar(true)" title="Show chat history"><i class="ph ph-sidebar-simple"></i></button><button type="button" class="ai-chat-title" onclick="newKurtexAIPageChat()"><strong>New Chat</strong><i class="ph ph-caret-down"></i></button></div>
         <div class="ai-assistant-page-shell">
-      <div id="ai-page-messages" class="ai-page-messages"><div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div></div>
-      <div class="ai-page-quick"><button onclick="aiPageQuick('Find similar Kurtex cases for the issue I am viewing.')">Similar cases</button><button onclick="aiPageQuick('Help me diagnose this maintenance issue. Ask me only for information you actually need.')">Diagnose issue</button></div>
-      <form class="ai-page-compose" onsubmit="sendKurtexAIPage(event);return false"><textarea id="ai-page-input" placeholder="Ask Kurtex AI about a maintenance issue..."></textarea><button type="submit" aria-label="Send"><i class="ph ph-paper-plane-tilt"></i></button></form>
+      <div id="ai-page-messages" class="ai-page-messages"><div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick('Help me diagnose a maintenance issue. Ask only for the details you actually need.')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick('Find similar Kurtex cases based on the maintenance issue I describe.')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick('Help me identify a truck, trailer, or reefer fault code and explain the next checks.')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick('Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div></div>
+      <form class="ai-page-compose" onsubmit="sendKurtexAIPage(event);return false"><div class="ai-compose-input"><textarea id="ai-page-input" placeholder="Ask anything about fleet maintenance..."></textarea><div class="ai-compose-footer"><div class="ai-compose-left"><button type="button" title="Add context"><i class="ph ph-paperclip"></i><span>Add</span></button><button type="button" onclick="showPage('ai_training')" title="Open AI Training"><i class="ph ph-book-open-text"></i><span>Knowledge</span></button></div><button class="ai-compose-send" type="submit" aria-label="Send"><i class="ph ph-arrow-up"></i></button></div></div></form>
         </div>
       </div>
     </div>

@@ -84,7 +84,7 @@ async function deleteAIPageSavedChat(event,id){
   if(String(kurtexAIChatId)===String(id)){
    kurtexAIChatId=null;
    var box=document.getElementById('ai-page-messages');
-   if(box)box.innerHTML='<div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div>';
+   if(box)box.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick(\'Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.\')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div>';
   }
   await loadAIPageSidebar();
  }catch(e){console.error('AI chat delete failed',e)}
@@ -95,7 +95,7 @@ async function newKurtexAIPageChat(){
  var side=document.getElementById('ai-page-sidebar-list');
  if(side)side.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
  var t=document.getElementById('ai-page-messages');
- if(t)t.innerHTML='<div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div>';
+ if(t)t.innerHTML='<div class="ai-page-welcome"><div class="ai-hero-spark"><i class="ph ph-sparkle"></i></div><h3>Ask Kurtex AI</h3><p>Diagnose maintenance issues, check fault codes, find similar cases, or use approved fleet knowledge.</p><div class="ai-start-grid"><button type="button" onclick="aiPageQuick(\'Help me diagnose a maintenance issue. Ask only for the details you actually need.\')"><i class="ph ph-stethoscope"></i><span>Diagnose an issue</span></button><button type="button" onclick="aiPageQuick(\'Find similar Kurtex cases based on the maintenance issue I describe.\')"><i class="ph ph-files"></i><span>Find similar cases</span></button><button type="button" onclick="aiPageQuick(\'Help me identify a truck, trailer, or reefer fault code and explain the next checks.\')"><i class="ph ph-warning-circle"></i><span>Check a fault code</span></button><button type="button" onclick="aiPageQuick(\'Use the approved maintenance knowledge library to help me with a repair or troubleshooting procedure.\')"><i class="ph ph-book-open-text"></i><span>Browse knowledge</span></button></div></div>';
  var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}loadAIPageSidebar()
 }
 async function openAIPageHistory(){

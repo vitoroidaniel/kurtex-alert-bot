@@ -41,7 +41,7 @@
 <div class="report-modal-overlay" id="report-modal-overlay" onclick="if(event.target===this)closeReport()">
 <div class="report-modal report-workspace" role="dialog" aria-modal="true" aria-label="Generate report">
   <div class="report-header">
-    <h2><i class="ph ph-file-text" style="color:var(--accent)"></i> Report</h2>
+    <div class="report-brand"><div class="report-seal"><i class="ph ph-file-text"></i></div><div><div class="report-kicker">KURTEX FLEET OPERATIONS</div><h2>Operations Report</h2><p>Verified maintenance activity and team performance summary</p></div></div>
     <div style="display:flex;align-items:center;gap:8px">
       <div class="report-tabs">
         <button class="report-tab active" onclick="setReportTab('today',this)">Today</button>
@@ -77,7 +77,7 @@
   </div>
   <div class="report-footer">
     <span class="ts" id="report-ts"></span>
-    <button class="print-report-btn" onclick="printReport()"><i class="ph ph-printer"></i> Print Report</button>
+    <div class="report-footer-actions"><a class="report-export-btn" href="/api/export"><i class="ph ph-download-simple"></i> Export data</a><button class="print-report-btn" onclick="printReport()"><i class="ph ph-printer"></i> Print official report</button></div>
   </div>
 </div>
 </div>
