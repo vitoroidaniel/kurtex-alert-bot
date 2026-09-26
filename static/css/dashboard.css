@@ -3275,3 +3275,31 @@ body[data-current-page="ai_training"] #page-ai_training.page.active{display:bloc
 body[data-current-page="ai_training"] #page-ai_training .ai-training-page{position:static!important;width:100%!important;max-width:1180px!important;height:auto!important;min-height:0!important;margin:0 auto!important;padding:14px 0 28px!important;transform:none!important}
 body[data-current-page="ai_training"] #page-ai_training .ai-training-header{margin-top:0!important}
 @media(max-width:760px){body[data-current-page="ai_training"] #page-ai_training .ai-training-page{padding:10px 0 22px!important}}
+
+/* v76 — align AI Training with standard Kurtex workspaces */
+body[data-current-page="ai_training"] #page-ai_training .ai-training-page{
+  max-width:none!important;width:100%!important;margin:0!important;padding:14px 0 28px!important;
+}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-header,
+body[data-current-page="ai_training"] #page-ai_training .ai-training-layout{
+  width:100%!important;max-width:none!important;margin-left:0!important;margin-right:0!important;
+}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-header{padding-left:0!important;padding-right:0!important}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-layout{
+  grid-template-columns:minmax(0,1fr) 310px!important;gap:14px!important;align-items:start!important;
+}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-main{min-width:0!important}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-side{width:310px!important}
+@media(max-width:1050px){
+ body[data-current-page="ai_training"] #page-ai_training .ai-training-layout{grid-template-columns:1fr!important}
+ body[data-current-page="ai_training"] #page-ai_training .ai-training-side{width:100%!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important}
+}
+@media(max-width:720px){body[data-current-page="ai_training"] #page-ai_training .ai-training-side{grid-template-columns:1fr!important}}
+
+/* v76 — notification header follows the same left-aligned hierarchy as other panels */
+.notification-panel .notification-panel-head{justify-content:flex-start!important;padding:12px!important}
+.notification-panel .notification-title{flex:1!important;justify-content:flex-start!important;text-align:left!important}
+.notification-panel .notification-title-icon{order:0!important;margin:0!important}
+.notification-panel .notification-title>div{order:1!important;text-align:left!important}
+.notification-panel .notification-mark-all{order:2!important;margin-left:auto!important}
+.notification-panel .notification-tabs{justify-content:flex-start!important}

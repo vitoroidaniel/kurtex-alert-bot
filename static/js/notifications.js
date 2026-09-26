@@ -1,10 +1,12 @@
 var kurtexNotifications=[],notificationFilter='all';
+function notificationSeenValue(v){return v===true||v===1||v==='1'||String(v).toLowerCase()==='true'}
+function normalizeNotification(n){if(n)n.seen=notificationSeenValue(n.seen);return n}
 function notificationIcon(n){if(n.kind==='ai')return'ph-sparkle';if(n.severity==='warning'||n.severity==='error')return'ph-warning-circle';return'ph-bell'}
 async function loadNotifications(){try{
  var r=await apiFetch('/api/notifications'),x=await r.json();if(!r.ok)return;
- var remote=x.items||[],byId={};
- kurtexNotifications.forEach(function(item){if(item&&item.id)byId[String(item.id)]=item});
- remote.forEach(function(item){if(!item||!item.id)return;var key=String(item.id);byId[key]=item});
+ var remote=Array.isArray(x)?x:(x.items||x.notifications||[]),byId={};
+ kurtexNotifications.forEach(function(item){if(item&&item.id){normalizeNotification(item);byId[String(item.id)]=item}});
+ remote.forEach(function(item){if(!item||!item.id)return;normalizeNotification(item);var key=String(item.id);byId[key]=item});
  kurtexNotifications=Object.keys(byId).map(function(k){return byId[k]}).sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0)});
  updateNotificationBadge(kurtexNotifications.filter(function(item){return!item.seen}).length);renderNotifications()
 }catch(e){renderNotifications()}}
