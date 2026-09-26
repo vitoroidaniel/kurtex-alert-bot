@@ -4205,3 +4205,11 @@ body[data-current-page="ai_assistant"] .ai-page-sidebar-head button:hover{backgr
 body[data-current-page="ai_assistant"] .ai-side-chat{transition:background-color .06s linear,border-color .06s linear!important;will-change:auto!important}
 body[data-current-page="ai_assistant"] .ai-side-chat.active{background:var(--surface,#fff)!important;border-color:var(--border)!important;box-shadow:0 1px 3px rgba(0,0,0,.055)!important}
 body[data-current-page="ai_assistant"] .ai-side-chat.active span{font-weight:750!important}
+
+/* v108 — use the dashboard's existing Phosphor UI icon pack */
+body[data-current-page="ai_assistant"] .ai-side-toggle i,
+body[data-current-page="ai_assistant"] .ai-side-show i{
+ display:inline-block!important;visibility:visible!important;opacity:1!important;
+ font-family:"Phosphor"!important;font-style:normal!important;
+ font-size:17px!important;line-height:1!important
+}
