@@ -459,17 +459,6 @@ function renderIntelUnitsContent(vtype, search) {
     })
     .join("");
   updateHTML(wrap, '<div class="section-title" style="margin-bottom:10px">Most reported units · top 20</div>' +
-    '<div class="toggle-tabs" style="margin-bottom:10px">' +
-    vbtn("all", "All") +
-    vbtn("truck", "Truck") +
-    vbtn("trailer", "Trailer") +
-    vbtn("reefer", "Reefer") +
-    "</div>" +
-    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" aria-label="Search intelligence units or issues" placeholder="Search unit or issue..." value="' +
-    attr(search || "") +
-    '" oninput="renderIntelUnits(\'' +
-    vtype +
-    "', this.value)\"></div>" +
     '<div class="table-wrap"><div class="table-scroll"><table>' +
     "<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>" +
     (filtered.length
