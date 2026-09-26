@@ -1129,5 +1129,18 @@ def api_knowledge_notes():
         return jsonify({"items":items[-50:][::-1]})
     data=request.get_json(silent=True) or {}; note=str(data.get("note") or "").strip()[:1500]; part=str(data.get("part") or "").strip()[:120]
     if not note: return jsonify({"error":"Note is required"}),400
-    u=session.get("user") or {}; item={"id":secrets.token_hex(6),"part":part,"note":note,"author":u.get("first_name") or u.get("name") or u.get("username") or "Agent","created":chicago_now().strftime("%Y-%m-%d %H:%M")}
+    u=session.get("user") or {}; author=(u.get("first_name") or u.get("name") or u.get("username") or "Agent") if isinstance(u,dict) else str(u); item={"id":secrets.token_hex(6),"part":part,"note":note,"author":author,"created":chicago_now().strftime("%Y-%m-%d %H:%M")}
     items.append(item); _write_knowledge(items[-1000:]); return jsonify(item),201
+
+@app.route("/api/knowledge_notes/<note_id>",methods=["PUT","DELETE"])
+def api_knowledge_note_item(note_id):
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    items=_read_knowledge(); idx=next((i for i,x in enumerate(items) if str(x.get("id"))==str(note_id)),None)
+    if idx is None: return jsonify({"error":"not found"}),404
+    if request.method=="DELETE":
+        deleted=items.pop(idx); _write_knowledge(items); return jsonify({"ok":True,"id":deleted.get("id")})
+    data=request.get_json(silent=True) or {}; note=str(data.get("note") or "").strip()[:1500]
+    if not note: return jsonify({"error":"Note is required"}),400
+    u=session.get("user") or {}; author=(u.get("first_name") or u.get("name") or u.get("username") or "Agent") if isinstance(u,dict) else str(u)
+    items[idx]["note"]=note; items[idx]["updated"]=chicago_now().strftime("%Y-%m-%d %H:%M"); items[idx]["updated_by"]=author
+    _write_knowledge(items); return jsonify(items[idx])
