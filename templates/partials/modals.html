@@ -1,6 +1,6 @@
 <!-- Case Modal -->
 <div class="modal-overlay" id="modal-overlay" style="z-index:400" onclick="if(event.target===this)closeModal()">
-<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
+<div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
   <button class="modal-close" aria-label="Close dialog" onclick="closeModal()"><i class="ph ph-x"></i></button>
   <h2 id="modal-title">Case Detail</h2>
   <div id="modal-body"><div class="loading">Loading...</div></div>
@@ -9,7 +9,7 @@
 
 <!-- Report Viewer Modal -->
 <div class="modal-overlay" id="report-view-overlay" style="z-index:500" onclick="if(event.target===this)closeReportView()">
-<div class="modal" role="dialog" aria-modal="true" style="max-width:820px">
+<div class="modal detail-surface report-view-surface" role="dialog" aria-modal="true">
   <button class="modal-close" aria-label="Close dialog" onclick="closeReportView()"><i class="ph ph-x"></i></button>
   <h2 id="report-view-title">Case Report</h2>
   <div id="report-view-body"><div class="loading">Loading...</div></div>
@@ -21,7 +21,7 @@
 
 <!-- Agent Modal -->
 <div class="modal-overlay" id="agent-modal-overlay" style="z-index:200" onclick="if(event.target===this)closeAgentModal()">
-<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
+<div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
   <button class="modal-close" aria-label="Close dialog" onclick="closeAgentModal()"><i class="ph ph-x"></i></button>
   <h2 id="agent-modal-title">Agent Profile</h2>
   <div id="agent-modal-body"><div class="loading">Loading...</div></div>
@@ -30,7 +30,7 @@
 
 <!-- Unit Detail Modal -->
 <div class="modal-overlay" id="unit-modal-overlay" style="z-index:300" onclick="if(event.target===this)closeUnitModal()">
-<div class="modal" role="dialog" aria-modal="true" tabindex="-1">
+<div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
   <button class="modal-close" aria-label="Close dialog" onclick="closeUnitModal()"><i class="ph ph-x"></i></button>
   <h2 id="unit-modal-title">Unit Detail</h2>
   <div id="unit-modal-body"><div class="loading">Loading...</div></div>
@@ -39,7 +39,7 @@
 
 <!-- Report Modal -->
 <div class="report-modal-overlay" id="report-modal-overlay" onclick="if(event.target===this)closeReport()">
-<div class="report-modal" role="dialog" aria-modal="true" aria-label="Generate report">
+<div class="report-modal report-workspace" role="dialog" aria-modal="true" aria-label="Generate report">
   <div class="report-header">
     <h2><i class="ph ph-file-text" style="color:var(--accent)"></i> Report</h2>
     <div style="display:flex;align-items:center;gap:8px">
