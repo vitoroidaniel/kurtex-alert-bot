@@ -216,8 +216,24 @@ def _cf_ai(messages, max_tokens=700, temperature=0.2, image_data_url=None):
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("Workers AI is not configured")
     url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{KURTEX_AI_MODEL}"
-    payload_body={"messages":messages,"max_tokens":max_tokens,"temperature":temperature}
-    if image_data_url: payload_body["image"]=image_data_url
+    payload_messages=[dict(m) for m in messages]
+    payload_body={"messages":payload_messages,"max_tokens":max_tokens,"temperature":temperature}
+    if image_data_url:
+        # Workers AI ImageTextToText supports image_url content parts. Put the
+        # image on the final user turn so the model receives the visual input
+        # together with the user's actual question.
+        for i in range(len(payload_messages)-1,-1,-1):
+            if payload_messages[i].get("role")=="user":
+                text_content=str(payload_messages[i].get("content") or "")
+                payload_messages[i]["content"]=[
+                    {"type":"text","text":text_content},
+                    {"type":"image_url","image_url":{"url":image_data_url}},
+                ]
+                break
+        # Keep the model-native image field too. Cloudflare's ImageTextToText
+        # schema accepts base64 here; using both forms makes REST vision robust
+        # across Workers AI model revisions.
+        payload_body["image"]=image_data_url.split(",",1)[-1]
     req=urllib.request.Request(url,data=json.dumps(payload_body).encode("utf-8"),
         method="POST",headers={"Authorization":f"Bearer {CLOUDFLARE_API_TOKEN}","Content-Type":"application/json"})
     try:
@@ -489,10 +505,36 @@ def _extract_ai_chat_file(f):
     elif ext==".docx":
         from docx import Document
         doc=Document(io.BytesIO(raw)); text="\n".join(p.text for p in doc.paragraphs)
-    else: raise ValueError("Supported files: JPG, PNG, WEBP, PDF, DOCX, TXT, MD, CSV and JSON")
+    elif ext==".xlsx":
+        from openpyxl import load_workbook
+        wb=load_workbook(io.BytesIO(raw),read_only=True,data_only=True)
+        rows=[]
+        for ws in wb.worksheets[:20]:
+            rows.append("SHEET: "+ws.title)
+            for row in ws.iter_rows(values_only=True):
+                vals=[str(v) for v in row if v is not None]
+                if vals: rows.append(" | ".join(vals))
+                if sum(len(x) for x in rows)>120000: break
+        text="\n".join(rows)
+    elif ext==".zip":
+        import zipfile
+        z=zipfile.ZipFile(io.BytesIO(raw))
+        names=[x.filename for x in z.infolist() if not x.is_dir()][:500]
+        snippets=[]
+        for info in z.infolist()[:100]:
+            if info.is_dir() or info.file_size>500000: continue
+            if Path(info.filename).suffix.lower() in (".txt",".md",".csv",".json",".py",".js",".css",".html"):
+                try:
+                    snippets.append("\nFILE: "+info.filename+"\n"+z.read(info).decode("utf-8","replace")[:12000])
+                except Exception: pass
+        text="ZIP CONTENTS:\n"+"\n".join(names)+"\n"+"".join(snippets)
+    else: raise ValueError("Supported files: JPG, PNG, WEBP, PDF, DOCX, XLSX, ZIP, TXT, MD, CSV and JSON")
     text=text.strip()
     if not text: raise ValueError("No readable text was found in this file")
-    return name, {"kind":"document","content":text[:120000]}
+    mime={".pdf":"application/pdf",".docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ".xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",".zip":"application/zip",
+          ".csv":"text/csv",".json":"application/json",".md":"text/markdown",".txt":"text/plain"}.get(ext,"application/octet-stream")
+    return name, {"kind":"document","mime":mime,"content":text[:120000],"raw_b64":base64.b64encode(raw).decode("ascii")}
 
 AI_CHAT_FILE = DATA_DIR / "ai_chats.json"
 
@@ -582,13 +624,25 @@ def api_ai_chat_file(chat_id):
     except Exception as e:return jsonify({"error":str(e)}),400
     item={"id":uuid.uuid4().hex,"name":name,"created_at":_now_iso(),**parsed}
     chat.setdefault("attachments",[]).append(item);chat["attachments"]=chat["attachments"][-12:];chat["updated_at"]=_now_iso();_save_user_chats(chats)
-    return jsonify({"id":item["id"],"name":name}),201
+    return jsonify({"id":item["id"],"name":name,"kind":item.get("kind"),"mime":item.get("mime")}),201
 
-@app.route("/api/ai/chats/<chat_id>/files/<file_id>",methods=["DELETE"])
+@app.route("/api/ai/chats/<chat_id>/files/<file_id>",methods=["GET","DELETE"])
 def api_ai_chat_file_delete(chat_id,file_id):
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
     chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if not chat:return jsonify({"error":"Chat not found"}),404
+    item=next((x for x in (chat.get("attachments") or []) if str(x.get("id"))==file_id),None)
+    if not item:return jsonify({"error":"File not found"}),404
+    if request.method=="GET":
+        if item.get("kind")=="image" and item.get("data"):
+            try:
+                raw=base64.b64decode(item["data"].split(",",1)[-1]); mime=item.get("mime") or "image/jpeg"
+                return Response(raw,mimetype=mime,headers={"Content-Disposition":'inline; filename="'+Path(item.get("name") or "image").name.replace('"','')+'"'})
+            except Exception:return jsonify({"error":"Image unavailable"}),404
+        if item.get("raw_b64"):
+            raw=base64.b64decode(item["raw_b64"]); mime=item.get("mime") or "application/octet-stream"
+            return Response(raw,mimetype=mime,headers={"Content-Disposition":'attachment; filename="'+Path(item.get("name") or "attachment").name.replace('"','')+'"'})
+        return jsonify({"error":"Original file is unavailable for this older attachment"}),404
     chat["attachments"]=[x for x in (chat.get("attachments") or []) if str(x.get("id"))!=file_id];chat["updated_at"]=_now_iso();_save_user_chats(chats);return jsonify({"ok":True})
 
 @app.route("/api/ai/chats/<chat_id>/context",methods=["PATCH"])
@@ -612,6 +666,7 @@ def api_ai_chat():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
     data=request.get_json(silent=True) or {}; message=str(data.get("message") or "").strip()[:4000]
     page=str(data.get("page") or "dashboard")[:80]; chat_id=str(data.get("chat_id") or "").strip()
+    requested_attachment_ids=[str(x) for x in (data.get("attachment_ids") or []) if str(x).strip()][:12]
     if not message:return jsonify({"error":"Message is required"}),400
     chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if chat is None:
@@ -646,7 +701,8 @@ def api_ai_chat():
         image_data=image_items[-1].get("data") if image_items else None
         answer=_cf_ai(messages,1000,.2,image_data_url=image_data)
         stage="save_chat"
-        history.extend([{"role":"user","content":message,"at":_now_iso()},{"role":"assistant","content":answer,"at":_now_iso()}])
+        history.extend([{"role":"user","content":message,"at":_now_iso(),"attachment_ids":requested_attachment_ids},
+                        {"role":"assistant","content":answer,"at":_now_iso()}])
         chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
         if not chat.get("title") or chat.get("title")=="New maintenance chat":chat["title"]=_chat_title(message)
         _save_user_chats(chats)

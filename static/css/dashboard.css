@@ -4637,3 +4637,67 @@ body[data-current-page="ai_assistant"] .ai-side-chat.active:before{
  background:var(--accent,#d93632)!important
 }
 body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open{padding-left:15px!important}
+
+/* v132 — ChatGPT-style AI attachments + message actions */
+#page-ai_assistant .ai-compose-input{display:flex;flex-direction:column}
+#page-ai_assistant .ai-chat-context{
+ display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;padding:0;margin:0;
+}
+#page-ai_assistant .ai-chat-context:empty{display:none}
+#page-ai_assistant .ai-chat-context:not(:empty){padding:10px 12px 0}
+#page-ai_assistant .ai-attach-card{
+ position:relative;display:flex;align-items:center;gap:9px;min-width:150px;max-width:260px;height:58px;
+ padding:7px 30px 7px 8px;border:1px solid var(--line,#dedede);border-radius:12px;background:#fff;
+ box-shadow:0 1px 2px rgba(0,0,0,.03)
+}
+#page-ai_assistant .ai-attach-card.is-image{width:72px;min-width:72px;height:72px;padding:0;overflow:hidden}
+#page-ai_assistant .ai-attach-card.is-image img{width:100%;height:100%;object-fit:cover}
+#page-ai_assistant .ai-attach-card.is-image .ai-attach-meta{display:none}
+#page-ai_assistant .ai-file-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:40px;border-radius:8px;background:#f3f4f6;font-size:19px}
+#page-ai_assistant .ai-attach-meta{min-width:0;display:flex;flex-direction:column}
+#page-ai_assistant .ai-attach-meta strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-ai_assistant .ai-attach-meta small{font-size:10px;color:#777;margin-top:2px}
+#page-ai_assistant .ai-attach-remove{position:absolute;right:5px;top:5px;width:22px;height:22px;border:0;border-radius:50%;background:rgba(255,255,255,.9);display:grid;place-items:center;cursor:pointer}
+#page-ai_assistant .ai-page-msg{position:relative}
+#page-ai_assistant .ai-msg-content{display:flex;flex-direction:column;gap:8px;min-width:0}
+#page-ai_assistant .ai-page-msg.user .ai-msg-content{align-items:flex-end}
+#page-ai_assistant .ai-msg-body{min-width:0}
+#page-ai_assistant .ai-page-msg.user .ai-msg-body{background:#202124;color:#fff;padding:11px 14px;border-radius:18px}
+#page-ai_assistant .ai-page-msg.user{background:transparent!important;border:0!important;padding:0!important}
+#page-ai_assistant .ai-msg-attachment{display:flex;text-decoration:none;color:inherit;border:1px solid #dedede;background:#fff}
+#page-ai_assistant .ai-msg-image{width:150px;height:150px;border-radius:14px;overflow:hidden;position:relative}
+#page-ai_assistant .ai-msg-image img{width:100%;height:100%;object-fit:cover}
+#page-ai_assistant .ai-msg-image span{display:none}
+#page-ai_assistant .ai-msg-file{width:min(320px,72vw);height:58px;border-radius:13px;align-items:center;gap:10px;padding:7px 10px}
+#page-ai_assistant .ai-msg-file>span:last-child{display:flex;min-width:0;flex-direction:column}
+#page-ai_assistant .ai-msg-file strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-ai_assistant .ai-msg-file small{font-size:10px;color:#777;margin-top:2px}
+#page-ai_assistant .ai-msg-actions{display:flex;margin-top:4px;opacity:0;transition:opacity .15s}
+#page-ai_assistant .ai-page-msg:hover .ai-msg-actions{opacity:1}
+#page-ai_assistant .ai-page-msg.user .ai-msg-actions{justify-content:flex-end}
+#page-ai_assistant .ai-msg-actions button{width:30px;height:30px;border:0;border-radius:8px;background:transparent;display:grid;place-items:center;cursor:pointer;color:#62666d}
+#page-ai_assistant .ai-msg-actions button:hover{background:#f0f1f2;color:#111}
+#page-ai_assistant .ai-msg-actions button.copied{color:#198754}
+@media(max-width:720px){
+ #page-ai_assistant .ai-chat-context{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+ #page-ai_assistant .ai-chat-context::-webkit-scrollbar{display:none}
+ #page-ai_assistant .ai-msg-actions{opacity:1}
+ #page-ai_assistant .ai-msg-image{width:118px;height:118px}
+ #page-ai_assistant .ai-msg-file{width:min(280px,78vw)}
+}
+
+/* v133 — active AI conversation */
+#page-ai_assistant .ai-side-chat.active{
+  border-color:rgba(220,38,38,.30)!important;
+  box-shadow:0 0 0 1px rgba(220,38,38,.07),0 2px 8px rgba(220,38,38,.045)!important;
+  background:rgba(220,38,38,.018)!important;
+}
+#page-ai_assistant .ai-side-chat.active:before{display:none!important}
+#page-ai_assistant .ai-side-chat.active .ai-side-chat-open{padding-left:12px!important}
+
+/* v134 — active chat: outline only */
+#page-ai_assistant .ai-side-chat.active{
+  background:transparent!important;
+  border-color:rgba(190,58,58,.26)!important;
+  box-shadow:none!important;
+}

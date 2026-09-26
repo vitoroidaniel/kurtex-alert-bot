@@ -123,6 +123,7 @@ async function openAIPageSavedChat(id,clicked){
  // can never visually bleed into the newly selected conversation.
  kurtexAIChatId=String(id);
  aiChatKnowledgeSelected=[];
+ aiChatPendingAttachments=[];
  var contextBox=document.getElementById('ai-chat-context');
  var inlineKnowledge=document.getElementById('ai-chat-knowledge-inline');
  if(contextBox)contextBox.innerHTML='';
@@ -134,9 +135,10 @@ async function openAIPageSavedChat(id,clicked){
   kurtexAIChatId=String(chat.id||id);
   var box=document.getElementById('ai-page-messages');box.innerHTML='';
   (chat.messages||[]).forEach(function(m){
-   var d=document.createElement('div');
-   d.className='ai-page-msg '+(m.role==='assistant'?'assistant':'user');
-   d.innerHTML=m.role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');
+   var d=document.createElement('div'),role=m.role==='assistant'?'assistant':'user';
+   d.className='ai-page-msg '+role;
+   var body=role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');
+   d.innerHTML=aiWrapMessage(role,body,aiAttachmentCards(kurtexAIChatId,chat.attachments||[],m.attachment_ids||[]));
    box.appendChild(d)
   });
   // Important: an empty saved chat remains the SAME saved chat.
@@ -176,12 +178,13 @@ async function sendKurtexAIPage(e){
  var input=document.getElementById('ai-page-input'),msg=(input&&input.value||'').trim();if(!msg)return false;
  input.value='';
  var dst=document.getElementById('ai-page-messages');var welcome=dst&&dst.querySelector('.ai-page-welcome');if(welcome)welcome.remove();
- var u=document.createElement('div');u.className='ai-page-msg user';u.textContent=msg;dst.appendChild(u);
- var wait=document.createElement('div');wait.className='ai-page-msg assistant thinking';wait.textContent='Thinking…';dst.appendChild(wait);dst.scrollTop=dst.scrollHeight;
+ var sentAttachments=aiChatPendingAttachments.slice();
+ var u=document.createElement('div');u.className='ai-page-msg user';u.innerHTML=aiWrapMessage('user',escapeAI(msg),aiAttachmentCards(kurtexAIChatId,sentAttachments,sentAttachments.map(function(a){return a.id})));dst.appendChild(u);
+ var wait=document.createElement('div');wait.className='ai-page-msg assistant thinking';wait.innerHTML='<div class="ai-msg-content"><div class="ai-msg-body">Thinking…</div></div>';dst.appendChild(wait);dst.scrollTop=dst.scrollHeight;
  try{
-  var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:'ai_assistant'})}),x=await r.json();
+  var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:'ai_assistant',attachment_ids:sentAttachments.map(function(a){return a.id})})}),x=await r.json();
   if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');
-  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.');
+  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=aiWrapMessage('assistant',kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.'),'');aiChatPendingAttachments=[];await refreshAIChatContext();
   loadKurtexAIChats();loadAIPageSidebar()
  }catch(err){wait.classList.remove('thinking');wait.textContent='Message was not sent. '+(err.message||'Check AI Training diagnostics.')}
  input.focus();dst.scrollTop=dst.scrollHeight;return false
@@ -227,6 +230,7 @@ document.addEventListener('click',function(e){
 
 // v124 — chat-scoped files + verified knowledge context
 var aiChatKnowledgeOptions=[], aiChatKnowledgeSelected=[];
+var aiChatPendingAttachments=[];
 async function aiEnsureChat(){
  if(kurtexAIChatId)return kurtexAIChatId;
  var r=await apiFetch('/api/ai/chats',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:'New maintenance chat'})});
@@ -244,7 +248,7 @@ async function prepareAIChatUpload(file){
 }
 async function uploadAIChatFiles(input){
  var files=Array.from((input&&input.files)||[]);if(!files.length)return;
- try{var id=await aiEnsureChat();for(var i=0;i<files.length;i++){var upload=await prepareAIChatUpload(files[i]);var fd=new FormData();fd.append('file',upload,upload.name||files[i].name);var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)+'/files',{method:'POST',body:fd}),x=await r.json();if(!r.ok)throw new Error(x.error||'Could not attach '+files[i].name)}await refreshAIChatContext()}catch(e){alert(e.message||'Could not attach file')}finally{if(input)input.value=''}
+ try{var id=await aiEnsureChat();for(var i=0;i<files.length;i++){var upload=await prepareAIChatUpload(files[i]);var fd=new FormData();fd.append('file',upload,upload.name||files[i].name);var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(id)+'/files',{method:'POST',body:fd}),x=await r.json();if(!r.ok)throw new Error(x.error||'Could not attach '+files[i].name);aiChatPendingAttachments.push({id:x.id,name:x.name||files[i].name,kind:x.kind||'',mime:x.mime||files[i].type||''})}await refreshAIChatContext()}catch(e){alert(e.message||'Could not attach file')}finally{if(input)input.value=''}
 }
 async function refreshAIChatContext(){
  var box=document.getElementById('ai-chat-context'),inline=document.getElementById('ai-chat-knowledge-inline');
@@ -253,11 +257,55 @@ async function refreshAIChatContext(){
   var results=await Promise.all([apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),apiFetch('/api/ai/knowledge/options')]);
   var x=await results[0].json(), ox=await results[1].json(), chat=x.item||x.chat||x,files=chat.attachments||[],kids=chat.knowledge_ids||[];
   aiChatKnowledgeSelected=kids.slice();aiChatKnowledgeOptions=ox.items||aiChatKnowledgeOptions||[];
-  if(box){var chips=[];files.forEach(function(a){var isImg=a.kind==='image'||/^image\//.test(a.mime||'');chips.push('<span class="ai-context-chip '+(isImg?'ai-image-chip':'')+'"><i class="ph '+(isImg?'ph-image':'ph-file-text')+'"></i><span>'+escapeAI(a.name)+'</span>'+(isImg?'<small>photo</small>':'')+'<button type="button" onclick="removeAIChatFile(&quot;'+aiAttr(a.id)+'&quot;)"><i class="ph ph-x"></i></button></span>')});box.innerHTML=chips.join('')}
+  if(box){
+   var pendingIds=new Set(aiChatPendingAttachments.map(function(a){return String(a.id)}));
+   var pending=files.filter(function(a){return pendingIds.has(String(a.id))});
+   box.innerHTML=pending.map(function(a){
+    var isImg=a.kind==='image'||/^image\//.test(a.mime||'');
+    var url='/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(a.id);
+    return '<div class="ai-attach-card '+(isImg?'is-image':'is-file')+'">'+
+      (isImg?'<img src="'+url+'" alt="">':'<span class="ai-file-icon"><i class="ph '+aiFileIcon(a.name)+'"></i></span>')+
+      '<span class="ai-attach-meta"><strong>'+escapeAI(a.name)+'</strong><small>'+escapeAI(aiFileType(a.name,a.mime))+'</small></span>'+
+      '<button type="button" class="ai-attach-remove" onclick="removeAIChatFile(&quot;'+aiAttr(a.id)+'&quot;)" aria-label="Remove"><i class="ph ph-x"></i></button></div>'
+   }).join('')
+  }
   if(inline){var selected=aiChatKnowledgeOptions.filter(function(k){return kids.indexOf(k.id)>=0});inline.innerHTML=selected.map(function(k){var colors=k.tag_colors||{},tags=k.tags||[],color=(tags.length&&colors[tags[0]])||k.tag_color||'blue';return '<button type="button" class="ai-inline-kb ai-tag-color-'+escapeAI(color)+'" onclick="openAIChatKnowledge()" title="'+escapeAI(k.title||'Maintenance knowledge')+'"><span class="ai-inline-kb-dot"></span><span>'+escapeAI(k.title||'Maintenance knowledge')+'</span></button>'}).join('')}
  }catch(e){}
 }
-async function removeAIChatFile(fid){if(!kurtexAIChatId)return;await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
+function aiFileType(name,mime){
+ var ext=((name||'').split('.').pop()||'file').toUpperCase();
+ if(/^image\//.test(mime||''))return 'Image';
+ var map={PDF:'PDF',DOCX:'Document',XLSX:'Spreadsheet',ZIP:'Archive',CSV:'CSV',JSON:'JSON',TXT:'Text',MD:'Markdown'};
+ return map[ext]||'File'
+}
+function aiFileIcon(name){
+ var ext=((name||'').split('.').pop()||'').toLowerCase();
+ if(ext==='xlsx'||ext==='csv')return 'ph-file-xls';
+ if(ext==='zip')return 'ph-file-zip';
+ if(ext==='pdf')return 'ph-file-pdf';
+ if(ext==='docx'||ext==='txt'||ext==='md')return 'ph-file-text';
+ return 'ph-file'
+}
+function aiAttachmentCards(chatId,attachments,ids){
+ var wanted=new Set((ids||[]).map(String));
+ return (attachments||[]).filter(function(a){return wanted.has(String(a.id))}).map(function(a){
+  var isImg=a.kind==='image'||/^image\//.test(a.mime||''),url='/api/ai/chats/'+encodeURIComponent(chatId)+'/files/'+encodeURIComponent(a.id);
+  if(isImg)return '<a class="ai-msg-attachment ai-msg-image" href="'+url+'" target="_blank"><img src="'+url+'" alt="'+escapeAI(a.name||'Attached image')+'"><span>'+escapeAI(a.name||'Image')+'</span></a>';
+  return '<a class="ai-msg-attachment ai-msg-file" href="'+url+'" target="_blank"><span class="ai-file-icon"><i class="ph '+aiFileIcon(a.name)+'"></i></span><span><strong>'+escapeAI(a.name||'Attachment')+'</strong><small>'+escapeAI(aiFileType(a.name,a.mime))+'</small></span></a>'
+ }).join('')
+}
+function copyAIMessage(btn){
+ var msg=btn.closest('.ai-page-msg');if(!msg)return;
+ var body=msg.querySelector('.ai-msg-body')||msg;
+ navigator.clipboard.writeText(body.innerText||body.textContent||'').then(function(){
+  btn.classList.add('copied');btn.innerHTML='<i class="ph ph-check"></i>';
+  setTimeout(function(){btn.classList.remove('copied');btn.innerHTML='<i class="ph ph-copy"></i>'},1200)
+ }).catch(function(){})
+}
+function aiWrapMessage(role,html,attachmentHtml){
+ return '<div class="ai-msg-content">'+(attachmentHtml||'')+'<div class="ai-msg-body">'+html+'</div></div><div class="ai-msg-actions"><button type="button" onclick="copyAIMessage(this)" title="Copy"><i class="ph ph-copy"></i></button></div>'
+}
+async function removeAIChatFile(fid){if(!kurtexAIChatId)return;aiChatPendingAttachments=aiChatPendingAttachments.filter(function(a){return String(a.id)!==String(fid)});await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
 async function openAIChatKnowledge(){
  try{await aiEnsureChat();var r=await apiFetch('/api/ai/knowledge/options'),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to load knowledge');aiChatKnowledgeOptions=x.items||[];var cr=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),chat=await cr.json();aiChatKnowledgeSelected=(chat.knowledge_ids||[]).slice();document.getElementById('ai-chat-knowledge-modal').hidden=false;renderAIChatKnowledgeOptions()}catch(e){alert(e.message||'Unable to load knowledge')}
 }
