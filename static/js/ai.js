@@ -211,7 +211,7 @@ async function refreshAIChatContext(){
   var results=await Promise.all([apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),apiFetch('/api/ai/knowledge/options')]);
   var x=await results[0].json(), ox=await results[1].json(), chat=x.item||x.chat||x,files=chat.attachments||[],kids=chat.knowledge_ids||[];
   aiChatKnowledgeSelected=kids.slice();aiChatKnowledgeOptions=ox.items||aiChatKnowledgeOptions||[];
-  if(box){var chips=[];files.forEach(function(a){chips.push('<span class="ai-context-chip"><i class="ph ph-file-text"></i>'+escapeAI(a.name)+'<button type="button" onclick="removeAIChatFile(\\''+aiAttr(a.id)+'\\')"><i class="ph ph-x"></i></button></span>')});box.innerHTML=chips.join('')}
+  if(box){var chips=[];files.forEach(function(a){chips.push('<span class="ai-context-chip"><i class="ph ph-file-text"></i>'+escapeAI(a.name)+'<button type="button" onclick="removeAIChatFile(&quot;'+aiAttr(a.id)+'&quot;)"><i class="ph ph-x"></i></button></span>')});box.innerHTML=chips.join('')}
   if(inline){var selected=aiChatKnowledgeOptions.filter(function(k){return kids.indexOf(k.id)>=0});inline.innerHTML=selected.map(function(k){var colors=k.tag_colors||{},tags=k.tags||[],color=(tags.length&&colors[tags[0]])||k.tag_color||'blue';return '<button type="button" class="ai-inline-kb ai-tag-color-'+escapeAI(color)+'" onclick="openAIChatKnowledge()" title="'+escapeAI(k.title||'Maintenance knowledge')+'"><span class="ai-inline-kb-dot"></span><span>'+escapeAI(k.title||'Maintenance knowledge')+'</span></button>'}).join('')}
  }catch(e){}
 }
