@@ -377,15 +377,12 @@ async function loadFleetIntel() {
         : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px">No data yet</td></tr>') +
       "</tbody></table></div></div>";
 
-    updateHTML(el, '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">' +
-      '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">' +
-      d.total_reports +
-      "</div></div>" +
-      '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-hash"></i></div><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">' +
-      d.total_units +
-      "</div></div>" +
-      "</div>" +
-      '<div id="intel-units-wrap"></div>' +
+    var summary = document.getElementById("intel-summary");
+    if (summary) updateHTML(summary,
+      '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">' + d.total_reports + '</div></div>' +
+      '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-hash"></i></div><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">' + d.total_units + '</div></div>'
+    );
+    updateHTML(el, '<div id="intel-units-wrap"></div>' +
       '<div id="intel-drivers-block"><div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>' + driversHtml + '</div>');
     renderIntelUnits(intelFilter.vtype, intelFilter.search);
   } catch (e) {
@@ -401,7 +398,9 @@ function intelUniversalSearch(value) {
   var recurring = document.getElementById("recurring-problems-content");
   if (recurring) {
     Array.prototype.forEach.call(recurring.children, function (row) {
-      row.style.display = !q || row.textContent.toLowerCase().indexOf(q.toLowerCase()) !== -1 ? "" : "none";
+      var show = !q || row.textContent.toLowerCase().indexOf(q.toLowerCase()) !== -1;
+      row.style.display = show ? "" : "none";
+      if (show && q && row.tagName === "DETAILS") row.open = true;
     });
   }
   var drivers = document.getElementById("intel-drivers-block");
@@ -489,11 +488,6 @@ function renderIntelUnitsContent(vtype, search) {
     vbtn("trailer", "Trailer") +
     vbtn("reefer", "Reefer") +
     "</div>" +
-    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" aria-label="Search intelligence units or issues" placeholder="Search unit or issue..." value="' +
-    attr(search || "") +
-    '" oninput="renderIntelUnits(\'' +
-    vtype +
-    "', this.value)\"></div>" +
     '<div class="table-wrap"><div class="table-scroll"><table>' +
     "<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>" +
     (filtered.length

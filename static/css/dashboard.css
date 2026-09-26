@@ -2723,3 +2723,32 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
     padding:8px!important;
   }
 }
+
+/* v52 — corrected Fleet Intelligence page ID and layout */
+#page-fleet_intel{overflow:visible!important}
+#page-fleet_intel .intel-summary-top{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 10px}
+#page-fleet_intel .intel-summary-top .stat-card{min-height:78px;padding:13px 16px}
+#page-fleet_intel .intelligence-search-shell{position:sticky!important;top:0!important;z-index:120!important;margin:0 0 14px!important;padding:10px 12px!important;background:var(--surface,#fff)!important;border:1px solid var(--border,#e2e4e8)!important;border-radius:12px!important;box-shadow:0 5px 16px rgba(17,24,39,.06)!important}
+#page-fleet_intel .intel-search-row{display:flex;align-items:center;gap:9px}
+#page-fleet_intel .intel-search-row>i{font-size:18px;color:var(--muted)}
+#page-fleet_intel .intel-search-row input{flex:1;min-width:0;height:40px;padding:0 12px;border:1px solid var(--border,#ddd);border-radius:9px;background:var(--surface2,#fafafa);color:var(--text,#111);font:inherit}
+#page-fleet_intel .intel-search-btn{height:40px}
+#page-fleet_intel .intel-type-tabs{margin:8px 0 0}
+#page-fleet_intel #recurring-problems-content{border:1px solid var(--border,#e4e5e8);border-radius:12px;overflow:hidden;background:var(--surface,#fff)}
+#page-fleet_intel .recurring-unit-tree{border-bottom:1px solid var(--border,#e8e9ec)}
+#page-fleet_intel .recurring-unit-tree:last-child{border-bottom:0}
+#page-fleet_intel .recurring-unit-tree summary{list-style:none;display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer}
+#page-fleet_intel .recurring-unit-tree summary::-webkit-details-marker{display:none}
+#page-fleet_intel .recurring-unit-main{display:grid;grid-template-columns:22px auto;align-items:center;column-gap:8px;flex:1;min-width:0}
+#page-fleet_intel .recurring-unit-main>i{grid-row:1/3;font-size:17px;color:var(--accent)}
+#page-fleet_intel .recurring-unit-main strong{font-size:13px}
+#page-fleet_intel .recurring-unit-main small{font-size:10.5px;color:var(--muted);margin-top:2px}
+#page-fleet_intel .recurring-unit-count{min-width:28px;text-align:center;padding:3px 7px;border-radius:999px;background:var(--accent-bg,#fff0f0);color:var(--accent,#df2027);font-size:11px;font-weight:700}
+#page-fleet_intel .recurring-caret{font-size:13px;color:var(--muted);transition:transform .16s ease}
+#page-fleet_intel .recurring-unit-tree[open] .recurring-caret{transform:rotate(180deg)}
+#page-fleet_intel .recurring-issue-tree{padding:0 14px 10px 44px}
+#page-fleet_intel .recurring-issue-line{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-size:11.5px}
+#page-fleet_intel .recurring-issue-line span{display:flex;gap:7px;align-items:center}
+#page-fleet_intel .recurring-issue-line i{color:var(--muted)}
+#page-fleet_intel .recurring-issue-line b{color:var(--accent)}
+@media(max-width:700px){#page-fleet_intel .intelligence-search-shell{top:0!important;padding:8px!important}#page-fleet_intel .intel-search-btn{width:42px;font-size:0}#page-fleet_intel .intel-search-btn i{font-size:16px}}

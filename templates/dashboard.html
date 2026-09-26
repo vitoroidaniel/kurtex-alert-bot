@@ -212,23 +212,24 @@
 
   <!-- Fleet Intelligence -->
   <div class="page" id="page-fleet_intel">
-    <div class="card" style="margin-bottom:16px">
-      <div class="card-title"><i class="ph ph-chart-line-up"></i> Fleet Intelligence</div>
-      <div class="toggle-tabs" style="margin-bottom:10px" id="issue-search-vtype-tabs">
+    <div id="intel-summary" class="intel-summary-top"></div>
+    <div class="intelligence-search-shell">
+      <div class="intel-search-row">
+        <i class="ph ph-magnifying-glass"></i>
+        <input id="issue-search-input" aria-label="Search all fleet intelligence" type="search" placeholder="Search all intelligence - issues, units, drivers, recurring problems..." oninput="intelUniversalSearch(this.value)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <button class="btn intel-search-btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
+      </div>
+      <div class="toggle-tabs intel-type-tabs" id="issue-search-vtype-tabs">
         <button class="toggle-btn active" data-vtype="" onclick="setIssueSearchVtype('')">All</button>
         <button class="toggle-btn" data-vtype="truck" onclick="setIssueSearchVtype('truck')">Truck</button>
         <button class="toggle-btn" data-vtype="trailer" onclick="setIssueSearchVtype('trailer')">Trailer</button>
         <button class="toggle-btn" data-vtype="reefer" onclick="setIssueSearchVtype('reefer')">Reefer</button>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <input id="issue-search-input" aria-label="Search issue history" type="text" placeholder="Search all intelligence - issues, units, drivers, recurring problems..." oninput="intelUniversalSearch(this.value)" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
-        <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
-      </div>
       <div id="issue-search-results"></div>
     </div>
-    <section class="recurring-panel"><div class="agent-section-head"><div><span class="eyebrow">PATTERNS</span><h3>Recurring problems</h3></div><button class="btn secondary" onclick="loadRecurringProblems()"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div><div id="recurring-problems-content"><div class="loading">Open Intelligence to analyze repeated unit issues.</div></div></section><div id="fleet-intel-content"><div class="loading">Loading...</div></div>
+    <section class="recurring-panel"><div class="agent-section-head"><div><span class="eyebrow">PATTERNS</span><h3>Recurring Problem Units</h3></div><button class="btn secondary" onclick="loadRecurringProblems()"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div><div id="recurring-problems-content"><div class="loading">Open Intelligence to analyze repeated unit issues.</div></div></section>
+    <div id="fleet-intel-content"><div class="loading">Loading...</div></div>
   </div>
-
 
   <!-- Parts Manual -->
   <div class="page" id="page-parts_manual">
