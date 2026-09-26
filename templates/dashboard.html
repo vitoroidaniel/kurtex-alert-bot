@@ -50,6 +50,7 @@
         <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
         <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Intelligence</div>
         <div class="nav-item nav-sub" data-page="truck_lab" role="button" tabindex="0" onclick="showPage('truck_lab')"><i class="ph ph-cube"></i> Truck 3D Lab</div>
+        <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
       </div>
     </div>
 
@@ -232,9 +233,24 @@
     <div class="truck-lab-grid">
       <section class="truck-viewer-card">
         <div class="truck-viewer-head"><div><strong id="truck-model-title">American semi tractor</strong><span id="truck-model-note">Real CC-licensed web 3D asset · drag to rotate, scroll/pinch to zoom</span></div><a id="truck-model-source" class="truck-source-link" href="https://sketchfab.com/3d-models/american-semi-truck-11f3b663616a4ff5956a7d86a74c009a" target="_blank" rel="noopener"><i class="ph ph-arrow-square-out"></i> Source / license</a></div>
+        <div class="truck-issue-controls">
+          <label class="truck-issue-switch"><input id="truck-issues-toggle" type="checkbox" checked onchange="toggleTruckIssues(this.checked)"><span></span> Common issues</label>
+          <div class="truck-issue-filters" id="truck-issue-filters">
+            <button class="active" data-issue-filter="all" onclick="filterTruckIssues('all',this)">All</button><button data-issue-filter="engine" onclick="filterTruckIssues('engine',this)">Engine</button><button data-issue-filter="air" onclick="filterTruckIssues('air',this)">Air</button><button data-issue-filter="brakes" onclick="filterTruckIssues('brakes',this)">Brakes</button><button data-issue-filter="suspension" onclick="filterTruckIssues('suspension',this)">Suspension</button><button data-issue-filter="electrical" onclick="filterTruckIssues('electrical',this)">Electrical</button><button data-issue-filter="reefer" onclick="filterTruckIssues('reefer',this)">Reefer</button>
+          </div>
+        </div>
         <div class="truck-viewer-shell">
           <iframe id="truck-model-frame" title="Interactive American semi tractor 3D model" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen src="https://sketchfab.com/models/11f3b663616a4ff5956a7d86a74c009a/embed?autostart=1&ui_theme=dark&ui_infos=0&ui_watermark=0"></iframe>
+          <div class="truck-issue-layer" id="truck-issue-layer" aria-label="Common issue locations">
+            <button class="truck-issue-pin sev-high" data-cat="engine" data-models="tractor hood engine" style="--x:28%;--y:47%" onclick="openTruckIssue('overheat')"><i class="ph ph-thermometer-hot"></i><span>Overheating</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="electrical" data-models="tractor hood" style="--x:20%;--y:68%" onclick="openTruckIssue('nostart')"><i class="ph ph-battery-warning"></i><span>No start</span></button>
+            <button class="truck-issue-pin sev-high" data-cat="air brakes" data-models="tractor" style="--x:62%;--y:69%" onclick="openTruckIssue('lowair')"><i class="ph ph-warning"></i><span>Low air</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="suspension air" data-models="tractor reefer" style="--x:72%;--y:75%" onclick="openTruckIssue('airbag')"><i class="ph ph-waves"></i><span>Air bag leak</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="brakes" data-models="tractor reefer" style="--x:82%;--y:72%" onclick="openTruckIssue('brakeheat')"><i class="ph ph-disc"></i><span>Brake heat</span></button>
+            <button class="truck-issue-pin sev-med" data-cat="reefer" data-models="reefer" style="--x:17%;--y:31%" onclick="openTruckIssue('reefercool')"><i class="ph ph-snowflake"></i><span>Not cooling</span></button>
+          </div>
         </div>
+        <div class="truck-issue-detail" id="truck-issue-detail"><i class="ph ph-info"></i><div><strong>Select an issue marker</strong><span>Markers are a location guide over the selected 3D asset. Rotate the model for inspection, then use the linked manual for diagnosis.</span></div></div>
         <div class="truck-viewer-help"><span><i class="ph ph-cursor-click"></i> Drag: rotate</span><span><i class="ph ph-magnifying-glass-plus"></i> Wheel/pinch: zoom</span><span><i class="ph ph-arrows-out"></i> Viewer controls: pan/fullscreen</span></div>
       </section>
 
@@ -261,6 +277,14 @@
     </div>
 
     <div class="truck-credits"><i class="ph ph-info"></i><div><strong>3D asset credits</strong><p>Models are displayed from their original Sketchfab pages and remain credited to their creators. Tractor: rudransh17feb · 53' Reefer Trailer: mcskinssketchfab · Truck Engine: andreviewport · Open Hood Semi Truck: jfessayedestrucs. Use the Source / license link above for the original artwork and current license details.</p></div></div>
+  </div>
+
+
+  <!-- Parts Manual -->
+  <div class="page" id="page-parts_manual">
+    <div class="parts-toolbar"><div class="parts-search"><i class="ph ph-magnifying-glass"></i><input id="parts-search" type="search" placeholder="Search part, symptom or system - air bag, low air, DEF..." oninput="renderPartsManual(this.value)"></div><div class="parts-cats" id="parts-cats"><button class="active" data-pcat="all" onclick="setPartsCategory('all',this)">All</button><button data-pcat="air" onclick="setPartsCategory('air',this)">Air</button><button data-pcat="brakes" onclick="setPartsCategory('brakes',this)">Brakes</button><button data-pcat="engine" onclick="setPartsCategory('engine',this)">Engine</button><button data-pcat="electrical" onclick="setPartsCategory('electrical',this)">Electrical</button><button data-pcat="aftertreatment" onclick="setPartsCategory('aftertreatment',this)">DEF/DPF</button><button data-pcat="reefer" onclick="setPartsCategory('reefer',this)">Reefer</button><button data-pcat="trailer" onclick="setPartsCategory('trailer',this)">Trailer</button></div></div>
+    <div class="parts-layout"><aside class="parts-index"><div class="parts-index-head"><span class="eyebrow">PARTS DATABASE</span><strong id="parts-count">0 parts</strong></div><div id="parts-list"></div></aside><section class="part-detail" id="part-detail"></section></div>
+    <div class="parts-disclaimer"><i class="ph ph-shield-warning"></i><span>This is an agent reference, not a substitute for the exact vehicle/OEM service procedure. Safety-critical brake, steering, pressurized-air, refrigerant and high-current electrical repairs require qualified service.</span></div>
   </div>
 
   <!-- Agent Profiles (manager only) -->
