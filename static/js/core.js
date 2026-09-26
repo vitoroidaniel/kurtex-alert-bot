@@ -20,6 +20,7 @@ var pages = [
   "fleet",
   "fleet_intel",
   "parts_manual",
+  "ai_training",
   "my_profile",
   "agents",
 ];
@@ -33,6 +34,7 @@ var titles = {
   fleet: "Fleet Stats",
   fleet_intel: "Fleet Intelligence",
   parts_manual: "Parts Manual",
+  ai_training: "AI Training",
   my_profile: "My Profile",
   agents: "Agent Profiles",
 };
@@ -139,10 +141,11 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
+    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_training:"ph-brain",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
-  document.getElementById("page-description").textContent =
+  var descriptionEl = document.getElementById("page-description");
+  if (descriptionEl) descriptionEl.textContent =
     page === "overview"
       ? "Today’s activity, outstanding cases, and team performance."
       : page === "cases"
@@ -152,6 +155,7 @@ function showPage(page) {
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";
+  if (page === "ai_training" && typeof loadAIKnowledge === "function") loadAIKnowledge();
   currentPage = page;
   document.body.setAttribute("data-current-page", page);
   preferences.set("kurtex-page", page);

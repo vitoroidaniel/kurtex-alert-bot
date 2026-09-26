@@ -2,7 +2,7 @@
 dashboard.py — Kurtex Alert Bot Web Dashboard
 Routes and read-only API. Presentation lives in templates/ and static/.
 """
-import csv, hashlib, hmac, io, json, logging, os, re, secrets, time, urllib.parse, urllib.request
+import csv, hashlib, hmac, io, json, logging, os, re, secrets, time, uuid, urllib.parse, urllib.request
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -483,6 +483,35 @@ def api_ai_chat():
         _notify_user("ai","Kurtex AI unavailable","The AI request failed. Check Workers AI access or try again later.","warning")
         return jsonify({"error":"Kurtex AI is temporarily unavailable."}),503
 
+def _maintenance_tokens(value):
+    text=str(value or "").lower()
+    replacements={"turbina":"turbo turbocharger","турбина":"turbo turbocharger","турбо":"turbo","presiune":"pressure boost",
+    "давление":"pressure boost","pierde aer":"air leak","scapa aer":"air leak","scapă aer":"air leak","утечка воздуха":"air leak",
+    "frana":"brake","frână":"brake","тормоз":"brake","тормоза":"brake","motor":"engine","двигатель":"engine",
+    "ulei":"oil","масло":"oil","temperatura":"temperature","температура":"temperature","frig":"cooling reefer",
+    "remorca":"trailer","remorcă":"trailer","прицеп":"trailer","camion":"truck","грузовик":"truck",
+    "baterie":"battery","аккумулятор":"battery"}
+    for a,b in replacements.items(): text=text.replace(a,b)
+    return set(re.findall(r"[a-z0-9ăâîșşțţа-яё_-]{3,}",text,re.I))
+
+def _part_case_candidates(part,limit=90):
+    all_cases=[c for c in load_cases() if not is_testing(c)]
+    part_text=" ".join([str(part.get("name") or ""),str(part.get("cat") or ""),str(part.get("keywords") or ""),
+      " ".join(str(x) for x in (part.get("issues") or [])),str(part.get("works") or "")])
+    wanted=_maintenance_tokens(part_text)-{"truck","trailer","engine","issue","problem","check","repair","service","maintenance","unit","system","part","power"}
+    def score(c):
+        txt=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes","vehicle_type","unit_number","report_driver"))
+        got=_maintenance_tokens(txt); overlap=wanted & got
+        return len(overlap)*4+(12 if str(part.get("name") or "").lower() in txt.lower() else 0)+(1 if c.get("issue_text") else 0)+(1 if c.get("notes") else 0)
+    ranked=sorted(all_cases,key=lambda c:(score(c),c.get("opened_at") or ""),reverse=True)
+    strong=[c for c in ranked if score(c)>0]; recent=sorted(all_cases,key=lambda c:c.get("opened_at") or "",reverse=True)[:20]
+    out=[]; seen=set()
+    for c in strong[:limit]+recent:
+        cid=str(c.get("id") or c.get("full_id") or id(c))
+        if cid not in seen:seen.add(cid);out.append(c)
+        if len(out)>=limit:break
+    return out
+
 @app.route("/api/ai/related_cases",methods=["POST"])
 def api_ai_related_cases():
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
@@ -490,29 +519,48 @@ def api_ai_related_cases():
     name=str(part.get("name") or "").strip()[:150]
     if not name:return jsonify({"error":"Part is required"}),400
     try:
-        candidates=sorted([c for c in load_cases() if not is_testing(c)],key=lambda c:c.get("opened_at") or "",reverse=True)[:120]
+        candidates=_part_case_candidates(part,90)
         pc={"name":name,"category":str(part.get("cat") or "")[:80],"keywords":str(part.get("keywords") or "")[:600],
             "common_issues":part.get("issues") if isinstance(part.get("issues"),list) else [],
             "how_it_works":str(part.get("works") or "")[:900]}
-        prompt="""Identify ONLY historical cases genuinely related to this exact component or directly associated failure modes.
-Generic maintenance overlap is not enough. Example: ordinary oil change must not match Turbocharger merely because a turbo uses engine oil.
-Understand Romanian/English/Russian wording and mechanic slang.
-Return ONLY JSON: {"matches":[{"id":"exact case id","score":0-100,"reason":"short reason"}]}
-Max 8; score >=75 only; exact candidate IDs only; uncertain => {"matches":[]}.
+        prompt="""Rerank real Kurtex fleet history for this maintenance component. Understand Romanian, English, Russian,
+mixed mechanic slang, misspellings, symptoms and indirect failure descriptions.
+A useful match may directly name the component, describe a strongly associated failure mode, or describe a connected
+subsystem issue that is diagnostically useful. Do NOT match generic maintenance because words such as oil, engine,
+truck or service overlap. Routine oil change is NOT a Turbocharger match; low boost, charge-air leak, actuator,
+turbo oil leak, abnormal whistle or underboost can be relevant without the word turbocharger.
+Return ONLY JSON: {"matches":[{"id":"exact case id","score":0-100,"reason":"short concrete reason"}]}
+Use exact IDs only. Include useful matches at 60+ confidence; prefer 3-8 when evidence exists.
 PART:
 %s
 CANDIDATES:
 %s"""%(json.dumps(pc,ensure_ascii=False),json.dumps([_ai_case_record(c) for c in candidates],ensure_ascii=False))
-        raw=_cf_ai([{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"user","content":prompt}],1100,0)
+        raw=_cf_ai([{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"user","content":prompt}],1300,0)
         cleaned=re.sub(r"^```(?:json)?\s*|\s*```$","",raw.strip(),flags=re.I|re.S); parsed=json.loads(cleaned)
         by_id={str(c.get("id") or ""):c for c in candidates}; out=[]
         for m in parsed.get("matches",[]) if isinstance(parsed,dict) else []:
-            cid=str(m.get("id") or ""); score=int(m.get("score") or 0)
-            if cid in by_id and score>=75:
+            cid=str(m.get("id") or "")
+            try: score=int(float(m.get("score") or 0))
+            except Exception: score=0
+            if cid in by_id and score>=60:
                 out.append({"case":serialize_case(by_id[cid]),"score":min(score,100),"reason":str(m.get("reason") or "")[:180]})
-        out.sort(key=lambda x:-x["score"]); return jsonify({"items":out[:8],"ai":True})
+        out.sort(key=lambda x:-x["score"])
+        return jsonify({"items":out[:8],"ai":True,"searched_cases":len([c for c in load_cases() if not is_testing(c)]),"candidates":len(candidates)})
     except Exception as e:
-        logger.warning("AI related cases failed: %s",e); _notify_user("ai","AI case matching unavailable","Parts Manual could not verify related cases. No unverified fallback was shown.","warning"); return jsonify({"error":"AI matching unavailable","items":[]}),503
+        logger.warning("AI related cases failed: %s",e)
+        _notify_user("ai","AI case matching unavailable","Parts Manual AI matching failed. No unverified cases were shown.","warning")
+        return jsonify({"error":"AI matching unavailable","items":[]}),503
+
+@app.route("/api/ai/test",methods=["POST"])
+def api_ai_test():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    if not _ai_is_trainer():return jsonify({"error":"forbidden"}),403
+    try:
+        answer=_cf_ai([{"role":"system","content":"Reply exactly: Kurtex AI connected"},{"role":"user","content":"connection test"}],40,0)
+        return jsonify({"ok":True,"response":answer,"model":KURTEX_AI_MODEL})
+    except Exception as e:
+        return jsonify({"ok":False,"error":str(e),"model":KURTEX_AI_MODEL,
+          "account_id_set":bool(CLOUDFLARE_ACCOUNT_ID),"token_set":bool(CLOUDFLARE_API_TOKEN)}),503
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
