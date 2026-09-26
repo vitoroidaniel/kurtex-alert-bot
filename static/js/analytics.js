@@ -386,13 +386,37 @@ async function loadFleetIntel() {
       "</div></div>" +
       "</div>" +
       '<div id="intel-units-wrap"></div>' +
-      '<div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>' +
-      driversHtml);
+      '<div id="intel-drivers-block"><div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>' + driversHtml + '</div>');
     renderIntelUnits(intelFilter.vtype, intelFilter.search);
   } catch (e) {
     if (e.name === "AbortError") return;
     if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
+}
+
+function intelUniversalSearch(value) {
+  var q = (value || "").trim();
+  intelFilter.search = q;
+  renderIntelUnits(intelFilter.vtype, q);
+  var recurring = document.getElementById("recurring-problems-content");
+  if (recurring) {
+    Array.prototype.forEach.call(recurring.children, function (row) {
+      row.style.display = !q || row.textContent.toLowerCase().indexOf(q.toLowerCase()) !== -1 ? "" : "none";
+    });
+  }
+  var drivers = document.getElementById("intel-drivers-block");
+  if (drivers) {
+    var rows = drivers.querySelectorAll("tbody tr");
+    var visible = 0;
+    rows.forEach(function (row) {
+      var show = !q || row.textContent.toLowerCase().indexOf(q.toLowerCase()) !== -1;
+      row.style.display = show ? "" : "none";
+      if (show) visible++;
+    });
+    drivers.style.display = !q || visible ? "" : "none";
+  }
+  if (q.length >= 2) searchIssue();
+  else updateHTML(document.getElementById("issue-search-results"), "");
 }
 
 var intelFilter = { vtype: "all", search: "" };
@@ -459,6 +483,17 @@ function renderIntelUnitsContent(vtype, search) {
     })
     .join("");
   updateHTML(wrap, '<div class="section-title" style="margin-bottom:10px">Most reported units · top 20</div>' +
+    '<div class="toggle-tabs" style="margin-bottom:10px">' +
+    vbtn("all", "All") +
+    vbtn("truck", "Truck") +
+    vbtn("trailer", "Trailer") +
+    vbtn("reefer", "Reefer") +
+    "</div>" +
+    '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="intel-units-search" aria-label="Search intelligence units or issues" placeholder="Search unit or issue..." value="' +
+    attr(search || "") +
+    '" oninput="renderIntelUnits(\'' +
+    vtype +
+    "', this.value)\"></div>" +
     '<div class="table-wrap"><div class="table-scroll"><table>' +
     "<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>" +
     (filtered.length

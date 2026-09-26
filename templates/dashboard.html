@@ -221,7 +221,7 @@
         <button class="toggle-btn" data-vtype="reefer" onclick="setIssueSearchVtype('reefer')">Reefer</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <input id="issue-search-input" aria-label="Search issue history" type="text" placeholder="Search issue or unit..." oninput="if(window._intelData) renderIntelUnits(intelFilter.vtype,this.value)" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <input id="issue-search-input" aria-label="Search issue history" type="text" placeholder="Search all intelligence - issues, units, drivers, recurring problems..." oninput="intelUniversalSearch(this.value)" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
         <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
       </div>
       <div id="issue-search-results"></div>

@@ -44,3 +44,8 @@
 @media(max-width:1180px){.login-card-wrap{width:430px;right:3.5vw}}
 @media(max-width:900px){.login-card-wrap{left:18px;right:18px;width:auto}.login-card{max-width:560px;padding:30px 28px}.login-card h2{font-size:34px}.intro{font-size:14px}}
 @media(max-width:520px){.login-card{padding:27px 23px;border-radius:20px}.login-card h2{font-size:32px}.card-kicker{font-size:10px}.intro{font-size:13.5px}.trust b{font-size:13px}.trust span{font-size:11.5px}.system-row{font-size:10px;padding-left:0;padding-right:0}}
+
+/* v47 centered Telegram widget */
+.telegram-box{justify-content:center!important}
+.tg-wrap{width:auto!important;min-width:0!important;min-height:0!important;background:transparent!important;overflow:visible!important;border-radius:10px!important}
+.tg-wrap iframe{width:230px!important;max-width:78%!important;margin:0 auto!important;border-radius:10px!important;box-shadow:none!important}

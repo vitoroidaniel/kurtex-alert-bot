@@ -2478,11 +2478,50 @@ body[data-current-page="parts_manual"] .part-detail{height:100%;min-height:0!imp
 .calendar-update .dot{width:6px;height:6px;box-shadow:0 0 0 2px #eaf5ed}
 .header-refresh{height:38px;padding:0 11px!important;border-radius:10px!important;color:#d9232e!important;background:#fff!important}
 .header-refresh:hover{background:#fff6f6!important}
-body[data-current-page="cases"] .page-title-icon i:before{content:"\\e32a"}
-body[data-current-page="missed"] .page-title-icon i:before{content:"\\e398"}
-body[data-current-page="fleet"] .page-title-icon i:before{content:"\\e4c2"}
-body[data-current-page="intelligence"] .page-title-icon i:before{content:"\\e0ca"}
-body[data-current-page="agents"] .page-title-icon i:before{content:"\\e68c"}
-body[data-current-page="parts_manual"] .page-title-icon i:before{content:"\\e3f8"}
 @media(max-width:760px){.page-heading{min-height:auto!important;padding:13px 0!important}.page-title-icon{width:34px;height:34px;flex-basis:34px}.page-heading h1{font-size:23px!important}.page-heading .eyebrow{display:none!important}.heading-actions{margin-top:10px!important}.chicago-calendar{min-width:0!important;flex:1!important}.header-refresh span{display:none}.header-refresh{width:38px;padding:0!important;justify-content:center}.calendar-update.live-pill{display:flex!important}}
-\n\n/* v46 — larger workspace headers + one Intelligence search */\n.page-heading{min-height:126px!important;padding:26px 0!important;margin-bottom:22px!important}\n.page-heading .eyebrow{font-size:11px!important;letter-spacing:1.8px!important;font-weight:700!important;margin-bottom:12px!important;color:#5f626a!important}\n.page-title-row{gap:15px!important}.page-title-icon{width:48px!important;height:48px!important;flex-basis:48px!important;border-radius:13px!important;font-size:21px!important}\n.page-heading h1{font-size:34px!important;line-height:1.08!important;letter-spacing:-.85px!important}.page-heading p{font-size:14px!important;line-height:1.5!important;margin-top:7px!important;color:#696c73!important}\n.chicago-calendar{min-width:330px!important;padding:10px 15px 10px 9px!important;gap:13px!important;border-radius:16px!important}.calendar-date-tile{min-width:54px!important;height:58px!important;flex-basis:54px!important;border-radius:10px!important}\n.calendar-date-tile>span{font-size:9px!important;padding:4px 6px!important}.calendar-date-tile strong{font-size:25px!important;padding:1px 7px 3px!important}.calendar-date-copy{gap:3px!important}.calendar-date-copy>strong{font-size:14px!important}.calendar-date-copy>span:not(.calendar-update){font-size:10.5px!important}.calendar-update.live-pill{font-size:10.5px!important;margin-top:3px!important}.calendar-update .dot{width:7px!important;height:7px!important}\n.header-refresh{height:44px!important;padding:0 15px!important;font-size:12px!important}.overview-toolbar{font-size:13px!important}\n#page-fleet_intel>.card:first-child{padding:16px!important}#page-fleet_intel>.card:first-child .card-title{font-size:15px!important;margin-bottom:12px!important}#page-fleet_intel #issue-search-input{font-size:13px!important;padding:11px 13px!important}#page-fleet_intel #intel-units-wrap .section-title{font-size:14px!important}\n@media(max-width:760px){.page-heading{min-height:auto!important;padding:17px 0!important}.page-heading .eyebrow{display:block!important;font-size:9px!important;margin-bottom:9px!important}.page-title-icon{width:40px!important;height:40px!important;flex-basis:40px!important}.page-heading h1{font-size:27px!important}.page-heading p{font-size:13px!important}.chicago-calendar{min-width:0!important;padding:8px 10px!important}.calendar-date-tile{min-width:46px!important;height:50px!important;flex-basis:46px!important}.calendar-date-tile strong{font-size:21px!important}}\n
+
+/* v47 intelligence universal search + stable header icons */
+#page-fleet_intel{overflow:visible!important}
+#page-fleet_intel>.card:first-child{position:sticky!important;top:10px!important;z-index:40!important;overflow:visible!important;border:1px solid var(--border);box-shadow:0 10px 26px rgba(20,20,25,.08)!important}
+#page-fleet_intel #issue-search-input{font-size:14px!important;min-height:42px}
+#page-fleet_intel #issue-search-results:empty{display:none}
+#page-fleet_intel .page-title-icon i:before{content:normal!important}
+
+/* v48 — Fleet Intelligence sticky search handoff */
+#page-intelligence .page-header,
+#page-intelligence .page-head,
+#page-intelligence .view-header {
+  position: relative !important;
+  top: auto !important;
+  z-index: 1 !important;
+}
+#page-intelligence .intelligence-search-shell,
+#page-intelligence .intelligence-search-wrap,
+#page-intelligence .intelligence-searchbar,
+#page-intelligence [data-intelligence-search-shell] {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 45 !important;
+  background: var(--bg, #fff) !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+  margin-top: 0 !important;
+  isolation: isolate;
+}
+#page-intelligence .intelligence-search-shell::before,
+#page-intelligence .intelligence-search-wrap::before,
+#page-intelligence .intelligence-searchbar::before,
+#page-intelligence [data-intelligence-search-shell]::before {
+  content:"";
+  position:absolute;
+  inset:0 -12px;
+  background:var(--bg, #fff);
+  z-index:-1;
+  border-bottom:1px solid var(--line, #e5e7eb);
+}
+@media(max-width: 760px){
+  #page-intelligence .intelligence-search-shell,
+  #page-intelligence .intelligence-search-wrap,
+  #page-intelligence .intelligence-searchbar,
+  #page-intelligence [data-intelligence-search-shell] { top:0 !important; padding-top:8px !important; padding-bottom:8px !important; }
+}

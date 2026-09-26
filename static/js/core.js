@@ -137,6 +137,11 @@ function showPage(page) {
   }
   var titleEl = document.getElementById("page-title");
   if (titleEl) titleEl.textContent = titles[page] || page;
+  var headerIcon = document.querySelector(".page-title-icon i");
+  if (headerIcon) {
+    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
+    headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
+  }
   document.getElementById("page-description").textContent =
     page === "overview"
       ? "Today’s activity, outstanding cases, and team performance."
