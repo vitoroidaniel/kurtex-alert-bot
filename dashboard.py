@@ -190,7 +190,7 @@ def serialize_case(c):
 # ── Kurtex AI / Cloudflare Workers AI ─────────────────────────────────────────
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
-KURTEX_AI_MODEL = os.getenv("KURTEX_AI_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast").strip()
+KURTEX_AI_MODEL=os.getenv("KURTEX_AI_MODEL","@cf/meta/llama-4-scout-17b-16e-instruct").strip()
 
 KURTEX_AI_SYSTEM = """You are Kurtex Maintenance AI, a diagnostic assistant for a commercial truck, trailer and reefer fleet.
 Act like an experienced senior maintenance advisor while staying careful about uncertainty. Understand English, Romanian,
@@ -253,14 +253,44 @@ def _ai_case_record(c):
       "issue":c.get("issue_text") or c.get("description") or "","description":c.get("description") or "",
       "notes":c.get("notes") or "","status":c.get("status") or "","opened":c.get("opened_at") or ""}
 
-def _ai_context(query="",limit=60):
-    cases=[c for c in load_cases() if not is_testing(c)]; terms=_terms(query) if "_terms" in globals() else set()
+def _ai_clip(value,limit):
+    text=re.sub(r"\s+"," ",str(value or "")).strip()
+    return text if len(text)<=limit else text[:max(0,limit-1)]+"…"
+
+def _ai_context(query="",limit=18):
+    """Build a small, relevant context instead of dumping fleet history into every prompt."""
+    cases=[c for c in load_cases() if not is_testing(c)]
+    terms=_maintenance_tokens(query) if "_maintenance_tokens" in globals() else (_terms(query) if "_terms" in globals() else set())
+    generic={"truck","trailer","unit","issue","problem","repair","service","check","maintenance","driver","case"}
+    terms={t for t in terms if t not in generic}
     def rank(c):
-        txt=" ".join(str(c.get(k) or "") for k in ("description","notes","issue_text","vehicle_type","unit_number","report_driver")).lower()
-        return (sum(1 for t in terms if t in txt),c.get("opened_at") or "")
-    cases=sorted(cases,key=rank,reverse=True)[:limit]
-    notes=_read_knowledge()[-30:] if "_read_knowledge" in globals() else []
-    return {"cases":[_ai_case_record(c) for c in cases],"knowledge_notes":notes,"approved_maintenance_knowledge":_ai_knowledge_matches(query,12) if "_ai_knowledge_matches" in globals() else []}
+        fields=" ".join(str(c.get(k) or "") for k in ("description","notes","issue_text","vehicle_type","unit_number","report_driver"))
+        low=fields.lower()
+        score=sum(3 if t in str(c.get("issue_text") or "").lower() else 1 for t in terms if t in low)
+        return (score,c.get("opened_at") or "")
+    ranked=sorted(cases,key=rank,reverse=True)
+    matched=[c for c in ranked if rank(c)[0]>0][:limit]
+    if not matched: matched=ranked[:min(6,limit)]
+    compact=[]
+    for c in matched:
+        r=_ai_case_record(c)
+        compact.append({"id":r["id"],"unit":r["unit"],"type":r["type"],"driver":r["driver"],
+          "issue":_ai_clip(r["issue"],420),"description":_ai_clip(r["description"],700),
+          "notes":_ai_clip(r["notes"],500),"status":r["status"],"opened":r["opened"]})
+    notes=[]
+    if "_read_knowledge" in globals():
+        raw=_read_knowledge() or []
+        # Only a few recent team notes; large note stores must not inflate every chat.
+        for n in raw[-8:]:
+            if isinstance(n,dict):
+                notes.append({k:_ai_clip(n.get(k),500) for k in ("part","note","author","updated") if n.get(k)})
+            else: notes.append(_ai_clip(n,500))
+    approved=[]
+    for x in (_ai_knowledge_matches(query,6) if "_ai_knowledge_matches" in globals() else []):
+        approved.append({"id":x.get("id"),"title":_ai_clip(x.get("title"),140),
+          "tags":(x.get("tags") or [])[:8],"content":_ai_clip(x.get("content"),2200)})
+    return {"cases":compact,"knowledge_notes":notes,"approved_maintenance_knowledge":approved,
+            "retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved)}}
 
 
 NOTIFICATIONS_FILE = DATA_DIR / "dashboard_notifications.json"
@@ -473,25 +503,31 @@ def api_ai_chat():
         chat={"id":uuid.uuid4().hex,"title":_chat_title(message),"created_at":_now_iso(),"updated_at":_now_iso(),"messages":[]}
         chats.append(chat)
     history=chat.get("messages") if isinstance(chat.get("messages"),list) else []
+    stage="context"
     try:
-        ctx=_ai_context(message,70)
+        ctx=_ai_context(message,18)
+        stage="prompt"
         messages=[{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"system","content":
           "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
           json.dumps(ctx,ensure_ascii=False)}]
-        for item in history[-12:]:
-            role=item.get("role"); content=str(item.get("content") or "")[:3000]
+        for item in history[-8:]:
+            role=item.get("role"); content=_ai_clip(item.get("content"),1800)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
         messages.append({"role":"user","content":message})
+        stage="workers_ai"
         answer=_cf_ai(messages,850,.2)
+        stage="save_chat"
         history.extend([{"role":"user","content":message,"at":_now_iso()},{"role":"assistant","content":answer,"at":_now_iso()}])
         chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
         if not chat.get("title") or chat.get("title")=="New maintenance chat":chat["title"]=_chat_title(message)
         _save_user_chats(chats)
         return jsonify({"answer":answer,"chat_id":chat["id"],"title":chat["title"]})
     except Exception as e:
-        logger.warning("Kurtex AI chat failed: %s",e)
-        _notify_user("ai","Kurtex AI unavailable","The AI request failed. Check Workers AI access or try again later.","warning")
-        return jsonify({"error":"Kurtex AI is temporarily unavailable."}),503
+        logger.exception("Kurtex AI chat failed at stage=%s: %s",stage,e)
+        _notify_user("ai","Kurtex AI unavailable","AI chat failed at "+stage+". Try again or check AI Training diagnostics.","warning")
+        payload={"error":"Kurtex AI is temporarily unavailable.","stage":stage}
+        if _ai_is_trainer(): payload["detail"]=str(e)[:500]
+        return jsonify(payload),503
 
 def _maintenance_tokens(value):
     text=str(value or "").lower()
