@@ -186,6 +186,189 @@ def serialize_case(c):
                 "response":"—","description":"","notes":"","reassigned":False}
 
 
+
+# ── Kurtex AI / Cloudflare Workers AI ─────────────────────────────────────────
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
+KURTEX_AI_MODEL = os.getenv("KURTEX_AI_MODEL", "@cf/meta/llama-3.3-70b-instruct-fp8-fast").strip()
+
+KURTEX_AI_SYSTEM = """You are Kurtex Maintenance AI, a diagnostic assistant for a commercial truck, trailer and reefer fleet.
+Act like an experienced senior maintenance advisor while staying careful about uncertainty. Understand English, Romanian,
+Russian, mixed-language mechanic slang, abbreviations and misspellings.
+Rules:
+- Diagnose systematically: symptom -> likely system -> useful questions/checks -> possible causes -> next action.
+- Never invent a Kurtex case, repair, part number, fault code, measurement, OEM procedure or mechanic finding.
+- Clearly separate KURTEX HISTORY supplied in context from your own diagnostic assessment.
+- Retrieved fleet records are historical evidence, not proof the current problem has the same cause.
+- For brakes, steering, wheel-end, pressurized air, refrigerant, high-current electrical and other safety-critical work,
+  recommend qualified technician verification and do not give risky step-by-step repair instructions.
+- If evidence is weak, say so. Better no match than an unrelated match.
+- Keep answers practical and concise for dispatch/maintenance agents.
+- Reply in the language used by the agent unless asked otherwise.
+"""
+
+def _cf_ai(messages, max_tokens=700, temperature=0.2):
+    if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+        raise RuntimeError("Workers AI is not configured")
+    url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{KURTEX_AI_MODEL}"
+    req=urllib.request.Request(url,data=json.dumps({"messages":messages,"max_tokens":max_tokens,"temperature":temperature}).encode("utf-8"),
+        method="POST",headers={"Authorization":f"Bearer {CLOUDFLARE_API_TOKEN}","Content-Type":"application/json"})
+    try:
+        with urllib.request.urlopen(req,timeout=35) as resp: payload=json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        logger.warning("Workers AI request failed: %s",e); raise RuntimeError("Workers AI request failed")
+    result=payload.get("result") or {}; text=result.get("response")
+    if not text and isinstance(result.get("choices"),list) and result["choices"]:
+        text=((result["choices"][0].get("message") or {}).get("content"))
+    if not text: raise RuntimeError("Workers AI returned no response")
+    return text.strip()
+
+def _ai_case_record(c):
+    return {"id":c.get("id") or "","driver":c.get("report_driver") or c.get("driver_name") or "",
+      "unit":c.get("unit_number") or "","type":(c.get("vehicle_type") or "").lower(),
+      "issue":c.get("issue_text") or c.get("description") or "","description":c.get("description") or "",
+      "notes":c.get("notes") or "","status":c.get("status") or "","opened":c.get("opened_at") or ""}
+
+def _ai_context(query="",limit=60):
+    cases=[c for c in load_cases() if not is_testing(c)]; terms=_terms(query) if "_terms" in globals() else set()
+    def rank(c):
+        txt=" ".join(str(c.get(k) or "") for k in ("description","notes","issue_text","vehicle_type","unit_number","report_driver")).lower()
+        return (sum(1 for t in terms if t in txt),c.get("opened_at") or "")
+    cases=sorted(cases,key=rank,reverse=True)[:limit]
+    notes=_read_knowledge()[-30:] if "_read_knowledge" in globals() else []
+    return {"cases":[_ai_case_record(c) for c in cases],"knowledge_notes":notes}
+
+
+AI_CHAT_FILE = DATA_DIR / "ai_chats.json"
+
+def _ai_user_key():
+    user=session.get("user") or {}
+    if isinstance(user,dict):
+        return str(user.get("id") or user.get("username") or user.get("email") or user.get("first_name") or "user")
+    return str(user or "user")
+
+def _read_ai_chats():
+    try:
+        if AI_CHAT_FILE.exists():
+            data=json.loads(AI_CHAT_FILE.read_text(encoding="utf-8"))
+            return data if isinstance(data,dict) else {}
+    except Exception as e: logger.warning("AI chat history read failed: %s",e)
+    return {}
+
+def _write_ai_chats(data):
+    AI_CHAT_FILE.parent.mkdir(parents=True,exist_ok=True)
+    tmp=AI_CHAT_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+    tmp.replace(AI_CHAT_FILE)
+
+def _user_chats():
+    data=_read_ai_chats(); key=_ai_user_key()
+    chats=data.get(key,[])
+    return chats if isinstance(chats,list) else []
+
+def _save_user_chats(chats):
+    data=_read_ai_chats(); data[_ai_user_key()]=chats[-100:]; _write_ai_chats(data)
+
+def _chat_title(text):
+    clean=re.sub(r"\s+"," ",str(text or "")).strip()
+    return (clean[:52]+"…") if len(clean)>52 else (clean or "New maintenance chat")
+
+def _now_iso():
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+@app.route("/api/ai/chats",methods=["GET","POST"])
+def api_ai_chats():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    chats=_user_chats()
+    if request.method=="GET":
+        summaries=[{"id":c.get("id"),"title":c.get("title") or "Maintenance chat","created_at":c.get("created_at"),
+                    "updated_at":c.get("updated_at"),"message_count":len(c.get("messages") or [])} for c in chats]
+        summaries.sort(key=lambda x:x.get("updated_at") or "",reverse=True)
+        return jsonify({"items":summaries})
+    data=request.get_json(silent=True) or {}; title=str(data.get("title") or "New maintenance chat")[:80]
+    cid=uuid.uuid4().hex
+    chat={"id":cid,"title":title,"created_at":_now_iso(),"updated_at":_now_iso(),"messages":[]}
+    chats.append(chat); _save_user_chats(chats)
+    return jsonify(chat),201
+
+@app.route("/api/ai/chats/<chat_id>",methods=["GET","DELETE","PATCH"])
+def api_ai_chat_item(chat_id):
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
+    if not chat:return jsonify({"error":"Chat not found"}),404
+    if request.method=="GET":return jsonify(chat)
+    if request.method=="DELETE":
+        _save_user_chats([c for c in chats if str(c.get("id"))!=chat_id]); return jsonify({"ok":True})
+    data=request.get_json(silent=True) or {}; title=str(data.get("title") or "").strip()
+    if title:chat["title"]=title[:80];chat["updated_at"]=_now_iso();_save_user_chats(chats)
+    return jsonify(chat)
+
+@app.route("/api/ai/status")
+def api_ai_status():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    return jsonify({"configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),"model":KURTEX_AI_MODEL})
+
+@app.route("/api/ai/chat",methods=["POST"])
+def api_ai_chat():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    data=request.get_json(silent=True) or {}; message=str(data.get("message") or "").strip()[:4000]
+    page=str(data.get("page") or "dashboard")[:80]; chat_id=str(data.get("chat_id") or "").strip()
+    if not message:return jsonify({"error":"Message is required"}),400
+    chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
+    if chat is None:
+        chat={"id":uuid.uuid4().hex,"title":_chat_title(message),"created_at":_now_iso(),"updated_at":_now_iso(),"messages":[]}
+        chats.append(chat)
+    history=chat.get("messages") if isinstance(chat.get("messages"),list) else []
+    try:
+        ctx=_ai_context(message,70)
+        messages=[{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"system","content":
+          "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
+          json.dumps(ctx,ensure_ascii=False)}]
+        for item in history[-12:]:
+            role=item.get("role"); content=str(item.get("content") or "")[:3000]
+            if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
+        messages.append({"role":"user","content":message})
+        answer=_cf_ai(messages,850,.2)
+        history.extend([{"role":"user","content":message,"at":_now_iso()},{"role":"assistant","content":answer,"at":_now_iso()}])
+        chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
+        if not chat.get("title") or chat.get("title")=="New maintenance chat":chat["title"]=_chat_title(message)
+        _save_user_chats(chats)
+        return jsonify({"answer":answer,"chat_id":chat["id"],"title":chat["title"]})
+    except Exception as e:
+        logger.warning("Kurtex AI chat failed: %s",e)
+        return jsonify({"error":"Kurtex AI unavailable. Check Cloudflare credentials/model access."}),503
+
+@app.route("/api/ai/related_cases",methods=["POST"])
+def api_ai_related_cases():
+    if not session.get("user"):return jsonify({"error":"unauthorized"}),401
+    data=request.get_json(silent=True) or {}; part=data.get("part") if isinstance(data.get("part"),dict) else {}
+    name=str(part.get("name") or "").strip()[:150]
+    if not name:return jsonify({"error":"Part is required"}),400
+    try:
+        candidates=sorted([c for c in load_cases() if not is_testing(c)],key=lambda c:c.get("opened_at") or "",reverse=True)[:120]
+        pc={"name":name,"category":str(part.get("cat") or "")[:80],"keywords":str(part.get("keywords") or "")[:600],
+            "common_issues":part.get("issues") if isinstance(part.get("issues"),list) else [],
+            "how_it_works":str(part.get("works") or "")[:900]}
+        prompt="""Identify ONLY historical cases genuinely related to this exact component or directly associated failure modes.
+Generic maintenance overlap is not enough. Example: ordinary oil change must not match Turbocharger merely because a turbo uses engine oil.
+Understand Romanian/English/Russian wording and mechanic slang.
+Return ONLY JSON: {"matches":[{"id":"exact case id","score":0-100,"reason":"short reason"}]}
+Max 8; score >=75 only; exact candidate IDs only; uncertain => {"matches":[]}.
+PART:
+%s
+CANDIDATES:
+%s"""%(json.dumps(pc,ensure_ascii=False),json.dumps([_ai_case_record(c) for c in candidates],ensure_ascii=False))
+        raw=_cf_ai([{"role":"system","content":KURTEX_AI_SYSTEM},{"role":"user","content":prompt}],1100,0)
+        cleaned=re.sub(r"^```(?:json)?\s*|\s*```$","",raw.strip(),flags=re.I|re.S); parsed=json.loads(cleaned)
+        by_id={str(c.get("id") or ""):c for c in candidates}; out=[]
+        for m in parsed.get("matches",[]) if isinstance(parsed,dict) else []:
+            cid=str(m.get("id") or ""); score=int(m.get("score") or 0)
+            if cid in by_id and score>=75:
+                out.append({"case":serialize_case(by_id[cid]),"score":min(score,100),"reason":str(m.get("reason") or "")[:180]})
+        out.sort(key=lambda x:-x["score"]); return jsonify({"items":out[:8],"ai":True})
+    except Exception as e:
+        logger.warning("AI related cases failed: %s",e); return jsonify({"error":"AI matching unavailable","items":[]}),503
+
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 @app.route("/auth/telegram")

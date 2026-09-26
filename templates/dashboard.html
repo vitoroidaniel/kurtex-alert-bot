@@ -247,6 +247,15 @@
 </div>
 
 {% include 'partials/modals.html' %}
+<button id="kurtex-ai-fab" class="kurtex-ai-fab" type="button" onclick="toggleKurtexAI()" aria-label="Open Kurtex AI"><i class="ph ph-sparkle"></i><span>Kurtex AI</span></button>
+<aside id="kurtex-ai-panel" class="kurtex-ai-panel" aria-hidden="true">
+<header class="kurtex-ai-head"><button class="ai-history-toggle" type="button" onclick="toggleAIHistory()" title="Chat history"><i class="ph ph-list"></i></button><div class="kurtex-ai-avatar"><i class="ph ph-wrench"></i></div><div><strong id="kurtex-ai-title">Kurtex Maintenance AI</strong><small>Truck · Trailer · Reefer</small></div><button type="button" onclick="newKurtexAIChat()" title="New chat"><i class="ph ph-plus"></i></button><button type="button" onclick="toggleKurtexAI(false)"><i class="ph ph-x"></i></button></header>
+<div class="kurtex-ai-body"><aside id="kurtex-ai-history" class="kurtex-ai-history"><div class="ai-history-head"><strong>Chats</strong><button onclick="newKurtexAIChat()"><i class="ph ph-plus"></i> New</button></div><div id="kurtex-ai-chat-list"></div></aside><section class="kurtex-ai-chat-main">
+<div class="kurtex-ai-notice"><i class="ph ph-shield-warning"></i><span>Diagnostic helper. Double-check safety-critical advice and repairs with a qualified technician.</span></div>
+<div id="kurtex-ai-messages" class="kurtex-ai-messages"><div class="kurtex-ai-msg assistant">Ask about a truck, trailer, reefer, symptom, part, or previous Kurtex case. Romanian, English and Russian are OK.</div></div>
+<div class="kurtex-ai-quick"><button onclick="kurtexAIQuick('Find similar Kurtex cases for the issue I am viewing.')">Similar cases</button><button onclick="kurtexAIQuick('Help me diagnose this maintenance issue. Ask me for the missing symptoms first.')">Diagnose</button></div>
+<form class="kurtex-ai-compose" onsubmit="sendKurtexAI(event)"><textarea id="kurtex-ai-input" rows="2" placeholder="ex: camion 202 pierde aer cand apasa frana"></textarea><button type="submit"><i class="ph ph-paper-plane-tilt"></i></button></form>
+</section></div></aside>
 <script defer src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/core.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/views.js') }}"></script>
@@ -255,5 +264,6 @@
 <script defer src="{{ url_for('static', filename='js/analytics.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/layout.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/ai.js') }}"></script>
 </body>
 </html>
