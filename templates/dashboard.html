@@ -114,11 +114,20 @@
 
   <div class="page" id="page-ai_assistant">
   <section class="ai-assistant-workspace">
-    <div class="ai-page-toolbar"><div><strong>Kurtex AI</strong><small>Maintenance assistant</small></div><div class="ai-page-toolbar-actions"><button type="button" onclick="openAIPageHistory()"><i class="ph ph-clock-counter-clockwise"></i> Chat history</button><button type="button" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i> New chat</button></div></div>
-    <div class="ai-assistant-page-shell">
+    <div class="ai-page-layout">
+      <aside id="ai-page-sidebar" class="ai-page-sidebar">
+        <div class="ai-page-sidebar-head"><button type="button" class="ai-side-toggle" onclick="toggleAIPageSidebar()" title="Hide chat history"><i class="ph ph-sidebar-simple"></i></button><button type="button" class="ai-side-new" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i><span>New chat</span></button></div>
+        <div class="ai-page-side-label">Chats</div>
+        <div id="ai-page-sidebar-list" class="ai-page-sidebar-list"><div class="ai-history-empty">Loading conversations...</div></div>
+      </aside>
+      <div class="ai-page-chat-column">
+        <div class="ai-page-chatbar"><button type="button" class="ai-side-show" onclick="toggleAIPageSidebar(true)" title="Show chat history"><i class="ph ph-sidebar-simple"></i></button><strong>Kurtex AI</strong><button type="button" onclick="newKurtexAIPageChat()" title="New chat"><i class="ph ph-plus"></i></button></div>
+        <div class="ai-assistant-page-shell">
       <div id="ai-page-messages" class="ai-page-messages"><div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div></div>
       <div class="ai-page-quick"><button onclick="aiPageQuick('Find similar Kurtex cases for the issue I am viewing.')">Similar cases</button><button onclick="aiPageQuick('Help me diagnose this maintenance issue. Ask me only for information you actually need.')">Diagnose issue</button></div>
       <form class="ai-page-compose" onsubmit="sendKurtexAIPage(event);return false"><textarea id="ai-page-input" placeholder="Ask Kurtex AI about a maintenance issue..."></textarea><button type="submit" aria-label="Send"><i class="ph ph-paper-plane-tilt"></i></button></form>
+        </div>
+      </div>
     </div>
   </section>
 </div>

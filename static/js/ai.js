@@ -50,11 +50,23 @@ function toggleKurtexAIFullscreen(force){
  p.classList.toggle('ai-fullscreen',on);
  var b=p.querySelector('.ai-expand-btn i');if(b)b.className=on?'ph ph-arrows-in':'ph ph-arrows-out';
 }
+function toggleAIPageSidebar(force){
+ var s=document.getElementById('ai-page-sidebar'),layout=document.querySelector('#page-ai_assistant .ai-page-layout');if(!s||!layout)return;
+ var show=typeof force==='boolean'?force:s.classList.contains('collapsed');
+ s.classList.toggle('collapsed',!show);layout.classList.toggle('sidebar-collapsed',!show)
+}
+async function loadAIPageSidebar(){
+ var list=document.getElementById('ai-page-sidebar-list');if(!list)return;
+ try{
+  var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
+  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" onclick="openAIPageSavedChat(\''+attr(c.id)+'\')"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+ }catch(e){list.innerHTML='<div class="ai-history-empty">Unable to load chats.</div>'}
+}
 async function newKurtexAIPageChat(){
  kurtexAIChatId=null;
  var t=document.getElementById('ai-page-messages');
  if(t)t.innerHTML='<div class="ai-page-welcome"><i class="ph ph-sparkle"></i><h3>How can I help?</h3><p>Ask about a truck, trailer, reefer, symptom, fault code, part, or Kurtex case history.</p></div>';
- var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}
+ var i=document.getElementById('ai-page-input');if(i){i.value='';i.focus()}loadAIPageSidebar()
 }
 async function openAIPageHistory(){
  var shell=document.querySelector('#page-ai_assistant .ai-assistant-workspace');if(!shell)return;
@@ -74,13 +86,13 @@ async function openAIPageSavedChat(id){
   var chat=x.item||x.chat||x;kurtexAIChatId=chat.id||id;var box=document.getElementById('ai-page-messages');box.innerHTML='';
   (chat.messages||[]).forEach(function(m){var d=document.createElement('div');d.className='ai-page-msg '+(m.role==='assistant'?'assistant':'user');d.innerHTML=m.role==='assistant'?kurtexAIFormat(m.content||m.text||''):escapeAI(m.content||m.text||'');box.appendChild(d)});
   if(!(chat.messages||[]).length)await newKurtexAIPageChat();
-  var p=document.getElementById('ai-page-history');if(p)p.remove();box.scrollTop=box.scrollHeight
+  var p=document.getElementById('ai-page-history');if(p)p.remove();box.scrollTop=box.scrollHeight;loadAIPageSidebar()
  }catch(e){}
 }
 function openKurtexAIPageChat(){
  if(typeof showPage==='function')showPage('ai_assistant');
  var p=document.getElementById('kurtex-ai-panel');if(p)p.classList.remove('open','ai-fullscreen','history-open');
- syncKurtexAIPageFromPanel();
+ syncKurtexAIPageFromPanel();loadAIPageSidebar();
  setTimeout(function(){var i=document.getElementById('ai-page-input');if(i)i.focus()},50)
 }
 function syncKurtexAIPageFromPanel(){
@@ -102,7 +114,7 @@ async function sendKurtexAIPage(e){
   var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,chat_id:kurtexAIChatId,page:'ai_assistant'})}),x=await r.json();
   if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');
   kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.');
-  loadKurtexAIChats()
+  loadKurtexAIChats();loadAIPageSidebar()
  }catch(err){wait.classList.remove('thinking');wait.textContent='Message was not sent. '+(err.message||'Check AI Training diagnostics.')}
  input.focus();dst.scrollTop=dst.scrollHeight;return false
 }
