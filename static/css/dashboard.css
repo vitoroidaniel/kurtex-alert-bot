@@ -4114,3 +4114,27 @@ body[data-current-page="ai_training"] .ai-kb-item{
 }
 body[data-current-page="ai_training"] .ai-kb-item:first-child{border-top:1px solid var(--border)!important}
 body[data-current-page="ai_training"] .ai-kb-item:hover{background:var(--surface-2,#fafafa)!important}
+
+/* v102 — AI Assistant fits visibly inside viewport with breathing room */
+body[data-current-page="ai_assistant"] .main{height:100vh!important;padding:16px 20px 20px!important;overflow:hidden!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100vh - 36px)!important;max-height:calc(100vh - 36px)!important;min-height:0!important;overflow:hidden!important}
+body[data-current-page="ai_assistant"] .ai-assistant-workspace{height:100%!important;max-height:100%!important;padding:0!important}
+body[data-current-page="ai_assistant"] .ai-page-layout{height:100%!important;max-height:100%!important;border:1px solid var(--border)!important;border-radius:12px!important;overflow:hidden!important}
+body[data-current-page="ai_assistant"] .ai-page-chat-column,
+body[data-current-page="ai_assistant"] .ai-assistant-page-shell{height:100%!important;min-height:0!important;overflow:hidden!important}
+body[data-current-page="ai_assistant"] .ai-page-messages{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;padding-bottom:18px!important}
+body[data-current-page="ai_assistant"] .ai-page-quick{flex:0 0 auto!important;padding:8px 0 6px!important}
+body[data-current-page="ai_assistant"] .ai-page-compose{flex:0 0 auto!important;margin:0 auto 12px!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-list{min-height:0!important;overflow-y:auto!important}
+
+/* v102 — AI Training page fixed; only Knowledge Library scrolls */
+body[data-current-page="ai_training"] .main{height:100vh!important;overflow:hidden!important}
+body[data-current-page="ai_training"] #page-ai_training{height:calc(100vh - 158px)!important;max-height:calc(100vh - 158px)!important;min-height:0!important;overflow:hidden!important;padding:0!important}
+body[data-current-page="ai_training"] #page-ai_training .ai-training-page,
+body[data-current-page="ai_training"] .ai-training-grid{height:100%!important;max-height:100%!important;min-height:0!important;overflow:hidden!important}
+body[data-current-page="ai_training"] .ai-training-grid{align-items:stretch!important}
+body[data-current-page="ai_training"] .ai-training-main{height:100%!important;min-height:0!important;grid-template-rows:auto minmax(0,1fr)!important;overflow:hidden!important}
+body[data-current-page="ai_training"] .ai-training-side{max-height:100%!important;overflow:hidden!important;align-content:start!important}
+body[data-current-page="ai_training"] .ai-library-card{min-height:0!important;height:100%!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
+body[data-current-page="ai_training"] .ai-library-card .ai-card-head{flex:0 0 auto!important}
+body[data-current-page="ai_training"] .ai-kb-list{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:contain!important;padding-right:4px!important}
