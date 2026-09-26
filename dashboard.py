@@ -1032,3 +1032,102 @@ def start_dashboard_thread():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     run_dashboard()
+
+
+# ── Operations intelligence: recurring issues, similarity, knowledge ─────────
+def _case_search_text(c):
+    return " ".join(str(c.get(k) or "") for k in ("description","notes","issue_text","vehicle_type","unit_number","load_type")).lower()
+
+def _terms(text):
+    stop={"the","and","for","with","from","that","this","truck","trailer","unit","driver","case","issue","was","are","not","but","has","have","had","into","out","too","very","need","needs","vehicle"}
+    return {w for w in re.findall(r"[a-z0-9][a-z0-9_-]{2,}",(text or "").lower()) if w not in stop}
+
+@app.route("/api/recurring_problems")
+def api_recurring_problems():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    try:
+        cases=load_cases(); groups=defaultdict(list)
+        for c in cases:
+            unit=(c.get("unit_number") or "").strip()
+            if not unit: continue
+            words=_terms(_case_search_text(c))
+            # stable operational buckets, only returned when supported by real case text
+            buckets={
+              "Air / suspension":{"air","suspension","bag","spring","leak","pressure"},
+              "Brakes":{"brake","abs","chamber","slack"},
+              "Cooling / overheating":{"coolant","cooling","overheat","thermostat","radiator"},
+              "Electrical / starting":{"battery","starter","alternator","electrical","voltage","crank"},
+              "Reefer":{"reefer","temperature","temp","thermo","carrier","cooling"},
+              "Tires / wheel end":{"tire","wheel","hub","bearing","seal"},
+              "Aftertreatment":{"def","dpf","scr","regen","emission"},
+            }
+            for label,keys in buckets.items():
+                if words & keys: groups[(unit,label)].append(c)
+        rows=[]
+        for (unit,label),items in groups.items():
+            if len(items)<2: continue
+            latest=max((x.get("opened_at") or "") for x in items)
+            rows.append({"unit":unit,"problem":label,"count":len(items),"latest":fmt_dt(latest),"cases":[serialize_case(x) for x in sorted(items,key=lambda z:z.get("opened_at","") or "",reverse=True)[:4]]})
+        rows.sort(key=lambda x:(-x["count"],x["unit"]))
+        return jsonify({"items":rows[:30]})
+    except Exception as e:
+        logger.error("recurring problems error: %s",e); return jsonify({"items":[]})
+
+@app.route("/api/similar_cases")
+def api_similar_cases():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    cid=request.args.get("id","").strip(); query=request.args.get("q","").strip()
+    try:
+        cases=load_cases(); current=None
+        if cid:
+            current=next((c for c in cases if (c.get("id") or "")==cid or (c.get("id") or "").startswith(cid)),None)
+            if current: query=_case_search_text(current)
+        qterms=_terms(query)
+        scored=[]
+        for c in cases:
+            if current is c: continue
+            terms=_terms(_case_search_text(c)); overlap=qterms & terms
+            if not overlap: continue
+            score=len(overlap)/(max(1,len(qterms|terms))**0.5)
+            if (current and current.get("unit_number") and c.get("unit_number")==current.get("unit_number")): score+=.35
+            scored.append((score,c,sorted(overlap)[:6]))
+        scored.sort(key=lambda x:x[0],reverse=True)
+        return jsonify({"items":[{"score":round(sc,2),"matched":m,"case":serialize_case(c)} for sc,c,m in scored[:6]]})
+    except Exception as e:
+        logger.error("similar cases error: %s",e); return jsonify({"items":[]})
+
+@app.route("/api/part_cases")
+def api_part_cases():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    q=request.args.get("q","").strip(); keys=_terms(q)
+    try:
+        rows=[]
+        for c in load_cases():
+            text=_case_search_text(c); hit=[k for k in keys if k in text]
+            if hit: rows.append((len(hit),c,hit))
+        rows.sort(key=lambda x:(-x[0],x[1].get("opened_at","") or ""),reverse=False)
+        return jsonify({"items":[{"matched":h[:5],"case":serialize_case(c)} for _,c,h in rows[:8]]})
+    except Exception as e:
+        logger.error("part cases error: %s",e); return jsonify({"items":[]})
+
+KNOWLEDGE_FILE=DATA_DIR/"knowledge_notes.json"
+def _read_knowledge():
+    try:
+        x=json.loads(KNOWLEDGE_FILE.read_text(encoding="utf-8")) if KNOWLEDGE_FILE.exists() else []
+        return x if isinstance(x,list) else []
+    except Exception: return []
+def _write_knowledge(items):
+    tmp=KNOWLEDGE_FILE.with_suffix('.tmp'); tmp.write_text(json.dumps(items,ensure_ascii=False,indent=2),encoding='utf-8'); tmp.replace(KNOWLEDGE_FILE)
+
+@app.route("/api/knowledge_notes",methods=["GET","POST"])
+def api_knowledge_notes():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    items=_read_knowledge()
+    if request.method=="GET":
+        part=request.args.get("part","").strip().lower()
+        if part: items=[x for x in items if (x.get("part") or "").lower()==part]
+        return jsonify({"items":items[-50:][::-1]})
+    data=request.get_json(silent=True) or {}; note=str(data.get("note") or "").strip()[:1500]; part=str(data.get("part") or "").strip()[:120]
+    if not note: return jsonify({"error":"Note is required"}),400
+    u=session.get("user") or {}; item={"id":secrets.token_hex(6),"part":part,"note":note,"author":u.get("first_name") or u.get("name") or u.get("username") or "Agent","created":chicago_now().strftime("%Y-%m-%d %H:%M")}
+    items.append(item); _write_knowledge(items[-1000:]); return jsonify(item),201

@@ -173,7 +173,8 @@ async function loadCaseList(kind, append, quiet) {
         ? '<div class="load-more"><button class="btn" onclick="loadCaseList(\'' +
           kind +
           "',true)\">Load more ↓</button></div>"
-        : ""));
+        : "") + '<div class="case-similarity-block"><div class="agent-section-head"><div><span class="eyebrow">CASE SIMILARITY</span><h3>Similar previous cases</h3></div></div><div id="case-similarity" class="intel-mini-list"><div class="loading">Finding similar cases...</div></div></div>');
+    loadSimilarCases(c.full_id || c.id);
   } catch (e) {
     if (e.name === "AbortError") return;
     if (!state.rows.length) if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
@@ -436,87 +437,20 @@ async function loadMyProfile() {
   }
 }
 
-async function loadAgents() {
-  var el = document.getElementById("agents-content");
-  if (!el) return;
-  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading...</div>');
-  try {
-    var r = await apiFetch("/api/agents");
-    if (r.status === 403) {
-      updateHTML(el, '<div class="loading">Access denied.</div>');
-      return;
-    }
-    if (!r.ok) {
-      updateHTML(el, '<div class="loading">Error loading agents.</div>');
-      return;
-    }
-    var agents = await r.json();
-    if (!agents.length) {
-      updateHTML(el, '<div class="empty-state">No agents found.</div>');
-      return;
-    }
-    var cards = agents
-      .map(function (a, i) {
-        var init = (a.name || "?")[0].toUpperCase();
-        var rate = a.rate || 0;
-        var rateColor = "var(--text)";
-        return (
-          '<div class="card agent-card" role="button" tabindex="0" data-agent="' +
-          attr(a.name || "") +
-          '" data-username="' +
-          attr(a.username || "") +
-          '" data-agent-id="' +
-          attr(a.id || "") +
-          '" onclick="openAgentModal(this.dataset.agent, this.dataset.username, this.dataset.agentId)">' +
-          '<div class="agent-card-rank">#' +
-          (i + 1) +
-          "</div>" +
-          '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-right:36px">' +
-          '<div class="agent-card-avatar">' +
-          h(init) +
-          "</div>" +
-          '<div style="min-width:0"><div style="font-size:17px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
-          h(a.name || "") +
-          "</div>" +
-          '<div style="font-size:12px;color:var(--muted)">' +
-          (a.username ? "@" + h(a.username) : "No username") +
-          "</div></div>" +
-          "</div>" +
-          '<div class="mini-stat-grid">' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--text)">' +
-          (a.total || 0) +
-          '</div><div class="agent-card-statlabel">Total</div></div>' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--text)">' +
-          (a.done || 0) +
-          '</div><div class="agent-card-statlabel">Resolved</div></div>' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:var(--text)">' +
-          (a.missed || 0) +
-          '</div><div class="agent-card-statlabel">Missed</div></div>' +
-          '<div class="agent-card-statbox"><div class="agent-card-statval" style="color:' +
-          rateColor +
-          '">' +
-          rate +
-          '%</div><div class="agent-card-statlabel">Resolution rate</div></div>' +
-          "</div>" +
-          '<div class="agent-rate-track"><div class="agent-rate-fill" style="width:' +
-          Math.min(rate, 100) +
-          '%"></div></div>' +
-          '<div class="agent-card-footer" style="justify-content:flex-end">' +
-          '<span style="color:var(--accent);font-weight:700;display:flex;align-items:center;gap:4px">View Cases <i class="ph ph-arrow-right"></i></span>' +
-          "</div>" +
-          "</div>"
-        );
-      })
-      .join("");
-    updateHTML(el, '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:18px">' +
-      cards +
-      "</div>");
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    console.error(e);
-    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
-  }
-}
+var agentsWorkspace={agents:[],selected:null};
+async function loadAgents(){
+ var el=document.getElementById('agents-content');if(!el)return;el.innerHTML='<div class="loading">Loading agents...</div>';
+ try{var r=await apiFetch('/api/agents');if(!r.ok){el.innerHTML='<div class="loading">Unable to load agents.</div>';return;}var agents=await r.json();agentsWorkspace.agents=agents;
+ if(!agents.length){el.innerHTML='<div class="empty-state">No agents found.</div>';return;}
+ el.innerHTML='<div class="agents-page-head"><div><span class="eyebrow">TEAM</span><h2>Agents</h2><p>Workload and case activity without the card clutter.</p></div><div class="agents-summary"><strong>'+agents.length+'</strong><span>agents</span></div></div><div class="agents-toolbar"><div class="agents-search"><i class="ph ph-magnifying-glass"></i><input id="agents-search" placeholder="Search agent..." oninput="filterAgents(this.value)"></div></div><div class="agents-workspace"><aside class="agents-list" id="agents-list"></aside><section class="agent-workspace-detail" id="agent-workspace-detail"></section></div>';
+ renderAgentRows(agents);selectAgentWorkspace(agents[0].name,agents[0].username||'',agents[0].id||'');
+ }catch(e){console.error(e);el.innerHTML='<div class="loading">Unable to load agents.</div>';}}
+function filterAgents(q){q=(q||'').toLowerCase();renderAgentRows(agentsWorkspace.agents.filter(function(a){return ((a.name||'')+' '+(a.username||'')).toLowerCase().includes(q)}));}
+function renderAgentRows(rows){var el=document.getElementById('agents-list');if(!el)return;el.innerHTML='<div class="agents-list-head"><span>AGENTS</span><b>'+rows.length+'</b></div>'+rows.map(function(a){return '<button class="agent-row '+(agentsWorkspace.selected===a.name?'active':'')+'" onclick="selectAgentWorkspace('+JSON.stringify(a.name)+','+JSON.stringify(a.username||'')+','+JSON.stringify(a.id||'')+')"><span class="agent-row-avatar">'+h((a.name||'?')[0].toUpperCase())+'</span><span class="agent-row-main"><strong>'+h(a.name||'')+'</strong><small>'+(a.username?'@'+h(a.username):'agent')+'</small></span><span class="agent-row-stats"><b>'+Number(a.total||0)+'</b><small>cases</small></span><i class="ph ph-caret-right"></i></button>'}).join('');}
+async function selectAgentWorkspace(name,username,id){agentsWorkspace.selected=name;renderAgentRows(agentsWorkspace.agents.filter(function(a){var q=(document.getElementById('agents-search')||{}).value||'';return !q||((a.name||'')+' '+(a.username||'')).toLowerCase().includes(q.toLowerCase())}));var d=document.getElementById('agent-workspace-detail');if(!d)return;d.innerHTML='<div class="loading">Loading '+h(name)+'...</div>';
+ try{var r=await apiFetch('/api/agent?name='+encodeURIComponent(name)+'&username='+encodeURIComponent(username||'')+'&id='+encodeURIComponent(id||'')+'&period=month&offset=0&limit=12');if(!r.ok)throw new Error('agent');var a=await r.json(),ps=a.period_stats||{};
+ d.innerHTML='<div class="agent-detail-head"><div class="agent-detail-avatar">'+h((name||'?')[0].toUpperCase())+'</div><div><span class="eyebrow">AGENT WORKSPACE</span><h2>'+h(name)+'</h2><p>'+(username?'@'+h(username):'Team member')+'</p></div><button class="btn secondary" onclick="openAgentModal('+JSON.stringify(name)+','+JSON.stringify(username||'')+','+JSON.stringify(id||'')+')">Full history</button></div><div class="agent-kpis"><div><span>Cases this month</span><strong>'+Number(ps.total||0)+'</strong></div><div><span>Resolved</span><strong>'+Number(ps.done||0)+'</strong></div><div><span>Missed</span><strong>'+Number(ps.missed||0)+'</strong></div><div><span>Resolution</span><strong>'+Number(ps.rate||0)+'%</strong></div></div><div class="agent-section-head"><div><span class="eyebrow">CURRENT VIEW</span><h3>Recent cases</h3></div><span>'+((a.cases||[]).length)+' shown</span></div><div class="agent-case-list">'+((a.cases||[]).map(function(c){return '<button class="agent-case-row" data-id="'+attr(c.full_id||c.id)+'" onclick="openCase(this)"><span>'+statusBadge(c.status)+'</span><span class="agent-case-copy"><strong>'+h(c.driver||c.group||'Case')+'</strong><small>'+h(c.description||'No description')+'</small></span><span class="agent-case-time">'+h(c.opened||'')+'</span><i class="ph ph-arrow-right"></i></button>'}).join('')||'<div class="empty-state">No cases in this period.</div>')+'</div>';
+ }catch(e){d.innerHTML='<div class="loading">Unable to load agent.</div>';}}
 
 // ── Modals ─────────────────────────────────────────────────────────────────
 async function openCase(el) {
@@ -780,5 +714,11 @@ function searchPartsWeb(){
 }
 function renderPartsManual(q){q=(q||document.getElementById('parts-search')&&document.getElementById('parts-search').value||'').trim().toLowerCase();var list=document.getElementById('parts-list');if(!list)return;var rows=partsDB.filter(function(p){return(partsCategory==='all'||p.cat===partsCategory)&&(!q||(p.name+' '+p.keywords+' '+p.what+' '+p.issues.join(' ')).toLowerCase().indexOf(q)>=0)});document.getElementById('parts-count').textContent=rows.length+' part'+(rows.length===1?'':'s');list.innerHTML=rows.map(function(p){return '<button class="part-row '+(p.id===selectedPart?'active':'')+'" onclick="selectPart(\''+p.id+'\')"><i class="ph '+p.icon+'"></i><span><strong>'+h(p.name)+'</strong><small>'+h(p.loc)+'</small></span><i class="ph ph-caret-right"></i></button>'}).join('')||'<div class="parts-empty">No matching parts.</div>';if(!partsDB.some(function(p){return p.id===selectedPart})&&rows[0])selectedPart=rows[0].id;if(!document.getElementById('part-detail').dataset.ready)selectPart(selectedPart);}
 function setPartsCategory(cat,btn){partsCategory=cat;document.querySelectorAll('#parts-cats button').forEach(function(b){b.classList.toggle('active',b===btn)});renderPartsManual();}
-function selectPart(id){var p=partsDB.find(function(x){return x.id===id});if(!p)return;selectedPart=id;var d=document.getElementById('part-detail');if(!d)return;d.dataset.ready='1';d.innerHTML='<div class="part-hero"><div class="part-hero-copy"><div class="part-meta"><span>'+h(p.cat)+'</span><span><i class="ph ph-map-pin"></i> '+h(p.loc)+'</span></div><h2>'+h(p.name)+'</h2><p>'+h(p.what)+'</p></div></div><div class="part-section part-photo-section"><div class="part-section-head"><div><span class="part-label">REAL PART PHOTOS</span><h3>What it looks like</h3></div><small>Live web references · actual installed model may vary</small></div>'+partPhoto(p)+'</div><div class="part-section"><div class="part-section-head"><div><span class="part-label">TROUBLESHOOTING</span><h3>Understand the part</h3></div></div><div class="part-info-grid"><article class="part-how"><div class="part-card-icon"><i class="ph ph-gear-six"></i></div><span class="part-label">HOW IT WORKS</span><p>'+h(p.works)+'</p></article><article><div class="part-card-icon"><i class="ph ph-warning"></i></div><span class="part-label">COMMON ISSUES</span><ul>'+p.issues.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ul></article><article><div class="part-card-icon"><i class="ph ph-magnifying-glass"></i></div><span class="part-label">QUICK CHECKS</span><ol>'+p.checks.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ol></article><article class="part-fix"><div class="part-card-icon"><i class="ph ph-wrench"></i></div><span class="part-label">FIX / NEXT ACTION</span><p>'+h(p.fix)+'</p></article></div></div><a class="part-source" href="'+p.url+'" target="_blank" rel="noopener"><i class="ph ph-book-open-text"></i><span><strong>OEM / technical reference</strong><small>'+h(p.source)+'</small></span><i class="ph ph-arrow-square-out part-source-arrow"></i></a>';loadLivePartPhoto(p);renderPartsManual(document.getElementById('parts-search')?document.getElementById('parts-search').value:'');}
+function selectPart(id){var p=partsDB.find(function(x){return x.id===id});if(!p)return;selectedPart=id;var d=document.getElementById('part-detail');if(!d)return;d.dataset.ready='1';d.innerHTML='<div class="part-hero"><div class="part-hero-copy"><div class="part-meta"><span>'+h(p.cat)+'</span><span><i class="ph ph-map-pin"></i> '+h(p.loc)+'</span></div><h2>'+h(p.name)+'</h2><p>'+h(p.what)+'</p></div></div><div class="part-section part-photo-section"><div class="part-section-head"><div><span class="part-label">REAL PART PHOTOS</span><h3>What it looks like</h3></div><small>Live web references · actual installed model may vary</small></div>'+partPhoto(p)+'</div><div class="part-section"><div class="part-section-head"><div><span class="part-label">TROUBLESHOOTING</span><h3>Understand the part</h3></div></div><div class="part-info-grid"><article class="part-how"><div class="part-card-icon"><i class="ph ph-gear-six"></i></div><span class="part-label">HOW IT WORKS</span><p>'+h(p.works)+'</p></article><article><div class="part-card-icon"><i class="ph ph-warning"></i></div><span class="part-label">COMMON ISSUES</span><ul>'+p.issues.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ul></article><article><div class="part-card-icon"><i class="ph ph-magnifying-glass"></i></div><span class="part-label">QUICK CHECKS</span><ol>'+p.checks.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ol></article><article class="part-fix"><div class="part-card-icon"><i class="ph ph-wrench"></i></div><span class="part-label">FIX / NEXT ACTION</span><p>'+h(p.fix)+'</p></article></div></div><a class="part-source" href="'+p.url+'" target="_blank" rel="noopener"><i class="ph ph-book-open-text"></i><span><strong>OEM / technical reference</strong><small>'+h(p.source)+'</small></span><i class="ph ph-arrow-square-out part-source-arrow"></i></a><div class="part-intel-grid"><section class="part-intel-card"><div class="part-section-head"><div><span class="part-label">KURTEX CASES</span><h3>Related case history</h3></div></div><div id="part-case-history" class="intel-mini-list"><div class="loading">Finding related cases...</div></div></section><section class="part-intel-card"><div class="part-section-head"><div><span class="part-label">KNOWLEDGE NOTES</span><h3>Team knowledge</h3></div></div><div id="part-knowledge-list" class="intel-mini-list"></div><div class="knowledge-add"><textarea id="knowledge-note-input" placeholder="Add a useful troubleshooting note..."></textarea><button class="btn secondary" onclick="saveKnowledgeNote()">Save note</button></div></section></div>';loadLivePartPhoto(p);loadPartCases(p);loadKnowledgeNotes(p);renderPartsManual(document.getElementById('parts-search')?document.getElementById('parts-search').value:'');}
 setTimeout(function(){renderCommonParts();renderPartsManual('');updateTruckIssuePins();},0);
+
+async function loadPartCases(p){var el=document.getElementById('part-case-history');if(!el)return;try{var q=[p.name,p.keywords].join(' '),r=await apiFetch('/api/part_cases?q='+encodeURIComponent(q)),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.slice(0,5).map(function(x){var c=x.case;return '<button class="intel-case-link" data-id="'+attr(c.full_id||c.id)+'" onclick="openCase(this)"><span>'+statusBadge(c.status)+'</span><span><strong>'+h(c.driver||c.group||'Case')+'</strong><small>'+h(c.description||'')+'</small></span><i class="ph ph-arrow-right"></i></button>'}).join(''):'<div class="intel-empty">No matching Kurtex cases yet.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Case history unavailable.</div>';}}
+async function loadKnowledgeNotes(p){var el=document.getElementById('part-knowledge-list');if(!el)return;try{var r=await apiFetch('/api/knowledge_notes?part='+encodeURIComponent(p.id)),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.slice(0,5).map(function(n){return '<div class="knowledge-note"><p>'+h(n.note)+'</p><small>'+h(n.author)+' · '+h(n.created)+'</small></div>'}).join(''):'<div class="intel-empty">No team notes yet.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Notes unavailable.</div>';}}
+async function saveKnowledgeNote(){var p=partsDB.find(function(x){return x.id===selectedPart}),i=document.getElementById('knowledge-note-input');if(!p||!i||!i.value.trim())return;var r=await apiFetch('/api/knowledge_notes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part:p.id,note:i.value.trim()})});if(r.ok){i.value='';loadKnowledgeNotes(p);}}
+async function loadSimilarCases(caseId){var el=document.getElementById('case-similarity');if(!el)return;try{var r=await apiFetch('/api/similar_cases?id='+encodeURIComponent(caseId)),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.map(function(x){var c=x.case;return '<button class="intel-case-link" data-id="'+attr(c.full_id||c.id)+'" onclick="openCase(this)"><span>'+statusBadge(c.status)+'</span><span><strong>'+h(c.driver||c.group||'Case')+'</strong><small>'+h(c.description||'')+'</small></span><span class="similarity-match">'+h((x.matched||[]).slice(0,3).join(' · '))+'</span></button>'}).join(''):'<div class="intel-empty">No similar historical cases found.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Similarity unavailable.</div>';}}
+async function loadRecurringProblems(){var el=document.getElementById('recurring-problems-content');if(!el)return;try{var r=await apiFetch('/api/recurring_problems'),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.slice(0,12).map(function(v){return '<div class="recurring-row"><span class="recurring-count">'+v.count+'×</span><span><strong>Unit '+h(v.unit)+'</strong><small>'+h(v.problem)+' · latest '+h(v.latest)+'</small></span></div>'}).join(''):'<div class="intel-empty">No repeated unit/problem patterns detected yet.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Recurring analysis unavailable.</div>';}}
