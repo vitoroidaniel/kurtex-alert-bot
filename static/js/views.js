@@ -173,8 +173,7 @@ async function loadCaseList(kind, append, quiet) {
         ? '<div class="load-more"><button class="btn" onclick="loadCaseList(\'' +
           kind +
           "',true)\">Load more ↓</button></div>"
-        : "") + '<div class="case-similarity-block"><div class="agent-section-head"><div><span class="eyebrow">CASE SIMILARITY</span><h3>Similar previous cases</h3></div></div><div id="case-similarity" class="intel-mini-list"><div class="loading">Finding similar cases...</div></div></div>');
-    loadSimilarCases(c.full_id || c.id);
+        : ""));
   } catch (e) {
     if (e.name === "AbortError") return;
     if (!state.rows.length) if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
@@ -279,10 +278,11 @@ async function loadFleet() {
   }
 }
 
-var fleetStatusState = { vtype: "all", search: "" };
+var fleetStatusState = { vtype: "all", search: "", limit: 10 };
 
 function setFleetStatusFilter(vtype) {
   fleetStatusState.vtype = vtype;
+  fleetStatusState.limit = 10;
   renderFleetStatus();
   var wrap = document.getElementById("fleet-status-wrap");
   if (wrap) wrap.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -320,7 +320,8 @@ function renderFleetStatusContent() {
       "</button>"
     );
   }
-  var rows = filtered
+  var visible = filtered.slice(0, s.limit || 10);
+  var rows = visible
     .map(function (item) {
       var badge =
         item.status === "active"
@@ -365,11 +366,13 @@ function renderFleetStatusContent() {
     "</div>" +
     '<div class="search-wrap" style="margin-bottom:12px"><i class="ph ph-magnifying-glass"></i><input type="text" id="fleet-status-search" aria-label="Search fleet units, issues or drivers" placeholder="Search unit, issue, or driver..." value="' +
     attr(s.search || "") +
-    '" oninput="fleetStatusState.search=this.value;renderFleetStatus()"></div>' +
+    '" oninput="fleetStatusState.search=this.value;fleetStatusState.limit=10;renderFleetStatus()"></div>' +
     (filtered.length
       ? '<div class="table-wrap"><div class="table-scroll"><table><thead><tr><th>Unit</th><th>Status</th><th>Issue</th><th>Driver</th><th>Opened</th></tr></thead><tbody>' +
         rows +
-        "</tbody></table></div></div>"
+        "</tbody></table></div></div>" +
+        '<div class="fleet-list-footer"><span>Showing ' + visible.length + ' of ' + filtered.length + '</span>' +
+        (visible.length < filtered.length ? '<button class="btn secondary" onclick="fleetStatusState.limit+=10;renderFleetStatus()">Show 10 more</button>' : '') + '</div>'
       : '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No units match this filter.</div>') +
     "</div>");
 }

@@ -80,7 +80,19 @@
     </div>
   </div>
 
-  <header class="page-heading"><div><div class="eyebrow">MAINTENANCE, IN VIEW</div><h1 id="page-title">Overview</h1><p id="page-description">Today's activity, outstanding cases, and team performance.</p></div><div class="heading-actions"><div class="live-pill" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Connecting…</span></div><time id="today-label" class="chicago-calendar" aria-label="Current Chicago date and time"><span class="calendar-date-tile" aria-hidden="true"><span id="chicago-month"></span><strong id="chicago-day"></strong></span><span class="calendar-date-copy"><strong id="chicago-date"></strong><span>Chicago time <span aria-hidden="true">·</span> <span id="chicago-time"></span></span></span></time><button class="badge-btn btn-outline" id="refresh-button" onclick="refresh(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></header>
+  <header class="page-heading">
+    <div class="page-heading-copy">
+      <div class="eyebrow">MAINTENANCE, IN VIEW</div>
+      <div class="page-title-row"><span class="page-title-icon" aria-hidden="true"><i class="ph ph-squares-four"></i></span><div><h1 id="page-title">Overview</h1><p id="page-description">Today's activity, outstanding cases, and team performance.</p></div></div>
+    </div>
+    <div class="heading-actions">
+      <time id="today-label" class="chicago-calendar" aria-label="Current Chicago date and time">
+        <span class="calendar-date-tile" aria-hidden="true"><span id="chicago-month"></span><strong id="chicago-day"></strong></span>
+        <span class="calendar-date-copy"><strong id="chicago-date"></strong><span>Chicago time <span aria-hidden="true">·</span> <span id="chicago-time"></span></span><span class="calendar-update live-pill" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Connecting…</span></span></span>
+      </time>
+      <button class="badge-btn btn-outline header-refresh" id="refresh-button" onclick="refresh(true)" aria-label="Refresh dashboard"><i class="ph ph-arrows-clockwise"></i><span>Refresh</span></button>
+    </div>
+  </header>
   <div class="mobile-overview-controls" aria-label="Overview controls">
     <div class="mobile-calendar-slot"></div>
     <div class="mobile-action-row">
@@ -201,7 +213,7 @@
   <!-- Fleet Intelligence -->
   <div class="page" id="page-fleet_intel">
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title"><i class="ph ph-magnifying-glass"></i> Search by Issue</div>
+      <div class="card-title"><i class="ph ph-chart-line-up"></i> Fleet Intelligence</div>
       <div class="toggle-tabs" style="margin-bottom:10px" id="issue-search-vtype-tabs">
         <button class="toggle-btn active" data-vtype="" onclick="setIssueSearchVtype('')">All</button>
         <button class="toggle-btn" data-vtype="truck" onclick="setIssueSearchVtype('truck')">Truck</button>
@@ -209,7 +221,7 @@
         <button class="toggle-btn" data-vtype="reefer" onclick="setIssueSearchVtype('reefer')">Reefer</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-        <input id="issue-search-input" aria-label="Search issue history" type="text" placeholder="e.g. Box temp out of range" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <input id="issue-search-input" aria-label="Search issue history" type="text" placeholder="Search issue or unit..." oninput="if(window._intelData) renderIntelUnits(intelFilter.vtype,this.value)" style="flex:1;min-width:200px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text)" onkeydown="if(event.key==='Enter')searchIssue()">
         <button class="btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i> Search</button>
       </div>
       <div id="issue-search-results"></div>

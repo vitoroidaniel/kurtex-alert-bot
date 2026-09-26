@@ -424,7 +424,7 @@ function renderIntelUnitsContent(vtype, search) {
       (vtype === v ? " active" : "") +
       '" onclick="renderIntelUnits(\'' +
       v +
-      "', document.getElementById('intel-units-search').value)\">" +
+      "', (document.getElementById('issue-search-input')||{value:''}).value)\">" +
       label +
       "</button>"
     );
