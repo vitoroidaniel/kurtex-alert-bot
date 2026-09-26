@@ -4061,3 +4061,56 @@ body[data-current-page="ai_assistant"] .ai-page-sidebar,
 body[data-current-page="ai_assistant"] .ai-page-chat-column{height:100%!important}
 body[data-current-page="ai_assistant"] .ai-page-messages,
 body[data-current-page="ai_assistant"] .ai-page-sidebar-list{overflow-y:auto!important}
+
+/* v101 — keep AI actions/composer pinned and visible */
+body[data-current-page="ai_assistant"] .ai-assistant-page-shell{
+ display:flex!important;
+ flex-direction:column!important;
+ height:100%!important;
+ min-height:0!important;
+ overflow:hidden!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-messages{
+ flex:1 1 auto!important;
+ min-height:0!important;
+ overflow-y:auto!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-quick{
+ flex:0 0 auto!important;
+ position:relative!important;
+ bottom:auto!important;
+ padding:8px 0 6px!important;
+ background:var(--surface)!important;
+ z-index:3!important;
+}
+body[data-current-page="ai_assistant"] .ai-page-compose{
+ flex:0 0 auto!important;
+ position:relative!important;
+ bottom:auto!important;
+ margin-top:0!important;
+ margin-bottom:10px!important;
+ background:var(--surface)!important;
+ z-index:3!important;
+}
+
+/* v101 — Knowledge Library: plain list only, no gray/card surface */
+body[data-current-page="ai_training"] .ai-library-card,
+body[data-current-page="ai_training"] .ai-kb-list{
+ background:transparent!important;
+ border:0!important;
+ border-radius:0!important;
+ box-shadow:none!important;
+ padding:0!important;
+}
+body[data-current-page="ai_training"] .ai-kb-list{overflow:visible!important}
+body[data-current-page="ai_training"] .ai-kb-item{
+ min-height:48px!important;
+ padding:8px 6px!important;
+ margin:0!important;
+ border:0!important;
+ border-bottom:1px solid var(--border)!important;
+ border-radius:0!important;
+ background:transparent!important;
+}
+body[data-current-page="ai_training"] .ai-kb-item:first-child{border-top:1px solid var(--border)!important}
+body[data-current-page="ai_training"] .ai-kb-item:hover{background:var(--surface-2,#fafafa)!important}
