@@ -74,7 +74,10 @@ function toggleKurtexAIFullscreen(force){
 function toggleAIPageSidebar(force){
  var s=document.getElementById('ai-page-sidebar'),layout=document.querySelector('#page-ai_assistant .ai-page-layout');if(!s||!layout)return;
  var show=typeof force==='boolean'?force:s.classList.contains('collapsed');
- s.classList.toggle('collapsed',!show);layout.classList.toggle('sidebar-collapsed',!show)
+ s.classList.toggle('collapsed',!show);layout.classList.toggle('sidebar-collapsed',!show);
+ if(window.matchMedia&&window.matchMedia('(max-width:760px)').matches){
+   document.body.classList.toggle('ai-mobile-history-open',show);
+ }
 }
 async function loadAIPageSidebar(){
  var list=document.getElementById('ai-page-sidebar-list');if(!list)return;

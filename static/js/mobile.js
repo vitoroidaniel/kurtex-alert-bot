@@ -53,3 +53,20 @@
   const mo=new MutationObserver(()=>harden());
   document.addEventListener('DOMContentLoaded',()=>mo.observe(document.body,{childList:true,subtree:true}));
 })();
+
+/* v137 mobile state normalization */
+(function(){
+ const mobile=()=>window.matchMedia('(max-width:760px)').matches;
+ function init(){
+   if(!mobile())return;
+   const side=document.getElementById('ai-page-sidebar'),layout=document.querySelector('#page-ai_assistant .ai-page-layout');
+   if(side&&layout&&!document.body.classList.contains('ai-mobile-history-open')){
+     side.classList.add('collapsed');layout.classList.add('sidebar-collapsed');
+   }
+ }
+ document.addEventListener('DOMContentLoaded',init);
+ document.addEventListener('click',function(e){
+   if(!mobile())return;
+   if(e.target.closest('.ai-side-chat-open')) setTimeout(()=>toggleAIPageSidebar(false),60);
+ },true);
+})();

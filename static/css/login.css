@@ -210,3 +210,33 @@
 @media(max-width:900px){
   .tg-wrap,.tg-wrap iframe{width:auto!important;min-width:0!important;max-width:100%!important}
 }
+
+/* v137 — mobile login rebuilt as a compact sign-in screen */
+@media(max-width:760px){
+html,body{width:100%!important;min-height:100%!important;overflow-x:hidden!important;background:#090d12!important}
+.login-shell{position:relative!important;display:flex!important;flex-direction:column!important;min-height:100dvh!important;overflow:hidden!important;background:#090d12!important}
+.scene-slider,.scene-overlay{position:absolute!important;inset:0 0 auto!important;height:46dvh!important;min-height:330px!important}.scene-light{display:none!important}.scene-slide{background-position:58% center!important;transform:none!important}
+.scene-overlay{background:linear-gradient(180deg,rgba(5,8,12,.22),rgba(5,8,12,.35) 54%,#090d12 100%)!important}
+.topbar{position:relative!important;z-index:5!important;padding:calc(14px + env(safe-area-inset-top)) 16px 0!important}.brand{font-size:18px!important;gap:9px!important}.brand img{width:39px!important;height:39px!important}.brand small{font-size:7px!important}
+.hero-copy{position:relative!important;z-index:4!important;left:auto!important;right:auto!important;top:auto!important;width:100%!important;transform:none!important;padding:44px 17px 24px!important;min-height:230px!important}
+.hero-copy .eyebrow{font-size:9px!important;letter-spacing:1.7px!important}.hero-copy h1{margin:9px 0 0!important;max-width:355px!important;font-size:clamp(37px,11vw,48px)!important;line-height:.96!important;letter-spacing:-2px!important}.hero-copy>p,.hero-features{display:none!important}
+.login-card-wrap{position:relative!important;z-index:6!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;width:100%!important;transform:none!important;padding:0 12px calc(12px + env(safe-area-inset-bottom))!important;margin-top:auto!important}
+.login-card{width:100%!important;max-width:520px!important;margin:0 auto!important;padding:21px 18px 16px!important;border-radius:20px!important;background:rgba(255,255,255,.985)!important;box-shadow:0 20px 55px rgba(0,0,0,.30)!important}.login-card:after{width:130px!important;height:130px!important}
+.card-kicker{font-size:9px!important;letter-spacing:1.55px!important}.login-card h2{margin:9px 0 6px!important;font-size:29px!important;letter-spacing:-1px!important}.intro{font-size:12.5px!important;line-height:1.45!important;max-width:none!important}
+.telegram-box{margin-top:16px!important;min-height:40px!important}.tg-wrap,.tg-wrap iframe{max-width:100%!important}.help{margin:9px auto 0!important;max-width:300px!important;font-size:10px!important;line-height:1.4!important;text-align:center!important;justify-content:center!important}
+.divider{margin:15px 0 13px!important}.trust{gap:10px!important}.trust>i{width:34px!important;height:34px!important;flex-basis:34px!important;font-size:17px!important}.trust b{font-size:12px!important}.trust span{font-size:10px!important;line-height:1.4!important}.system-row{margin-top:13px!important;padding:10px 0 0!important;font-size:9px!important}.page-footer{display:none!important}
+}
+@media(max-width:380px){.hero-copy{padding-top:30px!important;min-height:205px!important}.hero-copy h1{font-size:35px!important}.login-card{padding:18px 15px 14px!important}.trust span{display:none!important}}
+@media(max-height:700px) and (max-width:760px){.hero-copy{padding-top:18px!important;min-height:175px!important}.hero-copy h1{font-size:33px!important}.login-card{padding-top:17px!important}.divider{margin:11px 0!important}.trust span{display:none!important}}
+
+/* v138 — mobile login as a split poster/sign-in experience */
+@media(max-width:760px){
+.login-shell{display:grid!important;grid-template-rows:42dvh minmax(0,1fr)!important;background:#f4f5f7!important;overflow:auto!important}
+.scene-slider,.scene-overlay{position:absolute!important;inset:0 0 auto!important;height:42dvh!important;min-height:280px!important}.scene-slide{background-position:58% 52%!important}.scene-overlay{background:linear-gradient(180deg,rgba(6,9,13,.22),rgba(6,9,13,.22) 55%,rgba(6,9,13,.72))!important}
+.topbar{position:absolute!important;inset:0 0 auto!important;padding:calc(15px + env(safe-area-inset-top)) 16px 0!important}.brand{font-size:17px!important}
+.hero-copy{position:absolute!important;z-index:5!important;left:16px!important;right:16px!important;top:auto!important;bottom:59dvh!important;width:auto!important;min-height:0!important;padding:0 0 17px!important}.hero-copy .eyebrow{font-size:8px!important;color:#ff5b60!important}.hero-copy h1{font-size:36px!important;line-height:.95!important;max-width:310px!important;margin-top:8px!important}
+.login-card-wrap{grid-row:2!important;position:relative!important;z-index:7!important;align-self:stretch!important;width:100%!important;padding:0!important;margin:0!important;background:#f4f5f7!important}
+.login-card{max-width:none!important;width:100%!important;min-height:58dvh!important;margin:0!important;padding:28px 20px calc(20px + env(safe-area-inset-bottom))!important;border:0!important;border-radius:26px 26px 0 0!important;background:#fff!important;box-shadow:0 -8px 30px rgba(0,0,0,.10)!important}
+.login-card:after{display:none!important}.card-kicker{font-size:9px!important}.login-card h2{font-size:31px!important;margin:10px 0 7px!important}.intro{font-size:13px!important;max-width:330px!important}.telegram-box{justify-content:flex-start!important;margin-top:19px!important}.help{justify-content:flex-start!important;text-align:left!important;margin:10px 0 0!important;max-width:310px!important}.divider{margin:20px 0 17px!important}.trust{max-width:360px!important}.system-row{margin-top:20px!important}
+}
+@media(max-height:700px) and (max-width:760px){.login-shell{grid-template-rows:36dvh minmax(0,1fr)!important}.scene-slider,.scene-overlay{height:36dvh!important;min-height:220px!important}.hero-copy{bottom:65dvh!important}.hero-copy h1{font-size:31px!important}.login-card{min-height:64dvh!important}}
