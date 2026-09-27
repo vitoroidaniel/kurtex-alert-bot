@@ -102,3 +102,13 @@ function mobileGo(page){
  document.addEventListener('click',function(e){if(!e.target.closest('.mobile-more-sheet,.mobile-more'))toggleMobileMore(false)},true);
  window.addEventListener('resize',sync,{passive:true});
 })();
+
+/* v142 AI mobile history behavior */
+(function(){
+ document.addEventListener('click',function(e){
+   if(!window.matchMedia('(max-width:760px)').matches)return;
+   if(e.target.closest('.ai-side-chat-open')){
+     setTimeout(function(){if(typeof toggleAIPageSidebar==='function')toggleAIPageSidebar(false)},30);
+   }
+ },false);
+})();

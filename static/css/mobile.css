@@ -565,3 +565,44 @@ body[data-current-page="overview"] .mobile-home-tip{display:none!important}
 @keyframes mobileSheetIn{from{transform:translateY(24px);opacity:.75}to{transform:none;opacity:1}}
 }
 @media(max-width:380px){#modal-body .detail-grid,#unit-modal-body .detail-grid{grid-template-columns:1fr!important}}
+
+/* v142 screenshot fixes */
+@media(max-width:760px){
+/* parts */
+.mobile-parts-more{display:flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;width:100%!important;height:52px!important;border:0!important;border-top:1px solid #eceef1!important;background:rgba(247,248,250,.85)!important;color:#343940!important;font-size:12px!important;font-weight:750!important}
+.mobile-parts-more i{font-size:14px!important}
+#page-parts_manual .part-row:nth-child(n+8){}
+
+/* case viewer: clean compact sheet, no timeline bleeding above title */
+#modal-overlay .modal{max-height:72dvh!important;padding:10px 14px calc(16px + env(safe-area-inset-bottom))!important}
+#modal-overlay #modal-title{position:sticky!important;z-index:5!important;top:-10px!important;margin:0 -2px 12px!important;padding:8px 48px 12px 2px!important;background:rgba(248,249,251,.98)!important;font-size:20px!important;border-bottom:1px solid #e7e9ec!important}
+#modal-overlay #modal-body>.timeline,#modal-overlay #modal-body>.case-timeline{display:none!important}
+#modal-overlay #modal-body .detail-grid{grid-template-columns:1fr 1fr!important;gap:7px!important}
+#modal-overlay #modal-body .detail-item{min-height:58px!important;padding:9px 11px!important;border-radius:14px!important}
+#modal-overlay #modal-body .desc-box,#modal-overlay #modal-body .notes-box{padding:12px!important}
+#modal-overlay #modal-body .box-text{font-size:12px!important}
+
+/* AI history: true sheet instead of broken translucent overlay */
+body[data-current-page="ai_assistant"].ai-mobile-history-open:after{display:none!important}
+body[data-current-page="ai_assistant"].ai-mobile-history-open .ai-page-sidebar{display:flex!important;flex-direction:column!important;position:fixed!important;z-index:1100!important;inset:auto 10px calc(86px + env(safe-area-inset-bottom)) 10px!important;width:auto!important;height:auto!important;max-height:62dvh!important;padding:10px!important;border:1px solid rgba(255,255,255,.95)!important;border-radius:24px!important;background:#f7f8fa!important;box-shadow:0 20px 55px rgba(18,24,33,.22)!important;transform:none!important;overflow:hidden!important}
+body[data-current-page="ai_assistant"].ai-mobile-history-open .ai-page-sidebar:before{content:"";display:block;width:36px;height:4px;margin:1px auto 10px;border-radius:99px;background:#cfd3d8}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head{display:grid!important;grid-template-columns:44px 1fr!important;gap:8px!important;flex:0 0 auto!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head .ai-side-toggle{width:44px!important;height:44px!important;min-height:44px!important;border-radius:14px!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-head .ai-side-new{height:44px!important;min-height:44px!important;border-radius:14px!important}
+body[data-current-page="ai_assistant"] .ai-page-side-label{margin:12px 5px 7px!important;font-size:9px!important}
+body[data-current-page="ai_assistant"] .ai-page-sidebar-list{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;padding:0 1px 2px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat{min-height:66px!important;margin:0 0 7px!important;border:1px solid #e3e6ea!important;border-radius:16px!important;background:#fff!important}
+body[data-current-page="ai_assistant"] .ai-side-chat.active{border-color:rgba(207,61,65,.32)!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open{padding:10px 12px!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open span{font-size:12px!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body[data-current-page="ai_assistant"] .ai-side-chat-open small{font-size:9px!important}
+
+/* AI message page spacing from screenshot */
+body[data-current-page="ai_assistant"] .ai-page-chatbar{padding:0 14px!important}
+body[data-current-page="ai_assistant"] .ai-side-show{width:42px!important;height:42px!important;border-radius:13px!important}
+body[data-current-page="ai_assistant"] .ai-page-messages{padding-bottom:156px!important}
+body[data-current-page="ai_assistant"] .ai-page-compose{bottom:6px!important}
+body[data-current-page="ai_assistant"] .ai-compose-input{padding:8px!important}
+body[data-current-page="ai_assistant"] .ai-compose-input textarea{min-height:48px!important;max-height:92px!important;padding:7px 8px!important}
+}
+@media(max-width:380px){#modal-overlay #modal-body .detail-grid{grid-template-columns:1fr!important}}
