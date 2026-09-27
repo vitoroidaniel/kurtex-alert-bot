@@ -12,9 +12,22 @@
 
 
 <div class="mobile-header">
-  <div class="mobile-logo"><img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:32px;height:32px;border-radius:50%;object-fit:cover"> Kurtex</div>
-  <div class="hamburger" role="button" tabindex="0" aria-label="Toggle navigation" onclick="toggleSidebar()"><i class="ph ph-list"></i></div>
+  <button class="mobile-avatar" type="button" onclick="showPage('my_profile')" aria-label="Profile"><img src="{{ user.photo_url or url_for('static', filename='images/kurtex-logo.png') }}" alt=""></button>
+  <div class="mobile-brand"><strong>Kurtex</strong><small>Maintenance</small></div>
+  <button class="mobile-more" type="button" onclick="toggleMobileMore()" aria-label="More"><i class="ph ph-dots-three"></i></button>
 </div>
+<div id="mobile-more-sheet" class="mobile-more-sheet" hidden>
+ <button onclick="mobileGo('fleet_intel')"><i class="ph ph-truck"></i><span>Fleet lookup</span></button>
+ <button onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>Profile</span></button>
+ <button onclick="openLayoutSettings();toggleMobileMore(false)"><i class="ph ph-gear"></i><span>Settings</span></button>
+ <button onclick="toggleTheme();toggleMobileMore(false)"><i class="ph ph-sun"></i><span>Appearance</span></button>
+</div>
+<nav class="mobile-tabbar" aria-label="Mobile navigation">
+ <button data-mobile-page="overview" onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Home</span></button>
+ <button data-mobile-page="parts_manual" onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts</span></button>
+ <button class="mobile-ai-tab" data-mobile-page="ai_assistant" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span>AI</span></button>
+ <button data-mobile-page="fleet_intel" onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><span>Search</span></button>
+</nav>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <div class="layout">
@@ -100,7 +113,16 @@
     <div class="mobile-update-row"><span class="dot"></span><span class="mobile-last-update">Updated just now</span></div>
   </div>
   <div id="connection-banner" class="connection-banner" role="alert" hidden></div>
-  <div class="page active" id="page-overview"><div class="overview-toolbar"><span>Your operations, at a glance</span><button class="badge-btn btn-outline" onclick="openLayoutSettings()">Customize overview</button></div>
+  <div class="page active" id="page-overview">
+  <section class="mobile-app-home">
+    <div class="mobile-home-copy"><span>MAINTENANCE COMPANION</span><h1>What do you need?</h1><p>Quick access to the tools that matter when you're away from the desk.</p></div>
+    <button class="mobile-home-ai" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span><strong>Ask Kurtex AI</strong><small>Diagnose symptoms, fault codes and repairs</small></span><i class="ph ph-arrow-up-right"></i></button>
+    <div class="mobile-home-grid">
+      <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><strong>Parts</strong><small>Identify & troubleshoot</small></button>
+      <button onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><strong>Issue search</strong><small>Truck & trailer history</small></button>
+    </div>
+    <div class="mobile-home-tip"><i class="ph ph-camera"></i><span><strong>Got a photo?</strong><small>Open AI and attach it for visual diagnostics.</small></span><button onclick="mobileGo('ai_assistant')">Open AI</button></div>
+  </section><div class="overview-toolbar"><span>Your operations, at a glance</span><button class="badge-btn btn-outline" onclick="openLayoutSettings()">Customize overview</button></div>
     <div class="overview-label"><span>Today at a glance</span><small>Reassignments & response average cover all time</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">

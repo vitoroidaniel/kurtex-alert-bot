@@ -398,3 +398,64 @@ body[data-current-page="ai_assistant"] .ai-page-sidebar{inset:0!important;paddin
 /* compact floating AI */
 #kurtex-ai-fab,.kurtex-ai-fab{width:50px!important;height:50px!important;border-radius:50%!important;background:#1b1e23!important;box-shadow:0 8px 24px rgba(0,0,0,.18)!important}
 }
+
+/* ============================================================
+   v139 KURTEX MOBILE COMPANION
+   Phone UI is intentionally NOT the desktop CRM.
+   ============================================================ */
+@media(max-width:760px){
+:root{--app-bg:#f2f4f7;--glass:rgba(255,255,255,.72);--glass-line:rgba(255,255,255,.86);--ink:#101216;--muted:#747b85;--red:#ee3d44}
+html,body{background:var(--app-bg)!important}
+body{padding-bottom:calc(82px + env(safe-area-inset-bottom))!important}
+.sidebar,.sidebar-overlay,.page-heading,.mobile-overview-controls,#kurtex-ai-fab,.kurtex-ai-fab{display:none!important}
+
+/* liquid-glass top identity bar */
+.mobile-header{display:grid!important;grid-template-columns:42px 1fr 42px!important;align-items:center!important;gap:9px!important;position:fixed!important;z-index:900!important;top:calc(9px + env(safe-area-inset-top))!important;left:12px!important;right:12px!important;height:58px!important;padding:7px!important;border:1px solid var(--glass-line)!important;border-radius:22px!important;background:var(--glass)!important;box-shadow:0 12px 35px rgba(22,29,39,.10),inset 0 1px 0 rgba(255,255,255,.9)!important;backdrop-filter:blur(26px) saturate(180%)!important;-webkit-backdrop-filter:blur(26px) saturate(180%)!important}
+.mobile-avatar,.mobile-more{display:grid!important;place-items:center!important;width:42px!important;height:42px!important;min-height:42px!important;padding:0!important;border:1px solid rgba(255,255,255,.8)!important;border-radius:16px!important;background:rgba(244,246,249,.76)!important;color:#252930!important}.mobile-avatar img{width:34px!important;height:34px!important;border-radius:12px!important;object-fit:cover!important}.mobile-more i{font-size:23px!important}
+.mobile-brand{display:flex!important;flex-direction:column!important;align-items:center!important;line-height:1.05!important}.mobile-brand strong{font-size:16px!important;letter-spacing:-.3px!important}.mobile-brand small{margin-top:3px!important;font-size:9px!important;text-transform:uppercase!important;letter-spacing:.16em!important;color:#858b94!important}
+
+/* fixed app tab bar */
+.mobile-tabbar{display:grid!important;grid-template-columns:1fr 1fr 1.05fr 1fr!important;position:fixed!important;z-index:920!important;left:12px!important;right:12px!important;bottom:calc(9px + env(safe-area-inset-bottom))!important;height:66px!important;padding:6px!important;border:1px solid var(--glass-line)!important;border-radius:24px!important;background:rgba(248,249,251,.78)!important;box-shadow:0 14px 40px rgba(20,27,37,.15),inset 0 1px 0 rgba(255,255,255,.95)!important;backdrop-filter:blur(28px) saturate(180%)!important;-webkit-backdrop-filter:blur(28px) saturate(180%)!important}
+.mobile-tabbar button{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;min-height:0!important;border:0!important;border-radius:18px!important;background:transparent!important;color:#858b94!important;font:inherit!important}.mobile-tabbar button i{font-size:21px!important}.mobile-tabbar button span{font-size:9px!important;font-weight:700!important}.mobile-tabbar button.active{background:rgba(255,255,255,.88)!important;color:#16191e!important;box-shadow:0 3px 13px rgba(23,30,40,.08)!important}.mobile-tabbar .mobile-ai-tab i{color:var(--red)!important}.mobile-tabbar .mobile-ai-tab.active{background:#1b1e23!important;color:#fff!important}.mobile-tabbar .mobile-ai-tab.active i{color:#ff555b!important}
+
+/* more sheet */
+.mobile-more-sheet{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;position:fixed!important;z-index:950!important;top:calc(76px + env(safe-area-inset-top))!important;right:12px!important;width:min(300px,calc(100vw - 24px))!important;padding:10px!important;border:1px solid rgba(255,255,255,.9)!important;border-radius:22px!important;background:rgba(249,250,252,.88)!important;box-shadow:0 18px 50px rgba(20,27,37,.16)!important;backdrop-filter:blur(30px) saturate(170%)!important}.mobile-more-sheet[hidden]{display:none!important}.mobile-more-sheet button{display:flex!important;align-items:center!important;gap:9px!important;height:50px!important;padding:0 12px!important;border:0!important;border-radius:15px!important;background:rgba(255,255,255,.82)!important;color:#262a30!important}.mobile-more-sheet i{font-size:18px!important}.mobile-more-sheet span{font-size:12px!important;font-weight:700!important}
+
+/* app content area */
+.main{padding:calc(84px + env(safe-area-inset-top)) 0 calc(92px + env(safe-area-inset-bottom))!important;background:var(--app-bg)!important;min-height:100dvh!important}.page{padding:12px 14px 22px!important}
+.page:not(#page-overview):not(#page-parts_manual):not(#page-ai_assistant):not(#page-fleet_intel):not(#page-my_profile){display:none!important}
+
+/* HOME = maintenance launcher, not CRM dashboard */
+#page-overview{display:none}
+#page-overview.active{display:block!important}
+#page-overview .overview-toolbar,#page-overview .overview-label,#page-overview [data-widget="key-metrics"],#page-overview [data-widget="top-agents"],#page-overview [data-widget="problem-units"],#page-overview [data-widget="recent-cases"],#page-overview .widget-controls{display:none!important}
+#page-overview:before{content:"Maintenance in your pocket";display:block;margin:6px 2px 2px;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:#ee3d44}
+#page-overview:after{content:"Use AI to diagnose an issue, search fleet knowledge, or identify a truck and trailer part.";display:block;margin:4px 2px 18px;max-width:340px;font-size:14px;line-height:1.48;color:#717883}
+#page-overview .overview-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important}
+#page-overview .overview-grid:before{content:"Ask Kurtex AI";grid-column:1/-1;display:flex;align-items:flex-end;height:160px;padding:20px;border-radius:26px;background:linear-gradient(145deg,#20242b,#111317);color:#fff;font-size:29px;font-weight:800;letter-spacing:-1.1px;box-shadow:0 14px 32px rgba(17,20,25,.15)}
+#page-overview .overview-grid:after{content:"Parts • symptoms • fault codes • previous repairs";grid-column:1/-1;margin-top:-64px;padding:0 20px 22px;color:#b8bdc5;font-size:11px;letter-spacing:.03em;pointer-events:none}
+
+/* Parts/search surfaces */
+#page-parts_manual,#page-fleet_intel,#page-my_profile{background:transparent!important}
+#page-parts_manual .parts-manual-header{padding:7px 2px 17px!important}#page-parts_manual .parts-manual-header .eyebrow{color:#e63b41!important}#page-parts_manual .parts-manual-header h2{font-size:31px!important;letter-spacing:-1.25px!important}.parts-toolbar,.parts-search-shell{gap:9px!important}.parts-search,.parts-category-select{background:rgba(255,255,255,.80)!important;border:1px solid rgba(255,255,255,.9)!important;border-radius:18px!important;box-shadow:0 6px 18px rgba(20,27,37,.04)!important;backdrop-filter:blur(16px)!important}.parts-web-search-btn{border-radius:18px!important;background:#1d2025!important}.parts-index,.part-detail{border:0!important;border-radius:22px!important;background:rgba(255,255,255,.82)!important;box-shadow:0 7px 22px rgba(20,27,37,.045)!important}.parts-row{min-height:62px!important}
+#page-fleet_intel .intel-summary-top{margin-top:5px!important}.intelligence-search-shell{border:0!important;border-radius:22px!important;background:rgba(255,255,255,.82)!important;box-shadow:0 7px 22px rgba(20,27,37,.05)!important}.intel-search-row{min-height:52px!important}
+
+/* AI owns the screen between glass bars */
+body[data-current-page="ai_assistant"] .main{padding-top:calc(78px + env(safe-area-inset-top))!important;padding-bottom:calc(86px + env(safe-area-inset-bottom))!important;background:#f7f8fa!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100dvh - 164px - env(safe-area-inset-top) - env(safe-area-inset-bottom))!important;background:transparent!important;border-radius:0!important}
+body[data-current-page="ai_assistant"] .ai-page-chatbar{background:transparent!important;border:0!important}.ai-page-welcome{padding-top:18px!important}.ai-page-welcome h2{font-size:36px!important;letter-spacing:-1.6px!important}.ai-page-welcome p{font-size:14px!important}.ai-start-card{border:1px solid rgba(255,255,255,.95)!important;background:rgba(255,255,255,.72)!important;backdrop-filter:blur(18px)!important;border-radius:20px!important}
+body[data-current-page="ai_assistant"] .ai-page-compose{bottom:5px!important}.ai-compose-input{border:1px solid rgba(255,255,255,.95)!important;background:rgba(255,255,255,.84)!important;border-radius:24px!important;box-shadow:0 12px 34px rgba(20,27,37,.12)!important;backdrop-filter:blur(24px) saturate(160%)!important}
+
+/* profile is a simple app account page */
+#page-my_profile .card,#page-my_profile .profile-card{border:0!important;border-radius:24px!important;background:rgba(255,255,255,.82)!important;box-shadow:0 8px 25px rgba(20,27,37,.05)!important}
+}
+
+@media(max-width:760px){
+#page-overview:before,#page-overview:after{display:none!important}
+.mobile-app-home{display:block!important}.mobile-home-copy{padding:9px 2px 17px!important}.mobile-home-copy>span{font-size:9px;font-weight:800;letter-spacing:.14em;color:#e73b41}.mobile-home-copy h1{margin:6px 0 4px;font-size:34px;line-height:1;letter-spacing:-1.5px}.mobile-home-copy p{margin:0;max-width:330px;font-size:13px;line-height:1.45;color:#747b85}
+.mobile-home-ai{display:grid!important;grid-template-columns:48px 1fr 28px!important;align-items:center!important;gap:10px!important;width:100%!important;min-height:112px!important;padding:18px!important;border:0!important;border-radius:26px!important;background:linear-gradient(145deg,#242830,#121419)!important;color:#fff!important;text-align:left!important;box-shadow:0 16px 34px rgba(17,20,25,.15)!important}.mobile-home-ai>i:first-child{display:grid;place-items:center;width:48px;height:48px;border-radius:17px;background:rgba(255,255,255,.08);color:#ff5258;font-size:25px}.mobile-home-ai span{display:flex;flex-direction:column;gap:5px}.mobile-home-ai strong{font-size:20px;letter-spacing:-.5px}.mobile-home-ai small{font-size:11px;line-height:1.35;color:#aeb4bd}.mobile-home-ai>i:last-child{font-size:20px;color:#7d838c}
+.mobile-home-grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:10px!important;margin-top:10px!important}.mobile-home-grid button{display:flex!important;flex-direction:column!important;align-items:flex-start!important;min-height:135px!important;padding:16px!important;border:1px solid rgba(255,255,255,.9)!important;border-radius:24px!important;background:rgba(255,255,255,.76)!important;text-align:left!important;box-shadow:0 8px 24px rgba(20,27,37,.04)!important;backdrop-filter:blur(20px)!important}.mobile-home-grid i{font-size:24px;margin-bottom:auto;color:#343940}.mobile-home-grid strong{font-size:16px}.mobile-home-grid small{margin-top:4px;font-size:10px;color:#7b828c}
+.mobile-home-tip{display:grid!important;grid-template-columns:38px 1fr auto!important;align-items:center!important;gap:10px!important;margin-top:10px!important;padding:13px!important;border-radius:20px!important;background:rgba(255,255,255,.65)!important;border:1px solid rgba(255,255,255,.9)!important}.mobile-home-tip>i{display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:#fff;font-size:18px}.mobile-home-tip span{display:flex;flex-direction:column;gap:2px}.mobile-home-tip strong{font-size:12px}.mobile-home-tip small{font-size:9px;color:#7d838c}.mobile-home-tip button{min-height:36px!important;padding:0 10px!important;border:0!important;border-radius:12px!important;background:#1c1f24!important;color:#fff!important;font-size:10px!important}
+#page-overview>.overview-toolbar,#page-overview>.overview-label,#page-overview>.overview-grid{display:none!important}
+}
+@media(min-width:761px){.mobile-app-home,.mobile-tabbar,.mobile-more-sheet{display:none!important}}

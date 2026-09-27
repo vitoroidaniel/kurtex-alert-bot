@@ -70,3 +70,27 @@
    if(e.target.closest('.ai-side-chat-open')) setTimeout(()=>toggleAIPageSidebar(false),60);
  },true);
 })();
+
+/* v139 — mobile companion app navigation */
+function toggleMobileMore(force){
+ var sheet=document.getElementById('mobile-more-sheet');if(!sheet)return;
+ var show=typeof force==='boolean'?force:sheet.hasAttribute('hidden');
+ if(show)sheet.removeAttribute('hidden');else sheet.setAttribute('hidden','');
+}
+function mobileGo(page){
+ toggleMobileMore(false);
+ if(typeof showPage==='function')showPage(page);
+ document.querySelectorAll('[data-mobile-page]').forEach(function(b){b.classList.toggle('active',b.dataset.mobilePage===page)});
+}
+(function(){
+ function sync(){
+  if(!window.matchMedia('(max-width:760px)').matches)return;
+  var page=document.body.getAttribute('data-current-page')||'overview';
+  var allowed=['overview','parts_manual','ai_assistant','fleet_intel','my_profile'];
+  if(!allowed.includes(page)){page='overview';if(typeof showPage==='function')showPage(page)}
+  document.querySelectorAll('[data-mobile-page]').forEach(function(b){b.classList.toggle('active',b.dataset.mobilePage===page)});
+ }
+ document.addEventListener('DOMContentLoaded',function(){setTimeout(sync,80)});
+ document.addEventListener('click',function(e){if(!e.target.closest('.mobile-more-sheet,.mobile-more'))toggleMobileMore(false)},true);
+ window.addEventListener('resize',sync,{passive:true});
+})();
