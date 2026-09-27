@@ -81,6 +81,14 @@ function mobileGo(page){
  toggleMobileMore(false);
  if(typeof showPage==='function')showPage(page);
  document.querySelectorAll('[data-mobile-page]').forEach(function(b){b.classList.toggle('active',b.dataset.mobilePage===page)});
+ if(page==='ai_assistant'){
+   requestAnimationFrame(function(){
+     var box=document.getElementById('ai-page-messages');
+     if(box && !box.children.length && typeof newKurtexAIPageChat==='function') newKurtexAIPageChat();
+     if(typeof loadAIPageSidebar==='function') loadAIPageSidebar();
+     if(typeof refreshAIChatContext==='function') refreshAIChatContext();
+   });
+ }
 }
 (function(){
  function sync(){
