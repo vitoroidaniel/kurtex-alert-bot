@@ -160,7 +160,8 @@ async function openAIPageSavedChat(id,clicked){
   var p=document.getElementById('ai-page-history');if(p)p.remove();
   box.scrollTop=box.scrollHeight;
   await refreshAIChatContext();
-  await loadAIPageSidebar();
+  if(window.matchMedia&&window.matchMedia('(max-width:760px)').matches) toggleAIPageSidebar(false);
+  loadAIPageSidebar();
  }catch(e){
   console.error('AI saved chat open failed',e);
   kurtexAIChatId=null;

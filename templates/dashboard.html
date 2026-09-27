@@ -121,7 +121,10 @@
       <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><strong>Parts</strong><small>Identify & troubleshoot</small></button>
       <button onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><strong>Issue search</strong><small>Truck & trailer history</small></button>
     </div>
-    <div class="mobile-home-tip"><i class="ph ph-camera"></i><span><strong>Got a photo?</strong><small>Open AI and attach it for visual diagnostics.</small></span><button onclick="mobileGo('ai_assistant')">Open AI</button></div>
+    <div class="mobile-home-tip"><i class="ph ph-camera"></i><span><strong>Got a photo?</strong><small>Open AI and attach it for visual diagnostics.</small></span><button onclick="mobileGo('ai_assistant')">Open AI</button></div><div class="mobile-home-shortcuts">
+ <button onclick="mobileGo('ai_assistant');setTimeout(function(){var i=document.getElementById('ai-page-input');if(i){i.value='Help me identify this fault code: ';i.focus()}},120)"><i class="ph ph-warning-circle"></i><span><strong>Fault code</strong><small>Explain a code</small></span></button>
+ <button onclick="mobileGo('fleet_intel')"><i class="ph ph-clock-counter-clockwise"></i><span><strong>Repair history</strong><small>Find past issues</small></span></button>
+</div>
   </section><div class="overview-toolbar"><span>Your operations, at a glance</span><button class="badge-btn btn-outline" onclick="openLayoutSettings()">Customize overview</button></div>
     <div class="overview-label"><span>Today at a glance</span><small>Reassignments & response average cover all time</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
