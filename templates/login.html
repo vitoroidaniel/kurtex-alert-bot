@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Sign in · Kurtex Operations</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/auth/login.css') }}">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+</head><body>
+<main class="login-shell">
+  <div class="scene-slider" aria-hidden="true">
+    <div class="scene-slide active" style="--bg:url('/static/images/login-fleet-service.png')"></div>
+    <div class="scene-slide" style="--bg:url('https://images.pexels.com/photos/7019372/pexels-photo-7019372.jpeg?auto=compress&dpr=1&h=1080&w=1920')"></div>
+    <div class="scene-slide" style="--bg:url('https://cdnmedia.endeavorsuite.com/images/ThumbGenerator/Thumb.aspx?img=http%3A%2F%2Fcdnmedia.endeavorsuite.com%2Fimages%2Forganizations%2F69697811-b34f-435b-913f-5f0aea1c02db%2FSEO+Images%2Ftksoutheast_trailerrepair_header.jpg&v=1648493416948%3Fv%3D20220516084723&w=1140')"></div>
+    <div class="scene-slide" style="--bg:url('https://images.pexels.com/photos/7541351/pexels-photo-7541351.jpeg?auto=compress&dpr=1&h=1080&w=1920')"></div>
+  </div><div class="scene-overlay" aria-hidden="true"></div><div class="scene-light" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt="Kurtex"><span>KURTEX<small>FLEET OPERATIONS</small></span></a>
+  </header>
+
+  <section class="hero-copy">
+    <span class="eyebrow">MAINTENANCE, IN VIEW</span>
+    <h1>Keep your fleet<br><em>moving</em> forward.</h1>
+    <p>One workspace for case activity, maintenance history, parts intelligence, and the people keeping every unit on the road.</p>
+    <div class="hero-features">
+      <div><i class="ph ph-clipboard-text"></i><span><b>Follow every case</b><small>From report to resolution</small></span></div>
+      <div><i class="ph ph-truck"></i><span><b>Know your fleet</b><small>History, repairs and recurring issues</small></span></div>
+      <div><i class="ph ph-chart-bar"></i><span><b>See team performance</b><small>Keep operations moving</small></span></div>
+    </div>
+  </section>
+
+  <section class="login-card-wrap">
+    <div class="login-card">
+      <div class="card-kicker">YOUR OPERATIONS WORKSPACE</div>
+      <h2>Welcome back.</h2>
+      <p class="intro">Sign in with your registered Telegram account to open the dashboard.</p>
+      {% if error %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>We couldn't verify your account. Please try again or contact your administrator.</span></div>{% endif %}
+      {% if bot_username %}
+      <div class="telegram-box"><div class="tg-wrap"><script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="medium" data-radius="10" data-auth-url="/auth/telegram" data-request-access="write"></script></div></div>
+      <p class="help"><i class="ph ph-info"></i> No sign-in button? Allow Telegram to load, then refresh this page.</p>
+      {% else %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>Telegram sign-in isn't configured. Ask your administrator to set BOT_USERNAME.</span></div>{% endif %}
+      <div class="divider"></div>
+      <div class="trust"><i class="ph ph-shield-check"></i><div><b>Same bot. Clearer picture.</b><span>Case assignment, alerts and report submission stay in Telegram. Review fleet activity and maintenance intelligence here.</span></div></div>
+      <div class="system-row"><span><i></i> Operations connected</span><span>Chicago time</span></div>
+    </div>
+  </section>
+
+  <footer class="page-footer"><span>Kurtex Maintenance</span><span>TRUCKS&nbsp;&nbsp;·&nbsp;&nbsp;TRAILERS&nbsp;&nbsp;·&nbsp;&nbsp;REEFERS&nbsp;&nbsp;·&nbsp;&nbsp;PEOPLE&nbsp;&nbsp;·&nbsp;&nbsp;PERFORMANCE</span></footer>
+</main>
+<script>
+(() => {
+  const slides = [...document.querySelectorAll('.scene-slide')];
+  if (!slides.length) return;
+  let current = 0;
+  const show = (index) => {
+    current = (index + slides.length) % slides.length;
+    slides.forEach((el,i) => el.classList.toggle('active', i === current));
+  };
+  setInterval(() => show(current + 1), 8500);
+})();
+</script>
+</body></html>

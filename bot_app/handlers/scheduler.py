@@ -1,0 +1,124 @@
+"""
+handlers/scheduler.py
+- Daily report at 06:50 America/Chicago
+- Escalation: first ping after 10 min, repeat every 10 min, max 5 rounds
+"""
+
+import logging
+from datetime import timedelta
+
+from telegram.ext import Application
+
+from backend.core.app_time import CENTRAL_TZ, CENTRAL_TIMEZONE_LABEL, parse_timestamp, utc_now
+from backend.core.config import config
+from backend.storage.case_store import mark_missed
+from bot_app.handlers.admin_handler import send_daily_report
+
+
+def _esc(t: str) -> str:
+    """Escape Markdown v1 special chars in dynamic content."""
+    return str(t).replace("_", "\\_").replace("*", "\\*").replace("`", "\\`").replace("[", "\\[")
+
+
+logger = logging.getLogger(__name__)
+
+ESCALATION_FIRST_MINUTES  = 10
+ESCALATION_REPEAT_MINUTES = 10
+ESCALATION_MAX_ROUNDS     = 5
+
+
+async def job_daily_report(ctx) -> None:
+    dest = config.REPORTS_GROUP_ID
+    if not dest:
+        logger.warning("No REPORTS_GROUP_ID — skipping daily report.")
+        return
+    await send_daily_report(ctx.bot, dest)
+
+
+async def job_escalation_check(ctx) -> None:
+    from backend.core.shift_manager import get_all_admins
+
+    alert_handler = ctx.bot_data.get("alert_handler")
+    if not alert_handler:
+        return
+
+    now    = utc_now()
+    first  = timedelta(minutes=ESCALATION_FIRST_MINUTES)
+    repeat = timedelta(minutes=ESCALATION_REPEAT_MINUTES)
+
+    for alert_id, record in list(alert_handler._alerts.items()):
+        if record.get("taken_by"):
+            continue
+
+        created_at = record.get("created_at")
+        if not created_at:
+            continue
+        created_at = parse_timestamp(created_at)
+        if not created_at:
+            continue
+
+        age = now - created_at
+        if age < first:
+            continue
+
+        last_esc = record.get("last_escalated_at")
+        if last_esc:
+            last_esc = parse_timestamp(last_esc)
+            if not last_esc:
+                continue
+            if (now - last_esc) < repeat:
+                continue
+
+        count = record.get("escalation_count", 0)
+        if count >= ESCALATION_MAX_ROUNDS:
+            continue
+
+        age_str     = f"{int(age.total_seconds() // 60)}m"
+        short_id    = alert_handler._register_alert(alert_id)
+        kb          = alert_handler._make_kb(short_id)
+        group_name  = record.get("group_name", "Driver Group")
+        driver_name = record.get("driver_name", "a driver")
+        description = record.get("text", "")
+
+        msg = (
+            f"🔔 *Unassigned Alert — {age_str} old* (reminder {count + 1}/{ESCALATION_MAX_ROUNDS})\n\n"
+            f"📌 *Group:* {_esc(group_name)}\n"
+            f"👤 *Driver:* {_esc(driver_name)}\n"
+            f"📝 {description[:200]}\n\n"
+            "⚠️ *Please respond!*"
+        )
+
+        if count >= ESCALATION_MAX_ROUNDS - 1:
+            from backend.storage.user_store import get_all_user_dicts
+            recipients = [u for u in get_all_user_dicts() if u.get("role") == "super_admin"]
+        else:
+            recipients = get_all_admins()
+        for admin in recipients:
+            try:
+                sent = await ctx.bot.send_message(
+                    admin["id"], msg, parse_mode="Markdown", reply_markup=kb,
+                )
+                record["recipients"].setdefault(admin["id"], []).append(sent.message_id)
+            except Exception as e:
+                logger.warning(f"Escalation DM failed for {admin['id']}: {e}")
+
+        record["last_escalated_at"] = now.isoformat()
+        record["escalation_count"]  = count + 1
+
+        if count == 0:
+            mark_missed(alert_id)
+
+        alert_handler._persist()
+        logger.info(f"Alert {alert_id} escalation #{count + 1} after {age_str}")
+
+
+def register_jobs(app: Application) -> None:
+    jq = app.job_queue
+
+    report_time = utc_now().astimezone(CENTRAL_TZ).replace(hour=6, minute=50, second=0, microsecond=0).timetz()
+    jq.run_daily(job_daily_report, time=report_time, name="daily_report")
+    # Check every 30s so reminders land within ~30s of each 10-minute mark,
+    # instead of drifting up to 5 minutes late.
+    jq.run_repeating(job_escalation_check, interval=30, first=60, name="escalation_check")
+
+    logger.info(f"Jobs registered: daily_report @ 06:50 {CENTRAL_TIMEZONE_LABEL}, escalation check every 30s")

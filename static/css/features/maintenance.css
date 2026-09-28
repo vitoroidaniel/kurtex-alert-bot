@@ -1,0 +1,39 @@
+/* Shared desktop/mobile maintenance-chat usability corrections. */
+.ai-page-layout,.ai-page-chat-column,.ai-assistant-workspace,.ai-msg-content{min-width:0;min-height:0}
+.ai-page-messages{overscroll-behavior:contain}
+.ai-msg-body,.ai-attach-meta,.ai-inline-kb{overflow-wrap:anywhere;min-width:0}
+.ai-msg-body pre{max-width:100%;overflow:auto;white-space:pre-wrap}
+.ai-compose-left{flex-wrap:wrap;min-width:0}
+.ai-compose-send{flex-shrink:0}
+.ai-compose-send:disabled{opacity:.5;cursor:progress}
+.ai-web-option{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:inherit;white-space:nowrap}
+.ai-web-option input{accent-color:#b83232;width:16px;height:16px}
+.ai-upload-status{font-size:12px;line-height:1.4;color:inherit;opacity:.8;padding:0 10px;overflow-wrap:anywhere}
+.ai-upload-status:not(:empty){padding:6px 10px}
+.ai-page-msg .ai-msg-actions{opacity:1}
+button:focus-visible,a:focus-visible,textarea:focus-visible{outline:2px solid #b83232;outline-offset:3px}
+.ai-chat-context{max-height:170px;overflow:auto}
+@media(max-width:760px){
+ #ai-page-input{font-size:16px!important;max-height:140px}
+ .ai-compose-left{gap:6px!important}
+ .ai-compose-left button,.ai-compose-send,.ai-side-chat-delete{min-width:44px;min-height:44px}
+ .ai-web-option{min-height:36px}
+ .ai-attach-card{max-width:min(270px,80vw)}
+ .ai-page-msg{max-width:100%!important}
+ .ai-msg-content{max-width:100%}
+ #modal-overlay .modal-close,#report-view-overlay .modal-close,#unit-modal-overlay .modal-close{min-width:44px!important;min-height:44px!important;opacity:1!important;pointer-events:auto!important}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.ai-msg-video{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px;border:1px solid var(--border,#ddd);border-radius:14px;overflow-wrap:anywhere}
+.ai-msg-video button,.ai-attach-meta button{border:1px solid var(--border,#ddd);border-radius:8px;padding:6px 10px;background:var(--surface,#fff);color:var(--text,#222);cursor:pointer}
+.ai-sources{margin-top:12px;font-size:12px}.ai-sources a{display:block;overflow-wrap:anywhere;margin-top:8px}.ai-sources small{display:block;opacity:.75}.ai-research-note{font-size:12px;opacity:.7}
+.ai-learning-card{margin-bottom:20px;padding:20px}.ai-learning-card p{line-height:1.5;max-width:80ch}
+.ai-learning-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.ai-learning-toolbar button,.ai-learning-toolbar select{padding:9px 12px;border:1px solid var(--border,#ddd);background:var(--surface,#fff);color:var(--text,#222);border-radius:9px;cursor:pointer}
+.ai-lesson{padding:16px;border:1px solid var(--border,#ddd);border-radius:12px;margin:12px 0;min-width:0}
+.ai-lesson label{display:block;margin:10px 0;font-size:12px}.ai-lesson input,.ai-lesson textarea{display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px;background:var(--surface,#fff);color:var(--text,#222);border:1px solid var(--border,#ddd);border-radius:8px}
+.ai-lesson pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font-size:12px}
+.ai-transcript-modal[hidden]{display:none!important}.ai-transcript-modal{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:16px;background:rgba(0,0,0,.5)}
+.ai-transcript-modal section{background:var(--surface,#fff);color:var(--text,#222);width:min(680px,100%);max-height:90dvh;overflow:auto;padding:20px;border-radius:18px;box-sizing:border-box}
+.ai-transcript-modal header,.ai-transcript-modal footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.ai-transcript-modal textarea{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:12px}.ai-transcript-modal button{padding:10px;border-radius:8px;min-height:44px;cursor:pointer}
+@media(max-width:760px){.ai-learning-card{padding:12px}.ai-msg-actions{flex-wrap:wrap}.ai-lesson input,.ai-lesson textarea{font-size:16px}.ai-lesson{padding:10px}}
