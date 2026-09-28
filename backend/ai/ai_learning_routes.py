@@ -19,8 +19,7 @@ def register_learning_routes(app,learning,chats,user_key,is_trainer,load_cases,i
         count=0
         for owner,items in chats.all_chats():
             for chat in items:learning.capture_chat(owner,chat);count+=1
-        case_count=learning.capture_cases([c for c in load_cases() if not is_testing(c)])
-        return jsonify(ok=True,chats=count,cases=case_count)
+        return jsonify(ok=True,chats=count,cases=0,note='Fleet cases are indexed automatically and do not enter the manual review queue.')
 
     @app.route('/api/ai/learning/<ident>',methods=['PATCH'])
     def learning_review(ident):
@@ -39,12 +38,16 @@ def register_learning_routes(app,learning,chats,user_key,is_trainer,load_cases,i
     def chat_feedback(chat_id):
         chat=next((c for c in chats.read(user_key()) if c.get('id')==chat_id),None)
         if not chat:return jsonify(error='Chat not found'),404
-        data=request.get_json(silent=True) or {};correction=str(data.get('correction','')).strip()
-        if not 10<=len(correction)<=12000:return jsonify(error='Describe the correction or confirmed outcome in 10-12000 characters.'),400
+        data=request.get_json(silent=True) or {}
+        reason=str(data.get('reason') or data.get('correction') or '').strip()
+        category=str(data.get('category') or 'other').strip().lower()[:40]
+        allowed={'incorrect','unclear','unsafe','outdated','missing_context','other'}
+        if category not in allowed:category='other'
+        if not 5<=len(reason)<=12000:return jsonify(error='Describe why this answer should be reviewed in 5-12000 characters.'),400
         messages=chat.get('messages',[]);wanted=str(data.get('message_id',''))
         found=next(((i,m) for i,m in enumerate(messages) if m.get('role')=='assistant' and str(m.get('id') or i)==wanted),None)
         if not found:return jsonify(error='Answer not found. Reopen the conversation and try again.'),404
         index,message=found;question=messages[index-1].get('content','') if index else ''
-        evidence='Agent question:\n'+question+'\n\nPrevious AI answer (unverified):\n'+message.get('content','')+'\n\nAgent correction / reported outcome (awaiting review):\n'+correction
-        ident=learning.capture('feedback:'+user_key()+':'+chat_id+':'+wanted,'correction',chat.get('title','Maintenance correction'),evidence)
+        evidence='Agent question:\n'+question+'\n\nAI answer (unverified):\n'+message.get('content','')+'\n\nReport category: '+category.replace('_',' ')+'\nAgent reason (awaiting developer review):\n'+reason
+        ident=learning.capture('feedback:'+user_key()+':'+chat_id+':'+wanted,'agent_report',chat.get('title','AI answer report'),evidence)
         return jsonify(ok=True,id=ident,status='pending'),201

@@ -4,6 +4,7 @@ All commands respond in <100ms.
 """
 import logging
 from collections import defaultdict
+from datetime import timedelta, timezone
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -13,13 +14,14 @@ from telegram.error import TelegramError
 from backend.storage.case_store import (
     async_get_cases_today     as get_cases_today,
     async_get_cases_this_week as get_cases_this_week,
+    async_get_cases_between   as get_cases_between,
     get_all_cases,
 )
 from backend.storage.user_store import (
     get_all_users, get_user, add_user, remove_user, edit_role,
     has_role, VALID_ROLES,
 )
-from backend.core.app_time import CENTRAL_TIMEZONE_LABEL, chicago_now, chicago_timestamp
+from backend.core.app_time import CENTRAL_TIMEZONE_LABEL, chicago_now, chicago_timestamp, MOLDOVA_TZ, MOLDOVA_TIMEZONE_LABEL, moldova_now
 
 
 logger   = logging.getLogger(__name__)
@@ -150,12 +152,19 @@ async def cmd_missed(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── Daily report (called by scheduler) ───────────────────────────────────────
 
 async def send_daily_report(bot, chat_id: int) -> None:
-    cases  = await get_cases_today()
-    today  = chicago_now().strftime("%B %d, %Y")
-    report = _build_daily_report(cases, f"End of Day Report — {today} {CENTRAL_TIMEZONE_LABEL}")
+    # Fixed business-day boundary: 14:30 Moldova local time -> next day 14:30.
+    # ZoneInfo keeps this correct across Moldova DST changes.
+    now_md = moldova_now()
+    end = now_md.replace(hour=14, minute=30, second=0, microsecond=0)
+    if now_md < end:
+        end -= timedelta(days=1)
+    start = end - timedelta(days=1)
+    cases = await get_cases_between(start.astimezone(timezone.utc), end.astimezone(timezone.utc))
+    period = f"{start.strftime('%b %d, %H:%M')} - {end.strftime('%b %d, %H:%M')} {MOLDOVA_TIMEZONE_LABEL}"
+    report = _build_daily_report(cases, f"Daily Operations Report — {period}")
     try:
         await bot.send_message(chat_id, report, parse_mode=ParseMode.MARKDOWN)
-        logger.info(f"Daily report sent to {chat_id}")
+        logger.info(f"Daily report sent to {chat_id} for {period}")
     except TelegramError as e:
         logger.error(f"Failed to send daily report: {e}")
 

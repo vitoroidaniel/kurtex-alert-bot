@@ -25,6 +25,6 @@ const root=path.join(__dirname,'..');
  input.value='Inspect again';ai.aiChatPendingAttachments=[{id:'photo',name:'wheel.jpg',kind:'image'}];tray.innerHTML='pending attachment';
  const failed=ai.sendKurtexAIPage({preventDefault(){}});rejectRequest(new Error('offline'));await failed;
  assert.equal(ai.aiChatPendingAttachments.length,1);assert.equal(tray.innerHTML,'pending attachment');assert.equal(input.value,'Inspect again');assert.equal(ai.aiBusy,false);
- assert.match(ai.aiWrapMessage('assistant','answer','','abc'),/Teach \/ correct/);
- console.log('PASS: mutation isolation, timeout, optimistic attachment clearing, failure restore and correction action');
+ const actions=ai.aiWrapMessage('assistant','answer','','abc');assert.match(actions,/> Report<\/button>/);assert.doesNotMatch(actions,/Teach \/ correct/);assert.match(actions,/copyAIMessage/);
+ console.log('PASS: mutation isolation, timeout, optimistic attachment clearing, failure restore plus agent copy/report actions');
 })();

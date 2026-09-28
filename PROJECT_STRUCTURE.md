@@ -1,32 +1,22 @@
 # Kurtex project structure
 
-## Runtime entry points
-- `dashboard.py` - Flask dashboard composition and HTTP routes. Kept as the compatibility entry point for Railway.
-- `bot.py` - Telegram bot composition/entry point.
+- `bot.py` — Telegram application bootstrap only.
+- `bot_app/handlers/` — Telegram agent/admin/report/scheduler behavior.
+- `backend/core/` — configuration, time zones, shifts, dashboard data snapshots.
+- `backend/storage/` — durable Railway-volume case/user storage.
+- `backend/ai/` — AI chat learning/research/video plus automatic Fleet Knowledge indexing.
+  - `fleet_knowledge.py` keeps historical fleet evidence separate from manual AI Review.
+  - `ai_learning.py` stores developer-reviewed AI feedback/verified lessons.
+- `templates/` — Flask pages and partials.
+- `static/js/core/` — browser app/API/state foundation.
+- `static/js/features/` — AI, cases, reports, fleet, analytics and developer knowledge/review UI.
+- `static/js/platform/` — mobile-specific behavior.
+- `static/css/` — core, feature, platform and auth styling.
+- `data/` — bundled non-secret reference data only. Runtime data belongs in `DATA_DIR`.
+- `tests/` — regression/unit tests.
 
-## Backend
-- `backend/ai/` - AI chat persistence, maintenance reasoning, research, video/audio processing, and learning/review workflow.
-- `backend/core/` - shared application configuration, Chicago-time helpers, dashboard data access, and shift logic.
-- `backend/storage/` - case/user persistence adapters.
-- `bot_app/handlers/` - Telegram command, alert, agent, report, admin, and scheduler handlers.
+## AI data boundaries
 
-## Frontend
-- `static/js/core/` - transport/API, shared state, navigation, refresh/bootstrap.
-- `static/js/features/` - feature-specific UI: AI, AI learning, reports, case details, analytics, dashboard views, layout, notifications.
-- `static/js/platform/` - device/platform behavior such as mobile viewport/navigation.
-- `static/css/core/` - main dashboard system and shared icon rules.
-- `static/css/features/` - feature-specific styles/fixes.
-- `static/css/platform/` - mobile/responsive presentation.
-- `static/css/auth/` - login/authentication presentation.
-- `static/images/`, `static/vendor/` - assets and vendored libraries.
+Fleet cases and report data are automatically indexed in `DATA_DIR/fleet_knowledge.sqlite3`. This is historical evidence and requires no per-case approval. Agent-reported AI answers go to AI Review and remain pending until a developer reviews them. Verified manual knowledge remains in the maintenance knowledge library.
 
-## Templates and data
-- `templates/` - Flask HTML templates and partials.
-- `data/` - application knowledge/data files.
-- `tests/` - backend and frontend regression tests.
-
-## Dependency rule
-Feature code may depend on `backend/core` and `backend/storage`. Core must not depend on feature modules. Bot handlers live outside dashboard/AI modules. Frontend feature code should use `static/js/core/api.js` for HTTP instead of creating separate transports.
-
-## Next architectural boundary
-`dashboard.py` remains intentionally compatible with the current deployment entry point. New endpoints should be added as Flask blueprints under `backend/<feature>/routes.py`; existing route groups can be migrated incrementally without another large breaking refactor.
+The full CSV export includes all case keys currently stored, including report fields and nested report/media metadata (JSON-encoded in CSV cells). Historical CSVs can also be bulk imported from AI Knowledge > Fleet Knowledge.

@@ -251,6 +251,17 @@ def get_cases_today() -> list[dict]:
     return [c for c in _load(CASES_FILE) if chicago_date_str(c.get("opened_at")) == today]
 
 
+
+def get_cases_between(start, end) -> list[dict]:
+    """Return cases opened in the half-open UTC-aware interval [start, end)."""
+    rows = []
+    for case in _load(CASES_FILE):
+        opened = parse_timestamp(case.get("opened_at"))
+        if opened and start <= opened < end:
+            rows.append(case)
+    return rows
+
+
 def get_cases_this_week() -> list[dict]:
     start = week_start_str()
     return [c for c in _load(CASES_FILE) if chicago_date_str(c.get("opened_at")) >= start]
@@ -336,6 +347,9 @@ async def async_get_all_cases_for_agent(agent_id):
 
 async def async_get_cases_today():
     return await asyncio.to_thread(get_cases_today)
+
+async def async_get_cases_between(start, end):
+    return await asyncio.to_thread(get_cases_between, start, end)
 
 async def async_get_cases_this_week():
     return await asyncio.to_thread(get_cases_this_week)

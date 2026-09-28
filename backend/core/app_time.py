@@ -5,6 +5,9 @@ from zoneinfo import ZoneInfo
 CENTRAL_TIMEZONE_NAME = "America/Chicago"
 CENTRAL_TZ = ZoneInfo(CENTRAL_TIMEZONE_NAME)
 CENTRAL_TIMEZONE_LABEL = "CT"
+MOLDOVA_TIMEZONE_NAME = "Europe/Chisinau"
+MOLDOVA_TZ = ZoneInfo(MOLDOVA_TIMEZONE_NAME)
+MOLDOVA_TIMEZONE_LABEL = "Moldova time"
 
 
 def utc_now() -> datetime:
@@ -53,3 +56,8 @@ def week_start_str() -> str:
 
 def month_start_str() -> str:
     return chicago_now().date().replace(day=1).isoformat()
+
+
+def moldova_now() -> datetime:
+    """Return current local time in Moldova with DST handled by zoneinfo."""
+    return datetime.now(MOLDOVA_TZ)

@@ -87,3 +87,6 @@ runtime files and all volume history are preserved.
 
 ## v124 AI chat context
 AI Assistant supports per-chat file attachments and verified Knowledge Library sources. PDF/DOCX extraction requires the dependencies listed in requirements.txt.
+
+## Fleet knowledge and AI review
+Resolved/reported case records are automatically indexed into `fleet_knowledge.sqlite3` on the persistent data volume. This evidence is retrieved for similar maintenance questions without creating thousands of manual approval tasks. AI Review is reserved for answers explicitly reported by agents. The dashboard CSV export is full-fidelity and includes report fields stored on each case, including nested report/media metadata as JSON cells.

@@ -497,6 +497,9 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         c["setpoint"]       = report_data.get("setpoint", "")
                         c["current_temp"]   = report_data.get("current_temp", "")
                         c["temp_recorder"]  = report_data.get("temp_recorder", "")
+                        c["report_text"]    = report_text
+                        c["report_data"]    = report_data
+                        c["media"]          = report_data.get("media", [])
                         found = True
                         break
                 if found:

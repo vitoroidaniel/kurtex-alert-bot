@@ -351,7 +351,7 @@ function copyAIMessage(btn){
  }).catch(function(){})
 }
 function aiWrapMessage(role,html,attachmentHtml,messageId){
- return '<div class="ai-msg-content">'+(attachmentHtml||'')+'<div class="ai-msg-body">'+html+'</div></div><div class="ai-msg-actions"><button type="button" onclick="copyAIMessage(this)" title="Copy"><i class="ph ph-copy"></i></button>'+(role==='assistant'&&messageId?'<button type="button" data-message-id="'+escapeAI(messageId)+'" onclick="submitAILesson(this)" title="Correct this answer or record a verified outcome">Teach / correct</button>':'')+'</div>'
+ return '<div class="ai-msg-content">'+(attachmentHtml||'')+'<div class="ai-msg-body">'+html+'</div></div><div class="ai-msg-actions"><button type="button" onclick="copyAIMessage(this)" title="Copy"><i class="ph ph-copy"></i></button>'+(role==='assistant'&&messageId?'<button type="button" data-message-id="'+escapeAI(messageId)+'" onclick="openAIReport(this)" title="Report this answer for developer review"><i class="ph ph-flag"></i> Report</button>':'')+'</div>'
 }
 async function removeAIChatFile(fid){if(!kurtexAIChatId||aiBusy||aiUploading)return;aiChatPendingAttachments=aiChatPendingAttachments.filter(function(a){return String(a.id)!==String(fid)});await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
 async function openAIChatKnowledge(){
@@ -382,11 +382,19 @@ function aiSourceLinks(sources,status){
  if(!links.length)return status&&status!=='disabled'?'<p class="ai-research-note">Web research: '+escapeAI(status.replace(/_/g,' '))+'.</p>':'';
  return '<details class="ai-sources"><summary>Research sources ('+links.length+')</summary>'+links.map(function(x){return '<a href="'+escapeAI(x.url)+'" target="_blank" rel="noopener noreferrer">['+escapeAI(x.citation)+'] '+escapeAI(x.title)+'</a><small>'+escapeAI(x.source_type)+'</small>';}).join('')+'</details>';
 }
-async function submitAILesson(button){
- var correction=prompt('What was missed, what should be corrected, or what repair was confirmed? Include the supporting test/result.');
- if(!correction)return;
- try{await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message_id:button.dataset.messageId,correction:correction})});button.textContent='Queued for review';}
- catch(e){alert(e.message);}
+var aiReportMessageId=null;
+function openAIReport(button){
+ aiReportMessageId=button.dataset.messageId;
+ var modal=document.getElementById('ai-report-modal'),reason=document.getElementById('ai-report-reason'),status=document.getElementById('ai-report-status');
+ if(reason)reason.value='';if(status)status.textContent='';if(modal)modal.hidden=false;setTimeout(function(){if(reason)reason.focus()},0);
+}
+function closeAIReport(){var modal=document.getElementById('ai-report-modal');if(modal)modal.hidden=true;aiReportMessageId=null}
+async function submitAIReport(){
+ var reason=(document.getElementById('ai-report-reason').value||'').trim(),category=document.getElementById('ai-report-category').value,status=document.getElementById('ai-report-status');
+ if(reason.length<5){status.textContent='Please add a short reason for the developer.';return}
+ status.textContent='Sending report…';
+ try{var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message_id:aiReportMessageId,category:category,reason:reason})}),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to report answer');status.textContent='Reported for developer review.';setTimeout(closeAIReport,700)}
+ catch(e){status.textContent=e.message||'Unable to report answer'}
 }
 var aiTranscriptFile=null,aiTranscriptChat=null;
 async function openAITranscript(id){

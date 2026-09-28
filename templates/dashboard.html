@@ -59,7 +59,7 @@
     </div>
     <div class="nav-ai-cluster">
       <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
-      {% if is_manager %}<div class="nav-item" data-page="ai_training" role="button" tabindex="0" onclick="showPage('ai_training')"><i class="ph ph-brain"></i> AI Training</div>{% endif %}
+      {% if is_developer %}<div class="nav-item" data-page="ai_training" role="button" tabindex="0" onclick="showPage('ai_training')"><i class="ph ph-flag"></i> AI Review</div><div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
     </div>
     <div class="nav-bottom-cluster">
       <div class="nav-item" data-page="my_profile" role="button" tabindex="0" onclick="showPage('my_profile')"><i class="ph ph-user"></i> My Profile</div>
@@ -284,15 +284,19 @@
   </div>
 
 
-<div class="page" id="page-ai_training">
+{% if is_developer %}<div class="page" id="page-ai_training">
 <section class="ai-training-page">
 <section class="ai-training-card ai-learning-card">
- <h3>Learning from fleet experience</h3>
- <p>Chats, corrections and case history enter the review queue automatically. Only approved lessons become shared guidance. Check the actual repair evidence before approving.</p>
- <div class="ai-learning-toolbar"><button type="button" onclick="syncAILearning()">Sync all chats &amp; cases</button><select id="ai-learning-filter" aria-label="Learning review status" onchange="loadAILearning(0)"><option value="pending">Needs review</option><option value="approved">Approved lessons</option><option value="rejected">Rejected</option></select><button type="button" onclick="loadAILearning(0)">Refresh</button></div>
+ <h3>AI answer review</h3>
+ <p>Only AI answers reported by agents appear here. Review the reason, correct the answer when needed, and approve only verified guidance.</p>
+ <div class="ai-learning-toolbar"><select id="ai-learning-filter" aria-label="Learning review status" onchange="loadAILearning(0)"><option value="pending">Needs review</option><option value="approved">Approved lessons</option><option value="rejected">Rejected</option></select><button type="button" onclick="loadAILearning(0)">Refresh</button></div>
  <div id="ai-learning-status" role="status"></div><div id="ai-learning-list"></div>
  <div class="ai-learning-toolbar"><button type="button" onclick="loadAILearning(Math.max(0,aiLearningOffset-20))">Previous</button><button type="button" onclick="loadAILearning(aiLearningOffset+20)">Next</button></div>
 </section>
+</section></div>{% endif %}
+
+{% if is_developer %}<div class="page" id="page-ai_knowledge"><section class="ai-training-page">
+<section class="ai-training-card ai-learning-card"><h3>Fleet Knowledge</h3><p>Historical case/report data is indexed automatically. Cases do not enter the manual AI Review queue. Fleet experience is treated as evidence, not as a guaranteed repair procedure.</p><div class="ai-stat-row"><div><strong id="fleet-knowledge-total">—</strong><span>Indexed cases</span></div><div><strong id="fleet-knowledge-resolved">—</strong><span>Resolved evidence</span></div><div><strong id="fleet-knowledge-review">—</strong><span>Incomplete evidence</span></div></div><div class="ai-learning-toolbar"><button type="button" onclick="syncFleetKnowledge()">Sync fleet cases now</button><button type="button" onclick="loadFleetKnowledgeStats()">Refresh stats</button></div><div class="ai-card-head"><div><h3>Import historical CSV</h3><p>Bulk-import old case exports directly into Fleet Knowledge. They are indexed automatically and never create approval cards.</p></div></div><input id="fleet-knowledge-csv" class="ai-native-file" type="file" accept=".csv,text/csv"><button class="ai-secondary-btn" type="button" onclick="importFleetKnowledgeCSV()"><i class="ph ph-upload-simple"></i> Import CSV</button><div id="fleet-knowledge-status" role="status"></div></section>
 <div class="ai-training-grid">
     <main class="ai-training-main">
       <section class="ai-training-card ai-add-card">
@@ -335,7 +339,8 @@
       </section>
     </aside>
   </div>
-</section></div>
+
+</section></div>{% endif %}
 
   <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
@@ -371,6 +376,7 @@
 <script defer src="{{ url_for('static', filename='js/platform/mobile.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/ai.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/notifications.js') }}"></script>
+<div id="ai-report-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><header><div><span class="eyebrow">AI FEEDBACK</span><h3 id="ai-report-title">Report this answer</h3></div><button type="button" onclick="closeAIReport()" aria-label="Close report">Close</button></header><p>Tell the developer what looks wrong or needs review. Reporting does not teach the AI automatically.</p><label><span>Reason</span><select id="ai-report-category"><option value="incorrect">Incorrect answer</option><option value="missing_context">Missing important context</option><option value="unclear">Unclear / confusing</option><option value="unsafe">Potentially unsafe guidance</option><option value="outdated">Possibly outdated</option><option value="other">Other</option></select></label><label><span>What should be reviewed?</span><textarea id="ai-report-reason" rows="6" maxlength="12000" placeholder="Example: The fault code points to a different circuit, and the manual says to test connector X first."></textarea></label><p id="ai-report-status" role="status"></p><footer><button type="button" onclick="closeAIReport()">Cancel</button><button type="button" class="ai-primary-btn" onclick="submitAIReport()"><i class="ph ph-flag"></i> Send report</button></footer></section></div>
 <div id="ai-transcript-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-transcript-title"><header><h3 id="ai-transcript-title">Driver explanation</h3><button type="button" onclick="document.getElementById('ai-transcript-modal').hidden=true" aria-label="Close transcript">Close</button></header><p>Check speech recognition, especially fault codes and model names. This explanation is driver-reported, not a confirmed diagnosis.</p><textarea id="ai-transcript-text" aria-label="Driver transcript" rows="10"></textarea><p id="ai-transcript-status" role="status"></p><footer><button type="button" onclick="saveAITranscript(true)">Retry transcription</button><button type="button" onclick="saveAITranscript(false)">Save correction</button></footer></section></div>
 <script defer src="{{ url_for('static', filename='js/features/ai-learning.js') }}"></script>
 </body>

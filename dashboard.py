@@ -11,6 +11,7 @@ from functools import wraps
 from backend.ai.ai_chat_store import ChatStore
 from backend.ai.ai_learning import LearningStore
 from backend.ai.ai_learning_routes import register_learning_routes
+from backend.ai.fleet_knowledge import FleetKnowledgeStore
 from backend.ai.ai_research import search_research
 from backend.ai.ai_video import process_video, transcribe_audio, MAX_VIDEO_BYTES
 from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, knowledge_excerpt
@@ -45,6 +46,7 @@ app.secret_key = _dashboard_secret()
 app.config["MAX_CONTENT_LENGTH"] = 82 * 1024 * 1024
 chat_store = ChatStore(DATA_DIR)
 learning_store = LearningStore(DATA_DIR / "ai_learning.sqlite3")
+fleet_knowledge_store = FleetKnowledgeStore(DATA_DIR / "fleet_knowledge.sqlite3")
 _ai_user_locks = [Lock() for _ in range(64)]
 
 def ai_serialized(fn):
@@ -346,6 +348,7 @@ def _ai_context(query="",limit=18):
           "tags":(x.get("tags") or [])[:8],"content":knowledge_excerpt(x.get("content"),query,2200)})
     return {"cases":compact,"knowledge_notes":notes,"approved_maintenance_knowledge":approved,
             "reviewed_lessons":learning_store.matches(query),
+            "fleet_experience":fleet_knowledge_store.matches(query,6),
             "retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved)}}
 
 
@@ -428,7 +431,7 @@ AI_KNOWLEDGE_FILE = DATA_DIR / "ai_maintenance_knowledge.json"
 
 def _ai_is_trainer():
     user=session.get("user") or {}
-    return isinstance(user,dict) and user.get("role","agent") in ("developer","super_admin")
+    return isinstance(user,dict) and user.get("role","agent") == "developer"
 
 def _read_ai_knowledge():
     try:
@@ -1567,22 +1570,66 @@ def api_report():
 
 @app.route("/api/export")
 def api_export():
+    """Full-fidelity case export. Includes report fields visible in the dashboard.
+
+    Nested report/media data is JSON-encoded in a cell instead of silently dropped.
+    """
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     cases = load_cases()
-    out = io.StringIO()
-    w = csv.writer(out)
-    w.writerow(["ID","Reported By","Group","Assigned To","Status","Opened","Closed","Response","Description","Notes"])
-    for c in sorted(cases, key=lambda x: x.get("opened_at",""), reverse=True):
-        w.writerow([csv_cell(value) for value in [
-            (c.get("id") or "")[:8], c.get("driver_name",""), c.get("group_name",""),
-            c.get("agent_name",""), c.get("status",""),
-            (c.get("opened_at") or "")[:16], (c.get("closed_at") or "")[:16],
-            fmt_secs(c.get("response_secs")), c.get("description",""), c.get("notes",""),
-        ]])
-    out.seek(0)
-    today = chicago_now().strftime("%Y-%m-%d")
-    return Response(out.getvalue(), mimetype="text/csv",
-                    headers={"Content-Disposition": f"attachment; filename=kurtex-{today}.csv"})
+    preferred=["id","driver_name","driver_username","group_name","agent_name","agent_username","status",
+      "opened_at","assigned_at","closed_at","response_secs","resolution_secs","description","notes",
+      "vehicle_type","unit_number","report_driver","issue_text","load_type","location","priority",
+      "pickup","delivery","comments","setpoint","current_temp","temp_recorder","resolution","solution",
+      "close_notes","closing_notes","resolution_notes","report_text","report_data","media","report_msg_id"]
+    discovered=set()
+    for c in cases: discovered.update(c.keys())
+    fields=[x for x in preferred if x in discovered]
+    fields += sorted(x for x in discovered if x not in fields)
+    out=io.StringIO();w=csv.writer(out);w.writerow(fields)
+    for c in sorted(cases,key=lambda x:x.get("opened_at","") or "",reverse=True):
+        row=[]
+        for key in fields:
+            value=c.get(key,"")
+            if isinstance(value,(dict,list)):value=json.dumps(value,ensure_ascii=False,default=str)
+            row.append(csv_cell(value))
+        w.writerow(row)
+    out.seek(0);today=chicago_now().strftime("%Y-%m-%d")
+    return Response(out.getvalue(),mimetype="text/csv",headers={"Content-Disposition":f"attachment; filename=kurtex-full-{today}.csv"})
+
+@app.route("/api/ai/fleet-knowledge",methods=["GET","POST"])
+def api_fleet_knowledge():
+    if not session.get("user"):return jsonify(error="unauthorized"),401
+    if not _ai_is_trainer():return jsonify(error="forbidden"),403
+    if request.method=="POST":
+        result=fleet_knowledge_store.ingest_cases([c for c in load_cases() if not is_testing(c)])
+        return jsonify(ok=True,stats=fleet_knowledge_store.stats(),**result)
+    return jsonify(fleet_knowledge_store.stats())
+
+@app.route("/api/ai/fleet-knowledge/import-csv",methods=["POST"])
+def api_fleet_knowledge_csv():
+    if not session.get("user"):return jsonify(error="unauthorized"),401
+    if not _ai_is_trainer():return jsonify(error="forbidden"),403
+    upload=request.files.get("file")
+    if not upload or not (upload.filename or "").lower().endswith(".csv"):return jsonify(error="Choose a CSV file."),400
+    raw=upload.read(25*1024*1024+1)
+    if len(raw)>25*1024*1024:return jsonify(error="CSV is larger than 25 MB."),413
+    try:text=raw.decode("utf-8-sig")
+    except UnicodeDecodeError:return jsonify(error="CSV must be UTF-8 encoded."),400
+    rows=[]
+    for row in csv.DictReader(io.StringIO(text)):
+        # Accept both Kurtex full export field names and the older friendly headers.
+        normalized={str(k or "").strip():v for k,v in row.items()}
+        aliases={"ID":"id","Reported By":"driver_name","Group":"group_name","Assigned To":"agent_name",
+          "Status":"status","Opened":"opened_at","Closed":"closed_at","Description":"description","Notes":"notes"}
+        for old,new_key in aliases.items():
+            if old in normalized and new_key not in normalized:normalized[new_key]=normalized[old]
+        for key in ("report_data","media"):
+            if isinstance(normalized.get(key),str) and normalized[key].strip().startswith(("{","[")):
+                try:normalized[key]=json.loads(normalized[key])
+                except Exception:pass
+        if normalized.get("id"):rows.append(normalized)
+    result=fleet_knowledge_store.ingest_cases(rows)
+    return jsonify(ok=True,rows=len(rows),stats=fleet_knowledge_store.stats(),**result)
 
 
 # ── HTML pages ────────────────────────────────────────────────────────────────
@@ -1724,7 +1771,8 @@ def index():
     if not session.get("user"): return redirect("/login")
     user = session["user"]
     is_manager = user.get("role","agent") in ("developer","super_admin")
-    return render_template("dashboard.html", user=user, is_manager=is_manager)
+    is_developer = user.get("role","agent") == "developer"
+    return render_template("dashboard.html", user=user, is_manager=is_manager, is_developer=is_developer)
 
 def _learning_sync_worker():
     from threading import Event
@@ -1739,7 +1787,7 @@ def _learning_sync_worker():
             if current!=signature:
                 cases,stale=case_snapshot.read(path)
                 if not stale:
-                    learning_store.capture_cases([c for c in cases if not is_testing(c)])
+                    fleet_knowledge_store.ingest_cases([c for c in cases if not is_testing(c)])
                     signature=current
         except Exception:logger.exception("Case-learning sync failed")
         Event().wait(60)

@@ -1,6 +1,6 @@
 """
 handlers/scheduler.py
-- Daily report at 06:50 America/Chicago
+- Daily report at 14:30 Europe/Chisinau; covers previous 14:30 -> current 14:30
 - Escalation: first ping after 10 min, repeat every 10 min, max 5 rounds
 """
 
@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from telegram.ext import Application
 
-from backend.core.app_time import CENTRAL_TZ, CENTRAL_TIMEZONE_LABEL, parse_timestamp, utc_now
+from backend.core.app_time import MOLDOVA_TZ, MOLDOVA_TIMEZONE_LABEL, parse_timestamp, utc_now
 from backend.core.config import config
 from backend.storage.case_store import mark_missed
 from bot_app.handlers.admin_handler import send_daily_report
@@ -115,10 +115,10 @@ async def job_escalation_check(ctx) -> None:
 def register_jobs(app: Application) -> None:
     jq = app.job_queue
 
-    report_time = utc_now().astimezone(CENTRAL_TZ).replace(hour=6, minute=50, second=0, microsecond=0).timetz()
+    report_time = utc_now().astimezone(MOLDOVA_TZ).replace(hour=14, minute=30, second=0, microsecond=0).timetz()
     jq.run_daily(job_daily_report, time=report_time, name="daily_report")
     # Check every 30s so reminders land within ~30s of each 10-minute mark,
     # instead of drifting up to 5 minutes late.
     jq.run_repeating(job_escalation_check, interval=30, first=60, name="escalation_check")
 
-    logger.info(f"Jobs registered: daily_report @ 06:50 {CENTRAL_TIMEZONE_LABEL}, escalation check every 30s")
+    logger.info(f"Jobs registered: daily_report @ 14:30 {MOLDOVA_TIMEZONE_LABEL}, escalation check every 30s")
