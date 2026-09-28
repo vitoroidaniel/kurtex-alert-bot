@@ -21,7 +21,7 @@ var pages = [
   "fleet_intel",
   "parts_manual",
   "ai_assistant",
-  "ai_training",
+  "ai_knowledge",
   "my_profile",
   "agents",
 ];
@@ -36,7 +36,7 @@ var titles = {
   fleet_intel: "Fleet Intelligence",
   parts_manual: "Parts Manual",
   ai_assistant: "AI Assistant",
-  ai_training: "AI Training",
+  ai_knowledge: "AI Knowledge",
   my_profile: "My Profile",
   agents: "Agent Profiles",
 };
@@ -143,7 +143,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_training:"ph-brain",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
+    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var descriptionEl = document.getElementById("page-description");
@@ -159,9 +159,9 @@ function showPage(page) {
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";
-  if (page === "ai_training" && typeof loadAIKnowledge === "function") loadAIKnowledge();
+  if (page === "ai_knowledge" && typeof loadAIKnowledge === "function") { loadAIKnowledge(); if (typeof loadFleetKnowledgeStats === "function") loadFleetKnowledgeStats(); }
   // Every workspace opens at its top. Prevent a previous page's scroll position
-  // from making AI Training (or any other tab) appear hundreds of pixels down.
+  // from making AI Knowledge (or any other tab) appear hundreds of pixels down.
   var mainScroll=document.querySelector(".main");
   if(mainScroll && typeof mainScroll.scrollTo==="function") mainScroll.scrollTo({top:0,left:0,behavior:"auto"});
   window.scrollTo(0,0);

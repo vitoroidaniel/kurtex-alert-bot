@@ -4709,3 +4709,18 @@ body[data-current-page="ai_assistant"] .ai-side-chat.active .ai-side-chat-open{p
 #page-ai_assistant .ai-md-bullet,#page-ai_assistant .ai-md-number{display:grid;grid-template-columns:20px minmax(0,1fr);gap:5px;margin:3px 0}
 #page-ai_assistant .ai-md-number{grid-template-columns:24px minmax(0,1fr)}
 #page-ai_assistant .ai-md-bullet+br,#page-ai_assistant .ai-md-number+br{display:none}
+
+/* v152 — compact left-aligned notification center */
+.notification-panel{width:400px!important;max-height:540px!important}
+.notification-panel .notification-panel-head{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:10px!important;min-height:0!important;padding:9px 12px!important;background:#fff!important;border-bottom:1px solid #edf0f2!important}
+.notification-panel .notification-title{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:9px!important;flex:1!important;min-width:0!important;text-align:left!important}
+.notification-panel .notification-title-icon{position:static!important;order:0!important;width:29px!important;height:29px!important;min-width:29px!important;margin:0!important;display:grid!important;place-items:center!important;border:1px solid #e4e7ea!important;border-radius:8px!important;background:#f6f7f8!important;color:#4c5259!important;font-size:14px!important}
+.notification-panel .notification-title>div{order:1!important;text-align:left!important;min-width:0!important}
+.notification-panel .notification-title strong{display:block!important;font-size:11px!important;line-height:1.15!important}
+.notification-panel .notification-title small{display:block!important;margin-top:2px!important;font-size:8px!important;line-height:1.1!important}
+.notification-panel .notification-mark-all{margin-left:auto!important;white-space:nowrap!important;padding:4px 2px!important;font-size:8px!important}
+.notification-panel .notification-tabs{padding:6px 10px!important}
+.notification-panel .notification-list{max-height:420px!important;min-height:120px!important;padding:0!important}
+.notification-panel .notification-item{padding-top:9px!important;padding-bottom:9px!important}
+.notification-panel .notification-title{flex-direction:row!important}
+.notification-panel .notification-title>div{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:center!important;gap:1px!important;flex:0 1 auto!important}

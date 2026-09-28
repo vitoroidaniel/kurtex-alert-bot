@@ -46,7 +46,7 @@ document.getElementById('ai-edit-modal').hidden=false;document.body.classList.ad
 function closeAIKnowledgeEdit(){document.getElementById('ai-edit-modal').hidden=true;document.body.classList.remove('modal-open')}
 async function updateAIKnowledge(e){e.preventDefault();var id=document.getElementById('ai-edit-id').value,btn=e.submitter||e.target.querySelector('button[type=submit]'),editTags=document.getElementById('ai-edit-tags').value.split(',').map(function(x){return x.trim()}).filter(Boolean),editColor=(document.getElementById('ai-edit-tag-color')||{}).value||'blue',editColors={};editTags.forEach(function(t){editColors[t]=editColor});var payload={title:document.getElementById('ai-edit-title').value.trim(),content:document.getElementById('ai-edit-content').value.trim(),tags:editTags,tag_colors:editColors};if(btn)btn.disabled=true;try{var r=await apiFetch('/api/ai/knowledge/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),x=await r.json();if(!r.ok)throw new Error(x.error||'Update failed');closeAIKnowledgeEdit();aiKnowledgeStatus('Knowledge updated.','ok');await loadAIKnowledge()}catch(err){aiKnowledgeStatus(err.message||'Update failed','bad')}finally{if(btn)btn.disabled=false}}
 async function deleteAIKnowledge(id){var k=aiKnowledgeItems.find(function(x){return String(x.id)===String(id)});if(!confirm('Delete "'+((k&&k.title)||'this knowledge item')+'"? This removes it from Kurtex AI reference material.'))return;try{var r=await apiFetch('/api/ai/knowledge/'+id,{method:'DELETE'}),x=await r.json();if(!r.ok)throw new Error(x.error||'Delete failed');aiKnowledgeStatus('Knowledge deleted.','ok');await loadAIKnowledge()}catch(err){aiKnowledgeStatus(err.message||'Delete failed','bad')}}
-document.addEventListener('DOMContentLoaded',function(){if(document.getElementById('page-ai_training'))loadAIKnowledge();/* Connection test is manual to avoid paid model calls at page load. */});
+document.addEventListener('DOMContentLoaded',function(){if(document.getElementById('page-ai_knowledge'))loadAIKnowledge();/* Connection test is manual to avoid paid model calls at page load. */});
 
 
 function kurtexAIFormat(text){
@@ -351,7 +351,7 @@ function copyAIMessage(btn){
  }).catch(function(){})
 }
 function aiWrapMessage(role,html,attachmentHtml,messageId){
- return '<div class="ai-msg-content">'+(attachmentHtml||'')+'<div class="ai-msg-body">'+html+'</div></div><div class="ai-msg-actions"><button type="button" onclick="copyAIMessage(this)" title="Copy"><i class="ph ph-copy"></i></button>'+(role==='assistant'&&messageId?'<button type="button" data-message-id="'+escapeAI(messageId)+'" onclick="openAIReport(this)" title="Report this answer for developer review"><i class="ph ph-flag"></i> Report</button>':'')+'</div>'
+ return '<div class="ai-msg-content">'+(attachmentHtml||'')+'<div class="ai-msg-body">'+html+'</div></div><div class="ai-msg-actions"><button type="button" class="ai-msg-action" onclick="copyAIMessage(this)" aria-label="Copy" data-tooltip="Copy"><i class="ph ph-copy"></i></button>'+(role==='assistant'&&messageId?'<button type="button" class="ai-msg-action" data-message-id="'+escapeAI(messageId)+'" onclick="openAIReport(this)" aria-label="Report" data-tooltip="Report"><i class="ph ph-flag"></i></button>':'')+'</div>'
 }
 async function removeAIChatFile(fid){if(!kurtexAIChatId||aiBusy||aiUploading)return;aiChatPendingAttachments=aiChatPendingAttachments.filter(function(a){return String(a.id)!==String(fid)});await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
 async function openAIChatKnowledge(){
@@ -393,7 +393,7 @@ async function submitAIReport(){
  var reason=(document.getElementById('ai-report-reason').value||'').trim(),category=document.getElementById('ai-report-category').value,status=document.getElementById('ai-report-status');
  if(reason.length<5){status.textContent='Please add a short reason for the developer.';return}
  status.textContent='Sending report…';
- try{var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message_id:aiReportMessageId,category:category,reason:reason})}),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to report answer');status.textContent='Reported for developer review.';setTimeout(closeAIReport,700)}
+ try{var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message_id:aiReportMessageId,category:category,reason:reason})}),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to report answer');status.textContent='Report sent.';setTimeout(closeAIReport,700)}
  catch(e){status.textContent=e.message||'Unable to report answer'}
 }
 var aiTranscriptFile=null,aiTranscriptChat=null;
