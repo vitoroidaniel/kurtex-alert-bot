@@ -396,7 +396,7 @@ def main():
         .build()
     )
 
-    import handlers.agent_handler as _ah
+    import bot_app.handlers.agent_handler as _ah
     _ah._bot_ref = app.bot
 
     async def error_handler(update, ctx):
