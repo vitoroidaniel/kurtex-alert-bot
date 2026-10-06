@@ -20,6 +20,38 @@ def _esc(t: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+
+async def _ack_report_callback(query, step: str):
+    """Acknowledge Telegram inline buttons immediately and log the report step.
+
+    Telegram keeps the client-side spinner running until answerCallbackQuery is
+    received.  A failed/stale acknowledgement must never prevent the report
+    workflow itself from continuing.
+    """
+    user_id = getattr(getattr(query, "from_user", None), "id", None)
+    logger.info("[REPORT] %s ENTER data=%r user=%s", step, getattr(query, "data", None), user_id)
+    try:
+        await query.answer()
+        logger.info("[REPORT] %s ACK user=%s", step, user_id)
+    except TelegramError as exc:
+        logger.warning("[REPORT] %s ACK_FAILED user=%s error=%s", step, user_id, exc)
+
+
+def _report_ready(ctx) -> bool:
+    return isinstance(ctx.user_data.get("report"), dict)
+
+
+async def _missing_report_session(query):
+    """Give a useful recovery message for a genuinely stale report button."""
+    try:
+        await query.edit_message_text(
+            "This report session has expired. Open the active case and press Report again.",
+            reply_markup=None,
+        )
+    except TelegramError:
+        pass
+
+
 (
     ASK_TYPE,
     ASK_UNIT,
@@ -148,7 +180,7 @@ def _build_report(d: dict) -> str:
 async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Entry point from Report button (solve|case_id). Stores handler info and shows vehicle selector."""
     query   = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "ENTRY")
     case_id = query.data.split("|")[1]
 
     from backend.storage.case_store import get_case
@@ -190,7 +222,7 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "TYPE")
     vtype = query.data.split("|")[1]
     report_case_id = ctx.user_data.get("report_case_id")
     report_handler = ctx.user_data.get("report_handler")
@@ -228,8 +260,12 @@ async def recv_issue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    ltype = query.data.split("|")[1]
+    await _ack_report_callback(query, "LOAD_TYPE")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] LOAD_TYPE missing report session user=%s", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
+    ltype = query.data.split("|", 1)[1]
     label_map = {"jbs": "JBS Load", "broker": "Broker Load", "empty": "Empty"}
     label = label_map.get(ltype, ltype.title())
     ctx.user_data["report"]["load"] = label
@@ -242,12 +278,14 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"*{label}*\n\nCurrent Location:",
             parse_mode=ParseMode.MARKDOWN, reply_markup=SKIP_KB
         )
+        logger.info("[REPORT] LOAD_TYPE SAVED load=%s NEXT_STATE=ASK_LOCATION user=%s", label, update.effective_user.id)
         return ASK_LOCATION
     else:
         await query.edit_message_text(
             f"*{label}*\n\nPick up Location / Time:",
             parse_mode=ParseMode.MARKDOWN, reply_markup=SKIP_KB
         )
+        logger.info("[REPORT] LOAD_TYPE SAVED load=%s NEXT_STATE=ASK_PICKUP user=%s", label, update.effective_user.id)
         return ASK_PICKUP
 
 
@@ -300,13 +338,22 @@ async def recv_current_temp(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_temp_recorder(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "TEMP_RECORDER")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "TEMP_RECORDER", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     ctx.user_data["report"]["temp_recorder"] = query.data.split("|")[1]
     await query.edit_message_text("Comments:", reply_markup=None)
     return ASK_COMMENTS
 
 
 async def recv_comments(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] COMMENTS missing report session user=%s", update.effective_user.id)
+        await update.message.reply_text("This report session has expired. Open the active case and press Report again.")
+        return ConversationHandler.END
+    logger.info("[REPORT] COMMENTS ENTER user=%s", update.effective_user.id)
     ctx.user_data["report"]["comments"] = update.message.text.strip()
     await update.message.reply_text(
         "Send photo(s) or video(s). Press Done when finished:",
@@ -314,6 +361,7 @@ async def recv_comments(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Done (no media)", callback_data="rpt_mediadone")
         ]])
     )
+    logger.info("[REPORT] COMMENTS SAVED NEXT_STATE=ASK_MEDIA user=%s", update.effective_user.id)
     return ASK_MEDIA
 
 
@@ -351,7 +399,11 @@ async def recv_media(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query  = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "SKIP")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "SKIP", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     report = ctx.user_data.get("report", {})
     vtype  = report.get("vehicle_type", "truck")
 
@@ -398,7 +450,11 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_media_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query       = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "MEDIA_DONE")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "MEDIA_DONE", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     vtype       = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
     vtype_label = VTYPE_LABELS.get(vtype, vtype.title())
     await query.edit_message_text(
@@ -411,7 +467,11 @@ async def cb_media_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_priority(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query  = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "PRIORITY")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "PRIORITY", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     ctx.user_data["report"]["priority"] = query.data.split("|")[1]
     preview = _build_report(ctx.user_data["report"])
     media   = ctx.user_data["report"].get("media", [])
@@ -426,7 +486,11 @@ async def cb_priority(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query  = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "CONFIRM")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "CONFIRM", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     action = query.data.split("|")[1]
 
     if action == "no":
@@ -566,7 +630,11 @@ def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
 
 async def cb_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "EDIT")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "EDIT", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     vtype = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
     await query.edit_message_text("Which field would you like to edit?", reply_markup=_edit_fields_kb(vtype))
     return ASK_EDIT_FIELD
@@ -574,14 +642,22 @@ async def cb_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_edit_back(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "EDIT_BACK")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "EDIT_BACK", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     await _show_preview(query, ctx, edit=True)
     return CONFIRM
 
 
 async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "EDIT_FIELD")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "EDIT_FIELD", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     field = query.data.split("|")[1]
     ctx.user_data["editing_field"] = field
     prompts = {
@@ -618,7 +694,11 @@ async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cb_edit_val_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    await _ack_report_callback(query, "EDIT_VALUE")
+    if not _report_ready(ctx):
+        logger.warning("[REPORT] %s missing report session user=%s", "EDIT_VALUE", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
     field = ctx.user_data.pop("editing_field", None)
     value = query.data.split("|")[1]
     if field:
@@ -640,9 +720,24 @@ def get_report_conversation():
     private_media = filters.ChatType.PRIVATE & (filters.PHOTO | filters.VIDEO | filters.Document.ALL)
 
     return ConversationHandler(
+        # Every inline report action is also a safe re-entry point.  This is
+        # intentional: Telegram buttons may belong to a different message than
+        # the one that started the ConversationHandler.  If PTB loses/misses a
+        # callback state, the button still runs and its return value restores
+        # the correct next state instead of leaving Telegram spinning forever.
         entry_points=[
-            CallbackQueryHandler(cb_report_entry, pattern=r'^solve\|'),
-            CallbackQueryHandler(cb_type,         pattern=r'^rpt_type\|'),
+            CallbackQueryHandler(cb_report_entry,   pattern=r'^solve\|'),
+            CallbackQueryHandler(cb_type,           pattern=r'^rpt_type\|'),
+            CallbackQueryHandler(cb_loadtype,       pattern=r'^rpt_loadtype\|'),
+            CallbackQueryHandler(cb_skip,           pattern=r'^rpt_skip$'),
+            CallbackQueryHandler(cb_temp_recorder,  pattern=r'^rpt_temprec\|'),
+            CallbackQueryHandler(cb_media_done,     pattern=r'^rpt_mediadone$'),
+            CallbackQueryHandler(cb_priority,       pattern=r'^rpt_priority\|'),
+            CallbackQueryHandler(cb_confirm,        pattern=r'^rpt_confirm\|'),
+            CallbackQueryHandler(cb_edit,           pattern=r'^rpt_edit$'),
+            CallbackQueryHandler(cb_edit_field,     pattern=r'^rpt_editfield\|'),
+            CallbackQueryHandler(cb_edit_back,      pattern=r'^rpt_edit_back$'),
+            CallbackQueryHandler(cb_edit_val_button,pattern=r'^rpt_editval\|'),
         ],
         states={
             ASK_TYPE:          [CallbackQueryHandler(cb_type,          pattern=r'^rpt_type\|')],
@@ -685,7 +780,7 @@ def get_report_conversation():
         },
         fallbacks=[CommandHandler("cancel", cmd_cancel)],
         per_message=False,
-        per_chat=False,
+        per_chat=True,
         per_user=True,
         allow_reentry=True,
     )
