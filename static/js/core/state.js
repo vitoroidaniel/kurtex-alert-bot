@@ -115,9 +115,14 @@ function anyModalOpen() {
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 function showPage(page) {
+  // Some pages (for example My Profile) are intentionally opened from
+  // controls outside the navigation menu. They must not require a matching
+  // .nav-item in order to be routable.
+  var navlessPages = ["my_profile"];
   if (
     pages.indexOf(page) < 0 ||
-    !document.querySelector('.nav-item[data-page="' + page + '"]')
+    (navlessPages.indexOf(page) < 0 &&
+      !document.querySelector('.nav-item[data-page="' + page + '"]'))
   )
     page = "overview";
   // Always close sidebar first on mobile
