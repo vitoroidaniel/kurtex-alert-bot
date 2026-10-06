@@ -256,6 +256,21 @@ Rules:
 - Do not recommend replacing expensive components until simpler checks and evidence support replacement.
 """
 
+def _ai_explicit_similar_case_request(message):
+    text=str(message or "").lower()
+    phrases=("similar case", "similar cases", "previous case", "previous cases", "past case", "past cases",
+             "fleet case", "fleet cases", "how did we fix", "how was it solved", "how were they solved",
+             "same issue before", "history cases", "historical cases")
+    return any(p in text for p in phrases)
+
+def _ai_visual_description_request(message, has_visual=False):
+    if not has_visual:return False
+    text=str(message or "").lower().strip()
+    phrases=("what do you see", "what can you see", "describe this", "describe the image", "describe the picture",
+             "what is in this picture", "what's in this picture", "what is in this image", "look at this picture",
+             "look at this image", "what does this show")
+    return any(p in text for p in phrases)
+
 def _cf_ai(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None):
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("Workers AI is not configured")
@@ -869,6 +884,8 @@ def api_ai_chat():
                 driver_reports.append({"media":"audio","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"warning":media.get("warning","")})
         if len(image_items)>12:return jsonify({"error":"Too many visual inputs. Send one video and up to four photos per message."}),400
         image_urls=[a["data"] for a in image_items if a.get("data")]
+        visual_description_only=_ai_visual_description_request(message,bool(image_urls))
+        wants_similar_cases=bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(message)
         observations=""
         if image_urls:
             stage="visual_inspection"
@@ -882,6 +899,8 @@ def api_ai_chat():
         ctx["visual_observations"]=observations
         ctx["image_labels"]=[a.get("name") for a in image_items]
         ctx["driver_speech_reports"]=driver_reports
+        ctx["similar_cases_requested"]=wants_similar_cases
+        ctx["visual_description_only"]=visual_description_only
         # Chat-scoped context: explicitly attached files and verified knowledge stay with this conversation.
         attachments=[]
         for a in (chat.get("attachments") or [])[-12:]:
@@ -901,7 +920,12 @@ def api_ai_chat():
         stage="prompt"
         messages=[{"role":"system","content":KURTEX_AI_SYSTEM+INSPECTION_POLICY},{"role":"system","content":
           "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
-          json.dumps(ctx,ensure_ascii=False)}, {"role":"system","content":"""Act as a professional maintenance triage assistant. Use the attached image/document, selected Knowledge, Parts Manual, relevant Kurtex history, and WEB SEARCH RESULTS together when available.
+          json.dumps(ctx,ensure_ascii=False)}, {"role":"system","content":"""Act as a professional maintenance triage assistant. Use the attached image/document, selected Knowledge, Parts Manual, relevant Kurtex history, and WEB SEARCH RESULTS together when they are relevant to the user's actual request.
+
+IMPORTANT INTENT RULES:
+- If visual_description_only is true, answer the user's visual question directly from VISUAL OBSERVATIONS. Do not turn it into a diagnostic report. Do not mention fleet history, similar cases, Parts Manual, repair procedures, or web research unless the user asked for them. Use natural prose and clearly separate what is visible from what cannot be confirmed from the image.
+- Similar fleet cases are optional evidence. Discuss them only when similar_cases_requested is true or the user explicitly asks for previous/history/similar cases. Never force a Similar Cases section into an unrelated answer.
+- A simple question deserves a simple direct answer. Use the full diagnostic workflow only for diagnosis/troubleshooting requests.
 
 For a diagnostic request, prefer this workflow:
 1. Quick assessment — 2-4 sentences stating what is observed vs what is only suspected.
@@ -910,7 +934,7 @@ For a diagnostic request, prefer this workflow:
 4. Most likely causes — ranked by evidence, not a random list.
 5. Recommended next action — what to do now, when to stop operation/escalate, and what a technician should verify.
 6. Matching parts — only when a verified Parts Manual/Knowledge source explicitly supports the part/number. Never invent a part number.
-7. Similar Kurtex cases — the UI shows structured case cards separately. In prose, synthesize only genuinely useful same-system historical patterns instead of rewriting every card. Never invent a match percentage. A case card is historical evidence, not proof. The cards expose: Reported driver/group, truck or trailer/unit, reported issue, case notes, who solved it, and the recorded resolution when one exists. Never turn missing resolution notes into a guessed repair. Explicitly ignore misleading keyword matches (for example tire air leaks when diagnosing a truck/trailer pneumatic air-system leak).
+7. Similar Kurtex cases — ONLY when similar_cases_requested is true. The UI shows structured case cards separately. In prose, synthesize only genuinely useful same-system historical patterns instead of rewriting every card. Never invent a match percentage. A case card is historical evidence, not proof. The cards expose: Reported driver/group, truck or trailer/unit, reported issue, case notes, who solved it, and the recorded resolution when one exists. Never turn missing resolution notes into a guessed repair. Explicitly ignore misleading keyword matches (for example tire air leaks when diagnosing a truck/trailer pneumatic air-system leak).
 8. Sources — compact one-line source list only. Do not add blank bullet lines or excessive spacing.
 
 For images: describe only what is actually visible; do not infer hidden damage as fact. For web results: use them to improve troubleshooting and identify useful technical references, but do not present a search snippet as an OEM procedure. If make/model or alarm code is needed for an exact procedure, ask for it.
@@ -924,8 +948,8 @@ Formatting: use clean headings, compact numbered steps, and single-spaced bullet
         answer=_cf_ai(messages,2200,.1,images=image_urls)
         stage="save_chat"
         answer_id=uuid.uuid4().hex
-        similar_cases=_ai_similar_case_cards(retrieval_query,5)
-        part_matches=ctx.get("parts_manual_matches") or []
+        similar_cases=_ai_similar_case_cards(retrieval_query,5) if wants_similar_cases else []
+        part_matches=[] if visual_description_only else (ctx.get("parts_manual_matches") or [])
         history.extend([{"id":uuid.uuid4().hex,"role":"user","content":message,"at":_now_iso(),"attachment_ids":active_ids,"request_id":request_id},
                         {"id":answer_id,"role":"assistant","content":answer,"at":_now_iso(),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches}])
         chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
