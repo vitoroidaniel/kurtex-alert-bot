@@ -58,3 +58,31 @@
   const mo=new MutationObserver(()=>{harden();syncMobileNav()});
   document.addEventListener('DOMContentLoaded',()=>mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['data-current-page']}));
 })();
+
+/* v17 mobile case-card adapter — presentation only, API/data logic unchanged */
+(function(){
+  const mq=window.matchMedia('(max-width:760px)');
+  let queued=false;
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function buildMobileCases(){
+    if(!mq.matches)return;
+    const host=document.getElementById('cases-table'); if(!host)return;
+    const table=host.querySelector('table'); if(!table)return;
+    const old=host.parentElement&&host.parentElement.querySelector('.mobile-case-cards'); if(old)old.remove();
+    const wrap=document.createElement('div'); wrap.className='mobile-case-cards';
+    table.querySelectorAll('tbody tr').forEach(tr=>{
+      const td=[...tr.children], id=tr.dataset.id||''; if(td.length<7)return;
+      const b=document.createElement('button'); b.type='button'; b.className='mobile-case-card'; b.dataset.id=id;
+      const status=td[3].innerHTML;
+      b.innerHTML='<div class="mobile-case-card-top"><strong>'+esc(td[0].textContent.trim()||'Unknown reporter')+'</strong><span>'+status+'</span></div>'+ 
+        '<div class="mobile-case-card-group"><i class="ph ph-users-three"></i><span>'+esc(td[1].textContent.trim()||'No group')+'</span></div>'+ 
+        '<p class="mobile-case-card-issue">'+esc(td[6].textContent.trim()||'No issue description provided')+'</p>'+ 
+        '<div class="mobile-case-card-meta"><span>Assigned to<b>'+esc(td[2].textContent.trim()||'—')+'</b></span><span>Opened<b>'+esc(td[4].textContent.trim()||'—')+'</b></span><span>Response<b>'+esc(td[5].textContent.trim()||'—')+'</b></span><span>Case<b>View details →</b></span></div>';
+      b.addEventListener('click',()=>{if(typeof window.openCase==='function')window.openCase(id)}); wrap.appendChild(b);
+    });
+    if(wrap.children.length)host.parentElement.appendChild(wrap);
+  }
+  function schedule(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;buildMobileCases()})}
+  document.addEventListener('DOMContentLoaded',()=>{schedule();const host=document.getElementById('cases-table');if(host)new MutationObserver(schedule).observe(host,{childList:true,subtree:true})});
+  if(mq.addEventListener)mq.addEventListener('change',schedule);
+})();

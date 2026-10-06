@@ -203,6 +203,14 @@ async function sendKurtexAIPage(e){
  var u=document.createElement('div');u.className='ai-page-msg user';u.innerHTML=aiWrapMessage('user',escapeAI(msg),aiAttachmentCards(kurtexAIChatId,sentAttachments,sentAttachments.map(function(a){return a.id})));dst.appendChild(u);
  var wait=document.createElement('div');wait.className='ai-page-msg assistant thinking';wait.innerHTML='<div class="ai-msg-content"><div class="ai-msg-body">Reviewing maintenance evidence…</div></div>';dst.appendChild(wait);dst.scrollTop=dst.scrollHeight;
  try{
+  // A knowledge selection may exist before a chat exists. Persist it only when
+  // the first real message is sent, so opening Knowledge never creates a chat.
+  if(!kurtexAIChatId && aiChatKnowledgeSelected.length){
+   var pendingKnowledge=aiChatKnowledgeSelected.slice();
+   await aiEnsureChat();
+   aiChatKnowledgeSelected=pendingKnowledge;
+   await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/context',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_ids:pendingKnowledge})});
+  }
   var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,request_id:requestKey,chat_id:kurtexAIChatId,page:'ai_assistant',web_search:!!document.getElementById('ai-web-search')?.checked,similar_cases:!!document.getElementById('ai-similar-cases')?.checked,attachment_ids:sentAttachments.map(function(a){return a.id})})}),x=await r.json();
   if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');
   aiLastSendAttempt=null;
@@ -359,7 +367,17 @@ function aiWrapMessage(role,html,attachmentHtml,messageId){
 }
 async function removeAIChatFile(fid){if(!kurtexAIChatId||aiBusy||aiUploading)return;aiChatPendingAttachments=aiChatPendingAttachments.filter(function(a){return String(a.id)!==String(fid)});await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
 async function openAIChatKnowledge(){
- try{await aiEnsureChat();var r=await apiFetch('/api/ai/knowledge/options'),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to load knowledge');aiChatKnowledgeOptions=x.items||[];var cr=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),chat=await cr.json();aiChatKnowledgeSelected=(chat.knowledge_ids||[]).slice();document.getElementById('ai-chat-knowledge-modal').hidden=false;renderAIChatKnowledgeOptions()}catch(e){alert(e.message||'Unable to load knowledge')}
+ try{
+  // Opening the picker is a UI action only. Do not create a conversation until
+  // the agent actually sends a message or uploads a file.
+  var r=await apiFetch('/api/ai/knowledge/options'),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to load knowledge');
+  aiChatKnowledgeOptions=x.items||[];
+  if(kurtexAIChatId){
+   var cr=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)),chat=await cr.json();
+   aiChatKnowledgeSelected=(chat.knowledge_ids||[]).slice();
+  }
+  document.getElementById('ai-chat-knowledge-modal').hidden=false;renderAIChatKnowledgeOptions();
+ }catch(e){alert(e.message||'Unable to load knowledge')}
 }
 function closeAIChatKnowledge(){var m=document.getElementById('ai-chat-knowledge-modal');if(m)m.hidden=true}
 function aiChatKnowledgeMeta(k){
@@ -389,12 +407,21 @@ function toggleAIChatKnowledge(id,on){var i=aiChatKnowledgeSelected.indexOf(id);
 function selectAllAIChatKnowledge(){filteredAIChatKnowledge().forEach(function(k){if(aiChatKnowledgeSelected.indexOf(k.id)<0)aiChatKnowledgeSelected.push(k.id)});renderAIChatKnowledgeOptions()}
 function clearAIChatKnowledge(){aiChatKnowledgeSelected=[];renderAIChatKnowledgeOptions()}
 async function removeAIChatKnowledge(id){
- if(!kurtexAIChatId||aiBusy)return;
+ if(aiBusy)return;
  aiChatKnowledgeSelected=aiChatKnowledgeSelected.filter(function(x){return String(x)!==String(id)});
+ if(!kurtexAIChatId){renderPendingAIKnowledge();return}
  var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/context',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_ids:aiChatKnowledgeSelected})});
  if(r.ok)await refreshAIChatContext();
 }
-async function applyAIChatKnowledge(){if(!kurtexAIChatId)return;var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/context',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_ids:aiChatKnowledgeSelected})});if(r.ok){closeAIChatKnowledge();refreshAIChatContext()}}
+function renderPendingAIKnowledge(){
+ var inline=document.getElementById('ai-chat-knowledge-inline');if(!inline)return;
+ var selected=aiChatKnowledgeOptions.filter(function(k){return aiChatKnowledgeSelected.indexOf(k.id)>=0});
+ inline.innerHTML=selected.map(function(k){return '<span class="ai-inline-kb" title="'+escapeAI(k.title||'Maintenance knowledge')+'"><button type="button" class="ai-inline-kb-open" onclick="openAIChatKnowledge()"><span class="ai-inline-kb-dot"></span><span>'+escapeAI(k.title||'Maintenance knowledge')+'</span></button><button type="button" class="ai-inline-kb-remove" onclick="event.stopPropagation();removeAIChatKnowledge(\''+aiAttr(k.id)+'\')" aria-label="Remove '+escapeAI(k.title||'knowledge source')+'"><i class="ph ph-x"></i></button></span>'}).join('');
+}
+async function applyAIChatKnowledge(){
+ if(!kurtexAIChatId){closeAIChatKnowledge();renderPendingAIKnowledge();return}
+ var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/context',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_ids:aiChatKnowledgeSelected})});if(r.ok){closeAIChatKnowledge();refreshAIChatContext()}
+}
 
 function aiSetBusy(on){
  aiBusy=on;
