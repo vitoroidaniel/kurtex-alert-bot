@@ -1835,16 +1835,16 @@ def api_trends():
         for (u,k),n in sorted(pairs.items(),key=lambda x:x[1],reverse=True):
             if n<2: continue
             vt=next((str(c.get("vehicle_type") or "Unit").title() for c in cur if str(c.get("unit_number") or "").strip()==u),"Unit")
-            hotspots.append({"label":u,"value":n,"detail":f"{vt} · {k} · repeated {n} times"})
+            hotspots.append({"label":u,"value":f"{n} cases","detail":f"{vt} · {k} · same problem reported {n} times"})
             if len(hotspots)>=7: break
         complete=max(0,len(cur)-incomplete)
         data_quality=[{"label":"Complete case records","value":complete,"detail":f"{round(complete/len(cur)*100) if cur else 0}% usable without cleanup"},{"label":"Incomplete / pending records","value":incomplete,"detail":"May reduce analytics confidence"},{"label":"Cases with unit number","value":sum(1 for c in cur if str(c.get('unit_number') or '').strip()),"detail":"Can be linked to unit history"}]
         insights=[]
-        if hotspots: insights.append(f"{hotspots[0]['label']} is the strongest recurring hotspot: {hotspots[0]['detail']}.")
-        if categories: insights.append(f"{categories[0]['label']} represents {categories[0]['detail']} ({categories[0]['value']} cases).")
-        if aged: insights.append(f"{aged} currently open cases are at least 7 days old and may need management review.")
-        if incomplete: insights.append(f"{incomplete} records in the selected period are incomplete or pending, which can reduce analytics reliability.")
-        if not insights: insights=["No significant management risk signal is available for the selected period."]
+        if hotspots: insights.append(f"{hotspots[0]['label']} has the clearest repeat problem: {hotspots[0]['detail']}.")
+        if categories: insights.append(f"{categories[0]['label']} is the most common problem category with {categories[0]['value']} cases ({categories[0]['detail']}).")
+        if aged: insights.append(f"{aged} open cases have been open for more than 7 days.")
+        if incomplete: insights.append(f"{incomplete} reports are incomplete or pending and may need more information.")
+        if not insights: insights=["No major repeat-problem or report-quality issue stands out in the selected period."]
         return jsonify(metrics=metrics,categories=categories,recurring_hotspots=hotspots,equipment_mix=equipment_mix,data_quality=data_quality,insights=insights,sample_size=len(cur),period=days)
     except Exception:
         logger.exception("Fleet analytics failed"); return jsonify({"error":"Unable to load fleet analytics."}),500
@@ -1865,10 +1865,10 @@ def api_comparison():
             us={str(c.get("unit_number") or "").strip() for c in rows if str(c.get("unit_number") or "").strip()}; pairs=Counter((str(c.get("unit_number") or "").strip(),category(c)) for c in rows if str(c.get("unit_number") or "").strip()); recurring={u for (u,_),n in pairs.items() if n>=2}; repeats=sum(max(0,n-1) for n in pairs.values()); res=sum(1 for c in rows if str(c.get("status") or "").lower() in resolved_status); inc=sum(1 for c in rows if not str(c.get("issue_text") or c.get("description") or "").strip() or str(c.get("status") or "").lower() in ("incomplete","pending")); return {"total":len(rows),"units":len(us),"recurring":recurring,"repeat":repeats,"resolved_pct":round(res/len(rows)*100) if rows else 0,"incomplete_pct":round(inc/len(rows)*100) if rows else 0}
         a,b=snapshot(cur),snapshot(prev)
         def pct(x,y): return (0 if not x else 100) if not y else round((x-y)/y*100)
-        vals=[("Case volume",a['total'],b['total'],"%"),("Affected units",a['units'],b['units'],"%"),("Recurring units",len(a['recurring']),len(b['recurring']),"%"),("Repeat events",a['repeat'],b['repeat'],"%"),("Resolved share",a['resolved_pct'],b['resolved_pct']," pp"),("Incomplete share",a['incomplete_pct'],b['incomplete_pct']," pp")]
+        vals=[("Cases",a['total'],b['total'],"%","Total cases in each period."),("Units with cases",a['units'],b['units'],"%","Unique units with at least one case in each period."),("Units with repeat problems",len(a['recurring']),len(b['recurring']),"%","Units where the same problem category appeared at least twice."),("Repeated problems",a['repeat'],b['repeat'],"%","Additional cases for a repeated problem on the same unit."),("Resolved cases %",a['resolved_pct'],b['resolved_pct']," pp","Percentage of period cases marked resolved, done or closed."),("Incomplete reports %",a['incomplete_pct'],b['incomplete_pct']," pp","Percentage of cases missing useful issue information or marked incomplete/pending.")]
         rows=[]
-        for l,x,y,u in vals:
-            delta=(x-y) if u==" pp" else pct(x,y); rows.append({"label":l,"current":f"{x}%" if u==" pp" else x,"previous":f"{y}%" if u==" pp" else y,"delta":delta,"unit":u})
+        for l,x,y,u,help_text in vals:
+            delta=(x-y) if u==" pp" else pct(x,y); rows.append({"label":l,"current":f"{x}%" if u==" pp" else x,"previous":f"{y}%" if u==" pp" else y,"delta":delta,"unit":u,"help":help_text})
         cc,pc=Counter(category(c) for c in cur),Counter(category(c) for c in prev); category_change=[]
         for k in set(cc)|set(pc): category_change.append({"label":k,"value":cc[k],"detail":f"Previous {pc[k]} · {pct(cc[k],pc[k]):+d}%"})
         category_change=sorted(category_change,key=lambda x:abs(int(x['detail'].split()[-1].replace('%',''))),reverse=True)[:7]
@@ -1876,8 +1876,8 @@ def api_comparison():
         for k in set(ce)|set(peq): equipment_change.append({"label":k,"value":ce[k],"detail":f"Previous {peq[k]} · {pct(ce[k],peq[k]):+d}%"})
         equipment_change=sorted(equipment_change,key=lambda x:x['value'],reverse=True)
         new=sorted(a['recurring']-b['recurring']); cleared=sorted(b['recurring']-a['recurring'])
-        new_rows=[{"label":u,"value":"New","detail":"Recurring in current period, not previous"} for u in new[:8]]; cleared_rows=[{"label":u,"value":"Improved","detail":"Was recurring in previous period"} for u in cleared[:8]]
-        insights=[f"Case volume changed {pct(a['total'],b['total']):+d}% ({a['total']} vs {b['total']}).",f"Recurring units changed from {len(b['recurring'])} to {len(a['recurring'])}; {len(new)} are newly recurring and {len(cleared)} cleared from the recurring list.",f"Repeat maintenance events changed {pct(a['repeat'],b['repeat']):+d}% ({a['repeat']} vs {b['repeat']}).",f"Incomplete-record share is {a['incomplete_pct']}% now versus {b['incomplete_pct']}% previously."]
+        new_rows=[{"label":u,"value":"Repeat","detail":"Repeats a problem now, but did not in the previous period"} for u in new[:8]]; cleared_rows=[{"label":u,"value":"Clear","detail":"Repeated a problem previously, but not in the current period"} for u in cleared[:8]]
+        insights=[f"Cases changed {pct(a['total'],b['total']):+d}%: {a['total']} now versus {b['total']} previously.",f"Units with repeat problems changed from {len(b['recurring'])} to {len(a['recurring'])}. {len(new)} are new repeat-problem units and {len(cleared)} no longer repeat a problem.",f"Repeated problems changed {pct(a['repeat'],b['repeat']):+d}%: {a['repeat']} now versus {b['repeat']} previously.",f"Incomplete reports are {a['incomplete_pct']}% of current cases versus {b['incomplete_pct']}% previously."]
         return jsonify(rows=rows,category_change=category_change,equipment_change=equipment_change,new_recurring=new_rows,cleared_recurring=cleared_rows,insights=insights,period=days)
     except Exception:
         logger.exception("Management comparison failed");return jsonify({"error":"Unable to build comparison."}),500
