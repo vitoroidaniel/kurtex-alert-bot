@@ -136,6 +136,9 @@ function renderMobileIssueDefault(){
 
 // ── Fleet Intelligence ────────────────────────────────────────────────────────
 async function loadFleetIntel() {
+  // Recurring units are part of Intelligence and should already be populated
+  // when the page opens. Refresh them quietly alongside the main dataset.
+  if (typeof loadRecurringProblems === "function") loadRecurringProblems(false);
   var el = document.getElementById("fleet-intel-content");
   if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading fleet intelligence...</div>');
   try {

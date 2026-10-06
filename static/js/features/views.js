@@ -801,6 +801,7 @@ function applyRecurringPanelState(){
   panel.classList.toggle('is-collapsed',hidden);
   var hide=panel.querySelector('.recurring-hide-btn span'); if(hide)hide.textContent=hidden?'Show':'Hide';
   var icon=panel.querySelector('.recurring-hide-btn i'); if(icon)icon.className=hidden?'ph ph-eye':'ph ph-eye-slash';
+  var pager=panel.querySelector('#recurring-pager'); if(pager)pager.hidden=hidden;
 }
 function toggleRecurringPanel(){
   var panel=document.getElementById('recurring-problems-panel'); if(!panel)return;
@@ -814,9 +815,11 @@ function setRecurringPage(page){
   loadRecurringProblems();
 }
 
-async function loadRecurringProblems(){
+async function loadRecurringProblems(manual){
   var el=document.getElementById('recurring-problems-content'); if(!el)return;
   applyRecurringPanelState();
+  var btn=document.querySelector('#recurring-problems-panel .recurring-load-btn');
+  if(manual && btn){btn.disabled=true;btn.classList.add('is-loading');}
   try{
     var r=await apiFetch('/api/recurring_problems'),x=await r.json(),items=x.items||[],grouped={};
     items.forEach(function(v){
@@ -863,6 +866,7 @@ async function loadRecurringProblems(){
       el.insertAdjacentElement('afterend',pager);
     }
   }catch(e){el.innerHTML='<div class="intel-empty">Recurring analysis unavailable.</div>';}
+  finally{if(btn){btn.disabled=false;btn.classList.remove('is-loading');}applyRecurringPanelState();}
 }
 
 // v57 Home ranges + meaningful empty states

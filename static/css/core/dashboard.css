@@ -5867,3 +5867,19 @@ body[data-current-page="overview"] .page-heading{
   .developer-health-test{grid-template-columns:minmax(0,1fr) auto!important}
   .developer-health-test .developer-test-btn{justify-self:end!important}
 }
+
+
+/* v70 — recurring problem units: compact header, automatic data, complete collapse */
+#page-fleet_intel .recurring-panel.is-collapsed #recurring-pager,
+#page-fleet_intel .recurring-panel.is-collapsed .recurring-load-btn{display:none!important}
+#page-fleet_intel .recurring-load-btn.is-loading i{animation:kurtexRecurringSpin .75s linear infinite}
+@keyframes kurtexRecurringSpin{to{transform:rotate(360deg)}}
+@media (min-width:701px){
+  #page-fleet_intel .recurring-panel{margin-top:0!important}
+  #page-fleet_intel .recurring-panel .agent-section-head{min-height:48px!important;padding:9px 12px!important}
+  #page-fleet_intel .recurring-panel .agent-section-head h3{line-height:1.15!important}
+  #page-fleet_intel #recurring-problems-content{padding-top:8px!important}
+}
+@media (max-width:700px){
+  #page-fleet_intel .recurring-panel .agent-section-head{padding-top:9px!important;padding-bottom:9px!important}
+}
