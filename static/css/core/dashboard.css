@@ -5581,3 +5581,40 @@ body[data-current-page="overview"] .topbar-report-action{display:inline-flex}
   .report-sections-bar{margin:14px 0 0!important;padding:14px 0 0!important}.report-section-grid{grid-template-columns:1fr 1fr!important}.report-section-tools button{width:32px!important;height:32px!important}.report-section-option{min-height:54px!important;padding:9px 10px!important}
 }
 body:not([data-current-page="overview"]) .mobile-overview-controls{display:none!important}
+
+/* v50 — Home visual polish */
+body[data-current-page="overview"] .main{
+  background-image:linear-gradient(rgba(248,249,251,.72),rgba(248,249,251,.82)),url('/static/images/home-wave-bg.jpg');
+  background-size:cover;
+  background-position:center top;
+  background-attachment:fixed;
+}
+body[data-current-page="overview"] #page-overview{position:relative}
+body[data-current-page="overview"] .page-heading{background:rgba(255,255,255,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+body[data-current-page="overview"] .home-welcome{
+  background:rgba(255,255,255,.78);border-color:rgba(218,222,228,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 10px 30px rgba(31,41,55,.045)
+}
+body[data-current-page="overview"] .home-welcome p{font-size:13px;line-height:1.45;color:#69717c}
+body[data-current-page="overview"] .home-today-heading{margin:0 2px 11px}
+body[data-current-page="overview"] .home-today-heading>div>span{font-size:15px;line-height:1.2}
+body[data-current-page="overview"] .home-today-heading small{font-size:11px;line-height:1.35;margin-top:3px}
+body[data-current-page="overview"] .home-live{display:none!important}
+body[data-current-page="overview"] .home-today-grid{gap:10px}
+body[data-current-page="overview"] .home-today-grid button{
+  grid-template-columns:40px minmax(0,1fr) 16px;gap:11px;min-height:72px;padding:14px 15px;border-radius:16px;background:rgba(255,255,255,.84);border-color:rgba(218,222,228,.9);backdrop-filter:blur(13px);-webkit-backdrop-filter:blur(13px)
+}
+body[data-current-page="overview"] .home-today-icon{width:40px;height:40px;border-radius:12px;background:rgba(247,248,250,.92)}
+body[data-current-page="overview"] .home-today-icon i{font-size:18px}
+body[data-current-page="overview"] .home-today-grid small{font-size:10.5px;line-height:1.25}
+body[data-current-page="overview"] .home-today-grid strong{font-size:23px;margin-top:3px}
+@media(max-width:760px){
+  body[data-current-page="overview"] .main{background-attachment:scroll;background-position:center top}
+  body[data-current-page="overview"] .home-welcome p{font-size:12px}
+  body[data-current-page="overview"] .home-today-heading>div>span{font-size:14px}
+  body[data-current-page="overview"] .home-today-heading small{font-size:10.5px}
+  body[data-current-page="overview"] .home-today-grid{gap:8px}
+  body[data-current-page="overview"] .home-today-grid button{grid-template-columns:36px minmax(0,1fr) 12px;min-height:66px;padding:12px}
+  body[data-current-page="overview"] .home-today-icon{width:36px;height:36px}
+  body[data-current-page="overview"] .home-today-grid small{font-size:10px}
+  body[data-current-page="overview"] .home-today-grid strong{font-size:21px}
+}
