@@ -8,6 +8,13 @@ async function loadStats() {
     if (!r.ok) return;
     stats = await r.json();
     var t = stats.today || {};
+    var homeToday={
+      "home-today-total":t.total||0,
+      "home-today-assigned":t.assigned||0,
+      "home-today-resolved":t.done||0,
+      "home-today-missed":t.missed||0
+    };
+    Object.keys(homeToday).forEach(function(id){var el=document.getElementById(id);if(el)el.textContent=homeToday[id]});
     var sg = document.getElementById("stat-grid");
     if (sg)
       updateHTML(sg, '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Today Total</div><div class="stat-value v-accent">' +

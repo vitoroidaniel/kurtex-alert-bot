@@ -26,7 +26,7 @@ var pages = [
   "agents",
 ];
 var titles = {
-  overview: "Overview",
+  overview: "Home",
   cases: "Cases",
   missed: "Missed Cases",
   leaderboard: "Leaderboard",
@@ -143,13 +143,13 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-squares-four",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
+    var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var descriptionEl = document.getElementById("page-description");
   if (descriptionEl) descriptionEl.textContent =
     page === "overview"
-      ? "Today’s activity, outstanding cases, and team performance."
+      ? "Your maintenance workspace for today."
       : page === "cases"
         ? "Find cases and review progress. Assign and resolve cases in Telegram."
         : page === "parts_manual"

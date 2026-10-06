@@ -42,7 +42,7 @@
     <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
   </div>
   <nav aria-label="Main navigation">
-    <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-squares-four"></i> Overview</div>
+    <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     <div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
@@ -98,7 +98,7 @@
   <header class="page-heading">
     <div class="page-heading-copy">
       <div class="eyebrow">MAINTENANCE, IN VIEW</div>
-      <div class="page-title-row"><span class="page-title-icon" aria-hidden="true"><i class="ph ph-squares-four"></i></span><div><h1 id="page-title">Overview</h1><p id="page-description">Today's activity, outstanding cases, and team performance.</p></div></div>
+      <div class="page-title-row"><span class="page-title-icon" aria-hidden="true"><i class="ph ph-house"></i></span><div><h1 id="page-title">Home</h1><p id="page-description">Your maintenance workspace for today.</p></div></div>
     </div>
     <div class="heading-actions">
       <time id="today-label" class="chicago-calendar" aria-label="Current Chicago date and time">
@@ -119,8 +119,21 @@
   </div>
   <div id="connection-banner" class="connection-banner" role="alert" hidden></div>
   <div class="page active" id="page-overview">
+  <section class="home-welcome" aria-label="Home welcome">
+    <div class="home-welcome-copy"><span class="home-welcome-kicker">KURTEX MAINTENANCE</span><h2>Welcome back, {{ user.first_name or 'there' }}</h2><p>Here’s what’s happening with your cases today.</p></div>
+    <button class="home-customize-icon" type="button" onclick="openLayoutSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button>
+  </section>
+  <section class="home-today-summary" aria-label="Today summary">
+    <div class="home-today-heading"><div><span>Today</span><small>Live case activity</small></div><span class="home-live"><i></i> Live</span></div>
+    <div class="home-today-grid" id="home-today-grid">
+      <button type="button" onclick="showPage('cases')"><span class="home-today-icon"><i class="ph ph-clipboard-text"></i></span><span><small>Today's cases</small><strong id="home-today-total">—</strong></span><i class="ph ph-caret-right"></i></button>
+      <button type="button" onclick="showPage('cases')"><span class="home-today-icon"><i class="ph ph-user-check"></i></span><span><small>Assigned today</small><strong id="home-today-assigned">—</strong></span><i class="ph ph-caret-right"></i></button>
+      <button type="button" onclick="showPage('cases')"><span class="home-today-icon"><i class="ph ph-check-circle"></i></span><span><small>Resolved today</small><strong id="home-today-resolved">—</strong></span><i class="ph ph-caret-right"></i></button>
+      <button type="button" onclick="showPage('missed')"><span class="home-today-icon"><i class="ph ph-warning-circle"></i></span><span><small>Missed today</small><strong id="home-today-missed">—</strong></span><i class="ph ph-caret-right"></i></button>
+    </div>
+  </section>
   <section class="mobile-app-home">
-    <div class="mobile-home-copy"><span>MAINTENANCE COMPANION</span><h1>What do you need?</h1><p>Quick access to the tools that matter when you're away from the desk.</p></div>
+    <div class="mobile-home-copy"><span>QUICK ACTIONS</span><h1>What do you need?</h1><p>Jump straight into the tools you use most.</p></div>
     <button class="mobile-home-ai" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span><strong>Ask Kurtex AI</strong><small>Diagnose symptoms, fault codes and repairs</small></span><i class="ph ph-arrow-up-right"></i></button>
     <div class="mobile-home-grid">
       <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><strong>Parts</strong><small>Identify & troubleshoot</small></button>
@@ -130,8 +143,8 @@
  <button onclick="mobileGo('ai_assistant');setTimeout(function(){var i=document.getElementById('ai-page-input');if(i){i.value='Help me identify this fault code: ';i.focus()}},120)"><i class="ph ph-warning-circle"></i><span><strong>Fault code</strong><small>Explain a code</small></span></button>
  <button onclick="mobileGo('fleet_intel')"><i class="ph ph-clock-counter-clockwise"></i><span><strong>Repair history</strong><small>Find past issues</small></span></button>
 </div>
-  </section><div class="overview-toolbar"><span>Your operations, at a glance</span><button class="badge-btn btn-outline" onclick="openLayoutSettings()">Customize overview</button></div>
-    <div class="overview-label"><span>Today at a glance</span><small>Reassignments & response average cover all time</small></div>
+  </section><div class="overview-toolbar"><button class="home-customize-icon overview-customize-fallback" type="button" onclick="openLayoutSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button></div>
+    <div class="overview-label"><span>Key metrics</span><small>Your selected Home metrics</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
       <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top agents <span class="card-meta">Today</span></div><div id="lb-overview"></div></div>

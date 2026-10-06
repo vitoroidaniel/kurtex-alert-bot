@@ -52,7 +52,7 @@
         <div id="custom-date-inputs" class="report-date-range" style="display:none"><label><span>From</span><input type="date" id="report-date-from" onchange="generateReport()"></label><label><span>To</span><input type="date" id="report-date-to" onchange="generateReport()"></label></div>
       </div>
       <div id="report-sections-bar" class="report-sections-bar">
-        <div class="report-sections-title"><div><strong>Report sections</strong><span>Only selected sections are included in the PDF.</span></div><div><button type="button" onclick="setAllReportSections(true)">Select all</button><button type="button" onclick="setAllReportSections(false)">Clear</button></div></div>
+        <div class="report-sections-title"><div><strong>Report sections</strong><span>Choose exactly what appears in the PDF.</span></div><div class="report-section-tools"><button type="button" onclick="setAllReportSections(true)" title="Select all" aria-label="Select all report sections"><i class="ph ph-checks"></i></button><button type="button" onclick="setAllReportSections(false)" title="Clear selection" aria-label="Clear report sections"><i class="ph ph-x"></i></button></div></div>
         <div class="report-section-grid">
           <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="summary" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Summary</b><small>Case totals and status overview</small></span></label>
           <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="agents" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Agent activity</b><small>Cases handled by agent</small></span></label>
@@ -63,7 +63,7 @@
         </div>
       </div>
     </section>
-    <div class="report-preview-label"><div><strong>A4 preview</strong><span id="report-ts"></span></div><span>PDF layout</span></div>
+    <div class="report-preview-label"><div><strong>A4 preview</strong><span id="report-ts"></span></div></div>
     <div class="report-paper-wrap"><div id="report-content" class="report-paper"><div class="loading">Generating report...</div></div></div>
   </div>
   <div class="report-footer">
