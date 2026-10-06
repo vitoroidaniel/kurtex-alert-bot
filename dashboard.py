@@ -1804,6 +1804,8 @@ def api_fleet_knowledge_csv():
 @app.route("/api/trends")
 def api_trends():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    if session["user"].get("role","agent") not in ("manager","admin","super_admin","developer"):
+        return jsonify({"error":"This analytics tab is not available for your role."}),403
     from datetime import timedelta
     try:
         days=max(1,min(366,int(request.args.get("period","30"))))
@@ -1840,13 +1842,20 @@ def api_trends():
         if cs['recurring_units']: insights.append(f"{cs['recurring_units']} units show repeated problems in the same category and should be reviewed for recurrence.")
         if cs['total']!=ps['total']: insights.append(f"Overall case volume is {'up' if cs['total']>ps['total'] else 'down'} {abs(delta('total'))}% versus the previous {days}-day period.")
         if not insights: insights=["No significant fleet pattern is available for the selected period yet."]
-        return jsonify(metrics=metrics,categories=categories,units_to_watch=watch,insights=insights,sample_size=len(cur),period=days)
+        
+        equipment=Counter((str(c.get("vehicle_type") or "Unknown").strip().title() or "Unknown") for c in cur)
+        equipment_mix=[{"label":k,"value":v,"detail":f"{round(v/len(cur)*100) if cur else 0}% of cases"} for k,v in equipment.most_common()]
+        status_counts=Counter((str(c.get("status") or "Open").strip().title() or "Open") for c in cur)
+        status_breakdown=[{"label":k,"value":v,"detail":"Current selected period"} for k,v in status_counts.most_common()]
+        return jsonify(metrics=metrics,categories=categories,units_to_watch=watch,equipment_mix=equipment_mix,status_breakdown=status_breakdown,insights=insights,sample_size=len(cur),period=days)
     except Exception:
         logger.exception("Fleet analytics failed"); return jsonify({"error":"Unable to load fleet analytics."}),500
 
 @app.route("/api/comparison")
 def api_comparison():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    if session["user"].get("role","agent") not in ("manager","admin","super_admin","developer"):
+        return jsonify({"error":"This management tab is not available for your role."}),403
     from datetime import timedelta
     try:
         days=max(1,min(366,int(request.args.get("period","30")))); cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date(); start=today-timedelta(days=days-1); pe=start-timedelta(days=1); ps=pe-timedelta(days=days-1)
@@ -1928,7 +1937,7 @@ def login():
 def index():
     if not session.get("user"): return redirect("/login")
     user = session["user"]
-    is_manager = user.get("role","agent") in ("developer","super_admin")
+    is_manager = user.get("role","agent") in ("manager","admin","developer","super_admin")
     is_developer = user.get("role","agent") == "developer"
     return render_template("dashboard.html", user=user, is_manager=is_manager, is_developer=is_developer)
 

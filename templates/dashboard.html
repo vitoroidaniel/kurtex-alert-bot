@@ -241,14 +241,22 @@
 
   <!-- Fleet Analytics -->
   <div class="page" id="page-trends">
-    <div class="management-toolbar"><div><h2>Fleet Analytics</h2><p>Live operational statistics calculated from Kurtex cases.</p></div><div class="toggle-tabs analytics-period-tabs"><button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7D</button><button class="toggle-btn" onclick="setTrendPeriod(30,this)">30D</button><button class="toggle-btn" onclick="setTrendPeriod(90,this)">90D</button><button class="toggle-btn" onclick="setTrendPeriod(180,this)">6M</button><button class="toggle-btn" onclick="setTrendPeriod(365,this)">1Y</button></div></div>
+    {% if is_manager %}
+    <div class="management-toolbar"><div><h2>Fleet Analytics</h2><p>Current fleet health, workload distribution, problem concentration and units requiring management attention.</p></div><div class="toggle-tabs analytics-period-tabs"><button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7D</button><button class="toggle-btn" onclick="setTrendPeriod(30,this)">30D</button><button class="toggle-btn" onclick="setTrendPeriod(90,this)">90D</button><button class="toggle-btn" onclick="setTrendPeriod(180,this)">6M</button><button class="toggle-btn" onclick="setTrendPeriod(365,this)">1Y</button></div></div>
     <div id="fleet-analytics-content"><div class="loading">Calculating fleet analytics...</div></div>
+    {% else %}
+    <div class="analytics-access-denied"><i class="ph ph-lock-key"></i><h2>Fleet Analytics</h2><p>This tab is not available for your role.</p><small>Management analytics are available to managers, admins, super admins and developers.</small></div>
+    {% endif %}
   </div>
 
   <!-- Management Compare -->
   <div class="page" id="page-comparison">
-    <div class="management-toolbar"><div><h2>Management Compare</h2><p>Compare periods, workload, problem categories and recurring maintenance.</p></div><select id="compare-days" class="analytics-select" onchange="loadComparison()"><option value="7">7 days vs previous 7</option><option value="30" selected>30 days vs previous 30</option><option value="90">90 days vs previous 90</option></select></div>
+    {% if is_manager %}
+    <div class="management-toolbar"><div><h2>Management Compare</h2><p>Compare the selected period against the previous equivalent period to see what changed.</p></div><select id="compare-days" class="analytics-select" onchange="loadComparison()"><option value="7">7 days vs previous 7</option><option value="30" selected>30 days vs previous 30</option><option value="90">90 days vs previous 90</option></select></div>
     <div id="comparison-content"><div class="loading">Building comparison...</div></div>
+    {% else %}
+    <div class="analytics-access-denied"><i class="ph ph-lock-key"></i><h2>Management Compare</h2><p>This tab is not available for your role.</p><small>Management comparisons are available to managers, admins, super admins and developers.</small></div>
+    {% endif %}
   </div>
 
   <!-- Fleet Intelligence -->
