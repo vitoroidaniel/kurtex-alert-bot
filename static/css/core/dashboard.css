@@ -4906,3 +4906,128 @@ body[data-current-page="settings"] .page-title{font-size:inherit}
 /* v9 — AI maintenance evidence */
 .ai-evidence-block{margin:16px 0 4px;border:1px solid var(--border,#e1e4e8);border-radius:16px;background:var(--surface,#fff);overflow:hidden}.ai-evidence-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border,#e6e8eb)}.ai-evidence-head>span{display:flex;align-items:center;gap:7px;font-weight:750;font-size:13px}.ai-evidence-head small{color:var(--muted,#777b82);font-size:10px}.ai-case-cards{display:grid;gap:9px;padding:10px}.ai-case-card{border:1px solid var(--border,#e1e4e8);border-radius:13px;padding:12px;background:var(--card,#fafbfc)}.ai-case-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.ai-case-top strong{font-size:11px;letter-spacing:.02em}.ai-case-status{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;padding:4px 7px;border-radius:999px;background:#eef1f4}.ai-case-field{display:grid;grid-template-columns:135px 1fr;gap:10px;padding:6px 0;border-top:1px solid rgba(120,125,132,.12)}.ai-case-field>span,.ai-case-resolution>span{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#777);font-weight:750}.ai-case-field b,.ai-case-field p,.ai-case-resolution p{font-size:12px;line-height:1.45;margin:0}.ai-case-resolution{margin-top:8px;padding:10px;border-radius:10px;background:rgba(34,150,92,.07);border:1px solid rgba(34,150,92,.16)}.ai-case-resolution>span{display:flex;gap:5px;align-items:center;color:#238356}.ai-case-resolution p{margin-top:5px}.ai-case-resolution small{display:block;margin-top:5px;color:var(--muted,#777);font-size:10px}.ai-case-unresolved{margin-top:8px;font-size:10px;color:var(--muted,#777)}.ai-part-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;padding:10px}.ai-part-card{display:grid;grid-template-columns:86px 1fr;min-width:0;border:1px solid var(--border,#e1e4e8);border-radius:13px;overflow:hidden;background:var(--card,#fafbfc)}.ai-part-thumb{min-height:86px;display:flex;align-items:center;justify-content:center;background:#eef1f4;color:#9298a0}.ai-part-thumb img{width:100%;height:100%;min-height:86px;object-fit:cover}.ai-part-copy{display:flex;min-width:0;flex-direction:column;align-items:flex-start;justify-content:center;padding:10px}.ai-part-copy strong{font-size:12px}.ai-part-copy span{font-size:10px;color:var(--muted,#777);margin:3px 0 8px}.ai-part-copy button{border:0;background:none;padding:0;color:var(--accent,#df2b30);font-size:10px;font-weight:750;cursor:pointer}
 @media(max-width:760px){.ai-evidence-head{align-items:flex-start;flex-direction:column}.ai-case-field{grid-template-columns:1fr;gap:3px}.ai-part-cards{grid-template-columns:1fr}.ai-part-card{grid-template-columns:92px 1fr}.ai-evidence-block{border-radius:14px;margin-top:12px}}
+
+/* v121 — AI Knowledge full-width workspace: preserve authoring width, expand library right */
+body[data-current-page="ai_knowledge"] .main{
+  width:auto!important;
+  max-width:none!important;
+  padding-left:22px!important;
+  padding-right:22px!important;
+  box-sizing:border-box!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge,
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-page{
+  width:100%!important;
+  max-width:none!important;
+  margin-left:0!important;
+  margin-right:0!important;
+  box-sizing:border-box!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-page{
+  padding-left:0!important;
+  padding-right:0!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-hero,
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-learning-card,
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-knowledge-workspace{
+  width:100%!important;
+  max-width:none!important;
+  box-sizing:border-box!important;
+}
+/* The left column is never sacrificed to make room for the library. Extra viewport width goes to the library. */
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-knowledge-workspace{
+  display:grid!important;
+  grid-template-columns:minmax(640px, .9fr) minmax(520px, 1.1fr)!important;
+  gap:16px!important;
+  align-items:start!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-main{
+  min-width:640px!important;
+  width:100%!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-side{
+  min-width:0!important;
+  width:100%!important;
+  max-width:none!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-card{
+  width:100%!important;
+  max-width:none!important;
+  min-height:520px!important;
+  box-sizing:border-box!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-kb-list{
+  width:100%!important;
+  max-width:none!important;
+}
+/* Use the extra library width for readable rows instead of tiny cards. */
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-card .ai-kb-item-top{
+  grid-template-columns:42px minmax(0,1fr) auto!important;
+  gap:13px!important;
+  padding:13px 14px!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-card .ai-kb-title-line strong{
+  font-size:13px!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  overflow-wrap:anywhere!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-card .ai-kb-item-copy small{
+  font-size:10.5px!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+}
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-card .ai-kb-actions button{
+  width:36px!important;
+  height:36px!important;
+}
+/* Let the authoring cards fill their entire column as well. */
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-upload-main,
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-add-card,
+body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-reference-main{
+  width:100%!important;
+  max-width:none!important;
+  box-sizing:border-box!important;
+}
+@media(max-width:1280px){
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-knowledge-workspace{
+    grid-template-columns:minmax(540px,1fr) minmax(440px,1fr)!important;
+  }
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-main{min-width:0!important}
+}
+@media(max-width:1020px){
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-knowledge-workspace{grid-template-columns:1fr!important}
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-main{min-width:0!important}
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-side{position:static!important}
+}
+@media(max-width:760px){
+  body[data-current-page="ai_knowledge"] .main{padding-left:10px!important;padding-right:10px!important}
+}
+
+/* v122 — AI Knowledge desktop balance: 70/30 authoring/library */
+@media(min-width:1281px){
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-knowledge-workspace{
+    grid-template-columns:minmax(0,7fr) minmax(360px,3fr)!important;
+    gap:18px!important;
+  }
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-training-main{
+    min-width:0!important;
+  }
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-side{
+    justify-self:stretch!important;
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-library-card{
+    width:100%!important;
+    min-width:0!important;
+  }
+}
+@media(min-width:1021px) and (max-width:1280px){
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-knowledge-workspace{
+    grid-template-columns:minmax(0,2fr) minmax(340px,1fr)!important;
+    gap:16px!important;
+  }
+}
