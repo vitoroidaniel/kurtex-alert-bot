@@ -1758,6 +1758,104 @@ def api_report():
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
 
+@app.route("/api/report/pdf")
+def api_report_pdf():
+    """Generate a real A4 PDF from the same live report data used by the dashboard."""
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        report_response = api_report()
+        if isinstance(report_response, tuple):
+            return report_response
+        data = report_response.get_json() or {}
+        selected = {x.strip() for x in request.args.get("sections", "summary,agents,groups,vtype,units,missed").split(",") if x.strip()}
+
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
+
+        buf = io.BytesIO()
+        accent = colors.HexColor("#20242B")
+        red = colors.HexColor("#D92D20")
+        green = colors.HexColor("#16803A")
+        muted = colors.HexColor("#667085")
+        line = colors.HexColor("#E4E7EC")
+        soft = colors.HexColor("#F7F8FA")
+        styles = getSampleStyleSheet()
+        title = ParagraphStyle("KurtexTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=20, leading=23, textColor=accent, alignment=TA_CENTER, spaceAfter=3)
+        kicker = ParagraphStyle("KurtexKicker", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=8.5, leading=11, textColor=red, alignment=TA_CENTER, spaceAfter=12)
+        section = ParagraphStyle("KurtexSection", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=accent, spaceBefore=10, spaceAfter=6, uppercase=True)
+        body = ParagraphStyle("KurtexBody", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.5, leading=11, textColor=accent)
+        small = ParagraphStyle("KurtexSmall", parent=body, fontSize=7.5, leading=9, textColor=muted)
+        metric_num = ParagraphStyle("MetricNum", parent=body, fontName="Helvetica-Bold", fontSize=17, leading=19, alignment=TA_CENTER, textColor=accent)
+        metric_label = ParagraphStyle("MetricLabel", parent=small, fontName="Helvetica-Bold", fontSize=6.8, alignment=TA_CENTER, textColor=muted)
+
+        def footer(canvas, doc):
+            canvas.saveState()
+            w, _ = A4
+            canvas.setStrokeColor(line); canvas.line(18*mm, 13*mm, w-18*mm, 13*mm)
+            canvas.setFont("Helvetica", 7); canvas.setFillColor(muted)
+            canvas.drawString(18*mm, 8*mm, "Kurtex Maintenance - generated from live case data")
+            canvas.drawRightString(w-18*mm, 8*mm, f"Page {doc.page}")
+            canvas.restoreState()
+
+        doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=18*mm, leftMargin=18*mm, topMargin=15*mm, bottomMargin=18*mm,
+                                title="Kurtex Maintenance Report", author="Kurtex Maintenance")
+        story = [Paragraph("KURTEX MAINTENANCE", title), Paragraph("OFFICIAL MAINTENANCE REPORT", kicker)]
+        meta = Table([[Paragraph("REPORT PERIOD", metric_label), Paragraph("GENERATED", metric_label)],
+                      [Paragraph(str(data.get("label", "")), body), Paragraph(chicago_now().strftime("%B %d, %Y - %I:%M %p CT"), body)]],
+                     colWidths=[85*mm, 85*mm])
+        meta.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),soft),("BOX",(0,0),(-1,-1),0.5,line),("INNERGRID",(0,0),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),8)]))
+        story += [meta, Spacer(1, 8*mm)]
+
+        if "summary" in selected:
+            story.append(Paragraph("SUMMARY", section))
+            metrics = [(data.get("total",0),"TOTAL CASES"),(data.get("done",0),"RESOLVED"),(data.get("open",0),"OPEN CASES"),(f'{data.get("rate",0)}%',"RESOLVED %")]
+            cells=[]
+            for val,lab in metrics:
+                cells.append([Paragraph(str(val),metric_num),Paragraph(lab,metric_label)])
+            t=Table([cells], colWidths=[42.5*mm]*4)
+            t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),soft),("BOX",(0,0),(-1,-1),0.5,line),("INNERGRID",(0,0),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)]))
+            story += [t, Spacer(1,4*mm)]
+
+        def data_table(title_text, headers, rows, widths=None):
+            if not rows: return
+            story.append(Paragraph(title_text.upper(), section))
+            vals=[[Paragraph(str(x), metric_label) for x in headers]] + [[Paragraph(str(x), body) for x in row] for row in rows]
+            t=Table(vals, colWidths=widths, repeatRows=1, hAlign="LEFT")
+            t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),soft),("TEXTCOLOR",(0,0),(-1,0),muted),("LINEBELOW",(0,0),(-1,0),0.7,line),("LINEBELOW",(0,1),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5)]))
+            story += [t, Spacer(1,3*mm)]
+
+        if "agents" in selected:
+            data_table("Agent activity", ["Agent","Cases"], [[x.get("name","-"),x.get("count",0)] for x in data.get("leaderboard",[])], [135*mm,35*mm])
+        if "groups" in selected:
+            data_table("Most active groups", ["Group","Cases"], [[x.get("name","-"),x.get("count",0)] for x in data.get("top_groups",[])], [135*mm,35*mm])
+        if "vtype" in selected:
+            rows=[]
+            labels={"truck":"Trucks","trailer":"Trailers","reefer":"Reefers"}
+            for vt, block in (data.get("by_vtype") or {}).items():
+                for x in block.get("top_issues",[]): rows.append([labels.get(vt,vt.title()), x.get("issue","-"), x.get("count",0)])
+            data_table("Issues by equipment", ["Equipment","Issue","Cases"], rows, [32*mm,118*mm,20*mm])
+        if "units" in selected:
+            data_table("Problem units", ["Unit","Type","Reports"], [[x.get("unit","-"),str(x.get("vtype","-")).title(),x.get("count",0)] for x in data.get("top_units",[])], [75*mm,55*mm,40*mm])
+        if "missed" in selected:
+            rows=[]
+            for x in data.get("missed_cases",[]): rows.append([x.get("driver_name") or x.get("driver") or "-", x.get("group_name") or x.get("group") or "-", x.get("opened_at") or x.get("opened") or "-"])
+            data_table("Unresolved cases", ["Driver","Group","Opened"], rows, [65*mm,60*mm,45*mm])
+
+        story += [Spacer(1,5*mm), Paragraph("This report contains only the sections selected in Kurtex Report Builder and was generated from live fleet case data.", small)]
+        doc.build(story, onFirstPage=footer, onLaterPages=footer)
+        buf.seek(0)
+        filename = "kurtex-maintenance-report-" + chicago_now().strftime("%Y-%m-%d") + ".pdf"
+        return Response(buf.getvalue(), mimetype="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    except Exception as e:
+        logger.exception("report PDF generation failed")
+        return jsonify({"error": "Unable to generate PDF report."}), 500
+
+
 @app.route("/api/export")
 def api_export():
     """Full-fidelity case export. Includes report fields visible in the dashboard.

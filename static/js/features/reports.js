@@ -1,12 +1,6 @@
 function openReport() {
   document.getElementById("report-modal-overlay").classList.add("open");
   lockBodyScroll();
-  reportTab = "today";
-  document.querySelectorAll(".report-tab").forEach(function (b, i) {
-    b.classList.toggle("active", i === 0);
-  });
-  document.getElementById("report-period-bar").style.display = "none";
-  document.getElementById("report-sections-bar").style.display = "none";
   generateReport();
 }
 function closeReport() {
@@ -32,45 +26,25 @@ function toggleCustomDates() {
     v === "custom" ? "flex" : "none";
 }
 async function generateReport() {
-  document.getElementById("report-content").innerHTML =
-    '<div class="loading">Generating report...</div>';
-  document.getElementById("report-sections-bar").style.display = "none";
-  var url = "/api/report?period=today";
-  if (reportTab === "custom") {
-    var period = document.getElementById("report-period-select").value;
-    if (period === "custom") {
-      var from = document.getElementById("report-date-from").value;
-      var to = document.getElementById("report-date-to").value;
-      if (!from) {
-        document.getElementById("report-content").innerHTML =
-          '<div class="loading">Please select a start date.</div>';
-        return;
-      }
-      if (to && from > to) {
-        document.getElementById("report-content").innerHTML =
-          '<div class="empty-state">End date must be on or after the start date.</div>';
-        return;
-      }
-      url = "/api/report?period=custom&from=" + from + "&to=" + (to || from);
-    } else {
-      url = "/api/report?period=" + period;
-    }
+  var content=document.getElementById("report-content");
+  if(!content) return;
+  content.innerHTML='<div class="loading">Generating report...</div>';
+  var period=document.getElementById("report-period-select").value||"today";
+  var url="/api/report?period="+encodeURIComponent(period);
+  if(period==="custom"){
+    var from=document.getElementById("report-date-from").value;
+    var to=document.getElementById("report-date-to").value;
+    if(!from){content.innerHTML='<div class="empty-state">Choose a start date to build the report.</div>';return;}
+    if(to&&from>to){content.innerHTML='<div class="empty-state">End date must be on or after the start date.</div>';return;}
+    url="/api/report?period=custom&from="+encodeURIComponent(from)+"&to="+encodeURIComponent(to||from);
   }
-  try {
-    var r = await apiFetch(url);
-    if (!r.ok) {
-      document.getElementById("report-content").innerHTML =
-        '<div class="loading">Error generating report.</div>';
-      return;
-    }
-    window._reportData = await r.json();
-    document.getElementById("report-sections-bar").style.display = "flex";
-    renderReportContent();
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    document.getElementById("report-content").innerHTML = errorContent(e);
-  }
+  try{var r=await apiFetch(url);if(!r.ok){content.innerHTML='<div class="loading">Error generating report.</div>';return;}window._reportData=await r.json();renderReportContent();}
+  catch(e){if(e.name!=="AbortError")content.innerHTML=errorContent(e);}
 }
+function setAllReportSections(on){document.querySelectorAll('.report-section-cb').forEach(function(cb){cb.checked=on});renderReportContent()}
+function reportPdfUrl(){var p=document.getElementById('report-period-select').value||'today',q='period='+encodeURIComponent(p);if(p==='custom'){var f=document.getElementById('report-date-from').value,t=document.getElementById('report-date-to').value||f;q+='&from='+encodeURIComponent(f)+'&to='+encodeURIComponent(t)}var sections=Array.from(document.querySelectorAll('.report-section-cb:checked')).map(function(x){return x.dataset.section}).join(',');return '/api/report/pdf?'+q+'&sections='+encodeURIComponent(sections)}
+function downloadReportPDF(){if(!window._reportData)return;window.location.href=reportPdfUrl()}
+async function shareReportPDF(){if(!window._reportData)return;try{var r=await apiFetch(reportPdfUrl());if(!r.ok)throw new Error('PDF could not be generated');var blob=await r.blob();var file=new File([blob],'kurtex-maintenance-report.pdf',{type:'application/pdf'});if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({title:'Kurtex Maintenance Report',files:[file]});return;}var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=file.name;a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},1000)}catch(e){alert(e.message||'Unable to share report.')}}
 
 function reportSectionEnabled(name) {
   var cb = document.querySelector(
@@ -128,7 +102,7 @@ function renderReportContent() {
       '<div style="font-size:28px;font-weight:800;color:var(--accent)">' +
       d.total +
       "</div>" +
-      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Alerts</div>' +
+      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Cases</div>' +
       "</div>" +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
       '<div style="font-size:28px;font-weight:800;color:var(--green)">' +
@@ -138,9 +112,9 @@ function renderReportContent() {
       "</div>" +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
       '<div style="font-size:28px;font-weight:800;color:var(--red)">' +
-      d.missed +
+      (d.open || 0) +
       "</div>" +
-      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Missed</div>' +
+      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Open Cases</div>' +
       "</div>" +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">' +
@@ -157,9 +131,9 @@ function renderReportContent() {
       "%</span>" +
       "</div>" +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">' +
-      '<span style="font-size:12px;color:var(--muted);font-weight:500">Avg Response Time</span>' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:500">Cases Assigned / Worked</span>' +
       '<span style="font-size:18px;font-weight:800;color:var(--text)">' +
-      d.avg_resp +
+      (d.assigned || 0) +
       "</span>" +
       "</div>" +
       "</div>";
