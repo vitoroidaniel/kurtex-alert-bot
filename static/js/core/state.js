@@ -159,14 +159,16 @@ function showPage(page) {
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";
+  // Apply the page state before page-specific rendering so CSS never briefly
+  // inherits the previous workspace while AI panels are being rebuilt.
+  currentPage = page;
+  document.body.setAttribute("data-current-page", page);
   if (page === "ai_knowledge" && typeof loadAIKnowledge === "function") { loadAIKnowledge(); if (typeof loadFleetKnowledgeStats === "function") loadFleetKnowledgeStats(); }
   // Every workspace opens at its top. Prevent a previous page's scroll position
   // from making AI Knowledge (or any other tab) appear hundreds of pixels down.
   var mainScroll=document.querySelector(".main");
   if(mainScroll && typeof mainScroll.scrollTo==="function") mainScroll.scrollTo({top:0,left:0,behavior:"auto"});
   window.scrollTo(0,0);
-  currentPage = page;
-  document.body.setAttribute("data-current-page", page);
   preferences.set("kurtex-page", page);
   // AI workspaces manage their own data. Do not trigger the global dashboard
   // refresh when switching between AI Assistant / AI Knowledge: it causes

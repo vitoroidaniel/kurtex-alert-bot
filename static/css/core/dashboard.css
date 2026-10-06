@@ -5031,3 +5031,51 @@ body[data-current-page="ai_knowledge"] #page-ai_knowledge .ai-reference-main{
     gap:16px!important;
   }
 }
+
+/* v123 — sidebar footer typography must never inherit workspace/page typography */
+.sidebar .sidebar-account-actions .sidebar-settings-btn,
+.sidebar .sidebar-account-actions .sidebar-signout-btn{
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:13px!important;
+  line-height:1!important;
+  font-weight:650!important;
+  letter-spacing:0!important;
+  text-transform:none!important;
+  font-style:normal!important;
+}
+.sidebar .sidebar-account-actions .sidebar-settings-btn span,
+.sidebar .sidebar-account-actions .sidebar-signout-btn span{
+  font-family:inherit!important;
+  font-size:13px!important;
+  line-height:1!important;
+  font-weight:650!important;
+  letter-spacing:0!important;
+  text-transform:none!important;
+}
+.sidebar .sidebar-account-actions .sidebar-settings-btn>i,
+.sidebar .sidebar-account-actions .sidebar-signout-btn>i{
+  font-size:16px!important;
+  line-height:1!important;
+}
+.sidebar .sidebar-account-actions .sidebar-settings-btn>i:last-child{font-size:13px!important}
+/* Page state may style the workspace only; account controls remain invariant. */
+body[data-current-page="ai_assistant"] .sidebar-account-actions button,
+body[data-current-page="ai_knowledge"] .sidebar-account-actions button,
+body[data-current-page="settings"] .sidebar-account-actions button{
+  font-size:13px!important;
+  line-height:1!important;
+}
+body[data-current-page="ai_assistant"] .sidebar-account-actions button span,
+body[data-current-page="ai_knowledge"] .sidebar-account-actions button span,
+body[data-current-page="settings"] .sidebar-account-actions button span{
+  font-size:13px!important;
+  line-height:1!important;
+}
+@media(max-width:760px){
+  .sidebar .sidebar-account-actions .sidebar-settings-btn,
+  .sidebar .sidebar-account-actions .sidebar-signout-btn,
+  .sidebar .sidebar-account-actions .sidebar-settings-btn span,
+  .sidebar .sidebar-account-actions .sidebar-signout-btn span{
+    font-size:13px!important;
+  }
+}
