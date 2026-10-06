@@ -14,7 +14,7 @@ from backend.ai.ai_learning_routes import register_learning_routes
 from backend.ai.fleet_knowledge import FleetKnowledgeStore
 from backend.ai.ai_research import search_research
 from backend.ai.ai_video import process_video, transcribe_audio, MAX_VIDEO_BYTES
-from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, knowledge_excerpt
+from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, knowledge_excerpt, COMPONENTS
 
 from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chicago_timestamp
 from backend.core.dashboard_data import CaseSnapshot, DataUnavailable
@@ -349,7 +349,8 @@ def _ai_context(query="",limit=18):
     return {"cases":compact,"knowledge_notes":notes,"approved_maintenance_knowledge":approved,
             "reviewed_lessons":learning_store.matches(query),
             "fleet_experience":fleet_knowledge_store.matches(query,6),
-            "retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved)}}
+            "historical_chat_experience":_ai_chat_history_matches(query,5),
+            "retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved),"historical_chats_in_prompt":len(_ai_chat_history_matches(query,5))}}
 
 
 AI_PARTS_FILE = Path(__file__).resolve().parent / "data" / "parts_manual_ai.json"
@@ -446,6 +447,35 @@ def _write_ai_knowledge(items):
     tmp=AI_KNOWLEDGE_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(items,ensure_ascii=False,indent=2),encoding="utf-8"); tmp.replace(AI_KNOWLEDGE_FILE)
 
+def _ai_chat_history_matches(query,limit=6):
+    """Retrieve relevant prior maintenance conversations across users as untrusted experience.
+
+    Owners are intentionally not exposed to the model. Old assistant answers are evidence of
+    prior troubleshooting only and never become approved repair guidance automatically.
+    """
+    wanted=tokens(query)
+    if not wanted:return []
+    ranked=[]
+    for _owner,chats in chat_store.all_chats():
+        for chat in chats:
+            messages=chat.get("messages") or []
+            for i,message in enumerate(messages):
+                if message.get("role")!="user":continue
+                question=str(message.get("content") or "")
+                answer=next((str(m.get("content") or "") for m in messages[i+1:i+3] if m.get("role")=="assistant"),"")
+                hay=question+" "+answer
+                overlap=wanted & tokens(hay)
+                if not overlap:continue
+                score=sum(3 if t in COMPONENTS else 1 for t in overlap)
+                ranked.append((score,str(chat.get("updated_at") or chat.get("created_at") or ""),{
+                    "conversation":_ai_clip(chat.get("title") or "Maintenance conversation",120),
+                    "question":_ai_clip(question,900),
+                    "prior_ai_answer":_ai_clip(answer,1400),
+                    "evidence_quality":"historical chat - unverified"
+                }))
+    ranked.sort(key=lambda x:(-x[0],x[1]),reverse=False)
+    return [x[2] for x in ranked[:limit]]
+
 def _ai_knowledge_matches(query,limit=12):
     items=_read_ai_knowledge(); q=tokens(query)
     def score(x):
@@ -479,16 +509,37 @@ def api_ai_knowledge_upload():
     f=request.files.get("file")
     if not f or not f.filename:return jsonify({"error":"File is required"}),400
     ext=Path(f.filename).suffix.lower()
-    if ext not in (".txt",".md",".csv",".json"):return jsonify({"error":"Use TXT, MD, CSV or JSON for this version"}),400
-    raw=f.read(2_000_001)
-    if len(raw)>2_000_000:return jsonify({"error":"File is too large (2 MB max)"}),400
-    try: content=raw.decode("utf-8")
-    except UnicodeDecodeError:
-        try: content=raw.decode("latin-1")
-        except Exception:return jsonify({"error":"Could not read text file"}),400
+    if ext not in (".txt",".md",".csv",".json",".pdf",".docx",".xlsx"):
+        return jsonify({"error":"Use TXT, MD, CSV, JSON, PDF, DOCX or XLSX"}),400
+    raw=f.read(5_000_001)
+    if len(raw)>5_000_000:return jsonify({"error":"File is too large (5 MB max)"}),400
+    try:
+        if ext in (".txt",".md",".csv",".json"):
+            try: content=raw.decode("utf-8")
+            except UnicodeDecodeError: content=raw.decode("latin-1")
+        elif ext==".pdf":
+            from pypdf import PdfReader
+            reader=PdfReader(io.BytesIO(raw)); content="\n".join((page.extract_text() or "") for page in reader.pages[:100])
+        elif ext==".docx":
+            from docx import Document
+            doc=Document(io.BytesIO(raw)); content="\n".join(p.text for p in doc.paragraphs)
+        else:
+            from openpyxl import load_workbook
+            wb=load_workbook(io.BytesIO(raw),read_only=True,data_only=True); rows=[]
+            for ws in wb.worksheets[:30]:
+                rows.append("SHEET: "+ws.title)
+                for row in ws.iter_rows(values_only=True):
+                    vals=[str(v) for v in row if v is not None]
+                    if vals:rows.append(" | ".join(vals))
+                    if sum(len(x) for x in rows)>150000:break
+            content="\n".join(rows)
+    except Exception as exc:
+        logger.warning("Knowledge file extraction failed: %s",exc);return jsonify({"error":"Could not extract readable content from this file"}),400
+    content=content.strip()
+    if not content:return jsonify({"error":"No readable text was found in this file"}),400
     now=datetime.now().astimezone().isoformat(timespec="seconds"); items=_read_ai_knowledge()
-    item={"id":uuid.uuid4().hex,"title":Path(f.filename).name[:120],"content":content[:120000],
-          "tags":["uploaded"],"source":"file","created_at":now,"updated_at":now,"created_by":_ai_user_key()}
+    item={"id":uuid.uuid4().hex,"title":Path(f.filename).name[:120],"content":content[:150000],
+          "tags":["uploaded",ext.lstrip(".")],"source":"file","created_at":now,"updated_at":now,"created_by":_ai_user_key()}
     items.append(item); _write_ai_knowledge(items); return jsonify(item),201
 
 @app.route("/api/ai/knowledge/<item_id>",methods=["PUT","DELETE"])

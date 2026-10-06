@@ -85,7 +85,7 @@ async function loadAIPageSidebar(){
  var list=document.getElementById('ai-page-sidebar-list');if(!list)return;
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
-  list.innerHTML=items.length?items.map(function(c){return '<div class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" data-chat-id="'+escapeAI(c.id)+'"><button type="button" class="ai-side-chat-open" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\',this.closest(\'.ai-side-chat\'))"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button><button type="button" class="ai-side-chat-delete" onclick="deleteAIPageSavedChat(event,\''+aiAttr(c.id)+'\')" title="Delete chat" aria-label="Delete chat"><i class="ph ph-trash"></i></button></div>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+  list.innerHTML=items.length?items.map(function(c){return '<div class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" data-chat-id="'+escapeAI(c.id)+'"><button type="button" class="ai-side-chat-open" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\',this.closest(\'.ai-side-chat\'))"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button><button type="button" class="ai-side-chat-delete" onclick="deleteAIPageSavedChat(event,\''+aiAttr(c.id)+'\')" title="Delete chat" aria-label="Delete chat"><i class="ph ph-trash"></i></button></div>'}).join(''):'<div class="ai-history-empty ai-history-empty-rich"><span class="ai-empty-icon"><i class="ph ph-chats-circle"></i></span><strong>No conversations yet</strong><small>Start a maintenance chat and it will appear here automatically for quick access later.</small><button type="button" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i> Start a chat</button></div>'
  }catch(e){list.innerHTML='<div class="ai-history-empty">Unable to load chats.</div>'}
 }
 
@@ -124,7 +124,7 @@ async function openAIPageHistory(){
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
   var list=panel.querySelector('.ai-page-history-list');
-  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><strong>'+escapeAI(c.title||'Maintenance conversation')+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty">No saved conversations yet.</div>'
+  list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><strong>'+escapeAI(c.title||'Maintenance conversation')+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty ai-history-empty-rich"><span class="ai-empty-icon"><i class="ph ph-chats-circle"></i></span><strong>No conversations yet</strong><small>Start a maintenance chat and it will appear here automatically for quick access later.</small><button type="button" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i> Start a chat</button></div>'
  }catch(e){panel.querySelector('.ai-page-history-list').textContent='Unable to load chat history.'}
 }
 async function openAIPageSavedChat(id,clicked){if(aiBusy||aiUploading)return;var sequence=++aiOpenSequence;
