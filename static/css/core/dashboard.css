@@ -5618,3 +5618,80 @@ body[data-current-page="overview"] .home-today-grid strong{font-size:23px;margin
   body[data-current-page="overview"] .home-today-grid small{font-size:10px}
   body[data-current-page="overview"] .home-today-grid strong{font-size:21px}
 }
+
+/* v51 — Home background visibility + readable account roles */
+.user-role{
+  display:inline-flex;
+  align-items:center;
+  width:max-content;
+  min-height:19px;
+  margin-top:4px;
+  padding:2px 7px;
+  border:1px solid #d9dee7;
+  border-radius:999px;
+  background:#f3f5f8;
+  color:#4d5868;
+  font-size:9px;
+  line-height:1;
+  font-weight:800;
+  letter-spacing:.02em;
+  text-transform:capitalize;
+}
+body[data-user-role="developer"] .user-role,
+body[data-is-developer="true"] .user-role{
+  border-color:rgba(220,38,38,.18);
+  background:rgba(239,68,68,.08);
+  color:#c62828;
+}
+
+body[data-current-page="overview"] .main{
+  position:relative;
+  isolation:isolate;
+  background:transparent!important;
+}
+body[data-current-page="overview"] .main::before{
+  content:"";
+  position:fixed;
+  z-index:-2;
+  inset:0 0 0 var(--sidebar-width, 230px);
+  pointer-events:none;
+  background:url('/static/images/home-wave-bg.jpg') center center/cover no-repeat;
+}
+body[data-current-page="overview"] .main::after{
+  content:"";
+  position:fixed;
+  z-index:-1;
+  inset:0 0 0 var(--sidebar-width, 230px);
+  pointer-events:none;
+  background:rgba(248,249,251,.34);
+}
+body[data-current-page="overview"] .topbar,
+body[data-current-page="overview"] .page-heading{
+  background:rgba(255,255,255,.66)!important;
+  backdrop-filter:blur(13px);
+  -webkit-backdrop-filter:blur(13px);
+}
+body[data-current-page="overview"] #page-overview{
+  background:transparent!important;
+}
+body[data-current-page="overview"] .home-welcome{
+  background:rgba(255,255,255,.68)!important;
+  border-color:rgba(210,216,224,.78)!important;
+  box-shadow:0 10px 32px rgba(31,41,55,.045)!important;
+}
+body[data-current-page="overview"] .home-today-grid button,
+body[data-current-page="overview"] #page-overview .stat-card,
+body[data-current-page="overview"] #page-overview .widget-card,
+body[data-current-page="overview"] #page-overview .overview-widget,
+body[data-current-page="overview"] #page-overview .panel,
+body[data-current-page="overview"] #page-overview .card{
+  background:rgba(255,255,255,.76)!important;
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+@media(max-width:760px){
+  body[data-current-page="overview"] .main::before,
+  body[data-current-page="overview"] .main::after{inset:0}
+  body[data-current-page="overview"] .main::before{background-position:center top}
+  body[data-current-page="overview"] .main::after{background:rgba(248,249,251,.40)}
+}
