@@ -4771,3 +4771,67 @@ body[data-current-page="ai_knowledge"] .ai-status-card .ai-stat-row{grid-templat
 body[data-current-page="ai_knowledge"] .ai-inline-status:empty,body[data-current-page="ai_knowledge"] .ai-test-result:empty{display:none!important}
 @media(max-width:1100px){body[data-current-page="ai_knowledge"] .ai-training-grid{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-training-side{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:760px){body[data-current-page="ai_knowledge"] .ai-training-hero{align-items:flex-start!important;flex-direction:column!important}.ai-training-flow{width:100%!important;overflow:auto!important}body[data-current-page="ai_knowledge"] .ai-stat-row,body[data-current-page="ai_knowledge"] .ai-training-side{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-import-strip{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-kb-form{grid-template-columns:1fr!important}.ai-kb-form .ai-field-wide{grid-column:auto!important}}
+
+/* v109 — AI Knowledge readability + workspace hierarchy */
+body[data-current-page="ai_knowledge"] #page-ai_knowledge{font-size:13px!important}
+body[data-current-page="ai_knowledge"] .ai-training-page{gap:16px!important}
+body[data-current-page="ai_knowledge"] .ai-training-hero p{font-size:13px!important;max-width:780px!important}
+body[data-current-page="ai_knowledge"] .ai-training-flow span{font-size:11px!important;height:36px!important;padding:0 12px!important}
+body[data-current-page="ai_knowledge"] .ai-card-head h3{font-size:16px!important;line-height:1.25!important}
+body[data-current-page="ai_knowledge"] .ai-card-head p{font-size:12px!important;line-height:1.5!important;margin-top:3px!important}
+body[data-current-page="ai_knowledge"] .ai-card-icon{width:38px!important;height:38px!important;font-size:18px!important;border-radius:10px!important}
+body[data-current-page="ai_knowledge"] .ai-stat-row strong{font-size:23px!important}
+body[data-current-page="ai_knowledge"] .ai-stat-row span:not(.ai-stat-icon){font-size:10.5px!important}
+body[data-current-page="ai_knowledge"] .ai-import-strip>div strong{font-size:12px!important}
+body[data-current-page="ai_knowledge"] .ai-import-strip>div span{font-size:10px!important}
+body[data-current-page="ai_knowledge"] .ai-learning-toolbar .btn,body[data-current-page="ai_knowledge"] .ai-import-strip .btn,body[data-current-page="ai_knowledge"] .ai-primary-btn,body[data-current-page="ai_knowledge"] .ai-secondary-btn{font-size:11px!important}
+body[data-current-page="ai_knowledge"] .ai-inline-status{display:inline-flex!important;align-items:center!important;gap:7px!important;margin-top:9px!important;padding:6px 9px!important;border-radius:8px!important;background:var(--surface-2,#f7f8f9)!important;color:var(--muted)!important;font-size:10px!important;line-height:1.2!important;width:max-content!important;max-width:100%!important}
+body[data-current-page="ai_knowledge"] .ai-inline-status:empty{display:none!important}
+body[data-current-page="ai_knowledge"] .ai-inline-status:before{content:"";width:6px;height:6px;border-radius:50%;background:#62a276;box-shadow:0 0 0 3px rgba(98,162,118,.11);flex:none}
+body[data-current-page="ai_knowledge"] .ai-knowledge-workspace{grid-template-columns:minmax(0,1.15fr) minmax(390px,.85fr)!important;gap:16px!important;align-items:start!important}
+body[data-current-page="ai_knowledge"] .ai-training-main{display:grid!important;gap:14px!important}
+body[data-current-page="ai_knowledge"] .ai-library-side{display:block!important;position:sticky!important;top:12px!important;align-self:start!important}
+body[data-current-page="ai_knowledge"] .ai-library-card{min-height:520px!important;padding:18px!important}
+body[data-current-page="ai_knowledge"] .ai-library-card .ai-card-head{align-items:flex-start!important}
+body[data-current-page="ai_knowledge"] .ai-library-card .eyebrow{font-size:9px!important;letter-spacing:.13em!important;color:var(--muted)!important}
+body[data-current-page="ai_knowledge"] .ai-kb-list{max-height:620px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-item{padding:13px 5px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-item-copy strong{font-size:12px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-item-copy small{font-size:9.5px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-item p{font-size:10.5px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-tags span{font-size:9px!important;padding:4px 7px!important}
+body[data-current-page="ai_knowledge"] .ai-upload-main{padding:18px!important}
+body[data-current-page="ai_knowledge"] .ai-upload-layout{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important;align-items:stretch!important}
+body[data-current-page="ai_knowledge"] .ai-upload-main .ai-file-picker{margin:0!important;min-height:104px!important;justify-content:flex-start!important;padding:16px 18px!important;text-align:left!important;position:relative!important}
+body[data-current-page="ai_knowledge"] .ai-upload-main .ai-file-picker>i{font-size:25px!important}
+body[data-current-page="ai_knowledge"] .ai-upload-main .ai-file-picker strong{font-size:12px!important}
+body[data-current-page="ai_knowledge"] .ai-upload-main .ai-file-picker small{font-size:10px!important;margin-top:3px!important}
+body[data-current-page="ai_knowledge"] .ai-browse-file{margin-left:auto!important;padding:8px 10px!important;border:1px solid var(--border)!important;border-radius:8px!important;background:var(--surface)!important;font-size:10px!important;font-weight:700!important;white-space:nowrap!important}
+body[data-current-page="ai_knowledge"] .ai-upload-main .ai-primary-btn{height:auto!important;min-width:128px!important}
+body[data-current-page="ai_knowledge"] .ai-approved-explainer{display:flex!important;gap:10px!important;align-items:flex-start!important;margin:0 0 12px!important;padding:11px 12px!important;border:1px solid #dfe8e2!important;border-radius:10px!important;background:#f7fbf8!important;color:#3f654b!important}
+body[data-current-page="ai_knowledge"] .ai-approved-explainer>i{font-size:17px!important;margin-top:1px!important}
+body[data-current-page="ai_knowledge"] .ai-approved-explainer div{display:grid!important;gap:3px!important}
+body[data-current-page="ai_knowledge"] .ai-approved-explainer strong{font-size:11px!important;color:#31543c!important}
+body[data-current-page="ai_knowledge"] .ai-approved-explainer span{font-size:10px!important;line-height:1.5!important}
+body[data-current-page="ai_knowledge"] .ai-training-help summary{font-size:11px!important;padding:11px 12px!important;display:flex!important;align-items:center!important;gap:6px!important}
+body[data-current-page="ai_knowledge"] .ai-training-help p{font-size:10.5px!important;padding:0 12px!important}
+body[data-current-page="ai_knowledge"] .ai-training-help button{font-size:10px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-form label>span,body[data-current-page="ai_knowledge"] .ai-tag-color-field>span{font-size:11px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-form input{height:42px!important;font-size:11.5px!important;padding:0 12px!important}
+body[data-current-page="ai_knowledge"] .ai-kb-form textarea{min-height:150px!important;font-size:11.5px!important;padding:12px!important}
+body[data-current-page="ai_knowledge"] .ai-tag-color-field small{font-size:9.5px!important}
+body[data-current-page="ai_knowledge"] .ai-form-submit{display:flex!important;align-items:end!important;justify-content:flex-end!important}
+body[data-current-page="ai_knowledge"] .ai-form-submit .ai-primary-btn{height:42px!important}
+body[data-current-page="ai_knowledge"] .ai-reference-row{display:grid!important;grid-template-columns:150px 180px minmax(0,1fr)!important;gap:10px!important;align-items:stretch!important}
+body[data-current-page="ai_knowledge"] .ai-reference-row>div{border:1px solid var(--border)!important;border-radius:10px!important;background:var(--surface-2,#fafafa)!important;padding:12px!important;display:flex!important;flex-direction:column!important;justify-content:center!important}
+body[data-current-page="ai_knowledge"] .ai-reference-row strong{font-size:18px!important;line-height:1.1!important}
+body[data-current-page="ai_knowledge"] .ai-reference-row span{font-size:10px!important;color:var(--muted)!important;margin-top:4px!important}
+body[data-current-page="ai_knowledge"] .ai-reference-row .ai-trust-note{flex-direction:row!important;align-items:center!important;gap:8px!important;margin:0!important;color:var(--muted)!important}
+body[data-current-page="ai_knowledge"] .ai-reference-row .ai-trust-note span{margin:0!important;line-height:1.45!important}
+body[data-current-page="ai_knowledge"] .ai-system-main .ai-card-head{margin:0!important}
+body[data-current-page="ai_knowledge"] .ai-system-main .btn{font-size:11px!important;height:36px!important}
+.ai-preview-modal .ai-edit-dialog header>button{display:grid!important;place-items:center!important;width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;color:#454a51!important;font-size:18px!important;line-height:1!important;cursor:pointer!important}
+.ai-preview-modal .ai-edit-dialog header>button i{display:block!important;font-size:18px!important;line-height:1!important}
+.ai-preview-modal .ai-edit-dialog header>button:hover{background:#f3f4f5!important;color:#111!important}
+@media(max-width:1100px){body[data-current-page="ai_knowledge"] .ai-knowledge-workspace{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-library-side{position:static!important}body[data-current-page="ai_knowledge"] .ai-library-card{min-height:360px!important}}
+@media(max-width:760px){body[data-current-page="ai_knowledge"] .ai-upload-layout,body[data-current-page="ai_knowledge"] .ai-reference-row{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-upload-main .ai-primary-btn{height:40px!important}.ai-browse-file{display:none!important}}

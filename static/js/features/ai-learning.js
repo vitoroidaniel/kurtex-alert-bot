@@ -3,7 +3,7 @@ async function loadFleetKnowledgeStats(){
  var out=document.getElementById('fleet-knowledge-status');if(!out)return;
  try{var r=await apiFetch('/api/ai/fleet-knowledge'),x=await r.json();if(!r.ok)throw new Error(x.error||'Unable to load fleet knowledge');
   document.getElementById('fleet-knowledge-total').textContent=x.total||0;document.getElementById('fleet-knowledge-resolved').textContent=x.resolved||0;document.getElementById('fleet-knowledge-review').textContent=x.incomplete||0;
-  out.textContent=x.last_sync?'Last indexed '+new Date(x.last_sync).toLocaleString():'Waiting for first sync.';
+  out.innerHTML=x.last_sync?'<i class="ph ph-check-circle"></i><span><b>Fleet index updated</b> · '+new Date(x.last_sync).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})+'</span>':'<i class="ph ph-clock"></i><span>Waiting for first sync</span>';
  }catch(e){out.textContent=e.message;}
 }
 async function syncFleetKnowledge(){

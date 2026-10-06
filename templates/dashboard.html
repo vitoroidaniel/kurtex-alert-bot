@@ -289,49 +289,42 @@
 {% if is_developer %}<div class="page" id="page-ai_knowledge"><section class="ai-training-page">
 <section class="ai-training-hero"><div class="ai-hero-copy"><span class="eyebrow">AI KNOWLEDGE</span><h2>Train Kurtex with fleet knowledge</h2><p>Manage historical fleet experience and verified maintenance references in one place. Previous cases remain searchable evidence while approved sources stay trusted.</p></div><div class="ai-training-flow" aria-label="Knowledge workflow"><span><i class="ph ph-database"></i> Ingest</span><i class="ph ph-caret-right"></i><span><i class="ph ph-magnifying-glass"></i> Retrieve</span><i class="ph ph-caret-right"></i><span><i class="ph ph-shield-check"></i> Verify</span></div></section>
 <section class="ai-training-card ai-learning-card"><div class="ai-card-head ai-card-head-row"><div class="ai-heading-group"><span class="ai-card-icon"><i class="ph ph-truck"></i></span><div><h3>Fleet experience</h3><p>Historical cases are indexed automatically and used as searchable evidence.</p></div></div><div class="ai-learning-toolbar"><button class="btn secondary" type="button" onclick="loadFleetKnowledgeStats()"><i class="ph ph-arrows-clockwise"></i> Refresh</button><button class="btn" type="button" onclick="syncFleetKnowledge()"><i class="ph ph-database"></i> Sync cases</button></div></div><div class="ai-stat-row"><div><span class="ai-stat-icon"><i class="ph ph-files"></i></span><strong id="fleet-knowledge-total">—</strong><span>Indexed cases</span></div><div><span class="ai-stat-icon"><i class="ph ph-check-circle"></i></span><strong id="fleet-knowledge-resolved">—</strong><span>Resolved evidence</span></div><div><span class="ai-stat-icon"><i class="ph ph-warning-circle"></i></span><strong id="fleet-knowledge-review">—</strong><span>Incomplete evidence</span></div></div><div class="ai-import-strip"><div><strong>Import historical data</strong><span>Bulk-import an older case export into Fleet Knowledge.</span></div><label class="ai-compact-file" for="fleet-knowledge-csv"><i class="ph ph-file-csv"></i><span id="fleet-csv-file-name">Choose CSV</span></label><input id="fleet-knowledge-csv" class="ai-native-file" type="file" accept=".csv,text/csv" onchange="document.getElementById('fleet-csv-file-name').textContent=this.files[0]?this.files[0].name:'Choose CSV'"><button class="btn" type="button" onclick="importFleetKnowledgeCSV()"><i class="ph ph-upload-simple"></i> Import</button></div><div id="fleet-knowledge-status" class="ai-inline-status" role="status"></div></section>
-<div class="ai-training-grid">
+<div class="ai-training-grid ai-knowledge-workspace">
     <main class="ai-training-main">
+      <section class="ai-training-card ai-upload-card ai-upload-main">
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-file-arrow-up"></i></span><div><h3>Feed Knowledge from files</h3><p>Add verified reference material from TXT, MD, CSV, JSON, PDF, DOCX or XLSX files.</p></div></div>
+        <div class="ai-upload-layout"><label class="ai-file-picker" for="ai-kb-file"><i class="ph ph-cloud-arrow-up"></i><span><strong>Drop a knowledge file here or browse</strong><small id="ai-file-name">PDF, CSV, JSON, DOCX, XLSX, TXT or MD · max 5 MB</small></span><span class="ai-browse-file">Browse files</span></label><input id="ai-kb-file" class="ai-native-file" type="file" accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx" onchange="document.getElementById('ai-file-name').textContent=this.files[0]?this.files[0].name:'PDF, CSV, JSON, DOCX, XLSX, TXT or MD · max 5 MB'"><button class="btn ai-primary-btn" type="button" onclick="uploadAIKnowledge()"><i class="ph ph-upload-simple"></i> Upload & add</button></div>
+      </section>
+
       <section class="ai-training-card ai-add-card">
-        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-brain"></i></span><div><h3>Add approved knowledge</h3><p>Only add verified mechanic notes, procedures, terminology or diagnostic guidance.</p></div></div>
-        <details class="ai-training-help"><summary>How to improve maintenance answers</summary><p>This library supplies reference material; it does not retrain the model. Add one verified repair per entry: equipment/model, fault code, symptom, visible defect, tests and results, confirmed cause, repair, verification and source/date. Record corrections explicitly, including what the AI missed. Use precise component and symptom tags. Keep unconfirmed diagnoses out of approved knowledge.</p><button type="button" onclick="aiKnowledgeTemplate()">Use verified-case template</button></details><form id="ai-kb-form" class="ai-kb-form" onsubmit="saveAIKnowledge(event)">
-          <label><span>Title</span><input id="ai-kb-title" placeholder="e.g. Cascadia air system notes" required></label>
-          <label class="ai-field-wide"><span>Maintenance knowledge</span><textarea id="ai-kb-content" rows="6" placeholder="Paste approved mechanic knowledge, diagnostic notes, procedures, terminology..." required></textarea></label>
-          <label><span>Tags <em>optional</em></span><input id="ai-kb-tags" placeholder="air system, cascadia, brakes"></label><div class="ai-tag-color-field"><span>Tag color</span><div class="ai-tag-color-picker" data-target="ai-kb-tag-color">
-<input id="ai-kb-tag-color" type="hidden" value="blue">
-<button type="button" class="ai-color-swatch red" data-color="red" title="Red"></button><button type="button" class="ai-color-swatch orange" data-color="orange" title="Orange"></button><button type="button" class="ai-color-swatch yellow" data-color="yellow" title="Yellow"></button><button type="button" class="ai-color-swatch green" data-color="green" title="Green"></button><button type="button" class="ai-color-swatch blue selected" data-color="blue" title="Blue"></button><button type="button" class="ai-color-swatch purple" data-color="purple" title="Purple"></button><button type="button" class="ai-color-swatch teal" data-color="teal" title="Teal"></button><button type="button" class="ai-color-swatch gray" data-color="gray" title="Gray"></button>
-</div><small>Selected color applies to the tags in this entry.</small></div>
-          <button class="btn ai-primary-btn" type="submit"><i class="ph ph-check"></i> Add to knowledge</button>
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-brain"></i></span><div><h3>Add verified knowledge manually</h3><p>Create a trusted reference when the useful information is not already in a file - for example a confirmed repair, mechanic procedure, fault-code note or correction.</p></div></div>
+        <div class="ai-approved-explainer"><i class="ph ph-shield-check"></i><div><strong>What happens when you add this?</strong><span>Kurtex can retrieve this entry as approved evidence when answering related maintenance questions. It does not change the Telegram/alert bot and it does not automatically trust normal chat messages.</span></div></div>
+        <details class="ai-training-help"><summary><i class="ph ph-info"></i> What makes a good knowledge entry?</summary><p>Add one verified repair per entry: equipment/model, fault code, symptom, tests and results, confirmed cause, repair, verification and source/date. Record corrections explicitly and keep unconfirmed diagnoses out of approved knowledge.</p><button type="button" onclick="aiKnowledgeTemplate()"><i class="ph ph-magic-wand"></i> Use verified-case template</button></details><form id="ai-kb-form" class="ai-kb-form" onsubmit="saveAIKnowledge(event)">
+          <label><span>Title</span><input id="ai-kb-title" placeholder="e.g. Cascadia air system - confirmed pressure leak" required></label>
+          <label><span>Tags <em>optional</em></span><input id="ai-kb-tags" placeholder="cascadia, air system, brakes"></label>
+          <label class="ai-field-wide"><span>Verified maintenance knowledge</span><textarea id="ai-kb-content" rows="6" placeholder="Describe the symptom, diagnostic checks, confirmed cause, repair and how the fix was verified..." required></textarea></label>
+          <div class="ai-tag-color-field"><span>Tag color</span><div class="ai-tag-color-picker" data-target="ai-kb-tag-color"><input id="ai-kb-tag-color" type="hidden" value="blue"><button type="button" class="ai-color-swatch red" data-color="red" title="Red"></button><button type="button" class="ai-color-swatch orange" data-color="orange" title="Orange"></button><button type="button" class="ai-color-swatch yellow" data-color="yellow" title="Yellow"></button><button type="button" class="ai-color-swatch green" data-color="green" title="Green"></button><button type="button" class="ai-color-swatch blue selected" data-color="blue" title="Blue"></button><button type="button" class="ai-color-swatch purple" data-color="purple" title="Purple"></button><button type="button" class="ai-color-swatch teal" data-color="teal" title="Teal"></button><button type="button" class="ai-color-swatch gray" data-color="gray" title="Gray"></button></div><small>Used to visually organize this entry in the library.</small></div>
+          <div class="ai-form-submit"><button class="btn ai-primary-btn" type="submit"><i class="ph ph-check"></i> Add verified knowledge</button></div>
         </form><div id="ai-kb-status" class="ai-kb-status" aria-live="polite"></div>
       </section>
 
-      <section class="ai-training-card ai-library-card">
-        <div class="ai-card-head ai-card-head-row"><div><h3>Knowledge library</h3><p>Verified reference material Kurtex AI can use when answering maintenance questions.</p></div><div class="ai-library-actions"><span class="ai-count-pill"><b id="ai-kb-count">0</b> items</span><button class="ai-icon-action" type="button" onclick="loadAIKnowledge()" title="Refresh library"><i class="ph ph-arrows-clockwise"></i></button></div></div>
-        <div id="ai-kb-list" class="ai-kb-list"></div>
+      <section class="ai-training-card ai-status-card ai-reference-main">
+        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-database"></i></span><div><h3>AI reference data</h3><p>Current searchable sources available to the dashboard assistant.</p></div></div>
+        <div class="ai-reference-row"><div><strong id="ai-case-count">0</strong><span>Historical cases</span></div><div><strong>EN · RO · RU</strong><span>Language support</span></div><div class="ai-trust-note"><i class="ph ph-shield-check"></i><span>Normal chat messages remain unverified experience until approved.</span></div></div>
+      </section>
+
+      <section class="ai-training-card ai-diagnostic-card ai-system-main">
+        <div class="ai-card-head ai-card-head-row"><div class="ai-heading-group"><span class="ai-card-icon"><i class="ph ph-plugs-connected"></i></span><div><h3>Workers AI connection</h3><p>Check the dashboard AI connection from Railway to Cloudflare.</p></div></div><button class="btn secondary" type="button" onclick="testKurtexAIConnection()"><i class="ph ph-wave-sine"></i> Test connection</button></div><div id="ai-test-result" class="ai-test-result" aria-live="polite"></div>
       </section>
     </main>
 
-    <aside class="ai-training-side">
-      <section class="ai-training-card ai-status-card">
-        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-database"></i></span><div><h3>AI reference data</h3><p>Current sources available to the assistant.</p></div></div>
-        <div class="ai-stat-row"><div><strong id="ai-case-count">0</strong><span>Historical cases</span></div><div><strong>EN · RO · RU</strong><span>Language support</span></div></div>
-        <div class="ai-trust-note"><i class="ph ph-shield-check"></i><span>Chat messages do not automatically become trusted knowledge.</span></div>
-      </section>
-
-      <section class="ai-training-card ai-upload-card">
-        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-file-arrow-up"></i></span><div><h3>Feed Knowledge from files</h3><p>TXT, MD, CSV, JSON, PDF, DOCX or XLSX · max 5 MB</p></div></div>
-        <label class="ai-file-picker" for="ai-kb-file"><i class="ph ph-upload-simple"></i><span><strong>Choose a file</strong><small id="ai-file-name">No file selected</small></span></label>
-        <input id="ai-kb-file" class="ai-native-file" type="file" accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx" onchange="document.getElementById('ai-file-name').textContent=this.files[0]?this.files[0].name:'No file selected'">
-        <button class="btn ai-secondary-btn" type="button" onclick="uploadAIKnowledge()"><i class="ph ph-upload-simple"></i> Upload & add</button>
-      </section>
-
-      <section class="ai-training-card ai-diagnostic-card">
-        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-plugs-connected"></i></span><div><h3>Workers AI</h3><p>Test the Railway → Cloudflare connection.</p></div></div>
-        <button class="btn secondary ai-secondary-btn" type="button" onclick="testKurtexAIConnection()"><i class="ph ph-wave-sine"></i> Test connection</button>
-        <div id="ai-test-result" class="ai-test-result" aria-live="polite"></div>
+    <aside class="ai-training-side ai-library-side">
+      <section class="ai-training-card ai-library-card">
+        <div class="ai-card-head ai-card-head-row"><div><span class="eyebrow">APPROVED SOURCES</span><h3>Knowledge library</h3><p>Verified references Kurtex can use in maintenance answers.</p></div><div class="ai-library-actions"><span class="ai-count-pill"><b id="ai-kb-count">0</b> items</span><button class="ai-icon-action" type="button" onclick="loadAIKnowledge()" title="Refresh library" aria-label="Refresh knowledge library"><i class="ph ph-arrows-clockwise"></i></button></div></div>
+        <div id="ai-kb-list" class="ai-kb-list"></div>
       </section>
     </aside>
   </div>
-
 </section></div>{% endif %}
 
   <!-- Agent Profiles (manager only) -->
