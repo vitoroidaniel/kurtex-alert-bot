@@ -233,7 +233,11 @@ Rules:
 - For brakes, steering, wheel-end, pressurized air, refrigerant, high-current electrical and other safety-critical work,
   recommend qualified technician verification and do not give risky step-by-step repair instructions.
 - If evidence is weak, say so. Better no match than an unrelated match.
-- Keep answers practical and concise for dispatch/maintenance agents.
+- Be a strong senior maintenance copilot, not a generic chatbot. Give enough detail to make the next diagnostic action clear, but do not pad answers.
+- Use the current conversation as diagnostic state: remember tests already performed and their results; do not restart or repeat failed/completed checks.
+- When a measurement is supplied, interpret it against verified context when possible and continue the diagnostic branch from that result.
+- Prefer testing before parts replacement. Explain what each test result would mean.
+- Keep answers practical for mechanics and maintenance agents.
 - Reply in the language used by the agent unless asked otherwise.
 - Never show internal Kurtex case IDs/UUIDs unless the agent explicitly asks for an ID.
 - When citing fleet history, prioritize useful operations fields: Driver / Group, Unit, Reported issue, Solved by, and Resolution.
@@ -250,7 +254,7 @@ Rules:
 - Do not recommend replacing expensive components until simpler checks and evidence support replacement.
 """
 
-def _cf_ai(messages, max_tokens=700, temperature=0.2, image_data_url=None, images=None):
+def _cf_ai(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None):
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("Workers AI is not configured")
     url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{KURTEX_AI_MODEL}"
@@ -316,6 +320,30 @@ def _ai_case_record(c):
       "closed":c.get("closed_at") or ""
     }
 
+def _ai_similar_case_cards(query,limit=5):
+    """UI-safe case summaries: operational facts only, no internal IDs."""
+    cases=[c for c in load_cases() if not is_testing(c)]
+    out=[]
+    for c in ranked_cases(query,cases,limit):
+        r=_ai_case_record(c)
+        vehicle=(r.get("type") or "").strip().lower()
+        unit=(r.get("unit") or "").strip()
+        out.append({
+            "reported_by":" / ".join(x for x in (r.get("driver"),r.get("group")) if x),
+            "driver":r.get("driver") or "",
+            "group":r.get("group") or "",
+            "vehicle":vehicle,
+            "unit":unit,
+            "issue":_ai_clip(r.get("issue") or r.get("description"),420),
+            "notes":_ai_clip(r.get("notes"),520),
+            "solved_by":r.get("solved_by") or "",
+            "resolution":_ai_clip(r.get("resolution"),650),
+            "status":r.get("status") or "",
+            "opened":r.get("opened") or "",
+            "closed":r.get("closed") or ""
+        })
+    return [{k:v for k,v in x.items() if v not in ("",None,[])} for x in out]
+
 def _ai_clip(value,limit):
     text=re.sub(r"\s+"," ",str(value or "")).strip()
     return text if len(text)<=limit else text[:max(0,limit-1)]+"…"
@@ -374,7 +402,7 @@ def _ai_parts_matches(query,limit=8):
     ranked.sort(key=lambda x:(-x[0],str(x[1].get("name") or "")))
     out=[]
     for score,p in ranked[:limit]:
-        out.append({"name":p.get("name"),"category":p.get("cat"),"location":p.get("loc"),"issues":p.get("issues") or [],
+        out.append({"id":p.get("id"),"name":p.get("name"),"category":p.get("cat"),"location":p.get("loc"),"keywords":p.get("keywords") or "","issues":p.get("issues") or [],
                     "checks":p.get("checks") or [],"guidance":p.get("fix") or "","source":p.get("source") or "","source_url":p.get("url") or ""})
     return out
 
@@ -571,6 +599,12 @@ def _extract_ai_chat_file(f):
         audio=parsed.pop('_audio_bytes',None)
         if audio:parsed['audio_blob']=chat_store.put_blob(audio)
         return name,parsed
+    if ext in (".wav",".mp3",".m4a",".ogg",".aac"):
+        raw=f.read(25_000_001)
+        if len(raw)>25_000_000: raise ValueError("Audio must be under 25 MB")
+        if not raw: raise ValueError("Audio is empty")
+        transcript=transcribe_audio(raw)
+        return name,{"kind":"audio","mime":f.mimetype or "audio/mpeg","transcript":transcript,"audio_status":"transcribed" if transcript else "no_speech","blob":chat_store.put_blob(raw)}
     raw=f.read(5_000_001)
     if len(raw)>5_000_000: raise ValueError("File is too large (5 MB max)")
     if ext in (".jpg",".jpeg",".png",".webp"):
@@ -619,7 +653,7 @@ def _extract_ai_chat_file(f):
                     snippets.append("\nFILE: "+info.filename+"\n"+z.read(info).decode("utf-8","replace")[:12000])
                 except Exception: pass
         text="ZIP CONTENTS:\n"+"\n".join(names)+"\n"+"".join(snippets)
-    else: raise ValueError("Supported files: MP4, MOV, WEBM, JPG, PNG, WEBP, PDF, DOCX, XLSX, ZIP, TXT, MD, CSV and JSON")
+    else: raise ValueError("Supported files: MP4, MOV, WEBM, WAV, MP3, M4A, OGG, AAC, JPG, PNG, WEBP, PDF, DOCX, XLSX, ZIP, TXT, MD, CSV and JSON")
     text=text.strip()
     if not text: raise ValueError("No readable text was found in this file")
     mime={".pdf":"application/pdf",".docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -714,7 +748,7 @@ def api_ai_chat_file_delete(chat_id,file_id):
     item=next((x for x in (chat.get("attachments") or []) if str(x.get("id"))==file_id),None)
     if not item:return jsonify({"error":"File not found"}),404
     if request.method=="GET":
-        if item.get("kind")=="video" and item.get("blob"):
+        if item.get("kind") in ("video","audio") and item.get("blob"):
             return send_file(chat_store.blob_path(item["blob"]),mimetype=item.get("mime"),download_name=item.get("name"),conditional=True)
         item=chat_store.hydrate(item)
         if item.get("kind")=="image" and item.get("data"):
@@ -766,7 +800,7 @@ def api_ai_chat():
                 if turn.get("request_id")!=request_id:continue
                 if turn.get("content")!=message or (chat_id and saved_chat.get("id")!=chat_id):return jsonify(error="Request ID conflicts with an earlier message"),409
                 answer=saved[index+1]
-                return jsonify(answer=answer.get("content",""),message_id=answer.get("id"),chat_id=saved_chat["id"],title=saved_chat.get("title"),sources=answer.get("sources",[]),research_status=answer.get("research_status"),replayed=True)
+                return jsonify(answer=answer.get("content",""),message_id=answer.get("id"),chat_id=saved_chat["id"],title=saved_chat.get("title"),sources=answer.get("sources",[]),research_status=answer.get("research_status"),similar_cases=answer.get("similar_cases",[]),parts=answer.get("parts",[]),replayed=True)
     chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if chat_id and chat is None:
         return jsonify({"error":"Chat not found"}),404
@@ -784,13 +818,15 @@ def api_ai_chat():
         active_ids=requested_attachment_ids
         if not active_ids:
             active_ids=next((m.get("attachment_ids",[]) for m in reversed(history) if m.get("role")=="user"),[])
-        active_media=[chat_store.hydrate(available[i]) for i in active_ids if i in available and available[i].get("kind") in ("image","video")]
+        active_media=[chat_store.hydrate(available[i]) for i in active_ids if i in available and available[i].get("kind") in ("image","video","audio")]
         image_items=[];driver_reports=[]
         for media in active_media:
             if media.get("kind")=="image":image_items.append(media)
-            else:
+            elif media.get("kind")=="video":
                 image_items.extend([{**frame,"name":media.get("name", "Video")+" - "+frame["name"]} for frame in media.get("frames",[])])
-                driver_reports.append({"video":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"warning":media.get("warning","")})
+                driver_reports.append({"media":"video","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"warning":media.get("warning","")})
+            elif media.get("kind")=="audio":
+                driver_reports.append({"media":"audio","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"warning":media.get("warning","")})
         if len(image_items)>12:return jsonify({"error":"Too many visual inputs. Send one video and up to four photos per message."}),400
         image_urls=[a["data"] for a in image_items if a.get("data")]
         observations=""
@@ -809,7 +845,7 @@ def api_ai_chat():
         # Chat-scoped context: explicitly attached files and verified knowledge stay with this conversation.
         attachments=[]
         for a in (chat.get("attachments") or [])[-12:]:
-            attachments.append({"name":_ai_clip(a.get("name"),180),"content":knowledge_excerpt(a.get("content"),retrieval_query,3500)}) if a.get("kind") not in ("image","video") else None
+            attachments.append({"name":_ai_clip(a.get("name"),180),"content":knowledge_excerpt(a.get("content"),retrieval_query,3500)}) if a.get("kind") not in ("image","video","audio") else None
         selected_ids=set(str(x) for x in (chat.get("knowledge_ids") or []))
         selected=[]
         for k in _read_ai_knowledge():
@@ -834,7 +870,7 @@ For a diagnostic request, prefer this workflow:
 4. Most likely causes — ranked by evidence, not a random list.
 5. Recommended next action — what to do now, when to stop operation/escalate, and what a technician should verify.
 6. Matching parts — only when a verified Parts Manual/Knowledge source explicitly supports the part/number. Never invent a part number.
-7. Similar Kurtex cases — candidates are not verified matches. Include ONLY the same component AND same failure mode, compatible equipment and no conflicting fault codes. Broad same-system similarities are insufficient for a strong match. Explain the shared evidence and differences; do not invent a percentage. If there are no useful matches, say "No strong similar Kurtex cases found" instead of showing unrelated cases.
+7. Similar Kurtex cases — the UI shows structured case cards separately. In prose, mention only genuinely useful historical patterns. Never invent a match percentage. A case card is historical evidence, not proof. The cards expose: Reported driver/group, truck or trailer/unit, reported issue, case notes, who solved it, and recorded resolution when available.
 8. Sources — compact one-line source list only. Do not add blank bullet lines or excessive spacing.
 
 For images: describe only what is actually visible; do not infer hidden damage as fact. For web results: use them to improve troubleshooting and identify useful technical references, but do not present a search snippet as an OEM procedure. If make/model or alarm code is needed for an exact procedure, ask for it.
@@ -845,17 +881,19 @@ Formatting: use clean headings, compact numbered steps, and single-spaced bullet
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
         messages.append({"role":"user","content":message})
         stage="workers_ai"
-        answer=_cf_ai(messages,1400,.1,images=image_urls)
+        answer=_cf_ai(messages,2200,.1,images=image_urls)
         stage="save_chat"
         answer_id=uuid.uuid4().hex
+        similar_cases=_ai_similar_case_cards(retrieval_query,5)
+        part_matches=ctx.get("parts_manual_matches") or []
         history.extend([{"id":uuid.uuid4().hex,"role":"user","content":message,"at":_now_iso(),"attachment_ids":active_ids,"request_id":request_id},
-                        {"id":answer_id,"role":"assistant","content":answer,"at":_now_iso(),"sources":research["results"],"research_status":research["status"]}])
+                        {"id":answer_id,"role":"assistant","content":answer,"at":_now_iso(),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches}])
         chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
         if not chat.get("title") or chat.get("title")=="New maintenance chat":chat["title"]=_chat_title(message)
         _save_user_chats(chats)
         try:learning_store.capture_chat(_ai_user_key(),chat)
         except Exception:logger.exception("Learning capture failed; chat answer remains saved")
-        return jsonify({"message_id":answer_id,"answer":answer,"chat_id":chat["id"],"title":chat["title"],"elapsed_ms":round((time.monotonic()-started)*1000),"retrieval":ctx["retrieval"],"images_analyzed":len(image_urls),"sources":research["results"],"research_status":research["status"]})
+        return jsonify({"message_id":answer_id,"answer":answer,"chat_id":chat["id"],"title":chat["title"],"elapsed_ms":round((time.monotonic()-started)*1000),"retrieval":ctx["retrieval"],"images_analyzed":len(image_urls),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches})
     except Exception as e:
         logger.exception("Kurtex AI chat failed at stage=%s: %s",stage,e)
         _notify_user("ai","Kurtex AI unavailable","AI chat failed at "+stage+". Try again or check AI Training diagnostics.","warning")
@@ -1971,15 +2009,16 @@ def api_knowledge_note_item(note_id):
 def api_video_transcript(chat_id,file_id):
     chats=_user_chats();chat=next((c for c in chats if c.get('id')==chat_id),None)
     if not chat:return jsonify(error='Chat not found'),404
-    item=next((a for a in chat.get('attachments',[]) if a.get('id')==file_id and a.get('kind')=='video'),None)
-    if not item:return jsonify(error='Video not found'),404
+    item=next((a for a in chat.get('attachments',[]) if a.get('id')==file_id and a.get('kind') in ('video','audio')),None)
+    if not item:return jsonify(error='Media not found'),404
     if request.method=='PATCH':
         data=request.get_json(silent=True) or {}
         item['transcript']=str(data.get('transcript','')).strip()[:16000]
         item['audio_status']='agent_corrected';item['warning']='';_save_user_chats(chats)
     elif request.method=='POST':
-        if not item.get('audio_blob'):return jsonify(error='No extracted audio is available. Type the driver explanation instead.'),400
-        try:item['transcript']=transcribe_audio(chat_store.blob_path(item['audio_blob']).read_bytes())
+        audio_ref=item.get('audio_blob') or (item.get('blob') if item.get('kind')=='audio' else None)
+        if not audio_ref:return jsonify(error='No audio is available. Type the driver explanation instead.'),400
+        try:item['transcript']=transcribe_audio(chat_store.blob_path(audio_ref).read_bytes())
         except Exception:return jsonify(error='Speech transcription failed. Please try again or enter the explanation.'),503
         item['audio_status']='transcribed' if item['transcript'] else 'no_speech';item['warning']='';_save_user_chats(chats)
     return jsonify(transcript=item.get('transcript',''),audio_status=item.get('audio_status'),warning=item.get('warning',''))

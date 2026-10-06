@@ -153,7 +153,7 @@ async function openAIPageSavedChat(id,clicked){if(aiBusy||aiUploading)return;var
    var d=document.createElement('div'),role=m.role==='assistant'?'assistant':'user';
    d.className='ai-page-msg '+role;
    var body=role==='assistant'?kurtexAIFormat(m.content||m.text||'')+aiSourceLinks(m.sources,m.research_status):escapeAI(m.content||m.text||'');
-   d.innerHTML=aiWrapMessage(role,body,aiAttachmentCards(kurtexAIChatId,chat.attachments||[],m.attachment_ids||[]),m.id||String(index));
+   d.innerHTML=aiWrapMessage(role,body+(role==='assistant'?aiEvidenceCards(m.similar_cases,m.parts):''),aiAttachmentCards(kurtexAIChatId,chat.attachments||[],m.attachment_ids||[]),m.id||String(index));
    box.appendChild(d)
   });
   // Important: an empty saved chat remains the SAME saved chat.
@@ -206,7 +206,7 @@ async function sendKurtexAIPage(e){
   var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,request_id:requestKey,chat_id:kurtexAIChatId,page:'ai_assistant',web_search:!!document.getElementById('ai-web-search')?.checked,attachment_ids:sentAttachments.map(function(a){return a.id})})}),x=await r.json();
   if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');
   aiLastSendAttempt=null;
-  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=aiWrapMessage('assistant',kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.')+aiSourceLinks(x.sources,x.research_status),'',x.message_id);aiClearAttachmentTray();await refreshAIChatContext();
+  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;wait.classList.remove('thinking');wait.innerHTML=aiWrapMessage('assistant',kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.')+aiEvidenceCards(x.similar_cases,x.parts)+aiSourceLinks(x.sources,x.research_status),'',x.message_id);aiLoadEvidencePhotos(wait);aiClearAttachmentTray();await refreshAIChatContext();
   loadKurtexAIChats();loadAIPageSidebar()
  }catch(err){aiChatPendingAttachments=sentAttachments;await refreshAIChatContext();wait.classList.remove('thinking');input.value=msg;wait.textContent='Message failed. Your draft is restored. '+(err.message||'Check AI Training diagnostics.')}
  aiSetBusy(false);input.focus();dst.scrollTop=dst.scrollHeight;return false
@@ -337,7 +337,7 @@ function aiAttachmentCards(chatId,attachments,ids){
  var wanted=new Set((ids||[]).map(String));
  return (attachments||[]).filter(function(a){return wanted.has(String(a.id))}).map(function(a){
   var isImg=a.kind==='image'||/^image\//.test(a.mime||''),url='/api/ai/chats/'+encodeURIComponent(chatId)+'/files/'+encodeURIComponent(a.id);
-  if(a.kind==='video')return '<div class="ai-msg-video"><a href="'+url+'" target="_blank" rel="noopener">'+escapeAI(a.name||'Video')+'</a><button type="button" onclick="openAITranscript(\''+aiAttr(a.id)+'\')">Driver transcript</button></div>';
+  if(a.kind==='video'||a.kind==='audio')return '<div class="ai-msg-video"><a href="'+url+'" target="_blank" rel="noopener"><i class="ph '+(a.kind==='audio'?'ph-waveform':'ph-video')+'"></i> '+escapeAI(a.name||(a.kind==='audio'?'Audio':'Video'))+'</a><button type="button" onclick="openAITranscript(\''+aiAttr(a.id)+'\')">Transcript</button></div>';
   if(isImg)return '<a class="ai-msg-attachment ai-msg-image" href="'+url+'" target="_blank"><img src="'+url+'" alt="'+escapeAI(a.name||'Attached image')+'"><span>'+escapeAI(a.name||'Image')+'</span></a>';
   return '<a class="ai-msg-attachment ai-msg-file" href="'+url+'" target="_blank"><span class="ai-file-icon"><i class="ph '+aiFileIcon(a.name)+'"></i></span><span><strong>'+escapeAI(a.name||'Attachment')+'</strong><small>'+escapeAI(aiFileType(a.name,a.mime))+'</small></span></a>'
  }).join('')
@@ -418,3 +418,30 @@ function aiSendRequestKey(message,attachments){
  var id=typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
  aiLastSendAttempt={signature:signature,id:id};return id;
 }
+
+/* v9 — maintenance evidence cards */
+function aiEvidenceCards(cases,parts){
+ var out='';
+ if(Array.isArray(cases)&&cases.length){
+  out+='<section class="ai-evidence-block"><div class="ai-evidence-head"><span><i class="ph ph-files"></i> Similar fleet cases</span><small>Historical evidence - verify before repair</small></div><div class="ai-case-cards">'+cases.map(function(c){
+   var vehicle=[c.vehicle?c.vehicle.toUpperCase():'',c.unit?('Unit '+c.unit):''].filter(Boolean).join(' · ');
+   var who=c.reported_by||[c.driver,c.group].filter(Boolean).join(' / ');
+   return '<article class="ai-case-card">'+
+    '<div class="ai-case-top"><span class="ai-case-status '+escapeAI((c.status||'').toLowerCase())+'">'+escapeAI(c.status||'Fleet case')+'</span>'+(vehicle?'<strong>'+escapeAI(vehicle)+'</strong>':'')+'</div>'+
+    (who?'<div class="ai-case-field"><span>Reported driver / group</span><b>'+escapeAI(who)+'</b></div>':'')+
+    (c.issue?'<div class="ai-case-field"><span>Issue</span><p>'+escapeAI(c.issue)+'</p></div>':'')+
+    (c.notes?'<div class="ai-case-field"><span>Case notes</span><p>'+escapeAI(c.notes)+'</p></div>':'')+
+    (c.resolution?'<div class="ai-case-resolution"><span><i class="ph ph-check-circle"></i> How it was solved</span><p>'+escapeAI(c.resolution)+'</p>'+(c.solved_by?'<small>Solved by '+escapeAI(c.solved_by)+'</small>':'')+'</div>':'<div class="ai-case-unresolved"><i class="ph ph-info"></i> No recorded resolution</div>')+
+   '</article>';
+  }).join('')+'</div></section>';
+ }
+ if(Array.isArray(parts)&&parts.length){
+  out+='<section class="ai-evidence-block"><div class="ai-evidence-head"><span><i class="ph ph-wrench"></i> Relevant Parts Manual</span><small>Reference photos may vary by installed model</small></div><div class="ai-part-cards">'+parts.slice(0,4).map(function(p){return '<article class="ai-part-card" data-ai-part-photo="'+aiAttr(p.id||p.name||'')+'"><div class="ai-part-thumb"><i class="ph ph-image"></i></div><div class="ai-part-copy"><strong>'+escapeAI(p.name||'Part')+'</strong><span>'+escapeAI([p.category,p.location].filter(Boolean).join(' · '))+'</span><button type="button" onclick="aiOpenPart(\''+aiAttr(p.id||'')+'\')">Open in Parts Manual <i class="ph ph-arrow-up-right"></i></button></div></article>'}).join('')+'</div></section>';
+ }
+ return out;
+}
+function aiLoadEvidencePhotos(root){
+ (root||document).querySelectorAll('.ai-part-card[data-ai-part-photo]').forEach(function(card){if(card.dataset.photoLoaded)return;card.dataset.photoLoaded='1';var id=card.dataset.aiPartPhoto,p=(window.partsDB||[]).find(function(x){return String(x.id)===String(id)});if(!p)return;var qs=new URLSearchParams({q:p.name,cat:p.cat||'',keywords:p.keywords||''});fetch('/api/part_image?'+qs).then(function(r){return r.ok?r.json():Promise.reject()}).then(function(x){var im=(x.results||[])[0];if(!im)return;var box=card.querySelector('.ai-part-thumb');box.innerHTML='<img src="'+escapeAI(im.thumbnail_url||im.image_url)+'" alt="'+escapeAI(p.name)+' reference" loading="lazy" referrerpolicy="no-referrer">'}).catch(function(){})
+ });
+}
+function aiOpenPart(id){if(typeof showPage==='function')showPage('parts_manual');setTimeout(function(){if(typeof selectPart==='function'&&id)selectPart(id)},80)}
