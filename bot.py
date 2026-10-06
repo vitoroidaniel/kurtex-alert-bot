@@ -22,7 +22,7 @@ from telegram.ext import (
 from backend.core.config import config
 from backend.core.app_time import CENTRAL_TIMEZONE_LABEL, chicago_timestamp
 from bot_app.handlers.alert_handler import AlertHandler, TRIGGER_WORDS
-from bot_app.handlers.report_handler import get_report_conversation
+from bot_app.handlers.report_handler import get_report_conversation, cb_orphan_report_callback
 from bot_app.handlers.agent_handler import (
     cmd_done, cmd_mycases, cmd_mystats, cmd_casehistory,
     cb_done_pick, cb_solve_confirm, cb_solve_cancel,
@@ -489,6 +489,9 @@ def main():
     # ConversationHandler only caused PTB callback-tracking warnings and could
     # intercept the real handlers.
     app.add_handler(get_report_conversation())
+    # Last-resort guard for stale report keyboards after a restart/session loss.
+    # Active report callbacks are consumed by ConversationHandler first.
+    app.add_handler(CallbackQueryHandler(cb_orphan_report_callback, pattern=r'^rpt_'))
 
     import re as _re
     def _build_pattern(words):

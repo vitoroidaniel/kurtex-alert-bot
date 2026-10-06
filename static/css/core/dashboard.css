@@ -5695,3 +5695,63 @@ body[data-current-page="overview"] #page-overview .card{
   body[data-current-page="overview"] .main::before{background-position:center top}
   body[data-current-page="overview"] .main::after{background:rgba(248,249,251,.40)}
 }
+
+/* v54 — Home surface cleanup: remove background interference and restore card hierarchy */
+body[data-current-page="overview"] .main{
+  background:#f6f7f9!important;
+}
+body[data-current-page="overview"] .main::before,
+body[data-current-page="overview"] .main::after{
+  display:none!important;
+  content:none!important;
+}
+body[data-current-page="overview"] .topbar{
+  background:#fff!important;
+  border-bottom:1px solid #e7e9ed!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body[data-current-page="overview"] .page-heading{
+  background:#fff!important;
+  border-bottom:1px solid #e7e9ed!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body[data-current-page="overview"] #page-overview{
+  background:#f6f7f9!important;
+}
+body[data-current-page="overview"] .home-welcome{
+  background:#fff!important;
+  border-color:#dfe3e8!important;
+  box-shadow:0 8px 24px rgba(15,23,42,.04)!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body[data-current-page="overview"] .home-today-grid button{
+  background:#fff!important;
+  border-color:#dfe3e8!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+body[data-current-page="overview"] #page-overview .stat-card,
+body[data-current-page="overview"] #page-overview .widget-card,
+body[data-current-page="overview"] #page-overview .overview-widget,
+body[data-current-page="overview"] #page-overview .panel,
+body[data-current-page="overview"] #page-overview .card{
+  background:#fff!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+/* Key metrics should read as one clean widget with distinct metric cards. */
+body[data-current-page="overview"] #overview-metrics,
+body[data-current-page="overview"] .overview-widget[data-widget="metrics"]{
+  background:#fff!important;
+  border-color:#e1e4e8!important;
+  box-shadow:0 3px 14px rgba(15,23,42,.035)!important;
+}
+body[data-current-page="overview"] .overview-widget[data-widget="metrics"] .stat-card,
+body[data-current-page="overview"] #overview-metrics .stat-card{
+  background:#fafbfc!important;
+  border:1px solid #e1e4e8!important;
+  box-shadow:none!important;
+}

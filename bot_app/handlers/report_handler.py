@@ -715,29 +715,37 @@ async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _show_preview(update.message, ctx, edit=False)
     return CONFIRM
 
+async def cb_orphan_report_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Stop Telegram's spinner for a stale report button outside a live conversation."""
+    query = update.callback_query
+    await _ack_report_callback(query, "ORPHAN")
+    logger.warning(
+        "[REPORT] ORPHAN callback=%r user=%s; no active report conversation",
+        getattr(query, "data", None),
+        update.effective_user.id if update.effective_user else None,
+    )
+    try:
+        await query.answer(
+            "This report session expired. Open the active case and press Report again.",
+            show_alert=True,
+        )
+    except TelegramError:
+        pass
+
+
 def get_report_conversation():
     private_text = filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND
     private_media = filters.ChatType.PRIVATE & (filters.PHOTO | filters.VIDEO | filters.Document.ALL)
 
     return ConversationHandler(
-        # Every inline report action is also a safe re-entry point.  This is
-        # intentional: Telegram buttons may belong to a different message than
-        # the one that started the ConversationHandler.  If PTB loses/misses a
-        # callback state, the button still runs and its return value restores
-        # the correct next state instead of leaving Telegram spinning forever.
+        # Only actions that can legitimately START/re-enter a report belong in
+        # entry_points. Putting every report button here makes allow_reentry=True
+        # restart an active conversation before its current-state handler gets a
+        # chance to process the callback. State-mismatch recovery belongs in
+        # fallbacks below instead.
         entry_points=[
-            CallbackQueryHandler(cb_report_entry,   pattern=r'^solve\|'),
-            CallbackQueryHandler(cb_type,           pattern=r'^rpt_type\|'),
-            CallbackQueryHandler(cb_loadtype,       pattern=r'^rpt_loadtype\|'),
-            CallbackQueryHandler(cb_skip,           pattern=r'^rpt_skip$'),
-            CallbackQueryHandler(cb_temp_recorder,  pattern=r'^rpt_temprec\|'),
-            CallbackQueryHandler(cb_media_done,     pattern=r'^rpt_mediadone$'),
-            CallbackQueryHandler(cb_priority,       pattern=r'^rpt_priority\|'),
-            CallbackQueryHandler(cb_confirm,        pattern=r'^rpt_confirm\|'),
-            CallbackQueryHandler(cb_edit,           pattern=r'^rpt_edit$'),
-            CallbackQueryHandler(cb_edit_field,     pattern=r'^rpt_editfield\|'),
-            CallbackQueryHandler(cb_edit_back,      pattern=r'^rpt_edit_back$'),
-            CallbackQueryHandler(cb_edit_val_button,pattern=r'^rpt_editval\|'),
+            CallbackQueryHandler(cb_report_entry, pattern=r'^solve\|'),
+            CallbackQueryHandler(cb_type,         pattern=r'^rpt_type\|'),
         ],
         states={
             ASK_TYPE:          [CallbackQueryHandler(cb_type,          pattern=r'^rpt_type\|')],
@@ -778,9 +786,24 @@ def get_report_conversation():
                                 CallbackQueryHandler(cb_edit_val_button, pattern=r'^rpt_editval\|'),
                                ],
         },
-        fallbacks=[CommandHandler("cancel", cmd_cancel)],
+        # If an inline callback arrives while PTB has a stale/mismatched report
+        # state, recover it here. These handlers preserve the active conversation
+        # instead of re-entering it as a brand-new flow.
+        fallbacks=[
+            CommandHandler("cancel", cmd_cancel),
+            CallbackQueryHandler(cb_loadtype,        pattern=r'^rpt_loadtype\|'),
+            CallbackQueryHandler(cb_skip,            pattern=r'^rpt_skip$'),
+            CallbackQueryHandler(cb_temp_recorder,   pattern=r'^rpt_temprec\|'),
+            CallbackQueryHandler(cb_media_done,      pattern=r'^rpt_mediadone$'),
+            CallbackQueryHandler(cb_priority,        pattern=r'^rpt_priority\|'),
+            CallbackQueryHandler(cb_confirm,         pattern=r'^rpt_confirm\|'),
+            CallbackQueryHandler(cb_edit,            pattern=r'^rpt_edit$'),
+            CallbackQueryHandler(cb_edit_field,      pattern=r'^rpt_editfield\|'),
+            CallbackQueryHandler(cb_edit_back,       pattern=r'^rpt_edit_back$'),
+            CallbackQueryHandler(cb_edit_val_button, pattern=r'^rpt_editval\|'),
+        ],
         per_message=False,
-        per_chat=True,
+        per_chat=False,
         per_user=True,
         allow_reentry=True,
     )
