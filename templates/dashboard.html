@@ -267,7 +267,8 @@
     <div class="intelligence-search-shell">
       <div class="intel-search-row">
         <i class="ph ph-magnifying-glass"></i>
-        <input id="issue-search-input" aria-label="Search all fleet intelligence" type="search" placeholder="Search all intelligence - issues, units, drivers, recurring problems..." oninput="intelUniversalSearch(this.value)" onkeydown="if(event.key==='Enter')searchIssue()">
+        <input id="issue-search-input" aria-label="Search all fleet intelligence" type="search" placeholder="Search issues, units, drivers, codes..." oninput="intelUniversalSearch(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();searchIssue()}">
+        <button id="issue-search-clear" class="intel-search-clear" type="button" hidden onclick="clearIntelLiveSearch()" aria-label="Clear search" title="Clear search"><i class="ph ph-x"></i></button>
         </div>
       <div class="intel-search-action"><button class="btn intel-search-btn" onclick="searchIssue()"><i class="ph ph-magnifying-glass"></i><span>Search</span></button></div>
       <div class="toggle-tabs intel-type-tabs" id="issue-search-vtype-tabs">

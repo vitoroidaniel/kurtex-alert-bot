@@ -408,9 +408,13 @@ async function loadFleetIntel() {
   }
 }
 
+var intelLiveSearchTimer = null;
 function intelUniversalSearch(value) {
   var q = (value || "").trim();
   intelFilter.search = q;
+  var clearBtn = document.getElementById("issue-search-clear");
+  if (clearBtn) clearBtn.hidden = !q;
+
   renderIntelUnits(intelFilter.vtype, q);
   var recurring = document.getElementById("recurring-problems-content");
   if (recurring) {
@@ -431,8 +435,28 @@ function intelUniversalSearch(value) {
     });
     drivers.style.display = !q || visible ? "" : "none";
   }
-  if (q.length >= 2) searchIssue();
-  else renderMobileIssueDefault();
+
+  if (intelLiveSearchTimer) clearTimeout(intelLiveSearchTimer);
+  if (q.length >= 2) {
+    var results = document.getElementById("issue-search-results");
+    if (results && window.matchMedia('(max-width:700px)').matches) {
+      updateHTML(results, '<div class="loading">Searching...</div>');
+    }
+    intelLiveSearchTimer = setTimeout(function () { searchIssue(); }, 280);
+  } else {
+    renderMobileIssueDefault();
+  }
+}
+
+function clearIntelLiveSearch() {
+  if (intelLiveSearchTimer) clearTimeout(intelLiveSearchTimer);
+  var input = document.getElementById("issue-search-input");
+  if (input) { input.value = ""; input.focus(); }
+  var clearBtn = document.getElementById("issue-search-clear");
+  if (clearBtn) clearBtn.hidden = true;
+  intelFilter.search = "";
+  renderIntelUnits(intelFilter.vtype, "");
+  renderMobileIssueDefault();
 }
 
 var intelFilter = { vtype: "all", search: "", page: 1 };
