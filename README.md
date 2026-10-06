@@ -90,3 +90,11 @@ AI Assistant supports per-chat file attachments and verified Knowledge Library s
 
 ## Fleet knowledge and AI review
 Resolved/reported case records are automatically indexed into `fleet_knowledge.sqlite3` on the persistent data volume. This evidence is retrieved for similar maintenance questions without creating thousands of manual approval tasks. AI Review is reserved for answers explicitly reported by agents. The dashboard CSV export is full-fidelity and includes report fields stored on each case, including nested report/media metadata as JSON cells.
+
+## v7 settings UX
+- Theme control moved into Settings; removed from sidebar/mobile quick menu.
+- Desktop sidebar pinning now uses a persistent user preference with fixed viewport positioning and correct main-content offset.
+- Settings reorganized into Overview, Appearance, Interface, AI Assistant, plus Developer for developer-role users only.
+- Workers AI connection diagnostics moved out of AI Knowledge and into Developer settings.
+- Added Remember last page and Default landing page preferences.
+- Sign out now uses a dedicated confirmation dialog.

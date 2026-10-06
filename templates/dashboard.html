@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css') }}">
 </head>
-<body data-user-id="{{ user.id }}">
+<body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}">
 
 
 <div class="mobile-header">
@@ -21,7 +21,6 @@
  <button onclick="mobileGo('fleet_intel')"><i class="ph ph-truck"></i><span>Fleet lookup</span></button>
  <button onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>Profile</span></button>
  <button onclick="openLayoutSettings();toggleMobileMore(false)"><i class="ph ph-gear"></i><span>Settings</span></button>
- <button onclick="toggleTheme();toggleMobileMore(false)"><i class="ph ph-sun"></i><span>Appearance</span></button>
 </div>
 <nav class="mobile-tabbar" aria-label="Mobile navigation">
  <button data-mobile-page="overview" onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Home</span></button>
@@ -72,9 +71,9 @@
       {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
     </div>
-    <button class="theme-btn" onclick="openLayoutSettings()"><i class="ph ph-tune"></i> Settings</button><div class="sidebar-actions">
-      <button class="theme-btn" onclick="toggleTheme()"><i class="ph ph-sun" id="theme-icon"></i> <span id="theme-label">Light</span></button>
-      <button class="logout-btn" onclick="window.location='/logout'"><i class="ph ph-sign-out"></i> Sign out</button>
+    <div class="sidebar-account-actions">
+      <button class="sidebar-settings-btn" onclick="openLayoutSettings()"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
+      <button class="sidebar-signout-btn" onclick="openSignOutConfirm()"><i class="ph ph-sign-out"></i><span>Sign out</span></button>
     </div>
   </div>
 </aside>
@@ -313,9 +312,6 @@
         <div class="ai-reference-row"><div><strong id="ai-case-count">0</strong><span>Historical cases</span></div><div><strong>EN · RO · RU</strong><span>Language support</span></div><div class="ai-trust-note"><i class="ph ph-shield-check"></i><span>Normal chat messages remain unverified experience until approved.</span></div></div>
       </section>
 
-      <section class="ai-training-card ai-diagnostic-card ai-system-main">
-        <div class="ai-card-head ai-card-head-row"><div class="ai-heading-group"><span class="ai-card-icon"><i class="ph ph-plugs-connected"></i></span><div><h3>Workers AI connection</h3><p>Check the dashboard AI connection from Railway to Cloudflare.</p></div></div><button class="btn secondary" type="button" onclick="testKurtexAIConnection()"><i class="ph ph-wave-sine"></i> Test connection</button></div><div id="ai-test-result" class="ai-test-result" aria-live="polite"></div>
-      </section>
     </main>
 
     <aside class="ai-training-side ai-library-side">

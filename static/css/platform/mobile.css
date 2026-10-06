@@ -916,3 +916,10 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
   body[data-current-page="ai_knowledge"] .ai-reference-row{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}.ai-reference-row>div{min-width:0!important}.ai-trust-note{grid-column:1/3!important}
   body[data-current-page="ai_knowledge"] .ai-system-main .ai-card-head-row>.btn{width:100%!important}
 }
+
+/* v120 — stable mobile form typography without JS inline mutations */
+@media(max-width:760px){
+  input,select,textarea{font-size:16px!important}
+  #page-ai_knowledge .ai-kb-form input,
+  #page-ai_knowledge .ai-kb-form textarea{font-size:16px!important}
+}

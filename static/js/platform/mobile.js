@@ -7,7 +7,6 @@
     document.documentElement.classList.toggle('kurtex-mobile',isMobile());
     if(!isMobile())return;
     wrapTables();
-    document.querySelectorAll('input,select,textarea').forEach(el=>{el.style.fontSize='16px'});
     document.querySelectorAll('.dropdown,.popover').forEach(el=>{el.style.maxWidth='calc(100vw - 24px)'});
     syncMobileNav();
   }

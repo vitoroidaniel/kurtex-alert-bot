@@ -96,7 +96,7 @@ function updateChicagoClock() {
 
 updateChicagoClock();
 setInterval(updateChicagoClock, 1000);
-showPage(preferences.get("kurtex-page") || "overview");
+showPage((typeof overviewLayout!=="undefined" && !overviewLayout.rememberPage ? overviewLayout.landingPage : preferences.get("kurtex-page")) || "overview");
 setInterval(autoRefresh, 15000);
 document.addEventListener("visibilitychange", function () {
   if (!document.hidden) autoRefresh();

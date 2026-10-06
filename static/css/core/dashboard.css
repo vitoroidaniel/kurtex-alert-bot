@@ -4835,3 +4835,70 @@ body[data-current-page="ai_knowledge"] .ai-system-main .btn{font-size:11px!impor
 .ai-preview-modal .ai-edit-dialog header>button:hover{background:#f3f4f5!important;color:#111!important}
 @media(max-width:1100px){body[data-current-page="ai_knowledge"] .ai-knowledge-workspace{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-library-side{position:static!important}body[data-current-page="ai_knowledge"] .ai-library-card{min-height:360px!important}}
 @media(max-width:760px){body[data-current-page="ai_knowledge"] .ai-upload-layout,body[data-current-page="ai_knowledge"] .ai-reference-row{grid-template-columns:1fr!important}body[data-current-page="ai_knowledge"] .ai-upload-main .ai-primary-btn{height:40px!important}.ai-browse-file{display:none!important}}
+
+/* === v7 settings, account actions and reliable desktop sidebar pinning === */
+.sidebar-account-actions{display:grid;gap:7px;margin-top:10px}
+.sidebar-settings-btn,.sidebar-signout-btn{width:100%;min-height:42px;border-radius:10px;border:1px solid #dedee3;background:#fff;display:flex;align-items:center;gap:9px;padding:0 11px;font:inherit;font-weight:650;color:#3f4046;cursor:pointer}
+.sidebar-settings-btn span,.sidebar-signout-btn span{flex:1;text-align:left}.sidebar-settings-btn>i:last-child{font-size:13px;color:#a0a1a7}.sidebar-settings-btn:hover{background:#f6f6f7;border-color:#d0d0d5}.sidebar-signout-btn{border-color:transparent;background:transparent;color:#77787e}.sidebar-signout-btn:hover{background:#fff1f1;color:#d62828}
+@media(min-width:761px){html.sidebar-fixed .sidebar{position:fixed!important;inset:0 auto 0 0!important;height:100dvh!important}html.sidebar-fixed .main{margin-left:234px!important;width:calc(100% - 234px)!important}html.sidebar-not-fixed .sidebar{position:relative!important;inset:auto!important;height:100dvh!important}html.sidebar-not-fixed .main{margin-left:0!important;width:auto!important;min-width:0;flex:1}}
+.settings-head p{margin:4px 0 0;color:#888990;font-size:12px}.theme-choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:24px}.theme-choice button{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:11px;text-align:left;padding:15px;border:1px solid #dedee3;border-radius:12px;background:#fff;color:#38393e}.theme-choice button>i{grid-row:1/3;font-size:21px;margin-top:2px}.theme-choice button strong{font-size:13px}.theme-choice button span{font-size:11px;color:#85868c}.theme-choice button.active{border-color:#292a2e;box-shadow:0 0 0 1px #292a2e}.settings-select-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px;border:1px solid #e1e1e5;border-radius:12px;background:#fff}.settings-select-row>span{display:grid;gap:4px}.settings-select-row strong{font-size:13px}.settings-select-row small{font-size:11px;color:#85868c}.settings-select-row select{min-width:180px;height:40px;border:1px solid #dcdce1;border-radius:9px;background:#fff;padding:0 34px 0 11px;font:inherit;color:#34353a}.settings-info-card,.developer-setting-card{border:1px solid #e1e1e5;border-radius:13px;background:#fafafa;padding:15px;margin-bottom:14px}.settings-info-card{display:flex;gap:12px}.settings-info-card>i{font-size:21px;color:#d62828}.settings-info-card strong,.developer-setting-card strong{font-size:13px}.settings-info-card p,.developer-setting-card p{margin:4px 0 0;color:#7d7e85;font-size:11px;line-height:1.5}.developer-setting-card>div:first-child{display:flex;align-items:flex-start;gap:11px;margin-bottom:14px}.developer-setting-icon{width:36px;height:36px;border-radius:9px;background:#fff;border:1px solid #e2e2e6;display:grid;place-items:center;color:#d62828;font-size:18px}.developer-setting-card .btn{width:100%}.developer-setting-card .ai-test-result{margin-top:10px}
+.signout-overlay{z-index:800!important}.signout-dialog{width:min(420px,calc(100vw - 28px));background:#fff;border:1px solid #dedee3;border-radius:18px;box-shadow:0 24px 80px rgba(0,0,0,.22);padding:24px;text-align:center}.signout-icon{width:48px;height:48px;margin:0 auto 14px;border-radius:14px;background:#fff1f1;color:#d62828;display:grid;place-items:center;font-size:23px}.signout-dialog h3{font-size:20px;margin:4px 0 7px}.signout-dialog p{font-size:12px;line-height:1.55;color:#77787f;margin:0 auto 20px;max-width:300px}.signout-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.signout-actions button,.signout-actions a{height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:7px;font-weight:700;text-decoration:none}.signout-actions button{background:#fff;border:1px solid #dadade;color:#4b4c52}.signout-actions a{background:#d62828;color:#fff;border:1px solid #d62828}
+@media(max-width:760px){html.sidebar-fixed .main,html.sidebar-not-fixed .main{margin-left:0!important;width:100%!important}.sidebar-account-actions{margin-top:8px}.theme-choice{grid-template-columns:1fr}.settings-select-row{align-items:flex-start;flex-direction:column}.settings-select-row select{width:100%;min-width:0}.signout-dialog{border-radius:18px;padding:22px 18px}.signout-actions{grid-template-columns:1fr}}
+
+/* v120 — AI Knowledge wide library + stable workspace typography */
+#page-ai_knowledge .ai-training-page{max-width:1440px!important}
+#page-ai_knowledge .ai-knowledge-workspace{grid-template-columns:minmax(420px,.82fr) minmax(560px,1.18fr)!important;gap:16px!important}
+#page-ai_knowledge .ai-library-side{min-width:0!important;width:100%!important}
+#page-ai_knowledge .ai-library-card{width:100%!important;min-width:0!important;padding:18px!important;overflow:hidden!important}
+#page-ai_knowledge .ai-library-card .ai-card-head{align-items:center!important;margin-bottom:14px!important;padding-bottom:13px!important;border-bottom:1px solid var(--border,#e4e6e9)!important}
+#page-ai_knowledge .ai-library-card .ai-card-head h3{font-size:17px!important;line-height:1.2!important}
+#page-ai_knowledge .ai-library-card .ai-card-head p{font-size:11.5px!important;line-height:1.45!important;max-width:420px!important}
+#page-ai_knowledge .ai-library-actions{display:flex!important;align-items:center!important;gap:8px!important;flex:none!important}
+#page-ai_knowledge .ai-count-pill{height:34px!important;display:flex!important;align-items:center!important;padding:0 11px!important;font-size:11px!important;border-radius:9px!important}
+#page-ai_knowledge .ai-icon-action{width:34px!important;height:34px!important;border:1px solid var(--border,#dfe2e6)!important;border-radius:9px!important;background:var(--surface,#fff)!important;display:grid!important;place-items:center!important;color:var(--text,#22262b)!important}
+#page-ai_knowledge .ai-kb-list{display:flex!important;flex-direction:column!important;gap:8px!important;min-height:220px!important;max-height:610px!important;overflow-y:auto!important;overflow-x:hidden!important;padding:1px 3px 1px 1px!important;scrollbar-gutter:stable!important}
+#page-ai_knowledge .ai-library-card .ai-kb-item{display:block!important;width:100%!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;border:1px solid var(--border,#e2e5e9)!important;border-radius:11px!important;background:var(--surface,#fff)!important;overflow:hidden!important;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease!important}
+#page-ai_knowledge .ai-library-card .ai-kb-item:hover{border-color:#d3d7dc!important;box-shadow:0 5px 16px rgba(17,24,39,.055)!important;transform:translateY(-1px)!important}
+#page-ai_knowledge .ai-library-card .ai-kb-item-top{display:grid!important;grid-template-columns:38px minmax(0,1fr) auto!important;align-items:center!important;gap:11px!important;padding:12px!important;width:100%!important;min-width:0!important}
+#page-ai_knowledge .ai-library-card .ai-kb-source{width:38px!important;height:38px!important;border:1px solid #f0dedd!important;border-radius:10px!important;background:#fff7f6!important;color:#df3936!important;display:grid!important;place-items:center!important;font-size:17px!important;flex:none!important}
+#page-ai_knowledge .ai-library-card .ai-kb-main{min-width:0!important;overflow:hidden!important}
+#page-ai_knowledge .ai-library-card .ai-kb-title-line{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;flex-wrap:wrap!important}
+#page-ai_knowledge .ai-library-card .ai-kb-title-line strong{font-size:12.5px!important;line-height:1.35!important;color:var(--text,#202328)!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;max-width:100%!important}
+#page-ai_knowledge .ai-library-card .ai-kb-tags-inline{display:flex!important;align-items:center!important;gap:4px!important;flex-wrap:wrap!important;min-width:0!important}
+#page-ai_knowledge .ai-library-card .ai-kb-tag{display:inline-flex!important;align-items:center!important;min-height:21px!important;padding:2px 7px!important;border-radius:999px!important;font-size:9px!important;line-height:1!important;white-space:nowrap!important}
+#page-ai_knowledge .ai-library-card .ai-kb-item-copy small{display:block!important;margin-top:4px!important;font-size:10px!important;line-height:1.3!important;color:var(--muted,#7b8189)!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+#page-ai_knowledge .ai-library-card .ai-kb-actions{display:flex!important;align-items:center!important;gap:5px!important;flex:none!important;margin:0!important}
+#page-ai_knowledge .ai-library-card .ai-kb-actions button{width:34px!important;height:34px!important;border:1px solid var(--border,#dfe2e6)!important;border-radius:9px!important;background:var(--surface,#fff)!important;color:var(--muted,#60666e)!important;display:grid!important;place-items:center!important;font-size:14px!important}
+#page-ai_knowledge .ai-library-card .ai-kb-actions button:hover{background:var(--surface-2,#f6f7f8)!important;color:var(--text,#202328)!important}
+#page-ai_knowledge .ai-library-card .ai-kb-actions button.danger:hover{background:#fff5f5!important;border-color:#f1c9c8!important;color:#d93632!important}
+
+/* Page switching must not change shared dashboard typography. */
+body[data-current-page="ai_knowledge"] .topbar,
+body[data-current-page="ai_assistant"] .topbar,
+body[data-current-page="settings"] .topbar{font-size:inherit!important}
+body[data-current-page="ai_knowledge"] .page-title,
+body[data-current-page="ai_assistant"] .page-title,
+body[data-current-page="settings"] .page-title{font-size:inherit}
+
+@media(max-width:1100px){
+ #page-ai_knowledge .ai-knowledge-workspace{grid-template-columns:minmax(360px,.9fr) minmax(470px,1.1fr)!important}
+}
+@media(max-width:900px){
+ #page-ai_knowledge .ai-knowledge-workspace{grid-template-columns:1fr!important}
+ #page-ai_knowledge .ai-library-side{grid-row:auto!important}
+ #page-ai_knowledge .ai-kb-list{max-height:none!important}
+}
+@media(max-width:650px){
+ #page-ai_knowledge .ai-library-card{padding:14px!important}
+ #page-ai_knowledge .ai-library-card .ai-card-head{align-items:flex-start!important;gap:10px!important}
+ #page-ai_knowledge .ai-library-card .ai-card-head h3{font-size:19px!important}
+ #page-ai_knowledge .ai-library-card .ai-card-head p{font-size:12.5px!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-item-top{grid-template-columns:40px minmax(0,1fr)!important;gap:10px!important;padding:12px!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-source{width:40px!important;height:40px!important;grid-column:1!important;grid-row:1!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-main{grid-column:2!important;grid-row:1!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-actions{grid-column:1/-1!important;grid-row:2!important;padding-top:10px!important;margin-top:1px!important;border-top:1px solid var(--border,#e8eaed)!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-actions button{width:auto!important;min-width:42px!important;height:38px!important;flex:1!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-title-line strong{font-size:14px!important;white-space:normal!important;overflow-wrap:anywhere!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-item-copy small{font-size:11px!important;white-space:normal!important}
+ #page-ai_knowledge .ai-library-card .ai-kb-tag{font-size:10px!important;min-height:22px!important}
+}
