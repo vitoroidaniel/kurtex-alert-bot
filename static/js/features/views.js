@@ -770,7 +770,8 @@ function editKnowledgeNote(id){var row=document.querySelector('.knowledge-note[d
 async function saveKnowledgeEdit(id){var row=document.querySelector('.knowledge-note[data-note-id="'+CSS.escape(id)+'"]'),i=row&&row.querySelector('textarea');if(!i||!i.value.trim())return;var r=await apiFetch('/api/knowledge_notes/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:i.value.trim()})});if(!r.ok){alert('Could not update the note.');return;}var p=partsDB.find(function(x){return x.id===selectedPart});if(p)loadKnowledgeNotes(p);}
 async function deleteKnowledgeNote(id){if(!confirm('Delete this knowledge note? This cannot be undone.'))return;var r=await apiFetch('/api/knowledge_notes/'+encodeURIComponent(id),{method:'DELETE'});if(!r.ok){alert('Could not delete the note.');return;}var p=partsDB.find(function(x){return x.id===selectedPart});if(p)loadKnowledgeNotes(p);}
 async function loadSimilarCases(caseId){var el=document.getElementById('case-similarity');if(!el)return;try{var r=await apiFetch('/api/similar_cases?id='+encodeURIComponent(caseId)),x=await r.json(),items=x.items||[];el.innerHTML=items.length?items.map(function(x){var c=x.case;return '<button class="intel-case-link" data-id="'+attr(c.full_id||c.id)+'" onclick="openCase(this)"><span>'+statusBadge(c.status)+'</span><span><strong>'+h(c.driver||c.group||'Case')+'</strong><small>'+h(c.description||'')+'</small></span><span class="similarity-match">'+h((x.matched||[]).slice(0,3).join(' · '))+'</span></button>'}).join(''):'<div class="intel-empty">No similar historical cases found.</div>';}catch(e){el.innerHTML='<div class="intel-empty">Similarity unavailable.</div>';}}
-var recurringShowAll = false;
+var recurringVisibleCount = 10;
+var recurringTotalUnits = 0;
 function applyRecurringPanelState(){
   var panel=document.getElementById('recurring-problems-panel'); if(!panel)return;
   var hidden=localStorage.getItem('kurtexRecurringCollapsed')==='1';
@@ -784,10 +785,18 @@ function toggleRecurringPanel(){
   localStorage.setItem('kurtexRecurringCollapsed',hidden?'1':'0');
   applyRecurringPanelState();
 }
-function toggleRecurringAll(){
-  recurringShowAll=!recurringShowAll;
-  var btn=document.querySelector('#recurring-problems-panel .recurring-all-btn span');
-  if(btn)btn.textContent=recurringShowAll?'Show top units':'Show all cases';
+function updateRecurringPagingButtons(){
+  var more=document.querySelector('#recurring-problems-panel .recurring-more-btn');
+  var less=document.querySelector('#recurring-problems-panel .recurring-less-btn');
+  if(more) more.style.display=recurringVisibleCount<recurringTotalUnits?'inline-flex':'none';
+  if(less) less.style.display=recurringVisibleCount>10?'inline-flex':'none';
+}
+function showMoreRecurring(){
+  recurringVisibleCount=Math.min(recurringVisibleCount+10,recurringTotalUnits||recurringVisibleCount+10);
+  loadRecurringProblems();
+}
+function showLessRecurring(){
+  recurringVisibleCount=Math.max(10,recurringVisibleCount-10);
   loadRecurringProblems();
 }
 async function loadRecurringProblems(){
@@ -804,12 +813,14 @@ async function loadRecurringProblems(){
       if(!grouped[unit].latest) grouped[unit].latest=v.latest||'';
     });
     var units=Object.keys(grouped).map(function(k){return grouped[k];}).sort(function(a,b){return b.total-a.total;});
-    if(!recurringShowAll)units=units.slice(0,12);
+    recurringTotalUnits=units.length;
+    units=units.slice(0,recurringVisibleCount);
     el.innerHTML=units.length?units.map(function(u,i){
       var issues=u.issues.sort(function(a,b){return b.count-a.count;});
       var typeLabel=u.type==='reefer'?'Reefer':u.type==='trailer'?'Trailer':u.type==='truck'?'Truck':'Unit';
       var typeIcon=u.type==='reefer'?'ph-snowflake':u.type==='trailer'?'ph-truck-trailer':'ph-truck';
       return '<details class="recurring-unit-tree"><summary><span class="recurring-unit-main"><i class="ph '+typeIcon+'"></i><strong>'+h(u.unit)+' <span class="recurring-type-badge recurring-type-'+h(u.type||'unit')+'">'+typeLabel+'</span></strong><small>'+u.total+' recurring reports'+(u.latest?' · latest '+h(u.latest):'')+'</small></span><span class="recurring-unit-count">'+u.total+'</span><i class="ph ph-caret-down recurring-caret"></i></summary><div class="recurring-issue-tree">'+issues.map(function(z){return '<div class="recurring-issue-line"><span><i class="ph ph-corner-down-right"></i>'+h(z.problem)+'</span><b>'+z.count+'×</b></div>';}).join('')+'</div></details>';
     }).join(''):'<div class="intel-empty">No repeated unit/problem patterns detected yet.</div>';
+    updateRecurringPagingButtons();
   }catch(e){el.innerHTML='<div class="intel-empty">Recurring analysis unavailable.</div>';}
 }
