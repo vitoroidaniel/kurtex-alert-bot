@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
+<meta name="theme-color" content="#f6f8fa">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Kurtex">
+<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css') }}">

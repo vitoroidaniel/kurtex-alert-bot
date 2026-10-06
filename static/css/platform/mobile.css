@@ -1108,3 +1108,87 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
 }
 @media(min-width:701px){.desktop-unit-history{display:block}.desktop-issue-results{display:block}.mobile-case-history{display:none!important}}
 \n\n/* v27 - centered mobile Intelligence, compact Settings sheet, AI chat actions */\n.ai-mobile-history-btn,.ai-mobile-new-btn{display:none}\n@media(max-width:700px){\n  /* Intelligence: centered, deliberate mobile column with breathing room. */\n  #page-fleet_intel{width:100%!important;max-width:430px!important;margin:0 auto!important;padding:10px 14px calc(92px + env(safe-area-inset-bottom))!important;box-sizing:border-box!important}\n  #page-fleet_intel:before{margin:0 2px 9px!important;font-size:22px!important;line-height:1.1!important}\n  #page-fleet_intel .intelligence-search-shell{width:100%!important;margin:0 auto!important;padding:8px!important;border-radius:17px!important;box-sizing:border-box!important}\n  #page-fleet_intel .intel-search-row{grid-template-columns:18px minmax(0,1fr) 38px!important;gap:5px!important;padding:4px 4px 4px 9px!important;border-radius:12px!important}\n  #page-fleet_intel #issue-search-input{min-width:0!important;width:100%!important;font-size:12px!important}\n  #page-fleet_intel .intel-search-btn{width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;border-radius:10px!important}\n  #page-fleet_intel .intel-search-btn{font-size:0!important}.intel-search-btn i{font-size:15px!important;margin:0!important}\n  #page-fleet_intel .intel-type-tabs{margin:7px 0 6px!important;padding:3px!important;border-radius:10px!important}\n  #page-fleet_intel .intel-type-tabs .toggle-btn{min-height:29px!important;height:29px!important;padding:0 9px!important;font-size:9px!important}\n  .mobile-search-default-head{padding:7px 2px 6px!important}.mobile-issue-list{gap:6px!important}\n  .mobile-issue-unit{padding:8px!important;border-radius:12px!important}\n\n  /* Settings: content-sized bottom sheet; never a mostly-empty full-screen modal. */\n  #layout-settings-overlay{align-items:flex-end!important;padding:0!important}\n  #layout-settings-overlay .settings-center{width:calc(100% - 20px)!important;max-width:430px!important;height:auto!important;min-height:0!important;max-height:56dvh!important;margin:0 auto 10px!important;border-radius:22px!important;background:#f7f8fa!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;box-shadow:0 18px 55px rgba(13,19,28,.24)!important}\n  #layout-settings-overlay .settings-head{padding:13px 14px 10px!important;min-height:0!important}\n  #layout-settings-overlay .settings-head h2{font-size:20px!important;margin:2px 0 2px!important}.settings-head p{font-size:9px!important}.settings-kicker{font-size:7px!important}\n  #layout-settings-overlay .settings-shell{display:flex!important;flex-direction:column!important;flex:0 1 auto!important;min-height:0!important;overflow:hidden!important}\n  #layout-settings-overlay .settings-nav{padding:6px 8px!important;gap:3px!important;justify-content:flex-start!important}\n  #layout-settings-overlay .settings-nav button{height:31px!important;padding:0 8px!important;font-size:9px!important;gap:4px!important}.settings-nav button i{font-size:11px!important}\n  #layout-settings-overlay .settings-content{flex:0 1 auto!important;min-height:0!important;max-height:calc(56dvh - 112px)!important;overflow-y:auto!important;padding:11px 12px 14px!important}\n  #layout-settings-overlay .settings-footer{display:none!important}\n  .settings-section-title{margin-bottom:10px!important}.settings-section-title>span{font-size:13px!important}.settings-section-title p{font-size:9px!important}\n  .layout-settings h3{margin:11px 2px 6px!important}.layout-settings .setting-row{min-height:43px!important;padding:6px 7px!important}\n  .layout-settings .metric-options label{min-height:38px!important;padding:7px!important}\n  .layout-settings .settings-toggle-row{padding:11px 2px!important}.layout-settings .settings-wide-action{padding:10px!important}\n\n  /* AI: history is a clear icon action on the left; New chat is the primary action on the right. */\n  body[data-current-page="ai_assistant"] .ai-page-chatbar{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:0 14px!important}\n  body[data-current-page="ai_assistant"] .ai-page-chatbar>.ai-side-show,body[data-current-page="ai_assistant"] .ai-page-chatbar>.ai-chat-title{display:none!important}\n  body[data-current-page="ai_assistant"] .ai-mobile-history-btn{display:grid!important;place-items:center!important;width:36px!important;height:36px!important;min-height:36px!important;padding:0!important;border:1px solid #e1e4e8!important;border-radius:11px!important;background:#fff!important;color:#343941!important}\n  body[data-current-page="ai_assistant"] .ai-mobile-history-btn i{font-size:17px!important}\n  body[data-current-page="ai_assistant"] .ai-mobile-new-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;height:36px!important;min-height:36px!important;padding:0 13px!important;border:1px solid #df3036!important;border-radius:11px!important;background:#df3036!important;color:#fff!important;font-size:11px!important;font-weight:800!important;box-shadow:0 5px 14px rgba(223,48,54,.18)!important}\n  body[data-current-page="ai_assistant"] .ai-mobile-new-btn i{font-size:14px!important}\n  body[data-current-page="ai_assistant"] .ai-page-history{left:10px!important;right:10px!important;top:54px!important;width:auto!important;max-height:60dvh!important;border-radius:16px!important;box-shadow:0 18px 45px rgba(14,20,28,.2)!important}\n}\n@media(max-width:370px){#layout-settings-overlay .settings-center{max-height:60dvh!important}#layout-settings-overlay .settings-content{max-height:calc(60dvh - 112px)!important}#page-fleet_intel{padding-left:11px!important;padding-right:11px!important}}\n
+/* v28 — comprehensive mobile UX pass */
+@media(max-width:760px){
+  :root{--m28-pad:14px;--m28-radius:16px;--m28-line:#e3e7eb;--m28-muted:#737b86}
+  html{-webkit-tap-highlight-color:transparent;scroll-behavior:smooth}
+  body{overscroll-behavior-y:none}
+  button,a,[role="button"]{touch-action:manipulation}
+  button:active,a:active,[role="button"]:active{transform:scale(.985)}
+  button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid rgba(226,48,54,.35)!important;outline-offset:2px!important}
+
+  /* one mobile content rail across the app */
+  main>.page:not(#page-fleet_intel):not(#page-ai_assistant){width:100%!important;max-width:430px!important;margin-inline:auto!important;box-sizing:border-box!important}
+  #page-overview,#page-parts_manual,#page-fleet,#page-cases,#page-missed{padding-left:var(--m28-pad)!important;padding-right:var(--m28-pad)!important;padding-bottom:calc(92px + env(safe-area-inset-bottom))!important}
+
+  /* app chrome */
+  .mobile-header{left:14px!important;right:14px!important;top:max(8px,env(safe-area-inset-top))!important;width:auto!important;max-width:402px!important;margin:auto!important}
+  .mobile-tabbar{left:10px!important;right:10px!important;bottom:max(8px,env(safe-area-inset-bottom))!important;width:auto!important;max-width:420px!important;margin:auto!important;min-height:58px!important;padding:5px!important}
+  .mobile-tabbar button{min-height:48px!important;border-radius:14px!important}.mobile-tabbar button.active{background:#fff!important;box-shadow:0 4px 16px rgba(22,29,39,.08)!important}
+  .mobile-tabbar i{font-size:20px!important}.mobile-tabbar span{font-size:9px!important}
+
+  /* Home: operations first, compact and scannable */
+  .mobile-home-copy{padding-top:3px!important;padding-bottom:12px!important}.mobile-home-copy h1{font-size:30px!important}.mobile-home-copy p{font-size:12px!important;max-width:310px!important}
+  .mobile-home-ai{min-height:70px!important;border-radius:18px!important}.mobile-home-grid{gap:8px!important}.mobile-home-grid>button{min-height:82px!important;border-radius:17px!important}
+  .mobile-home-tip{border-radius:15px!important;padding:10px!important}.mobile-home-shortcuts{gap:8px!important}.mobile-home-shortcuts>button{min-height:60px!important;border-radius:15px!important}
+  .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}.stat-card{min-height:78px!important;border-radius:16px!important;padding:11px!important}
+  .two-col{grid-template-columns:1fr!important;gap:9px!important}.two-col>.card{border-radius:17px!important}
+
+  /* Fleet/cases: sticky controls and compact cards */
+  #page-fleet .fleet-toolbar,#page-cases .cases-toolbar,#page-missed .cases-toolbar{position:sticky!important;top:68px!important;z-index:8!important;background:rgba(246,248,250,.92)!important;backdrop-filter:blur(16px)!important;padding:7px 0!important}
+  .mobile-case-cards{gap:8px!important}.mobile-case-card{padding:12px!important;border-radius:15px!important}.mobile-case-card-issue{-webkit-line-clamp:2!important;margin:9px 0!important}
+  .mobile-case-card-meta{gap:6px!important}.status-badge{white-space:nowrap!important}
+
+  /* Case / unit / report views behave like native sheets */
+  #modal-overlay,#unit-modal-overlay,#report-view-overlay{align-items:flex-end!important;padding:0!important;background:rgba(18,24,32,.32)!important;backdrop-filter:blur(4px)!important}
+  #modal-overlay>.modal,#unit-modal-overlay>.modal,#report-view-overlay>.modal{width:100%!important;max-width:430px!important;max-height:88dvh!important;margin:0 auto!important;border-radius:24px 24px 0 0!important;padding:18px 14px calc(18px + env(safe-area-inset-bottom))!important;overflow:auto!important;box-shadow:0 -14px 42px rgba(18,24,32,.16)!important}
+  #modal-overlay>.modal:before,#unit-modal-overlay>.modal:before,#report-view-overlay>.modal:before{content:"";display:block;width:36px;height:4px;border-radius:9px;background:#d3d7dc;margin:-7px auto 11px}
+  .detail-surface>h2{position:sticky!important;top:-18px!important;z-index:4!important;margin:0 -14px 12px!important;padding:12px 52px 11px 14px!important;background:rgba(255,255,255,.95)!important;backdrop-filter:blur(14px)!important;border-bottom:1px solid #edf0f2!important;font-size:18px!important}
+  .detail-surface .modal-close{position:sticky!important;float:right!important;top:0!important;z-index:6!important;width:36px!important;height:36px!important;border-radius:11px!important}
+  #modal-body,#unit-modal-body,#report-view-body{font-size:12px!important}.detail-grid{grid-template-columns:1fr!important;gap:7px!important}.detail-row,.detail-item{padding:9px!important;border-radius:12px!important}
+  .mobile-case-history{margin-top:11px!important}.mobile-history-case{min-height:52px!important}.mobile-history-copy strong{font-size:12px!important}.mobile-history-copy small{font-size:10px!important}
+
+  /* Parts: sticky discovery controls, denser results */
+  #page-parts_manual .parts-toolbar{position:sticky!important;top:68px!important;z-index:8!important;padding:7px 0 8px!important;background:rgba(246,248,250,.94)!important;backdrop-filter:blur(16px)!important}
+  .parts-search,.parts-category-select{border:1px solid var(--m28-line)!important;box-shadow:0 3px 12px rgba(20,27,37,.035)!important}.parts-row,.part-row{min-height:58px!important;padding:9px 11px!important}.parts-row p,.part-row p{display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
+
+  /* AI gets maximum conversation space and keyboard-safe composer */
+  body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(var(--mobile-vh,100dvh) - 74px)!important;padding-bottom:calc(68px + env(safe-area-inset-bottom))!important}
+  body[data-current-page="ai_assistant"] .ai-page-chat-column{min-height:0!important}
+  body[data-current-page="ai_assistant"] .ai-page-messages{padding-left:12px!important;padding-right:12px!important;scroll-padding-bottom:150px!important}
+  body[data-current-page="ai_assistant"] .ai-page-msg,body[data-current-page="ai_assistant"] .ai-message{max-width:94%!important}
+  body[data-current-page="ai_assistant"] .ai-page-compose{position:sticky!important;bottom:0!important;z-index:12!important;padding:7px 10px calc(7px + env(safe-area-inset-bottom))!important;background:linear-gradient(to top,#f7f8fa 78%,rgba(247,248,250,0))!important}
+  body[data-current-page="ai_assistant"] .ai-compose-input{border-radius:17px!important;box-shadow:0 6px 22px rgba(20,27,37,.08)!important}
+  body[data-current-page="ai_assistant"] #ai-page-input{max-height:120px!important;min-height:42px!important;font-size:14px!important}
+  body.mobile-keyboard-open .mobile-tabbar{display:none!important}body.mobile-keyboard-open #page-ai_assistant{padding-bottom:0!important;height:var(--mobile-vh,100dvh)!important}
+  .ai-upload-status:not(:empty){margin:5px 8px!important;padding:6px 8px!important;border-radius:9px!important;background:#f3f5f7!important;font-size:10px!important}
+
+  /* Search/fleet intelligence */
+  #page-fleet_intel .intelligence-search-shell{border:1px solid var(--m28-line)!important;box-shadow:0 7px 22px rgba(20,27,37,.055)!important}
+  .mobile-issue-unit{min-height:58px!important;transition:transform .12s ease,box-shadow .12s ease!important}.mobile-issue-unit:active{transform:scale(.985)!important}
+  .mobile-search-default-head{position:sticky!important;top:67px!important;z-index:5!important;background:rgba(246,248,250,.94)!important;backdrop-filter:blur(12px)!important}
+
+  /* common loading / empty / offline treatment */
+  .loading{min-height:72px!important;display:grid!important;place-items:center!important;color:var(--m28-muted)!important;font-size:11px!important}
+  .loading:before{content:"";width:24px;height:24px;border:3px solid #e6e9ed;border-top-color:#e43036;border-radius:50%;animation:m28spin .8s linear infinite;margin-right:8px}
+  .empty-state,.ai-history-empty{border:1px dashed #d9dde2!important;border-radius:15px!important;background:rgba(255,255,255,.7)!important;padding:18px 12px!important;text-align:center!important;color:var(--m28-muted)!important}
+  #connection-banner{position:fixed!important;left:14px!important;right:14px!important;top:72px!important;z-index:80!important;max-width:402px!important;margin:auto!important;border-radius:12px!important;box-shadow:0 7px 22px rgba(20,27,37,.12)!important}
+
+  /* consistent badges + typography */
+  .vehicle-type-badge,.unit-type-badge,.status-badge,.priority-badge{border-radius:999px!important;font-size:9px!important;font-weight:800!important;letter-spacing:.02em!important;padding:4px 7px!important}
+  h1,h2,h3{letter-spacing:-.025em}small,.muted,.card-meta{line-height:1.35!important}
+}
+@keyframes m28spin{to{transform:rotate(360deg)}}
+
+/* tablet / landscape is no longer treated as a stretched phone */
+@media(min-width:600px) and (max-width:900px){
+  main>.page{max-width:720px!important;margin-inline:auto!important}.mobile-header,.mobile-tabbar{max-width:680px!important}
+  .mobile-home-grid{grid-template-columns:repeat(2,1fr)!important}.stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+  #page-fleet_intel{max-width:720px!important}.mobile-issue-list{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  #modal-overlay>.modal,#unit-modal-overlay>.modal,#report-view-overlay>.modal{max-width:680px!important}
+}
+@media(max-width:760px) and (orientation:landscape){
+  .mobile-header{top:6px!important}.mobile-tabbar{min-height:50px!important}.mobile-tabbar button{min-height:40px!important}
+  #modal-overlay>.modal,#unit-modal-overlay>.modal,#report-view-overlay>.modal{max-height:94dvh!important}
+}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

@@ -1,0 +1,13 @@
+{
+  "name":"Kurtex Maintenance",
+  "short_name":"Kurtex",
+  "description":"Fleet maintenance operations and AI assistance",
+  "start_url":"/",
+  "display":"standalone",
+  "background_color":"#f6f8fa",
+  "theme_color":"#f6f8fa",
+  "icons":[
+    {"src":"/static/images/kurtex-logo.png","sizes":"192x192","type":"image/png","purpose":"any maskable"},
+    {"src":"/static/images/kurtex-logo.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
