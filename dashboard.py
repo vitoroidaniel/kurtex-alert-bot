@@ -244,7 +244,9 @@ Rules:
 - Omit unavailable fields instead of writing "not provided", "unknown", or similar filler.
 - Do not pad a history answer with generic observations (for example, do not say that check-engine issues can occur on trucks).
 - If the agent asks for matching/history cases, answer with the matching case facts first. Ask diagnostic follow-up questions only when the agent is actually asking for diagnosis.
-- Similar cases must be genuinely relevant to the current symptom/system. Never include unrelated cases just to fill a section.
+- Similar cases must match the affected SYSTEM/COMPONENT, not merely share words. Never group pneumatic air leaks with tire-pressure leaks; coolant, oil, fuel and refrigerant leaks are also separate problem families. Never include unrelated cases just to fill a section.
+- When summarizing history, include only CONFIRMED recorded fixes. If a case has no explicit resolution, say the resolution is not recorded in the structured case card; never invent, merge, or infer a repair from likely possibilities.
+- For history questions, synthesize the useful pattern: state how many truly relevant cases were found, summarize confirmed fixes, exclude false matches, then give the next practical checks only if the user is asking what to do. Do not repeat the same issue label in multiple redundant bullets.
 - For diagnosis, behave like a maintenance triage workflow, not a generic chatbot: first identify what is known, then ask the highest-value missing questions, then give prioritized checks from easiest/most likely to more involved.
 - Give focused actionable diagnostic branches only when evidence supports them.
 - For every recommended check, explain what result to look for and what that result would indicate. Do not claim a repair is confirmed before testing.
@@ -320,11 +322,49 @@ def _ai_case_record(c):
       "closed":c.get("closed_at") or ""
     }
 
+def _ai_problem_family(text):
+    """Classify broad maintenance system so lexical overlap cannot mix unrelated failures."""
+    t=" "+str(text or "").lower()+" "
+    groups=[
+      ("tire_wheel", ("tire","tyre","flat tire","wheel leak","rim","bead leak","tire air","puncture")),
+      ("pneumatic_air", ("air leak","air line","gladhand","glad hand","air hose","air fitting","air pressure","air tank","air dryer","brake chamber","air bag","airbag","o-ring","o ring")),
+      ("coolant", ("coolant","antifreeze","radiator","coolant leak","water pump")),
+      ("refrigeration", ("refrigerant","freon","reefer","thermo king","carrier unit","evaporator","condenser","setpoint")),
+      ("fuel", ("fuel leak","diesel leak","fuel line","fuel filter","injector")),
+      ("oil", ("oil leak","engine oil","gear oil","hydraulic oil")),
+      ("electrical", ("battery","alternator","voltage","wiring","wire","connector","fuse","relay","electrical","no power")),
+      ("brake", ("brake","brakes","caliper","rotor","brake pad","slack adjuster")),
+      ("engine", ("engine","motor","turbo","boost","def","scr","dpf","check engine","spn","fmi")),
+    ]
+    scores=[]
+    for name,words in groups:
+        score=sum(3 if (" "+w+" ") in t else 1 for w in words if w in t)
+        if score:scores.append((score,name))
+    return max(scores)[1] if scores else "general"
+
+def _ai_case_search_text(c):
+    r=_ai_case_record(c)
+    return " ".join(str(r.get(k) or "") for k in ("type","issue","description","notes","resolution"))
+
+def _ai_relevant_cases(query,cases,limit=8):
+    """Retrieve history, then enforce subsystem compatibility before exposing it to the model/UI."""
+    qfam=_ai_problem_family(query)
+    ranked=ranked_cases(query,cases,max(limit*5,30))
+    compatible=[]; fallback=[]
+    for c in ranked:
+        cfam=_ai_problem_family(_ai_case_search_text(c))
+        if qfam=="general" or cfam==qfam:
+            compatible.append(c)
+        elif cfam=="general":
+            fallback.append(c)
+    # General/underspecified records can support a query, but never displace explicit same-system matches.
+    return (compatible+fallback)[:limit]
+
 def _ai_similar_case_cards(query,limit=5):
     """UI-safe case summaries: operational facts only, no internal IDs."""
     cases=[c for c in load_cases() if not is_testing(c)]
     out=[]
-    for c in ranked_cases(query,cases,limit):
+    for c in _ai_relevant_cases(query,cases,limit):
         r=_ai_case_record(c)
         vehicle=(r.get("type") or "").strip().lower()
         unit=(r.get("unit") or "").strip()
@@ -352,7 +392,7 @@ def _ai_context(query="",limit=18):
     """Build a small, relevant context instead of dumping fleet history into every prompt."""
     cases=[c for c in load_cases() if not is_testing(c)]
     terms=tokens(query)
-    matched=ranked_cases(query,cases,limit)
+    matched=_ai_relevant_cases(query,cases,limit)
     compact=[]
     for c in matched:
         r=_ai_case_record(c)
@@ -870,7 +910,7 @@ For a diagnostic request, prefer this workflow:
 4. Most likely causes — ranked by evidence, not a random list.
 5. Recommended next action — what to do now, when to stop operation/escalate, and what a technician should verify.
 6. Matching parts — only when a verified Parts Manual/Knowledge source explicitly supports the part/number. Never invent a part number.
-7. Similar Kurtex cases — the UI shows structured case cards separately. In prose, mention only genuinely useful historical patterns. Never invent a match percentage. A case card is historical evidence, not proof. The cards expose: Reported driver/group, truck or trailer/unit, reported issue, case notes, who solved it, and recorded resolution when available.
+7. Similar Kurtex cases — the UI shows structured case cards separately. In prose, synthesize only genuinely useful same-system historical patterns instead of rewriting every card. Never invent a match percentage. A case card is historical evidence, not proof. The cards expose: Reported driver/group, truck or trailer/unit, reported issue, case notes, who solved it, and the recorded resolution when one exists. Never turn missing resolution notes into a guessed repair. Explicitly ignore misleading keyword matches (for example tire air leaks when diagnosing a truck/trailer pneumatic air-system leak).
 8. Sources — compact one-line source list only. Do not add blank bullet lines or excessive spacing.
 
 For images: describe only what is actually visible; do not infer hidden damage as fact. For web results: use them to improve troubleshooting and identify useful technical references, but do not present a search snippet as an OEM procedure. If make/model or alarm code is needed for an exact procedure, ask for it.

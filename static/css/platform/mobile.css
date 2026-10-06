@@ -923,3 +923,8 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
   #page-ai_knowledge .ai-kb-form input,
   #page-ai_knowledge .ai-kb-form textarea{font-size:16px!important}
 }
+
+@media (max-width: 760px){
+ .ai-chat-kb-toolbar{padding-left:14px!important;padding-right:14px!important}.ai-chat-kb-option{grid-template-columns:32px minmax(0,1fr) auto!important;min-height:58px!important;padding:10px!important}.ai-chat-kb-copy strong{font-size:13px!important}.ai-chat-kb-type{font-size:8px!important}.ai-chat-kb-dialog footer{position:sticky!important;bottom:0!important}.ai-chat-kb-apply{min-height:42px!important;padding:0 14px!important}
+ .ai-inline-kb-remove{width:28px!important;opacity:1!important;border-left:1px solid color-mix(in srgb,var(--kb) 24%,#e1e4e8)!important}.ai-inline-kb-open{max-width:125px!important}
+}
