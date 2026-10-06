@@ -5163,3 +5163,11 @@ body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:30px!importan
  body[data-current-page="ai_assistant"] .ai-inline-kb-open{height:29px!important;max-width:120px!important;font-size:10.5px!important}
  body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:29px!important;width:24px!important;opacity:1!important}
 }
+
+/* v20 - recurring intelligence controls */
+#page-fleet_intel .recurring-panel-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+#page-fleet_intel .recurring-panel.is-collapsed{padding:10px 12px!important}
+#page-fleet_intel .recurring-panel.is-collapsed #recurring-problems-content,
+#page-fleet_intel .recurring-panel.is-collapsed .recurring-all-btn,
+#page-fleet_intel .recurring-panel.is-collapsed .recurring-refresh-btn{display:none!important}
+#page-fleet_intel .recurring-panel.is-collapsed .agent-section-head{margin:0!important}

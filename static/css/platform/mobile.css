@@ -1046,3 +1046,17 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
   #modal-overlay #modal-title,#unit-modal-title,#report-view-title{min-height:54px!important;padding:16px 48px 12px 14px!important;font-size:17px!important}
   #modal-overlay .modal,#unit-modal-overlay .modal,#report-view-overlay .modal{height:auto!important;max-height:91dvh!important;min-height:0!important}
 }
+
+/* v20 - mobile Issue Search is intentionally search-only */
+@media(max-width:700px){
+  #page-fleet_intel{padding-top:12px!important}
+  #page-fleet_intel:before{content:"Issue search"!important;position:static!important;display:block!important;margin:0 4px 8px!important;font-size:25px!important;font-weight:800!important;letter-spacing:-.8px!important}
+  #page-fleet_intel:after{display:none!important;content:none!important}
+  #page-fleet_intel .intelligence-search-shell{margin-top:0!important;padding:10px!important;border:1px solid #e1e4e8!important;background:#fff!important;box-shadow:0 10px 28px rgba(20,27,37,.10)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  #page-fleet_intel .intel-search-row{display:grid!important;grid-template-columns:20px minmax(0,1fr) 40px!important;align-items:center!important;gap:6px!important;padding:5px 5px 5px 10px!important;border:1px solid #d9dde3!important;background:#f8f9fb!important;box-shadow:0 2px 8px rgba(20,27,37,.06)!important}
+  #page-fleet_intel #issue-search-input{height:40px!important;min-height:40px!important;background:transparent!important;color:var(--text)!important;font-size:13px!important;opacity:1!important}
+  #page-fleet_intel #issue-search-input::placeholder{color:#7b828d!important;opacity:1!important}
+  #page-fleet_intel .intel-search-btn{display:flex!important;width:38px!important;min-width:38px!important;max-width:38px!important;height:38px!important;min-height:38px!important;padding:0!important;align-items:center!important;justify-content:center!important;border-radius:11px!important}
+  #page-fleet_intel .recurring-panel,#page-fleet_intel #fleet-intel-content{display:none!important}
+  #page-fleet_intel #issue-search-results:empty:after{content:"Search by unit, issue, part, error code, driver or case details.";display:block;padding:44px 16px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}
+}

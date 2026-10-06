@@ -1557,43 +1557,47 @@ def api_issue_search():
     vtype = request.args.get("vtype","").strip().lower()
     if not q: return jsonify({"error":"no query"}), 400
     try:
-        # Match the exact keyword/phrase as typed (whole-word boundaries on each
-        # side, internal whitespace tolerant), case-insensitive. This is a literal
-        # match of the phrase, not "any of these words anywhere".
-        pattern = build_phrase_pattern(q)
-        if not pattern: return jsonify({"error":"no query"}), 400
+        import re
+        def norm(value):
+            return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+        needle = norm(q)
+        if not needle: return jsonify({"error":"no query"}), 400
         all_cases = load_cases()
         matches = []
+        searchable_fields = ("unit_number","issue_text","description","report_driver","driver","vehicle_type","status","full_id","id","part_number","error_code","resolution","notes")
         for c in all_cases:
             if not c.get("unit_number"): continue
             if vtype and (c.get("vehicle_type") or "").strip().lower() != vtype: continue
-            text = (c.get("issue_text") or "") + " " + (c.get("description") or "")
-            if pattern.search(text):
+            values = [c.get(k, "") for k in searchable_fields]
+            # Include simple/list/dict values so case history and imported metadata are searchable too.
+            values.extend(v for k,v in c.items() if k not in searchable_fields and isinstance(v,(str,int,float)))
+            haystacks = [norm(v) for v in values]
+            unit_norm = norm(c.get("unit_number"))
+            # Unit searches are forgiving: R168, r168 and 168 all resolve the same unit.
+            unit_digits = re.sub(r"[^0-9]+", "", unit_norm)
+            needle_digits = re.sub(r"[^0-9]+", "", needle)
+            unit_match = needle in unit_norm or (needle_digits and needle_digits == unit_digits)
+            if unit_match or any(needle in h for h in haystacks):
                 matches.append(c)
         from collections import defaultdict
         by_unit = defaultdict(lambda: {"cases": [], "vtype": ""})
         for c in matches:
             unit = (c.get("unit_number") or "").strip()
-            by_unit[(unit, c["vehicle_type"].lower())]["vtype"] = c.get("vehicle_type","")
-            by_unit[(unit, c["vehicle_type"].lower())]["cases"].append(c)
+            ctype = (c.get("vehicle_type") or "").lower()
+            by_unit[(unit, ctype)]["vtype"] = c.get("vehicle_type","")
+            by_unit[(unit, ctype)]["cases"].append(c)
         results = []
         for (unit, _), d in by_unit.items():
-            cases = sorted(d["cases"], key=lambda c: c.get("opened_at",""), reverse=True)
+            cases = sorted(d["cases"], key=lambda c: c.get("opened_at", ""), reverse=True)
             last = cases[0]
-            results.append({
-                "unit": unit,
-                "vtype": d["vtype"],
-                "count": len(cases),
-                "last_seen": fmt_dt(last.get("opened_at")),
-                "sample_issue": (last.get("issue_text") or last.get("description") or "")[:100],
-            })
-        results.sort(key=lambda x: -x["count"])
-        return jsonify({"query": q, "results": results, "total_matches": len(matches)})
+            results.append({"unit":unit,"vtype":d["vtype"],"count":len(cases),"last_seen":fmt_dt(last.get("opened_at")),"sample_issue":(last.get("issue_text") or last.get("description") or "")[:100]})
+        results.sort(key=lambda x: (-x["count"], x["unit"].lower()))
+        return jsonify({"query":q,"results":results,"total_matches":len(matches)})
     except DataUnavailable:
         raise
     except Exception as e:
         logger.error(f"api_issue_search error: {e}")
-        return jsonify({"error": "Unable to load data. Please retry."}), 500
+        return jsonify({"error":"Unable to load data. Please retry."}), 500
 
 
 @app.route("/api/fleet")
