@@ -1803,75 +1803,71 @@ def api_fleet_knowledge_csv():
 
 @app.route("/api/trends")
 def api_trends():
-    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    from datetime import timedelta
     try:
-        cases = [c for c in load_cases() if not is_testing(c)]
-        period = request.args.get("period","30")
-        try: days = int(period)
-        except (ValueError, TypeError): return jsonify({"error":"Trend period must be 1 to 366 days."}), 400
-        if not 1 <= days <= 366: return jsonify({"error":"Trend period must be 1 to 366 days."}), 400
-        by_date = defaultdict(list)
-        for case in cases: by_date[case_local_date(case)].append(case)
-        from datetime import timedelta
-        today = chicago_now().date()
-        labels, totals, resolved, missed_arr, avg_resp_arr = [], [], [], [], []
-        for i in range(days-1, -1, -1):
-            d = today - timedelta(days=i)
-            ds = d.isoformat()
-            day_cases = by_date.get(ds, [])
-            rt = [c["response_secs"] for c in day_cases if c.get("response_secs") is not None]
-            labels.append(d.strftime("%b %d"))
-            totals.append(len(day_cases))
-            resolved.append(sum(1 for c in day_cases if c.get("status")=="done"))
-            missed_arr.append(sum(1 for c in day_cases if c.get("status")=="missed"))
-            avg_resp_arr.append(int(sum(rt)/len(rt)) if rt else 0)
-        return jsonify({"labels":labels,"totals":totals,"resolved":resolved,"missed":missed_arr,"avg_resp":avg_resp_arr})
-    except DataUnavailable:
-        raise
+        days=max(1,min(366,int(request.args.get("period","30"))))
+        cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date()
+        def cat(c):
+            t=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes")).lower()
+            groups=[("Tires & Wheel End",("tire","wheel","hub","bearing","seal")),("Air & Suspension",("air bag","suspension","air leak","shock")),("Brakes",("brake","abs")),("Electrical & Battery",("electrical","battery","voltage","alternator","wiring")),("Cooling System",("coolant","radiator","overheat","cooling")),("Reefer System",("reefer","thermo king","carrier unit","temperature")),("Engine",("engine","oil pressure","misfire","def","dpf")),("Lighting",("light","lamp","headlight","marker")),("Fuel System",("fuel","diesel","injector"))]
+            return next((n for n,ks in groups if any(k in t for k in ks)),"Other")
+        def subset(start,end): return [c for c in cases if start<=case_local_date(c)<=end]
+        cur_start=today-timedelta(days=days-1); prev_end=cur_start-timedelta(days=1); prev_start=prev_end-timedelta(days=days-1)
+        cur=subset(cur_start.isoformat(),today.isoformat()); prev=subset(prev_start.isoformat(),prev_end.isoformat())
+        def stats(rows):
+            units={(str(c.get("unit_number") or "").strip(),str(c.get("vehicle_type") or "").lower()) for c in rows if str(c.get("unit_number") or "").strip()}
+            pairs=Counter((str(c.get("unit_number") or "").strip(),cat(c)) for c in rows if str(c.get("unit_number") or "").strip())
+            recurring={u for (u,_),n in pairs.items() if n>=2}; repeat=sum(max(0,n-1) for n in pairs.values())
+            incomplete=sum(1 for c in rows if str(c.get("status") or "").lower() in ("incomplete","pending","open") or not str(c.get("issue_text") or c.get("description") or "").strip())
+            resolved=sum(1 for c in rows if str(c.get("status") or "").lower() in ("done","resolved","closed"))
+            return {"total":len(rows),"resolved":resolved,"open":len(rows)-resolved,"incomplete":incomplete,"units":len(units),"recurring_units":len(recurring),"repeat_problems":repeat}
+        cs,ps=stats(cur),stats(prev)
+        def delta(k):
+            a,b=cs[k],ps[k]
+            if not b:return 0 if not a else 100
+            return round((a-b)/b*100)
+        metrics={**cs,"today":len(subset(today.isoformat(),today.isoformat()))}
+        for k in ("total","resolved","open","incomplete","units","recurring_units","repeat_problems"): metrics["delta_"+("recurring" if k=="recurring_units" else "repeat" if k=="repeat_problems" else k)]=delta(k)
+        cats=Counter(cat(c) for c in cur); categories=[{"label":k,"value":v,"detail":f"{round(v/len(cur)*100) if cur else 0}% of cases"} for k,v in cats.most_common(7)]
+        upairs=Counter(str(c.get("unit_number") or "").strip() for c in cur if str(c.get("unit_number") or "").strip()); watch=[]
+        for u,n in upairs.most_common(7):
+            uc=[c for c in cur if str(c.get("unit_number") or "").strip()==u]; top=Counter(cat(c) for c in uc).most_common(1)[0][0]
+            watch.append({"label":u,"value":n,"detail":f"{top} · {n} case{'s' if n!=1 else ''}"})
+        insights=[]
+        if categories: insights.append(f"{categories[0]['label']} is the largest problem category with {categories[0]['value']} cases in this period.")
+        if watch: insights.append(f"Unit {watch[0]['label']} has the highest case volume in the selected period ({watch[0]['value']} cases).")
+        if cs['recurring_units']: insights.append(f"{cs['recurring_units']} units show repeated problems in the same category and should be reviewed for recurrence.")
+        if cs['total']!=ps['total']: insights.append(f"Overall case volume is {'up' if cs['total']>ps['total'] else 'down'} {abs(delta('total'))}% versus the previous {days}-day period.")
+        if not insights: insights=["No significant fleet pattern is available for the selected period yet."]
+        return jsonify(metrics=metrics,categories=categories,units_to_watch=watch,insights=insights,sample_size=len(cur),period=days)
     except Exception:
-        logger.exception("Dashboard request failed")
-        return jsonify({"error": "Unable to load data. Please retry."}), 500
+        logger.exception("Fleet analytics failed"); return jsonify({"error":"Unable to load fleet analytics."}),500
 
 @app.route("/api/comparison")
 def api_comparison():
-    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    from datetime import timedelta
     try:
-        from datetime import timedelta
-        cases = [c for c in load_cases() if not is_testing(c)]
-        today = chicago_now().date()
-        # This week vs last week
-        this_mon = today - timedelta(days=today.weekday())
-        last_mon = this_mon - timedelta(days=7)
-        last_sun = this_mon - timedelta(days=1)
-        def week_stats(start, end):
-            wc = [c for c in cases if start.isoformat() <= case_local_date(c) <= end.isoformat()]
-            total = len(wc); done = sum(1 for c in wc if c.get("status")=="done")
-            missed = sum(1 for c in wc if c.get("status")=="missed")
-            rt = [c["response_secs"] for c in wc if c.get("response_secs") is not None]
-            avg = int(sum(rt)/len(rt)) if rt else 0
-            rate = round(done/total*100) if total else 0
-            return {"total":total,"done":done,"missed":missed,"avg_resp":fmt_secs(avg),"avg_secs":avg,"rate":rate}
-        this_sun = today
-        tw = week_stats(this_mon, this_sun)
-        lw = week_stats(last_mon, last_sun)
-        def delta(a, b, reverse=False):
-            if b == 0: return {"pct": 0, "up": True}
-            pct = round((a-b)/b*100)
-            up = pct > 0 if not reverse else pct < 0
-            return {"pct": abs(pct), "up": up}
-        return jsonify({
-            "this_week": tw, "last_week": lw,
-            "delta_total":  delta(tw["total"], lw["total"]),
-            "delta_done":   delta(tw["done"], lw["done"]),
-            "delta_missed": delta(tw["missed"], lw["missed"], reverse=True),
-            "delta_rate":   delta(tw["rate"], lw["rate"]),
-            "delta_resp":   delta(tw["avg_secs"], lw["avg_secs"], reverse=True),
-        })
-    except DataUnavailable:
-        raise
+        days=max(1,min(366,int(request.args.get("period","30")))); cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date(); start=today-timedelta(days=days-1); pe=start-timedelta(days=1); ps=pe-timedelta(days=days-1)
+        cur=[c for c in cases if start.isoformat()<=case_local_date(c)<=today.isoformat()]; prev=[c for c in cases if ps.isoformat()<=case_local_date(c)<=pe.isoformat()]
+        def resolved(rows):return sum(1 for c in rows if str(c.get("status") or "").lower() in ("done","resolved","closed"))
+        def units(rows):return len({str(c.get("unit_number") or "").strip() for c in rows if str(c.get("unit_number") or "").strip()})
+        def recurring(rows):
+            x=Counter(str(c.get("unit_number") or "").strip() for c in rows if str(c.get("unit_number") or "").strip());return sum(1 for n in x.values() if n>=2)
+        def pct(a,b):return (0 if not a else 100) if not b else round((a-b)/b*100)
+        vals=[("Total cases",len(cur),len(prev)),("Resolved",resolved(cur),resolved(prev)),("Open",len(cur)-resolved(cur),len(prev)-resolved(prev)),("Affected units",units(cur),units(prev)),("Recurring units",recurring(cur),recurring(prev))]
+        rows=[{"label":l,"current":a,"previous":b,"delta":pct(a,b)} for l,a,b in vals]
+        def simplecat(c):
+            t=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes")).lower(); maps=[("Tires / Wheel",("tire","wheel","bearing")),("Air / Suspension",("air leak","suspension","air bag")),("Brakes",("brake","abs")),("Electrical",("battery","electrical","wiring","voltage")),("Reefer",("reefer","thermo king","temperature")),("Engine",("engine","dpf","def","oil pressure"))];return next((n for n,ks in maps if any(k in t for k in ks)),"Other")
+        cc,pc=Counter(simplecat(c) for c in cur),Counter(simplecat(c) for c in prev); cats=[]
+        for k in set(cc)|set(pc): cats.append({"label":k,"value":cc[k],"detail":f"Previous {pc[k]} · {pct(cc[k],pc[k]):+d}%"})
+        cats=sorted(cats,key=lambda x:x['value'],reverse=True)[:7]
+        insights=[f"Case volume is {'higher' if len(cur)>len(prev) else 'lower' if len(cur)<len(prev) else 'unchanged'} compared with the previous {days}-day period.",f"{recurring(cur)} recurring units are present now versus {recurring(prev)} in the previous period."]
+        if cats: insights.append(f"{cats[0]['label']} currently has the highest category volume with {cats[0]['value']} cases.")
+        return jsonify(rows=rows,category_change=cats,insights=insights,period=days)
     except Exception:
-        logger.exception("Dashboard request failed")
-        return jsonify({"error": "Unable to load data. Please retry."}), 500
+        logger.exception("Management comparison failed");return jsonify({"error":"Unable to build comparison."}),500
 
 @app.route("/api/fleet_intelligence")
 def api_fleet_intelligence():

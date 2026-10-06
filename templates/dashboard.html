@@ -49,8 +49,8 @@
     <div class="nav-group">
       <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')"><span><i class="ph ph-chart-bar"></i> Analytics</span><i class="ph ph-caret-down nav-caret open" id="caret-group-analytics"></i></div>
       <div class="nav-group-items open" id="group-analytics">
-        <div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-trend-up"></i> Trends</div>
-        <div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-arrows-left-right"></i> Comparison</div>
+        <div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-chart-donut"></i> Fleet Analytics</div>
+        <div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-scales"></i> Management Compare</div>
       </div>
     </div>
     <div class="nav-group">
@@ -239,25 +239,16 @@
     <div id="my-profile-content"><div class="loading">Loading...</div></div>
   </div>
 
-  <!-- Trends -->
-  <div class="page" id="page-trends"><div id="chart-fallback" class="card" hidden></div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <div class="toggle-tabs" style="margin-bottom:0">
-        <button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7 Days</button>
-        <button class="toggle-btn" onclick="setTrendPeriod(30,this)">30 Days</button>
-        <button class="toggle-btn" onclick="setTrendPeriod(90,this)">90 Days</button>
-      </div>
-    </div>
-    <div class="two-col" style="margin-bottom:16px">
-      <div class="card"><div class="card-title"><i class="ph ph-chart-line"></i> Cases Over Time</div><canvas id="trend-cases-chart" height="180"></canvas></div>
-      <div class="card"><div class="card-title"><i class="ph ph-timer"></i> Avg Response Time</div><canvas id="trend-resp-chart" height="180"></canvas></div>
-    </div>
-    <div class="card"><div class="card-title"><i class="ph ph-chart-bar"></i> Daily Breakdown</div><canvas id="trend-bar-chart" height="120"></canvas></div>
+  <!-- Fleet Analytics -->
+  <div class="page" id="page-trends">
+    <div class="management-toolbar"><div><h2>Fleet Analytics</h2><p>Live operational statistics calculated from Kurtex cases.</p></div><div class="toggle-tabs analytics-period-tabs"><button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7D</button><button class="toggle-btn" onclick="setTrendPeriod(30,this)">30D</button><button class="toggle-btn" onclick="setTrendPeriod(90,this)">90D</button><button class="toggle-btn" onclick="setTrendPeriod(180,this)">6M</button><button class="toggle-btn" onclick="setTrendPeriod(365,this)">1Y</button></div></div>
+    <div id="fleet-analytics-content"><div class="loading">Calculating fleet analytics...</div></div>
   </div>
 
-  <!-- Comparison -->
+  <!-- Management Compare -->
   <div class="page" id="page-comparison">
-    <div id="comparison-content"><div class="loading">Loading...</div></div>
+    <div class="management-toolbar"><div><h2>Management Compare</h2><p>Compare periods, workload, problem categories and recurring maintenance.</p></div><select id="compare-days" class="analytics-select" onchange="loadComparison()"><option value="7">7 days vs previous 7</option><option value="30" selected>30 days vs previous 30</option><option value="90">90 days vs previous 90</option></select></div>
+    <div id="comparison-content"><div class="loading">Building comparison...</div></div>
   </div>
 
   <!-- Fleet Intelligence -->
