@@ -1091,19 +1091,104 @@ def api_overview_preferences():
     overview = payload.get("overview")
     if not isinstance(overview, dict):
         return jsonify({"error": "Invalid overview preferences."}), 400
-    allowed_widgets = {"metrics", "agents", "units", "cases"}
+    allowed_widgets = {"metrics", "agents", "units", "ai_summary", "activity", "cases"}
     clean = {}
     for device in ("desktop", "mobile"):
         src = overview.get(device, {})
         if not isinstance(src, dict):
             src = {}
         order = [x for x in src.get("order", []) if x in allowed_widgets]
-        order += [x for x in ("metrics", "agents", "units", "cases") if x not in order]
+        order += [x for x in ("metrics", "agents", "units", "ai_summary", "activity", "cases") if x not in order]
         hidden = [x for x in src.get("hidden", []) if x in allowed_widgets]
         metrics = [x for x in src.get("metrics", []) if isinstance(x, int) and 0 <= x <= 20]
         clean[device] = {"order": order, "hidden": hidden, "metrics": metrics}
     save_overview(user_id, clean)
     return jsonify({"ok": True, "overview": clean})
+
+
+# ── Developer workspace ─────────────────────────────────────────────────────
+def _developer_only():
+    user = session.get("user") or {}
+    return user.get("role") == "developer"
+
+@app.route("/api/developer/status")
+def api_developer_status():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not _developer_only(): return jsonify({"error":"forbidden"}), 403
+    from backend.storage.user_store import get_all_users
+    data_dir = Path(os.getenv("DATA_DIR", "/app/data"))
+    try:
+        data_writable = data_dir.exists() and os.access(str(data_dir), os.W_OK)
+    except Exception:
+        data_writable = False
+    try:
+        case_count = len(load_cases())
+    except Exception:
+        case_count = 0
+    return jsonify({
+        "telegram_configured": bool(os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")),
+        "ai_configured": bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),
+        "data_writable": data_writable,
+        "data_dir": str(data_dir),
+        "case_count": case_count,
+        "user_count": len(get_all_users()),
+        "ai_model": KURTEX_AI_MODEL if (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN) else "",
+        "environment": "Railway" if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID") else "Local",
+    })
+
+@app.route("/api/developer/test/telegram", methods=["POST"])
+def api_developer_test_telegram():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not _developer_only(): return jsonify({"error":"forbidden"}), 403
+    token = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token: return jsonify({"ok":False,"error":"Telegram bot token is not configured"}), 503
+    try:
+        import urllib.request
+        with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/getMe", timeout=8) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        if not payload.get("ok"): raise RuntimeError("Telegram API returned an unsuccessful response")
+        result = payload.get("result") or {}
+        return jsonify({"ok":True,"username":result.get("username",""),"id":result.get("id")})
+    except Exception as e:
+        logger.warning("Developer Telegram connection test failed: %s", e)
+        return jsonify({"ok":False,"error":"Telegram connection failed. Check Railway logs."}), 503
+
+@app.route("/api/developer/users", methods=["GET", "POST"])
+def api_developer_users():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not _developer_only(): return jsonify({"error":"forbidden"}), 403
+    from backend.storage.user_store import get_all_user_dicts, add_user, VALID_ROLES
+    if request.method == "GET":
+        users = sorted(get_all_user_dicts(), key=lambda u: ((u.get("name") or "").lower(), str(u.get("id"))))
+        return jsonify({"users": users})
+    payload = request.get_json(silent=True) or {}
+    try: user_id = int(str(payload.get("id", "")).strip())
+    except Exception: return jsonify({"error":"Enter a valid Telegram user ID."}), 400
+    name = str(payload.get("name") or "").strip()
+    username = str(payload.get("username") or "").strip().lstrip("@")
+    role = str(payload.get("role") or "agent").strip()
+    if not name: return jsonify({"error":"Name is required."}), 400
+    if role not in VALID_ROLES: return jsonify({"error":"Invalid role."}), 400
+    if not add_user(user_id, name, username, role): return jsonify({"error":"Unable to save user."}), 400
+    return jsonify({"ok":True})
+
+@app.route("/api/developer/users/<int:user_id>", methods=["PATCH", "DELETE"])
+def api_developer_user(user_id):
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not _developer_only(): return jsonify({"error":"forbidden"}), 403
+    from backend.storage.user_store import edit_role, remove_user, VALID_ROLES
+    current_id = int(session["user"].get("id") or 0)
+    if request.method == "DELETE":
+        if user_id == current_id: return jsonify({"error":"You cannot remove your own developer access while signed in."}), 400
+        if not remove_user(user_id): return jsonify({"error":"User not found."}), 404
+        return jsonify({"ok":True})
+    payload = request.get_json(silent=True) or {}
+    role = str(payload.get("role") or "").strip()
+    if role not in VALID_ROLES: return jsonify({"error":"Invalid role."}), 400
+    if user_id == current_id and role != "developer":
+        return jsonify({"error":"You cannot remove your own developer role while signed in."}), 400
+    if not edit_role(user_id, role): return jsonify({"error":"User not found."}), 404
+    return jsonify({"ok":True})
 
 # ── API ───────────────────────────────────────────────────────────────────────
 

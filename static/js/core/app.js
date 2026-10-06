@@ -18,6 +18,7 @@ async function refresh(force) {
     else if (currentPage === "fleet_intel") tasks.push(loadFleetIntel());
     else if (currentPage === "my_profile") tasks.push(loadMyProfile());
     else if (currentPage === "agents") tasks.push(loadAgents(true));
+    else if (currentPage === "developer" && typeof loadDeveloperWorkspace === "function") tasks.push(loadDeveloperWorkspace(true));
     await Promise.allSettled(tasks);
   } finally {
     refreshing = false;

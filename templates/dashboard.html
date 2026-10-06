@@ -67,6 +67,7 @@
     </div>
     <div class="nav-bottom-cluster">
       {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
+      {% if is_developer %}<div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
     </div>
   </nav>
   <div class="sidebar-footer">
@@ -76,7 +77,7 @@
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
     </div>
     <div class="sidebar-account-actions">
-      <button class="sidebar-settings-btn" onclick="openLayoutSettings()"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
+      <button class="sidebar-settings-btn" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
       <button class="sidebar-signout-btn" onclick="openSignOutConfirm()"><i class="ph ph-sign-out"></i><span>Sign out</span></button>
     </div>
   </div>
@@ -119,7 +120,7 @@
   <div class="page active" id="page-overview">
   <section class="home-welcome" aria-label="Home welcome">
     <div class="home-welcome-copy"><span class="home-welcome-kicker">KURTEX MAINTENANCE</span><h2>Welcome back, {{ user.first_name or 'there' }}</h2><p>Here’s what’s happening with your cases today.</p></div>
-    <button class="home-customize-icon" type="button" onclick="openLayoutSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button>
+    <button class="home-customize-icon" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button>
   </section>
   <section class="home-today-summary" aria-label="Today summary">
     <div class="home-today-heading"><div><span>Today</span><small>Live case activity</small></div></div>
@@ -141,7 +142,7 @@
  <button onclick="mobileGo('ai_assistant');setTimeout(function(){var i=document.getElementById('ai-page-input');if(i){i.value='Help me identify this fault code: ';i.focus()}},120)"><i class="ph ph-warning-circle"></i><span><strong>Fault code</strong><small>Explain a code</small></span></button>
  <button onclick="mobileGo('fleet_intel')"><i class="ph ph-clock-counter-clockwise"></i><span><strong>Repair history</strong><small>Find past issues</small></span></button>
 </div>
-  </section><div class="overview-toolbar"><button class="home-customize-icon overview-customize-fallback" type="button" onclick="openLayoutSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button></div>
+  </section><div class="overview-toolbar"><button class="home-customize-icon overview-customize-fallback" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button></div>
     <div class="overview-label"><span>Key metrics</span><small>Your selected Home metrics</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
@@ -340,6 +341,20 @@
   </div>
 </section></div>{% endif %}
 
+  {% if is_developer %}
+  <div class="page" id="page-developer">
+    <div class="developer-workspace">
+      <div class="developer-hero"><div><span class="eyebrow">SYSTEM TOOLS</span><h2>Developer workspace</h2><p>Test Kurtex services, manage access and inspect runtime health without exposing credentials.</p></div><span class="developer-only-pill"><i class="ph ph-lock-key"></i> Developer only</span></div>
+      <div class="developer-status-grid" id="developer-status-grid"><div class="card"><div class="loading">Checking services...</div></div></div>
+      <div class="developer-grid">
+        <section class="card developer-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-plugs-connected"></i></span><div><h3>Connections</h3><p>Run safe connectivity checks without showing tokens or secrets.</p></div></div></div><div class="developer-connection-list"><div class="developer-connection-row"><div><strong>Workers AI</strong><small>Dashboard → Cloudflare Workers AI</small></div><button class="btn secondary" type="button" onclick="developerTestAI()"><i class="ph ph-wave-sine"></i> Test</button></div><div id="developer-ai-result" class="developer-test-result"></div><div class="developer-connection-row"><div><strong>Telegram bot</strong><small>Railway → Telegram Bot API</small></div><button class="btn secondary" type="button" onclick="developerTestTelegram()"><i class="ph ph-paper-plane-tilt"></i> Test</button></div><div id="developer-telegram-result" class="developer-test-result"></div></div></section>
+        <section class="card developer-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-users-three"></i></span><div><h3>Manage users</h3><p>Add authorized users, change roles or revoke access.</p></div></div><button class="btn secondary" type="button" onclick="developerOpenAddUser()"><i class="ph ph-plus"></i> Add user</button></div><div id="developer-users"><div class="loading">Loading users...</div></div></section>
+      </div>
+      <section class="card developer-card developer-runtime-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-hard-drives"></i></span><div><h3>Runtime</h3><p>Safe deployment details for troubleshooting. Secret values are never displayed.</p></div></div><button class="btn secondary" type="button" onclick="loadDeveloperWorkspace(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div><div id="developer-runtime" class="developer-runtime"></div></section>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
     <div id="agents-content"><div class="loading">Loading...</div></div>
@@ -374,6 +389,7 @@
 <script defer src="{{ url_for('static', filename='js/platform/mobile.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/ai.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/notifications.js') }}"></script>
+{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js') }}"></script>{% endif %}
 <div id="ai-report-modal" class="ai-transcript-modal ai-report-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><header><div><span class="eyebrow">AI FEEDBACK</span><h3 id="ai-report-title">Report this answer</h3></div><button class="ai-report-close" type="button" onclick="closeAIReport()" aria-label="Close report" title="Close"><i class="ph ph-x"></i></button></header><p class="ai-report-intro">Tell us what looks wrong. Your report is saved as feedback and does not automatically teach the AI.</p><label><span>Reason</span><select id="ai-report-category"><option value="incorrect">Incorrect answer</option><option value="missing_context">Missing important context</option><option value="unclear">Unclear / confusing</option><option value="unsafe">Potentially unsafe guidance</option><option value="outdated">Possibly outdated</option><option value="other">Other</option></select></label><label><span>What should be reviewed?</span><textarea id="ai-report-reason" rows="5" maxlength="12000" placeholder="Example: The fault code points to a different circuit, and the manual says to test connector X first."></textarea></label><p id="ai-report-status" role="status"></p><footer><button type="button" class="ai-report-cancel" onclick="closeAIReport()">Cancel</button><button type="button" class="ai-primary-btn" onclick="submitAIReport()"><i class="ph ph-paper-plane-tilt"></i> Send report</button></footer></section></div>
 <div id="ai-transcript-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-transcript-title"><header><h3 id="ai-transcript-title">Driver explanation</h3><button type="button" onclick="document.getElementById('ai-transcript-modal').hidden=true" aria-label="Close transcript">Close</button></header><p>Check speech recognition, especially fault codes and model names. This explanation is driver-reported, not a confirmed diagnosis.</p><textarea id="ai-transcript-text" aria-label="Driver transcript" rows="10"></textarea><p id="ai-transcript-status" role="status"></p><footer><button type="button" onclick="saveAITranscript(true)">Retry transcription</button><button type="button" onclick="saveAITranscript(false)">Save correction</button></footer></section></div>
 <script defer src="{{ url_for('static', filename='js/features/ai-learning.js') }}"></script>

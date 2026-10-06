@@ -24,6 +24,7 @@ var pages = [
   "ai_knowledge",
   "my_profile",
   "agents",
+  "developer",
 ];
 var titles = {
   overview: "Home",
@@ -39,6 +40,7 @@ var titles = {
   ai_knowledge: "AI Knowledge",
   my_profile: "My Profile",
   agents: "Agent Profiles",
+  developer: "Developer",
 };
 var medals = ["01", "02", "03"];
 
@@ -148,7 +150,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
+    var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",developer:"ph-code"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var headerRefresh = document.getElementById("refresh-button");
@@ -163,6 +165,8 @@ function showPage(page) {
           ? "Look up truck and reefer parts, how they work, common symptoms, checks, and source material."
         : page === "ai_assistant"
           ? "Full workspace for maintenance diagnosis, Kurtex history and approved knowledge."
+        : page === "developer"
+          ? "Connections, access and system diagnostics."
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";
@@ -170,6 +174,7 @@ function showPage(page) {
   // inherits the previous workspace while AI panels are being rebuilt.
   currentPage = page;
   document.body.setAttribute("data-current-page", page);
+  if (page === "developer" && typeof loadDeveloperWorkspace === "function") loadDeveloperWorkspace();
   if (page === "ai_knowledge" && typeof loadAIKnowledge === "function") { loadAIKnowledge(); if (typeof loadFleetKnowledgeStats === "function") loadFleetKnowledgeStats(); }
   // Every workspace opens at its top. Prevent a previous page's scroll position
   // from making AI Knowledge (or any other tab) appear hundreds of pixels down.
