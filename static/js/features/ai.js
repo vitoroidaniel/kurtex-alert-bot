@@ -311,7 +311,7 @@ async function refreshAIChatContext(){
     var isImg=a.kind==='image'||/^image\//.test(a.mime||'');
     var url='/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(a.id);
     return '<div class="ai-attach-card '+(isImg?'is-image':'is-file')+'">'+
-      (isImg?'<img src="'+url+'" alt="">':'<span class="ai-file-icon"><i class="ph '+aiFileIcon(a.name)+'"></i></span>')+
+      (isImg?'<button type="button" class="ai-attach-image-open" onclick="openAIImagePreview(\''+url+'\',\''+aiAttr(a.name||'Image')+'\')" aria-label="Preview image"><img src="'+url+'" alt=""></button>':'<span class="ai-file-icon"><i class="ph '+aiFileIcon(a.name)+'"></i></span>')+
       '<span class="ai-attach-meta"><strong>'+escapeAI(a.name)+'</strong><small>'+escapeAI(aiFileType(a.name,a.mime))+'</small>'+(a.kind==='video'?'<button type="button" onclick="openAITranscript(\''+aiAttr(a.id)+'\')">Transcript</button>':'')+'</span>'+
       '<button type="button" class="ai-attach-remove" onclick="removeAIChatFile(&quot;'+aiAttr(a.id)+'&quot;)" aria-label="Remove"><i class="ph ph-x"></i></button></div>'
    }).join('')
@@ -319,6 +319,8 @@ async function refreshAIChatContext(){
   if(inline){var selected=aiChatKnowledgeOptions.filter(function(k){return kids.indexOf(k.id)>=0});inline.innerHTML=selected.map(function(k){var colors=k.tag_colors||{},tags=k.tags||[],color=(tags.length&&colors[tags[0]])||k.tag_color||'blue';return '<span class="ai-inline-kb ai-tag-color-'+escapeAI(color)+'" title="'+escapeAI(k.title||'Maintenance knowledge')+'"><button type="button" class="ai-inline-kb-open" onclick="openAIChatKnowledge()"><span class="ai-inline-kb-dot"></span><span>'+escapeAI(k.title||'Maintenance knowledge')+'</span></button><button type="button" class="ai-inline-kb-remove" onclick="event.stopPropagation();removeAIChatKnowledge(\''+aiAttr(k.id)+'\')" aria-label="Remove '+escapeAI(k.title||'knowledge source')+'" title="Remove from this chat"><i class="ph ph-x"></i></button></span>'}).join('')}
  }catch(e){}
 }
+function openAIImagePreview(url,name){var m=document.getElementById('ai-image-preview-modal'),img=document.getElementById('ai-image-preview-img'),title=document.getElementById('ai-image-preview-name');if(!m||!img)return;img.src=url;img.alt=name||'Attachment preview';if(title)title.textContent=name||'Image preview';m.hidden=false;document.body.classList.add('modal-open')}
+function closeAIImagePreview(){var m=document.getElementById('ai-image-preview-modal'),img=document.getElementById('ai-image-preview-img');if(m)m.hidden=true;if(img)img.removeAttribute('src');document.body.classList.remove('modal-open')}
 function aiFileType(name,mime){
  var ext=((name||'').split('.').pop()||'file').toUpperCase();
  if(/^image\//.test(mime||''))return 'Image';
@@ -340,7 +342,7 @@ function aiAttachmentCards(chatId,attachments,ids){
  return (attachments||[]).filter(function(a){return wanted.has(String(a.id))}).map(function(a){
   var isImg=a.kind==='image'||/^image\//.test(a.mime||''),url='/api/ai/chats/'+encodeURIComponent(chatId)+'/files/'+encodeURIComponent(a.id);
   if(a.kind==='video'||a.kind==='audio')return '<div class="ai-msg-video"><a href="'+url+'" target="_blank" rel="noopener"><i class="ph '+(a.kind==='audio'?'ph-waveform':'ph-video')+'"></i> '+escapeAI(a.name||(a.kind==='audio'?'Audio':'Video'))+'</a><button type="button" onclick="openAITranscript(\''+aiAttr(a.id)+'\')">Transcript</button></div>';
-  if(isImg)return '<a class="ai-msg-attachment ai-msg-image" href="'+url+'" target="_blank"><img src="'+url+'" alt="'+escapeAI(a.name||'Attached image')+'"><span>'+escapeAI(a.name||'Image')+'</span></a>';
+  if(isImg)return '<button type="button" class="ai-msg-attachment ai-msg-image" onclick="openAIImagePreview(\''+url+'\',\''+aiAttr(a.name||'Image')+'\')"><img src="'+url+'" alt="'+escapeAI(a.name||'Attached image')+'"><span>'+escapeAI(a.name||'Image')+'</span></button>';
   return '<a class="ai-msg-attachment ai-msg-file" href="'+url+'" target="_blank"><span class="ai-file-icon"><i class="ph '+aiFileIcon(a.name)+'"></i></span><span><strong>'+escapeAI(a.name||'Attachment')+'</strong><small>'+escapeAI(aiFileType(a.name,a.mime))+'</small></span></a>'
  }).join('')
 }

@@ -157,6 +157,7 @@
   </section>
 </div>
 
+<div id="ai-image-preview-modal" class="ai-image-preview-modal" hidden><div class="ai-image-preview-backdrop" onclick="closeAIImagePreview()"></div><section class="ai-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview"><header><div><strong id="ai-image-preview-name">Image preview</strong><small>Attachment preview</small></div><button type="button" onclick="closeAIImagePreview()" aria-label="Close preview"><i class="ph ph-x"></i></button></header><div class="ai-image-preview-stage"><img id="ai-image-preview-img" alt="Attachment preview"></div></section></div>
 <div id="ai-chat-knowledge-modal" class="ai-chat-kb-modal" hidden><div class="ai-chat-kb-backdrop" onclick="closeAIChatKnowledge()"></div><section class="ai-chat-kb-dialog"><header><div><strong>Knowledge for this chat</strong><small>Select verified sources Kurtex AI should use in this conversation.</small></div><button type="button" onclick="closeAIChatKnowledge()"><i class="ph ph-x"></i></button></header><div class="ai-chat-kb-search"><i class="ph ph-magnifying-glass"></i><input id="ai-chat-kb-search" placeholder="Search knowledge..." oninput="renderAIChatKnowledgeOptions()"></div><div class="ai-chat-kb-toolbar"><span id="ai-chat-kb-selected-label">Selected sources</span><div><button type="button" onclick="selectAllAIChatKnowledge()">Select all</button><button type="button" onclick="clearAIChatKnowledge()">Clear all</button></div></div><div id="ai-chat-kb-list" class="ai-chat-kb-list"></div><footer><span id="ai-chat-kb-count">0 sources selected</span><button type="button" class="ai-chat-kb-apply" onclick="applyAIChatKnowledge()"><span>Apply sources</span><i class="ph ph-check"></i></button></footer></section></div>
 
 <div class="page" id="page-cases">
@@ -307,10 +308,7 @@
         </form><div id="ai-kb-status" class="ai-kb-status" aria-live="polite"></div>
       </section>
 
-      <section class="ai-training-card ai-status-card ai-reference-main">
-        <div class="ai-card-head"><span class="ai-card-icon"><i class="ph ph-database"></i></span><div><h3>AI reference data</h3><p>Current searchable sources available to the dashboard assistant.</p></div></div>
-        <div class="ai-reference-row"><div><strong id="ai-case-count">0</strong><span>Historical cases</span></div><div><strong>EN · RO · RU</strong><span>Language support</span></div><div class="ai-trust-note"><i class="ph ph-shield-check"></i><span>Normal chat messages remain unverified experience until approved.</span></div></div>
-      </section>
+
 
     </main>
 
