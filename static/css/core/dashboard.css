@@ -5226,3 +5226,25 @@ body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:30px!importan
 #page-fleet_intel .recurring-type-trailer{color:#8a5a12;background:#fff8eb;border-color:#f2e1be}
 #page-fleet_intel .recurring-type-reefer{color:#28737d;background:#eefbfc;border-color:#d4edef}
 [data-theme="dark"] #page-fleet_intel .recurring-type-badge{background:var(--surface2);border-color:var(--border)}
+
+/* v25 — keep Fleet Intelligence pagination clear of the floating Kurtex AI control */
+@media (min-width:761px){
+  body[data-current-page="fleet_intel"] #page-fleet_intel .fleet-list-footer.fleet-pager{
+    padding-right:132px;
+  }
+  body[data-current-page="fleet_intel"] #page-fleet_intel .fleet-pager-controls{
+    flex-wrap:nowrap;
+  }
+}
+@media (min-width:761px) and (max-width:980px){
+  body[data-current-page="fleet_intel"] #kurtex-ai-fab{
+    width:48px;
+    min-width:48px;
+    padding:0;
+    justify-content:center;
+  }
+  body[data-current-page="fleet_intel"] #kurtex-ai-fab span{display:none}
+  body[data-current-page="fleet_intel"] #page-fleet_intel .fleet-list-footer.fleet-pager{
+    padding-right:66px;
+  }
+}
