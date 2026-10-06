@@ -417,9 +417,11 @@ function intelUniversalSearch(value) {
   else updateHTML(document.getElementById("issue-search-results"), "");
 }
 
-var intelFilter = { vtype: "all", search: "" };
-function renderIntelUnits(vtype, search) {
-  intelFilter = { vtype: vtype, search: search };
+var intelFilter = { vtype: "all", search: "", page: 1 };
+var intelUnitsPerPage = 10;
+function renderIntelUnits(vtype, search, page) {
+  var changedFilter=intelFilter.vtype!==vtype || intelFilter.search!==(search||"");
+  intelFilter = { vtype: vtype, search: search, page: changedFilter ? 1 : (page || intelFilter.page || 1) };
   preserveInput("intel-units-search", function () {
     renderIntelUnitsContent(vtype, search);
   });
@@ -440,6 +442,12 @@ function renderIntelUnitsContent(vtype, search) {
       return false;
     return true;
   });
+  var totalItems=filtered.length;
+  var totalPages=Math.max(1,Math.ceil(totalItems/intelUnitsPerPage));
+  var page=Math.max(1,Math.min(totalPages,intelFilter.page||1));
+  intelFilter.page=page;
+  var startIndex=(page-1)*intelUnitsPerPage;
+  var visible=filtered.slice(startIndex,startIndex+intelUnitsPerPage);
   function vbtn(v, label) {
     return (
       '<button class="toggle-btn' +
@@ -451,7 +459,7 @@ function renderIntelUnitsContent(vtype, search) {
       "</button>"
     );
   }
-  var rows = filtered
+  var rows = visible
     .map(function (u) {
       return (
         '<tr style="cursor:pointer" data-unit="' +
@@ -489,8 +497,9 @@ function renderIntelUnitsContent(vtype, search) {
     "</div>" +
     '<div class="table-wrap"><div class="table-scroll"><table>' +
     "<thead><tr><th>Unit #</th><th>Type</th><th>Reports</th><th>Top Issue</th><th>Last Seen</th></tr></thead><tbody>" +
-    (filtered.length
+    (totalItems
       ? rows
       : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No units match this filter</td></tr>') +
-    "</tbody></table></div></div>");
+    "</tbody></table></div></div>" +
+    (totalItems ? '<div class="fleet-list-footer fleet-pager intel-units-pager"><span>Showing '+(startIndex+1)+'–'+Math.min(startIndex+visible.length,totalItems)+' of '+totalItems+'</span><div class="fleet-pager-controls"><button class="btn secondary pager-btn" '+(page<=1?'disabled':'')+' onclick="renderIntelUnits(intelFilter.vtype,intelFilter.search,'+(page-1)+')"><i class="ph ph-arrow-left"></i> Previous</button><span class="pager-page">'+page+' / '+totalPages+'</span><button class="btn secondary pager-btn" '+(page>=totalPages?'disabled':'')+' onclick="renderIntelUnits(intelFilter.vtype,intelFilter.search,'+(page+1)+')">Next <i class="ph ph-arrow-right"></i></button></div></div>' : ''));
 }
