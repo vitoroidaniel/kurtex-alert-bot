@@ -32,3 +32,17 @@ function openLayoutSettings(tab){activeSettingsTab=tab||'overview';renderSetting
 function closeLayoutSettings(){settingsOverlay.classList.remove('open');overviewPage.classList.remove('editing-layout');unlockBodyScroll()}
 function resetOverviewLayout(){overviewLayout={order:['metrics','agents','units','cases'],hidden:[],metrics:[],density:'comfortable',reduceMotion:false,fixedSidebar:true,rememberPage:true,landingPage:'overview'};saveOverviewLayout();renderSettingsPanel()}
 applyOverviewLayout();
+
+// v40: Settings are live controls. Notify the mobile overview after every local preference change.
+(function(){
+  var originalApply=applyOverviewLayout;
+  applyOverviewLayout=function(){
+    originalApply();
+    if(overviewPage){
+      overviewPage.classList.remove('overview-live-updated');
+      void overviewPage.offsetWidth;
+      overviewPage.classList.add('overview-live-updated');
+    }
+  };
+  applyOverviewLayout();
+})();

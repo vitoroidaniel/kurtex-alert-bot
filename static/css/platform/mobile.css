@@ -1520,3 +1520,59 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
 @media (min-width:701px){
   #page-fleet_intel #issue-search-results{grid-column:1 / -1!important;width:100%!important}
 }
+
+/* v40 — mobile overview becomes a live, settings-driven dashboard */
+@media(max-width:760px){
+  /* Home can scroll now that real overview widgets are available. */
+  body[data-current-page="overview"]{height:100dvh!important;overflow:hidden!important}
+  body[data-current-page="overview"] .main{height:100dvh!important;overflow:hidden!important;padding-bottom:calc(84px + env(safe-area-inset-bottom))!important}
+  body[data-current-page="overview"] #page-overview{height:100%!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding:4px 14px 28px!important;scrollbar-width:none!important}
+  body[data-current-page="overview"] #page-overview::-webkit-scrollbar{display:none!important}
+
+  /* Keep the useful mobile launch area, but make it less dominant. */
+  body[data-current-page="overview"] .mobile-app-home{display:block!important;margin-bottom:12px!important}
+  body[data-current-page="overview"] .mobile-home-copy{padding:2px 1px 8px!important}
+  body[data-current-page="overview"] .mobile-home-copy h1{font-size:27px!important}
+  body[data-current-page="overview"] .mobile-home-copy p{font-size:11px!important}
+  body[data-current-page="overview"] .mobile-home-ai{min-height:82px!important;padding:12px 14px!important;border-radius:20px!important}
+  body[data-current-page="overview"] .mobile-home-grid{gap:8px!important;margin-top:8px!important}
+  body[data-current-page="overview"] .mobile-home-grid button{min-height:88px!important;padding:12px!important;border-radius:19px!important}
+  body[data-current-page="overview"] .mobile-home-tip,body[data-current-page="overview"] .mobile-home-shortcuts{display:none!important}
+
+  /* The same overview widgets controlled by Settings are now the mobile dashboard. */
+  body[data-current-page="overview"] #page-overview>.overview-toolbar{display:flex!important;align-items:center!important;justify-content:space-between!important;margin:14px 0 8px!important;padding:0 2px!important}
+  body[data-current-page="overview"] #page-overview>.overview-toolbar>span{font-size:15px!important;font-weight:800!important;letter-spacing:-.2px!important;color:#252930!important}
+  body[data-current-page="overview"] #page-overview>.overview-toolbar .badge-btn{min-height:34px!important;padding:0 10px!important;border-radius:11px!important;font-size:10px!important}
+  body[data-current-page="overview"] #page-overview>.overview-label{display:none!important}
+  body[data-current-page="overview"] #page-overview>.overview-grid{display:flex!important;flex-direction:column!important;gap:10px!important;width:100%!important}
+  body[data-current-page="overview"] #page-overview>.overview-grid:before,body[data-current-page="overview"] #page-overview>.overview-grid:after{display:none!important;content:none!important}
+  body[data-current-page="overview"] .overview-widget{display:block!important;width:100%!important;margin:0!important;min-width:0!important;transition:opacity .18s ease,transform .18s ease!important}
+  body[data-current-page="overview"] .overview-widget[hidden]{display:none!important}
+  body[data-current-page="overview"] .widget-controls{display:none!important}
+
+  /* Key metrics: compact 2-column cards, honoring Visible Metrics instantly. */
+  body[data-current-page="overview"] #stat-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin:0!important}
+  body[data-current-page="overview"] #stat-grid .stat-card{min-height:82px!important;padding:11px 12px!important;border-radius:17px!important;border:1px solid #e2e5e9!important;background:#fff!important;box-shadow:0 4px 14px rgba(20,27,37,.035)!important}
+  body[data-current-page="overview"] #stat-grid .stat-card[hidden]{display:none!important}
+  body[data-current-page="overview"] #stat-grid .stat-icon{width:30px!important;height:30px!important;border-radius:10px!important;font-size:15px!important}
+  body[data-current-page="overview"] #stat-grid .stat-value{font-size:21px!important;line-height:1!important}
+  body[data-current-page="overview"] #stat-grid .stat-label{font-size:9px!important;line-height:1.2!important}
+
+  /* Problem Units / Top Agents use the existing live data, condensed for phone. */
+  body[data-current-page="overview"] .overview-widget.card,body[data-current-page="overview"] .overview-widget.section{padding:12px!important;border:1px solid #e2e5e9!important;border-radius:18px!important;background:#fff!important;box-shadow:0 4px 14px rgba(20,27,37,.035)!important}
+  body[data-current-page="overview"] .overview-widget .card-title,body[data-current-page="overview"] .overview-widget .section-title{font-size:14px!important;font-weight:800!important;margin-bottom:8px!important}
+  body[data-current-page="overview"] .overview-widget .card-meta,body[data-current-page="overview"] .overview-widget .section-title small{font-size:9px!important}
+  body[data-current-page="overview"] #lb-overview,body[data-current-page="overview"] #units-overview{max-height:245px!important;overflow:auto!important;scrollbar-width:none!important}
+  body[data-current-page="overview"] #lb-overview::-webkit-scrollbar,body[data-current-page="overview"] #units-overview::-webkit-scrollbar{display:none!important}
+  body[data-current-page="overview"] .agent-overview-card{padding:10px!important;border-radius:14px!important}
+
+  /* Recent cases is a compact scrollable card instead of a desktop-width table. */
+  body[data-current-page="overview"] #recent-table{max-height:280px!important;overflow:auto!important;border-radius:14px!important;scrollbar-width:none!important}
+  body[data-current-page="overview"] #recent-table::-webkit-scrollbar{display:none!important}
+  body[data-current-page="overview"] .overview-widget .section-header{display:flex!important;align-items:center!important;margin-bottom:8px!important}
+  body[data-current-page="overview"] .overview-widget .text-button{font-size:10px!important;white-space:nowrap!important}
+
+  /* Compact AI send action, while retaining a comfortable invisible tap area through footer spacing. */
+  body[data-current-page="ai_assistant"] .ai-compose-send{width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;flex:0 0 32px!important;border-radius:11px!important;box-shadow:0 3px 9px rgba(20,27,37,.13)!important}
+  body[data-current-page="ai_assistant"] .ai-compose-send i{font-size:13px!important}
+}
