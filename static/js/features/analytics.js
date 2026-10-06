@@ -382,8 +382,7 @@ async function loadFleetIntel() {
       '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Total Reports</div><div class="stat-value v-accent">' + d.total_reports + '</div></div>' +
       '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-hash"></i></div><div class="stat-label">Unique Units Tracked</div><div class="stat-value v-blue">' + d.total_units + '</div></div>'
     );
-    updateHTML(el, '<div id="intel-units-wrap"></div>' +
-      '<div id="intel-drivers-block"><div class="section-title" style="margin:16px 0 10px">Most Reported Drivers</div>' + driversHtml + '</div>');
+    updateHTML(el, '<div id="intel-units-wrap"></div>');
     renderIntelUnits(intelFilter.vtype, intelFilter.search);
   } catch (e) {
     if (e.name === "AbortError") return;
@@ -481,7 +480,7 @@ function renderIntelUnitsContent(vtype, search) {
       );
     })
     .join("");
-  updateHTML(wrap, '<div class="section-title" style="margin-bottom:10px">Most reported units · top 20</div>' +
+  updateHTML(wrap, '<div class="intel-units-head"><div><div class="section-title">Most Reported Units</div><div class="intel-units-subtitle">Units with the highest maintenance report volume. Select a unit to open its full case history.</div></div><div class="intel-units-total"><b>'+filtered.length+'</b><span>units shown</span></div></div>' +
     '<div class="toggle-tabs" style="margin-bottom:10px">' +
     vbtn("all", "All") +
     vbtn("truck", "Truck") +

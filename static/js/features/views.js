@@ -797,7 +797,8 @@ async function loadRecurringProblems(){
     var r=await apiFetch('/api/recurring_problems'),x=await r.json(),items=x.items||[],grouped={};
     items.forEach(function(v){
       var unit=String(v.unit||'Unknown');
-      if(!grouped[unit]) grouped[unit]={unit:unit,total:0,latest:'',issues:[]};
+      if(!grouped[unit]) grouped[unit]={unit:unit,type:String(v.vehicle_type||'').toLowerCase(),total:0,latest:'',issues:[]};
+      if(!grouped[unit].type && v.vehicle_type) grouped[unit].type=String(v.vehicle_type).toLowerCase();
       grouped[unit].total+=Number(v.count||0);
       grouped[unit].issues.push({problem:v.problem||'Unknown issue',count:Number(v.count||0),latest:v.latest||''});
       if(!grouped[unit].latest) grouped[unit].latest=v.latest||'';
@@ -806,7 +807,9 @@ async function loadRecurringProblems(){
     if(!recurringShowAll)units=units.slice(0,12);
     el.innerHTML=units.length?units.map(function(u,i){
       var issues=u.issues.sort(function(a,b){return b.count-a.count;});
-      return '<details class="recurring-unit-tree" '+(i<3&&!recurringShowAll?'open':'')+'><summary><span class="recurring-unit-main"><i class="ph ph-truck"></i><strong>'+h(u.unit)+'</strong><small>'+u.total+' recurring reports'+(u.latest?' · latest '+h(u.latest):'')+'</small></span><span class="recurring-unit-count">'+u.total+'</span><i class="ph ph-caret-down recurring-caret"></i></summary><div class="recurring-issue-tree">'+issues.map(function(z){return '<div class="recurring-issue-line"><span><i class="ph ph-corner-down-right"></i>'+h(z.problem)+'</span><b>'+z.count+'×</b></div>';}).join('')+'</div></details>';
+      var typeLabel=u.type==='reefer'?'Reefer':u.type==='trailer'?'Trailer':u.type==='truck'?'Truck':'Unit';
+      var typeIcon=u.type==='reefer'?'ph-snowflake':u.type==='trailer'?'ph-truck-trailer':'ph-truck';
+      return '<details class="recurring-unit-tree"><summary><span class="recurring-unit-main"><i class="ph '+typeIcon+'"></i><strong>'+h(u.unit)+' <span class="recurring-type-badge recurring-type-'+h(u.type||'unit')+'">'+typeLabel+'</span></strong><small>'+u.total+' recurring reports'+(u.latest?' · latest '+h(u.latest):'')+'</small></span><span class="recurring-unit-count">'+u.total+'</span><i class="ph ph-caret-down recurring-caret"></i></summary><div class="recurring-issue-tree">'+issues.map(function(z){return '<div class="recurring-issue-line"><span><i class="ph ph-corner-down-right"></i>'+h(z.problem)+'</span><b>'+z.count+'×</b></div>';}).join('')+'</div></details>';
     }).join(''):'<div class="intel-empty">No repeated unit/problem patterns detected yet.</div>';
   }catch(e){el.innerHTML='<div class="intel-empty">Recurring analysis unavailable.</div>';}
 }

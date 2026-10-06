@@ -1907,7 +1907,7 @@ def api_fleet_intelligence():
             top_drivers.append({"name": name, "total": total, "top_issue": top_issue})
         top_drivers.sort(key=lambda x: -x["total"])
         return jsonify({
-            "top_units": top_units[:20],
+            "top_units": top_units[:50],
             "total_units": len(unit_data),
             "top_drivers": top_drivers[:20],
             "total_reports": len(reported),
@@ -1993,7 +1993,8 @@ def api_recurring_problems():
         for (unit,label),items in groups.items():
             if len(items)<2: continue
             latest=max((x.get("opened_at") or "") for x in items)
-            rows.append({"unit":unit,"problem":label,"count":len(items),"latest":fmt_dt(latest),"cases":[serialize_case(x) for x in sorted(items,key=lambda z:z.get("opened_at","") or "",reverse=True)[:4]]})
+            vtype=next(((x.get("vehicle_type") or "").strip().lower() for x in items if (x.get("vehicle_type") or "").strip()), "")
+            rows.append({"unit":unit,"vehicle_type":vtype,"problem":label,"count":len(items),"latest":fmt_dt(latest),"cases":[serialize_case(x) for x in sorted(items,key=lambda z:z.get("opened_at","") or "",reverse=True)[:4]]})
         rows.sort(key=lambda x:(-x["count"],x["unit"]))
         return jsonify({"items":rows[:30]})
     except Exception as e:
