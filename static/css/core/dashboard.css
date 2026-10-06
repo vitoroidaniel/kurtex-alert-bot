@@ -5755,3 +5755,17 @@ body[data-current-page="overview"] #overview-metrics .stat-card{
   border:1px solid #e1e4e8!important;
   box-shadow:none!important;
 }
+
+/* v55 - Report sections must stay flat inside Report Builder.
+   Use the ID selector here because an older #report-sections-bar rule has
+   higher specificity than the newer class-only redesign. */
+#report-sections-bar.report-sections-bar{
+  margin:17px 0 0!important;
+  padding:16px 0 0!important;
+  border:0!important;
+  border-top:1px solid #eceef1!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  outline:0!important;
+}
