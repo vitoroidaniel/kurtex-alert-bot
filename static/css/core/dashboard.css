@@ -5248,3 +5248,6 @@ body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:30px!importan
     padding-right:66px;
   }
 }
+
+/* v30 guard: mobile AI history/new-chat controls do not alter desktop UI */
+@media (min-width:701px){.ai-mobile-history-btn,.ai-mobile-new-btn{display:none!important}}

@@ -1193,3 +1193,96 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
 }
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 \n\n/* v29 - mobile AI header: history left, current chat title only, new chat right */\n@media(max-width:700px){\n  body[data-current-page="ai_assistant"] .ai-page-chatbar{\n    display:grid!important;\n    grid-template-columns:40px minmax(0,1fr) auto!important;\n    align-items:center!important;\n    gap:8px!important;\n    min-height:52px!important;\n    padding:7px 12px!important;\n    border-bottom:1px solid rgba(25,31,40,.07)!important;\n    background:rgba(255,255,255,.88)!important;\n    backdrop-filter:blur(18px)!important;\n  }\n  body[data-current-page="ai_assistant"] .ai-mobile-history-btn{\n    width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;\n    border-radius:12px!important;background:#fff!important;border:1px solid #e5e7eb!important;\n    box-shadow:0 2px 8px rgba(16,24,40,.05)!important;\n  }\n  body[data-current-page="ai_assistant"] .ai-chat-title{\n    display:block!important;min-width:0!important;width:100%!important;padding:0 4px!important;\n    border:0!important;background:transparent!important;box-shadow:none!important;cursor:default!important;\n    text-align:left!important;overflow:hidden!important;\n  }\n  body[data-current-page="ai_assistant"] .ai-chat-title strong{\n    display:block!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;\n    font-size:13px!important;line-height:1.2!important;font-weight:800!important;color:#20242b!important;\n  }\n  body[data-current-page="ai_assistant"] .ai-mobile-new-btn{\n    display:inline-flex!important;width:auto!important;min-width:0!important;height:38px!important;min-height:38px!important;\n    padding:0 12px!important;gap:5px!important;border-radius:12px!important;white-space:nowrap!important;\n    background:#24272d!important;border:1px solid #24272d!important;color:#fff!important;\n    box-shadow:0 4px 12px rgba(20,24,31,.12)!important;font-size:10px!important;font-weight:800!important;\n  }\n  body[data-current-page="ai_assistant"] .ai-mobile-new-btn i{font-size:14px!important}\n}\n@media(max-width:360px){\n  body[data-current-page="ai_assistant"] .ai-page-chatbar{grid-template-columns:38px minmax(0,1fr) 38px!important}\n  body[data-current-page="ai_assistant"] .ai-mobile-new-btn{width:38px!important;padding:0!important}\n  body[data-current-page="ai_assistant"] .ai-mobile-new-btn span{display:none!important}\n}\n
+/* v30 — mobile-only Settings redesign + strict desktop AI preservation */
+/* Mobile AI controls must never leak into the desktop chat header. */
+@media (min-width:701px){
+  body[data-current-page="ai_assistant"] .ai-mobile-history-btn,
+  body[data-current-page="ai_assistant"] .ai-mobile-new-btn{display:none!important}
+}
+
+@media (max-width:700px){
+  /* Settings is a true compact bottom sheet: content-sized, capped at half the viewport. */
+  #layout-settings-overlay{align-items:flex-end!important;justify-content:center!important;padding:0!important;background:rgba(18,24,33,.34)!important}
+  #layout-settings-overlay .settings-center{
+    width:calc(100% - 16px)!important;max-width:440px!important;
+    height:auto!important;min-height:0!important;max-height:50dvh!important;
+    margin:0 auto 8px!important;border-radius:22px!important;
+    display:flex!important;flex-direction:column!important;overflow:hidden!important;
+    background:#f7f8fa!important;box-shadow:0 18px 55px rgba(13,19,28,.24)!important;
+  }
+  #layout-settings-overlay .settings-head{padding:14px 15px 10px!important;min-height:0!important;flex:0 0 auto!important}
+  #layout-settings-overlay .settings-kicker{display:none!important}
+  #layout-settings-overlay .settings-head h2{margin:0 0 3px!important;font-size:22px!important;line-height:1.05!important;font-weight:800!important}
+  #layout-settings-overlay .settings-head p{margin:0!important;font-size:11px!important;line-height:1.35!important}
+  #layout-settings-overlay .modal-close{width:36px!important;height:36px!important;border-radius:11px!important}
+  #layout-settings-overlay .settings-shell{display:flex!important;flex-direction:column!important;flex:1 1 auto!important;min-height:0!important;overflow:hidden!important}
+  #layout-settings-overlay .settings-nav{
+    display:flex!important;flex-direction:row!important;flex:0 0 auto!important;
+    padding:6px 9px 7px!important;gap:4px!important;overflow-x:auto!important;overflow-y:hidden!important;
+    border:0!important;border-bottom:1px solid #e8e9ec!important;background:#f7f8fa!important;scrollbar-width:none!important;
+  }
+  #layout-settings-overlay .settings-nav::-webkit-scrollbar{display:none!important}
+  #layout-settings-overlay .settings-nav button,
+  #layout-settings-overlay .settings-nav button[data-settings-tab="overview"]{
+    display:inline-flex!important;flex:0 0 auto!important;justify-content:center!important;
+    width:auto!important;min-width:max-content!important;height:36px!important;padding:0 10px!important;
+    gap:6px!important;border-radius:10px!important;font-size:11px!important;font-weight:700!important;
+  }
+  #layout-settings-overlay .settings-nav button i{font-size:14px!important}
+  #layout-settings-overlay .settings-nav button.active{border-color:#e12e34!important;box-shadow:0 0 0 1px rgba(225,46,52,.08)!important}
+  #layout-settings-overlay .settings-content{
+    flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;
+    padding:12px 13px 15px!important;overscroll-behavior:contain!important;
+  }
+  #layout-settings-overlay .settings-footer{display:none!important}
+  #layout-settings-overlay .settings-section-title{margin:0 0 12px!important}
+  #layout-settings-overlay .settings-section-title>span{font-size:16px!important;font-weight:800!important}
+  #layout-settings-overlay .settings-section-title p{margin-top:4px!important;font-size:11px!important;line-height:1.4!important}
+  #layout-settings-overlay .layout-settings h3{margin:12px 2px 7px!important;font-size:10px!important;letter-spacing:.08em!important;text-transform:uppercase!important}
+
+  /* One matching selection language throughout Overview. */
+  #layout-settings-overlay .settings-list{border-radius:13px!important;background:#fff!important}
+  #layout-settings-overlay .setting-row{min-height:48px!important;padding:7px 8px!important;gap:8px!important}
+  #layout-settings-overlay .setting-row label{display:flex!important;align-items:center!important;gap:9px!important;min-width:0!important;font-size:12px!important;font-weight:650!important}
+  #layout-settings-overlay .setting-row label input,
+  #layout-settings-overlay .metric-options label input{
+    appearance:none!important;-webkit-appearance:none!important;display:grid!important;place-items:center!important;
+    width:22px!important;height:22px!important;min-width:22px!important;margin:0!important;
+    border:1.5px solid #cfd3d9!important;border-radius:7px!important;background:#fff!important;cursor:pointer!important;
+  }
+  #layout-settings-overlay .setting-row label input:checked,
+  #layout-settings-overlay .metric-options label input:checked{background:#292c31!important;border-color:#292c31!important}
+  #layout-settings-overlay .setting-row label input:checked:after,
+  #layout-settings-overlay .metric-options label input:checked:after{content:"✓";color:#fff;font-size:13px;font-weight:900;line-height:1}
+  #layout-settings-overlay .setting-actions{display:flex!important;gap:5px!important}
+  #layout-settings-overlay .setting-actions button{width:32px!important;height:32px!important;min-width:32px!important;border-radius:9px!important}
+  #layout-settings-overlay .metric-options{display:grid!important;grid-template-columns:1fr!important;gap:6px!important}
+  #layout-settings-overlay .metric-options label{display:flex!important;align-items:center!important;gap:9px!important;min-height:42px!important;padding:7px 9px!important;border-radius:11px!important;font-size:11px!important;font-weight:650!important}
+
+  #layout-settings-overlay .theme-choice{grid-template-columns:1fr 1fr!important;gap:7px!important;margin-bottom:13px!important}
+  #layout-settings-overlay .theme-choice button{padding:10px!important;border-radius:12px!important}
+  #layout-settings-overlay .theme-choice button strong{font-size:12px!important}
+  #layout-settings-overlay .theme-choice button span{font-size:10px!important}
+  #layout-settings-overlay .density-picker{gap:7px!important}
+  #layout-settings-overlay .density-option{min-height:50px!important;padding:9px 10px!important;border-radius:12px!important}
+  #layout-settings-overlay .density-option strong{font-size:12px!important}
+  #layout-settings-overlay .density-option small{font-size:10px!important}
+  #layout-settings-overlay .settings-toggle-row{padding:11px 3px!important;gap:10px!important}
+  #layout-settings-overlay .settings-toggle-row strong{font-size:12px!important}
+  #layout-settings-overlay .settings-toggle-row small{font-size:10px!important;line-height:1.35!important}
+  #layout-settings-overlay .settings-toggle-row>span>i{font-size:18px!important}
+  #layout-settings-overlay .settings-select-row{padding:10px!important;gap:10px!important;align-items:flex-start!important;flex-direction:column!important}
+  #layout-settings-overlay .settings-select-row strong{font-size:12px!important}
+  #layout-settings-overlay .settings-select-row small{font-size:10px!important}
+  #layout-settings-overlay .settings-select-row select{width:100%!important;min-width:0!important;height:38px!important;font-size:12px!important}
+  #layout-settings-overlay .settings-info-card,
+  #layout-settings-overlay .developer-setting-card{padding:11px!important;margin-bottom:9px!important;border-radius:12px!important}
+  #layout-settings-overlay .settings-info-card strong,
+  #layout-settings-overlay .developer-setting-card strong{font-size:12px!important}
+  #layout-settings-overlay .settings-info-card p,
+  #layout-settings-overlay .developer-setting-card p{font-size:10px!important;line-height:1.4!important}
+  #layout-settings-overlay .settings-wide-action{padding:10px!important;border-radius:12px!important}
+  #layout-settings-overlay .settings-wide-action strong{font-size:12px!important}
+  #layout-settings-overlay .settings-wide-action small{font-size:10px!important}
+  #layout-settings-overlay .developer-setting-card .btn{min-height:38px!important;font-size:11px!important}
+}
