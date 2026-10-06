@@ -108,7 +108,7 @@ async function deleteAIPageSavedChat(event,id){
  }catch(e){console.error('AI chat delete failed',e)}
 }
 
-async function newKurtexAIPageChat(){if(aiBusy||aiUploading)return;aiOpenSequence++;aiChatPendingAttachments=[];aiChatKnowledgeSelected=[];
+async function newKurtexAIPageChat(){if(aiBusy||aiUploading)return;aiOpenSequence++;aiChatPendingAttachments=[];aiChatKnowledgeSelected=[];aiClearAttachmentTray();
  kurtexAIChatId=null;updateAIPageChatTitle('New Chat');
  var side=document.getElementById('ai-page-sidebar-list');
  if(side)side.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});
@@ -140,6 +140,7 @@ async function openAIPageSavedChat(id,clicked){if(aiBusy||aiUploading)return;var
  kurtexAIChatId=String(id);
  aiChatKnowledgeSelected=[];
  aiChatPendingAttachments=[];
+ aiClearAttachmentTray();
  var contextBox=document.getElementById('ai-chat-context');
  var inlineKnowledge=document.getElementById('ai-chat-knowledge-inline');
  if(contextBox)contextBox.innerHTML='';
@@ -302,7 +303,7 @@ async function uploadAIChatFiles(input){
     aiChatPendingAttachments.push({id:x.id,name:x.name,kind:x.kind,mime:x.mime,audio_status:x.audio_status,warning:x.warning});
    }
   }
-  aiUploadStatus(aiChatPendingAttachments.some(function(a){return a.warning})?'Attached. Audio needs attention: open Transcript to retry or enter the driver explanation.':'Ready to send. Video combines sampled views with the driver transcript.');
+  aiSyncAttachmentStatus();
  }catch(e){aiUploadStatus(e.message||'Could not attach file');}
  finally{aiUploading=false;if(input)input.value='';await refreshAIChatContext();}
 }
@@ -368,7 +369,22 @@ function copyAIMessage(btn){
 function aiWrapMessage(role,html,attachmentHtml,messageId){
  return '<div class="ai-msg-content">'+(attachmentHtml||'')+'<div class="ai-msg-body">'+html+'</div></div><div class="ai-msg-actions"><button type="button" class="ai-msg-action" onclick="copyAIMessage(this)" aria-label="Copy" data-tooltip="Copy"><i class="ph ph-copy"></i></button>'+(role==='assistant'&&messageId?'<button type="button" class="ai-msg-action" data-message-id="'+escapeAI(messageId)+'" onclick="openAIReport(this)" aria-label="Report" data-tooltip="Report"><i class="ph ph-flag"></i></button>':'')+'</div>'
 }
-async function removeAIChatFile(fid){if(!kurtexAIChatId||aiBusy||aiUploading)return;aiChatPendingAttachments=aiChatPendingAttachments.filter(function(a){return String(a.id)!==String(fid)});await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});refreshAIChatContext()}
+async function removeAIChatFile(fid){
+ if(!kurtexAIChatId||aiBusy||aiUploading)return;
+ var removed=aiChatPendingAttachments.find(function(a){return String(a.id)===String(fid)});
+ aiChatPendingAttachments=aiChatPendingAttachments.filter(function(a){return String(a.id)!==String(fid)});
+ aiSyncAttachmentStatus();
+ try{
+  var r=await apiFetch('/api/ai/chats/'+encodeURIComponent(kurtexAIChatId)+'/files/'+encodeURIComponent(fid),{method:'DELETE'});
+  if(!r.ok)throw new Error('Unable to remove attachment');
+ }catch(e){
+  if(removed)aiChatPendingAttachments.push(removed);
+  aiSyncAttachmentStatus();
+  throw e;
+ }
+ await refreshAIChatContext();
+ aiSyncAttachmentStatus();
+}
 async function openAIChatKnowledge(){
  try{
   // Opening the picker is a UI action only. Do not create a conversation until
@@ -430,7 +446,15 @@ function aiSetBusy(on){
  aiBusy=on;
  document.querySelectorAll('.ai-compose-send,#kurtex-ai-panel button[type="submit"]').forEach(function(b){b.disabled=on;b.setAttribute('aria-busy',String(on));});
 }
-function aiUploadStatus(text){var el=document.getElementById('ai-upload-status');if(el)el.textContent=text;}
+function aiUploadStatus(text){var el=document.getElementById('ai-upload-status');if(el)el.textContent=text||'';}
+function aiSyncAttachmentStatus(){
+ var items=aiChatPendingAttachments||[];
+ if(!items.length){aiUploadStatus('');return}
+ if(items.some(function(a){return a.warning})){aiUploadStatus('Audio needs attention. Open Transcript to retry or add the driver explanation.');return}
+ var videos=items.filter(function(a){return a.kind==='video'||/^video\//.test(a.mime||'')});
+ if(videos.length){aiUploadStatus(videos.length>1?'Videos ready':'Video ready');return}
+ aiUploadStatus('');
+}
 function aiKnowledgeTemplate(){
  var el=document.getElementById('ai-kb-content');if(!el)return;
  if(el.value.trim()&&!confirm('Replace the current unsaved knowledge draft?'))return;
