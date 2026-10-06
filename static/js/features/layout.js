@@ -1,9 +1,9 @@
 // Workspace preferences: desktop and mobile Overview layouts are independent and account-backed.
 var overviewDevice=window.matchMedia('(max-width:760px)').matches?'mobile':'desktop';
 var layoutKeyBase='kurtex-overview-v3-'+document.body.dataset.userId;
-var widgetCatalog=[['metrics','Key metrics'],['agents','Top agents'],['units','Problem units'],['cases','Recent cases']];
+var widgetCatalog=[['metrics','Key metrics'],['agents','Top agents'],['units','Problem units'],['ai_summary','AI summary'],['activity','Recent activity'],['cases','Recent cases']];
 var metricLabels=['Today total','Assigned','Resolved','Missed','Reassigned','Average response'];
-function defaultOverviewWorkspace(){return {order:['metrics','agents','units','cases'],hidden:[],metrics:[]}}
+function defaultOverviewWorkspace(){return {order:['metrics','agents','units','ai_summary','activity','cases'],hidden:[],metrics:[]}}
 function normalizeOverviewWorkspace(saved){var d=defaultOverviewWorkspace();saved=saved&&typeof saved==='object'?saved:{};if(Array.isArray(saved.order))d.order=[...new Set(saved.order.filter(k=>widgetCatalog.some(w=>w[0]===k)).concat(d.order))];d.hidden=Array.isArray(saved.hidden)?saved.hidden.filter(k=>widgetCatalog.some(w=>w[0]===k)):[];d.metrics=Array.isArray(saved.metrics)?saved.metrics.filter(Number.isInteger):[];return d}
 var overviewLayouts={desktop:defaultOverviewWorkspace(),mobile:defaultOverviewWorkspace()};
 ['desktop','mobile'].forEach(function(device){try{var cached=JSON.parse(preferences.get(layoutKeyBase+'-'+device));if(cached)overviewLayouts[device]=normalizeOverviewWorkspace(cached)}catch(_){}});
@@ -19,7 +19,7 @@ function bindSharedOverviewProps(target){['density','reduceMotion','fixedSidebar
 bindSharedOverviewProps(overviewLayouts.desktop);bindSharedOverviewProps(overviewLayouts.mobile);
 var overviewPage=document.getElementById('page-overview'),overviewGrid=document.createElement('div');overviewGrid.className='overview-grid';
 var metricsWidget=document.createElement('section');metricsWidget.append(document.querySelector('.overview-label'),document.getElementById('stat-grid'));
-var widgetNodes={metrics:metricsWidget,agents:document.getElementById('lb-overview').closest('.card'),units:document.getElementById('units-overview').closest('.card'),cases:document.getElementById('recent-table').closest('.section')};
+var widgetNodes={metrics:metricsWidget,agents:document.getElementById('lb-overview').closest('.card'),units:document.getElementById('units-overview').closest('.card'),ai_summary:document.getElementById('home-ai-summary').closest('.card'),activity:document.getElementById('home-recent-activity').closest('.card'),cases:document.getElementById('recent-table').closest('.section')};
 var oldColumns=widgetNodes.agents.parentElement;
 widgetCatalog.forEach(function(item){var node=widgetNodes[item[0]];node.dataset.widget=item[0];node.classList.add('overview-widget');var controls=document.createElement('div');controls.className='widget-controls';controls.innerHTML='<button class="widget-drag" draggable="true" aria-label="Drag '+item[1]+'">⠿ '+item[1]+'</button><button onclick="toggleOverviewWidget(\''+item[0]+'\',false)" aria-label="Hide '+item[1]+'">Hide</button>';node.prepend(controls);overviewGrid.append(node)});oldColumns.remove();overviewPage.append(overviewGrid);
 var emptyLayout=document.createElement('div');emptyLayout.className='empty-state overview-empty-message';emptyLayout.textContent='Your overview is empty. Use Settings to add widgets.';overviewPage.append(emptyLayout);

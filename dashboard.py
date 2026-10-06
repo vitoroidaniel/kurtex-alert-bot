@@ -1304,9 +1304,13 @@ def api_stats():
             "week":  {"total":len(wc),"done":sum(1 for c in wc if c.get("status")=="done"),"missed":sum(1 for c in wc if c.get("status")=="missed")},
             "month": {"total":len(mc),"done":sum(1 for c in mc if c.get("status")=="done"),"missed":sum(1 for c in mc if c.get("status")=="missed")},
             "all_time": {"total":len(cases),"done":sum(1 for c in cases if c.get("status")=="done"),"avg_resp":fmt_secs(avg)},
-            "leaderboard_day": lb(tc), "leaderboard_week": lb(wc), "leaderboard_month": lb(mc),
+            "leaderboard_day": lb(tc), "leaderboard_week": lb(wc), "leaderboard_month": lb(mc), "leaderboard_all": lb(real),
             "top_groups": group_stats[:6],
             "top_problem_units": top_problem_units,
+            "top_problem_units_day": top_units_for(tc, 6),
+            "top_problem_units_week": top_units_for(wc, 6),
+            "top_problem_units_month": top_units_for(mc, 6),
+            "top_problem_units_all": top_problem_units,
             "top_words": [{"word":w,"count":v} for w,v in Counter(hashtags).most_common(15)],
             "reassigned_count": sum(1 for c in cases if c.get("reassigned")),
         })
@@ -1315,6 +1319,32 @@ def api_stats():
     except Exception as e:
         logger.error(f"api_stats error: {e}")
         return jsonify({"error": "Unable to load data. Please retry."}), 500
+
+
+@app.route("/api/home/ai-summary")
+def api_home_ai_summary():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    try:
+        cases=[c for c in load_cases() if not is_testing(c)]
+        today=today_str(); tc=[c for c in cases if case_local_date(c)==today]
+        st=Counter(c.get("status","open") for c in tc)
+        units=top_units_for(tc,3)
+        facts={"total":len(tc),"resolved":st.get("done",0),"assigned":st.get("assigned",0)+st.get("reported",0),"missed":st.get("missed",0),"open":st.get("open",0),"top_units":units}
+        if not tc:
+            return jsonify({"summary":"No maintenance cases have been recorded today yet.","source":"live"})
+        prompt="Write ONE concise management summary, max 2 sentences. Use only these exact facts. Do not invent causes, diagnoses, trends, or numbers. Mention attention only when missed/open > 0. Facts: "+json.dumps(facts,ensure_ascii=False)
+        try:
+            summary=_cf_ai([{"role":"system","content":"You summarize Kurtex maintenance dashboard facts. Be concise and factual."},{"role":"user","content":prompt}],max_tokens=120,temperature=0.1).strip()
+            if summary: return jsonify({"summary":summary,"source":"ai"})
+        except Exception as e:
+            logger.info("Home AI summary fallback: %s",e)
+        parts=[f"{len(tc)} cases today",f"{st.get('done',0)} resolved"]
+        if st.get("missed",0): parts.append(f"{st.get('missed',0)} missed")
+        if st.get("open",0): parts.append(f"{st.get('open',0)} still open")
+        return jsonify({"summary":"Today: "+", ".join(parts)+".","source":"live"})
+    except Exception as e:
+        logger.error("home ai summary error: %s",e)
+        return jsonify({"summary":"Summary is temporarily unavailable.","source":"fallback"})
 
 
 @app.route("/api/cases")

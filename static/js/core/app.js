@@ -31,6 +31,7 @@ async function loadRecent() {
     var r = await apiFetch("/api/cases?filter=today&limit=10", "recent");
     var d = await r.json();
     updateHTML(el, caseTable(d.cases));
+    renderHomeActivity(d.cases || []);
   } catch (e) {
     if (e.name !== "AbortError" && !el.querySelector("table"))
       if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
@@ -96,6 +97,7 @@ function updateChicagoClock() {
 
 updateChicagoClock();
 setInterval(updateChicagoClock, 1000);
+loadHomeAISummary();
 showPage((typeof overviewLayout!=="undefined" && !overviewLayout.rememberPage ? overviewLayout.landingPage : preferences.get("kurtex-page")) || "overview");
 setInterval(autoRefresh, 15000);
 document.addEventListener("visibilitychange", function () {

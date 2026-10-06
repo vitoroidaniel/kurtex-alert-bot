@@ -146,9 +146,11 @@
     <div class="overview-label"><span>Key metrics</span><small>Your selected Home metrics</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
     <div class="two-col">
-      <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top agents <span class="card-meta">Today</span></div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Problem units <span class="card-meta">All time</span></div><div id="units-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top agents <select class="home-range" id="agents-home-range" onchange="setHomeRange('agents',this.value)" aria-label="Top agents time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></div><div id="lb-overview"></div></div>
+      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Problem units <select class="home-range" id="units-home-range" onchange="setHomeRange('units',this.value)" aria-label="Problem units time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all" selected>All time</option></select></div><div id="units-overview"></div></div>
     </div>
+    <div class="card home-ai-summary-card"><div class="card-title"><i class="ph ph-sparkle"></i>AI summary <span class="home-ai-badge">Live</span></div><div id="home-ai-summary" class="home-ai-summary"><span class="home-ai-loading">Analyzing today's activity...</span></div></div>
+    <div class="card home-activity-card"><div class="card-title"><i class="ph ph-activity"></i>Recent activity <span class="card-meta">Today</span></div><div id="home-recent-activity" class="home-recent-activity"><div class="loading">Loading...</div></div></div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent cases <small>Latest 10 from today</small></div><button class="text-button" onclick="showPage('cases')">View all cases →</button></div>
       <div class="table-wrap"><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></div>

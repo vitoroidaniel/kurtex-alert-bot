@@ -74,6 +74,9 @@ async function loadStats() {
           "</div>"
         : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>');
 
+    renderHomeRangeWidgets();
+    var missedHome=document.getElementById("home-today-missed");if(missedHome)missedHome.classList.toggle("home-zero-good",Number(t.missed||0)===0);
+
     var ulb = document.getElementById("units-lb");
     if (ulb) updateHTML(ulb, unitProblemRows(units));
   } catch (e) {
@@ -849,3 +852,23 @@ async function loadRecurringProblems(){
     }
   }catch(e){el.innerHTML='<div class="intel-empty">Recurring analysis unavailable.</div>';}
 }
+
+// v57 Home ranges + meaningful empty states
+var homeRanges={agents:(preferences.get('kurtex-home-agents-range')||'day'),units:(preferences.get('kurtex-home-units-range')||'all')};
+function homeEmpty(icon,title,detail){return '<div class="home-empty"><i class="ph '+icon+'"></i><span><strong>'+h(title)+'</strong>'+(detail?'<br><small>'+h(detail)+'</small>':'')+'</span></div>'}
+function renderHomeRangeWidgets(){
+  if(!stats||!stats.today)return;
+  var ar=homeRanges.agents,ur=homeRanges.units;
+  var lb=stats['leaderboard_'+ar]||[]; var lbo=document.getElementById('lb-overview');
+  if(lbo) updateHTML(lbo,lb.length?listRows(lb.slice(0,5),lb[0]?lb[0].count:1):homeEmpty('ph-check-circle','No agent activity in this period','Nothing needs attention here.'));
+  var units=stats['top_problem_units_'+ur]||[]; var uo=document.getElementById('units-overview');
+  if(uo) updateHTML(uo,units.length?unitProblemRows(units):homeEmpty('ph-check-circle','No problem units in this period','No unit reports found.'));
+  var as=document.getElementById('agents-home-range'),us=document.getElementById('units-home-range'); if(as)as.value=ar;if(us)us.value=ur;
+}
+function setHomeRange(kind,value){if(!['day','week','month','all'].includes(value))return;homeRanges[kind]=value;preferences.set('kurtex-home-'+kind+'-range',value);renderHomeRangeWidgets()}
+function renderHomeActivity(cases){
+  var el=document.getElementById('home-recent-activity');if(!el)return;
+  if(!cases||!cases.length){updateHTML(el,homeEmpty('ph-check-circle','No activity yet today','New case activity will appear here automatically.'));return}
+  updateHTML(el,cases.slice(0,5).map(function(c){var status=(c.status||'open').toLowerCase(),icon=status==='done'?'ph-check-circle':status==='missed'?'ph-warning-circle':status==='assigned'||status==='reported'?'ph-user-check':'ph-clipboard-text';var label=status==='done'?'Case resolved':status==='missed'?'Case missed':status==='assigned'||status==='reported'?'Case assigned':'Case opened';var detail=[c.unit_number||'',c.vehicle_type||'',c.agent_name||''].filter(Boolean).join(' · ');return '<div class="home-activity-row"><span class="home-activity-icon"><i class="ph '+icon+'"></i></span><span class="home-activity-copy"><strong>'+h(label)+'</strong><small>'+h(detail||c.description||'Maintenance case')+'</small></span></div>'}).join(''));
+}
+async function loadHomeAISummary(){var el=document.getElementById('home-ai-summary');if(!el)return;try{var r=await apiFetch('/api/home/ai-summary','home-ai-summary');if(!r.ok)throw new Error('summary');var d=await r.json();updateHTML(el,'<p>'+h(d.summary||'No summary available.')+'</p>')}catch(e){if(e.name!=='AbortError')updateHTML(el,homeEmpty('ph-info','Summary unavailable','Dashboard data is still available.'))}}
