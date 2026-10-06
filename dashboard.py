@@ -1323,28 +1323,94 @@ def api_stats():
 
 @app.route("/api/home/ai-summary")
 def api_home_ai_summary():
+    """Surface actionable fleet intelligence; never repeat Home KPI totals."""
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
         cases=[c for c in load_cases() if not is_testing(c)]
-        today=today_str(); tc=[c for c in cases if case_local_date(c)==today]
-        st=Counter(c.get("status","open") for c in tc)
-        units=top_units_for(tc,3)
-        facts={"total":len(tc),"resolved":st.get("done",0),"assigned":st.get("assigned",0)+st.get("reported",0),"missed":st.get("missed",0),"open":st.get("open",0),"top_units":units}
-        if not tc:
-            return jsonify({"summary":"No maintenance cases have been recorded today yet.","source":"live"})
-        prompt="Write ONE concise management summary, max 2 sentences. Use only these exact facts. Do not invent causes, diagnoses, trends, or numbers. Mention attention only when missed/open > 0. Facts: "+json.dumps(facts,ensure_ascii=False)
-        try:
-            summary=_cf_ai([{"role":"system","content":"You summarize Kurtex maintenance dashboard facts. Be concise and factual."},{"role":"user","content":prompt}],max_tokens=120,temperature=0.1).strip()
-            if summary: return jsonify({"summary":summary,"source":"ai"})
-        except Exception as e:
-            logger.info("Home AI summary fallback: %s",e)
-        parts=[f"{len(tc)} cases today",f"{st.get('done',0)} resolved"]
-        if st.get("missed",0): parts.append(f"{st.get('missed',0)} missed")
-        if st.get("open",0): parts.append(f"{st.get('open',0)} still open")
-        return jsonify({"summary":"Today: "+", ".join(parts)+".","source":"live"})
+        today=chicago_now().date()
+        resolved={"done","resolved","closed"}
+
+        def category(c):
+            text=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes","report_text")).lower()
+            groups=[
+                ("Tires & Wheel End",("tire","tyre","wheel","hub","bearing","seal")),
+                ("Air & Suspension",("air bag","suspension","air leak","shock")),
+                ("Brakes",("brake","abs")),
+                ("Electrical & Battery",("electrical","battery","voltage","alternator","wiring")),
+                ("Cooling System",("coolant","radiator","overheat","cooling")),
+                ("Reefer System",("reefer","thermo king","carrier unit","temperature","setpoint")),
+                ("Engine / Emissions",("engine","oil pressure","misfire","def","dpf")),
+                ("Lighting",("light","lamp","headlight","marker")),
+                ("Fuel System",("fuel","diesel","injector"))]
+            return next((name for name,words in groups if any(w in text for w in words)),"Other")
+
+        def dated(c):
+            try:
+                d=case_local_date(c)
+                return datetime.fromisoformat(d).date() if d else None
+            except Exception: return None
+
+        # Emerging problems: recent 14 days versus the immediately preceding 14 days.
+        recent_start=today-timedelta(days=13); previous_start=today-timedelta(days=27); previous_end=recent_start-timedelta(days=1)
+        recent=[c for c in cases if dated(c) and recent_start<=dated(c)<=today]
+        previous=[c for c in cases if dated(c) and previous_start<=dated(c)<=previous_end]
+        rc,pc=Counter(category(c) for c in recent),Counter(category(c) for c in previous)
+        emerging=[]
+        for name,n in rc.items():
+            old=pc.get(name,0)
+            # Require real evidence: at least 3 recent cases and either +2 cases or >=2x prior volume.
+            if name!="Other" and n>=3 and n>=old+2 and (old==0 or n>=old*2):
+                units=len({str(c.get("unit_number") or "").strip() for c in recent if category(c)==name and str(c.get("unit_number") or "").strip()})
+                emerging.append((n-old,n,name,old,units))
+        emerging.sort(reverse=True)
+
+        # Repair follow-up: same unit + problem family returned after a resolved case within 30 days.
+        by_unit={}
+        for c in cases:
+            unit=str(c.get("unit_number") or "").strip()
+            d=dated(c)
+            if unit and d: by_unit.setdefault(unit,[]).append((d,c))
+        followups=[]
+        for unit,rows in by_unit.items():
+            rows.sort(key=lambda x:x[0])
+            for i,(d,c) in enumerate(rows):
+                if str(c.get("status") or "").lower() in resolved: continue
+                fam=category(c)
+                if fam=="Other": continue
+                prior=[(pd,p) for pd,p in rows[:i] if str(p.get("status") or "").lower() in resolved and category(p)==fam and 0 <= (d-pd).days <= 30]
+                if prior:
+                    pd,p=prior[-1]; followups.append(((d-pd).days,d,unit,fam,c,p))
+        followups.sort(key=lambda x:x[1],reverse=True)
+
+        insights=[]
+        if emerging:
+            _,n,name,old,units=emerging[0]
+            unit_text=f" across {units} units" if units else ""
+            facts={"kind":"emerging_problem","category":name,"recent_14_days":n,"previous_14_days":old,"units":units}
+            text=f"{name} reports increased to {n} in the last 14 days{unit_text}, compared with {old} in the previous 14 days."
+            insights.append({"type":"emerging_problem","title":"Emerging problem","text":text,"meta":"Last 14 days vs previous 14 days","facts":facts})
+        if followups:
+            days,_,unit,fam,current,prior=followups[0]
+            text=f"Unit {unit} has a new {fam.lower()} case {days} day{'s' if days!=1 else ''} after a similar case was resolved."
+            insights.append({"type":"repair_followup","title":"Repair follow-up","text":text,"meta":"Possible repeat after a recent resolution","case_id":current.get("id") or current.get("full_id")})
+
+        # AI may improve wording only; detection and numbers above remain deterministic.
+        if insights:
+            try:
+                facts=[{"type":x["type"],"title":x["title"],"text":x["text"],"meta":x["meta"]} for x in insights]
+                prompt=("Rewrite each maintenance insight for a fleet manager. Keep every number, unit, category and time period exactly as provided. "
+                        "Do not add diagnoses, causes, recommendations, trends or facts. Return JSON only as an array of strings in the same order. Facts: "+json.dumps(facts,ensure_ascii=False))
+                raw=_cf_ai([{"role":"system","content":"You edit verified Kurtex fleet insights. Never invent information."},{"role":"user","content":prompt}],max_tokens=220,temperature=0.05).strip()
+                if raw.startswith("```"): raw=raw.strip("`").replace("json\n","",1).strip()
+                rewritten=json.loads(raw)
+                if isinstance(rewritten,list) and len(rewritten)==len(insights) and all(isinstance(x,str) and x.strip() for x in rewritten):
+                    for item,text in zip(insights,rewritten): item["text"]=text.strip()
+            except Exception as e:
+                logger.info("Kurtex Intelligence wording fallback: %s",e)
+        return jsonify({"insights":insights[:2],"source":"live","generated_at":chicago_now().isoformat()})
     except Exception as e:
-        logger.error("home ai summary error: %s",e)
-        return jsonify({"summary":"Summary is temporarily unavailable.","source":"fallback"})
+        logger.exception("home intelligence error: %s",e)
+        return jsonify({"error":"Intelligence is temporarily unavailable."}),500
 
 
 @app.route("/api/cases")

@@ -1,7 +1,7 @@
 // Workspace preferences: desktop and mobile Overview layouts are independent and account-backed.
 var overviewDevice=window.matchMedia('(max-width:760px)').matches?'mobile':'desktop';
 var layoutKeyBase='kurtex-overview-v3-'+document.body.dataset.userId;
-var widgetCatalog=[['metrics','Key metrics'],['agents','Top agents'],['units','Problem units'],['ai_summary','AI summary'],['activity','Recent activity'],['cases','Recent cases']];
+var widgetCatalog=[['metrics','Key metrics'],['agents','Top agents'],['units','Problem units'],['ai_summary','Kurtex Intelligence'],['activity','Recent activity'],['cases','Recent cases']];
 var metricLabels=['Today total','Assigned','Resolved','Missed','Reassigned','Average response'];
 function defaultOverviewWorkspace(){return {order:['metrics','agents','units','ai_summary','activity','cases'],hidden:[],metrics:[]}}
 function normalizeOverviewWorkspace(saved){var d=defaultOverviewWorkspace();saved=saved&&typeof saved==='object'?saved:{};if(Array.isArray(saved.order))d.order=[...new Set(saved.order.filter(k=>widgetCatalog.some(w=>w[0]===k)).concat(d.order))];d.hidden=Array.isArray(saved.hidden)?saved.hidden.filter(k=>widgetCatalog.some(w=>w[0]===k)):[];d.metrics=Array.isArray(saved.metrics)?saved.metrics.filter(Number.isInteger):[];return d}

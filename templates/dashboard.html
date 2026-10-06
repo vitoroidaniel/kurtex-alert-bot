@@ -71,11 +71,11 @@
     </div>
   </nav>
   <div class="sidebar-footer">
-    <div class="user-chip">
+    <button class="user-chip user-chip-profile" type="button" onclick="showPage('my_profile')" aria-label="Open my profile">
       {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
       {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
-    </div>
+    </button>
     <div class="sidebar-account-actions">
       <button class="sidebar-settings-btn" onclick="openLayoutSettings()"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
       <button class="sidebar-signout-btn" onclick="openSignOutConfirm()"><i class="ph ph-sign-out"></i><span>Sign out</span></button>
@@ -149,7 +149,7 @@
       <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top agents <select class="home-range" id="agents-home-range" onchange="setHomeRange('agents',this.value)" aria-label="Top agents time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></div><div id="lb-overview"></div></div>
       <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Problem units <select class="home-range" id="units-home-range" onchange="setHomeRange('units',this.value)" aria-label="Problem units time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all" selected>All time</option></select></div><div id="units-overview"></div></div>
     </div>
-    <div class="card home-ai-summary-card"><div class="card-title"><i class="ph ph-sparkle"></i>AI summary <span class="home-ai-badge">Live</span></div><div id="home-ai-summary" class="home-ai-summary"><span class="home-ai-loading">Analyzing today's activity...</span></div></div>
+    <div class="card home-ai-summary-card home-intelligence-card"><div class="card-title"><i class="ph ph-brain"></i>Kurtex Intelligence <span class="home-ai-badge">Live</span></div><div id="home-ai-summary" class="home-ai-summary home-intelligence"><span class="home-ai-loading">Checking fleet patterns...</span></div></div>
     <div class="card home-activity-card"><div class="card-title"><i class="ph ph-activity"></i>Recent activity <span class="card-meta">Today</span></div><div id="home-recent-activity" class="home-recent-activity"><div class="loading">Loading...</div></div></div>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent cases <small>Latest 10 from today</small></div><button class="text-button" onclick="showPage('cases')">View all cases →</button></div>

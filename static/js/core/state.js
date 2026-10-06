@@ -146,6 +146,8 @@ function showPage(page) {
     var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
+  var headerRefresh = document.getElementById("refresh-button");
+  if (headerRefresh) headerRefresh.hidden = false;
   var descriptionEl = document.getElementById("page-description");
   if (descriptionEl) descriptionEl.textContent =
     page === "overview"

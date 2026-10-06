@@ -460,22 +460,34 @@ async function loadMyProfile() {
 }
 
 var agentsWorkspace={agents:[]};
-async function loadAgents(){
- var el=document.getElementById('agents-content');if(!el)return;el.innerHTML='<div class="loading">Loading agents...</div>';
- try{var r=await apiFetch('/api/agents');if(!r.ok){el.innerHTML='<div class="loading">Unable to load agents.</div>';return;}var agents=await r.json();agentsWorkspace.agents=agents;
- if(!agents.length){el.innerHTML='<div class="empty-state">No agents found.</div>';return;}
- el.innerHTML='<div class="agents-page-head agents-cards-head"><div><span class="eyebrow">TEAM</span><h2>Agents</h2><p>Workload, resolution and response activity at a glance.</p></div><div class="agents-summary"><strong>'+agents.length+'</strong><span>agents</span></div></div><div class="agents-toolbar"><div class="agents-search"><i class="ph ph-magnifying-glass"></i><input id="agents-search" placeholder="Search agent..." oninput="filterAgents(this.value)"></div></div><div class="agents-card-grid" id="agents-card-grid"></div>';
- renderAgentCards(agents);
- }catch(e){console.error(e);el.innerHTML='<div class="loading">Unable to load agents.</div>';}}
+async function loadAgents(background){
+ var el=document.getElementById('agents-content');if(!el)return;
+ var hasContent=!!el.querySelector('.agents-card-grid');
+ if(!background && !hasContent) el.innerHTML='<div class="loading">Loading agents...</div>';
+ try{
+   var r=await apiFetch('/api/agents');
+   if(!r.ok){if(!hasContent)el.innerHTML='<div class="loading">Unable to load agents.</div>';return;}
+   var agents=await r.json();agentsWorkspace.agents=agents;
+   if(!agents.length){el.innerHTML='<div class="empty-state">No agents found.</div>';return;}
+   var search=el.querySelector('#agents-search');
+   var query=search?search.value:'';
+   if(!hasContent){
+     el.innerHTML='<div class="agents-toolbar agents-toolbar-top"><div class="agents-search"><i class="ph ph-magnifying-glass"></i><input id="agents-search" placeholder="Search agent..." oninput="filterAgents(this.value)"></div><div class="agents-summary"><strong>'+agents.length+'</strong><span>agents</span></div></div><div class="agents-card-grid" id="agents-card-grid"></div>';
+   }else{
+     var summary=el.querySelector('.agents-summary strong');if(summary)summary.textContent=agents.length;
+   }
+   filterAgents(query);
+ }catch(e){console.error(e);if(!hasContent)el.innerHTML='<div class="loading">Unable to load agents.</div>';}
+}
 function filterAgents(q){q=(q||'').toLowerCase();renderAgentCards(agentsWorkspace.agents.filter(function(a){return ((a.name||'')+' '+(a.username||'')).toLowerCase().includes(q)}));}
 function renderAgentCards(rows){
  var el=document.getElementById('agents-card-grid');if(!el)return;
  el.innerHTML=rows.map(function(a){
    var rate=Math.max(0,Math.min(100,Number(a.rate||0)));
    return '<button type="button" class="agent-overview-card" data-agent="'+attr(a.name||'')+'" data-username="'+attr(a.username||'')+'" data-agent-id="'+attr(a.id||'')+'" onclick="openAgentModal(this.dataset.agent,this.dataset.username,this.dataset.agentId)">'+
-     '<div class="agent-overview-top"><span class="agent-overview-avatar">'+h((a.name||'?')[0].toUpperCase())+'</span><span class="agent-overview-id"><strong>'+h(a.name||'')+'</strong><small>'+(a.username?'@'+h(a.username):'Team member')+'</small></span><i class="ph ph-arrow-up-right"></i></div>'+
-     '<div class="agent-overview-metrics"><span><b>'+Number(a.total||0)+'</b><small>Cases</small></span><span><b>'+Number(a.done||0)+'</b><small>Resolved</small></span><span><b>'+Number(a.missed||0)+'</b><small>Missed</small></span></div>'+
-     '<div class="agent-overview-rate"><span><small>Resolution</small><b>'+rate+'%</b></span><div class="agent-overview-track"><i style="width:'+rate+'%"></i></div></div>'+
+     '<div class="agent-overview-top"><span class="agent-overview-avatar">'+h((a.name||'?')[0].toUpperCase())+'</span><span class="agent-overview-id"><strong>'+h(a.name||'')+'</strong><small>'+(a.username?'@'+h(a.username):'Team member')+'</small></span><i class="ph ph-arrow-up-right"></i></div>'+ 
+     '<div class="agent-overview-metrics"><span><b>'+Number(a.total||0)+'</b><small>Cases</small></span><span><b>'+Number(a.done||0)+'</b><small>Resolved</small></span><span><b>'+Number(a.missed||0)+'</b><small>Missed</small></span></div>'+ 
+     '<div class="agent-overview-rate"><span><small>Resolution</small><b>'+rate+'%</b></span><div class="agent-overview-track"><i style="width:'+rate+'%"></i></div></div>'+ 
      '<div class="agent-overview-foot"><span><i class="ph ph-timer"></i> Avg response '+h(a.avg_resp||'—')+'</span><span>View activity <i class="ph ph-caret-right"></i></span></div></button>';
  }).join('')||'<div class="empty-state">No matching agents.</div>';
 }
@@ -871,4 +883,4 @@ function renderHomeActivity(cases){
   if(!cases||!cases.length){updateHTML(el,homeEmpty('ph-check-circle','No activity yet today','New case activity will appear here automatically.'));return}
   updateHTML(el,cases.slice(0,5).map(function(c){var status=(c.status||'open').toLowerCase(),icon=status==='done'?'ph-check-circle':status==='missed'?'ph-warning-circle':status==='assigned'||status==='reported'?'ph-user-check':'ph-clipboard-text';var label=status==='done'?'Case resolved':status==='missed'?'Case missed':status==='assigned'||status==='reported'?'Case assigned':'Case opened';var detail=[c.unit_number||'',c.vehicle_type||'',c.agent_name||''].filter(Boolean).join(' · ');return '<div class="home-activity-row"><span class="home-activity-icon"><i class="ph '+icon+'"></i></span><span class="home-activity-copy"><strong>'+h(label)+'</strong><small>'+h(detail||c.description||'Maintenance case')+'</small></span></div>'}).join(''));
 }
-async function loadHomeAISummary(){var el=document.getElementById('home-ai-summary');if(!el)return;try{var r=await apiFetch('/api/home/ai-summary','home-ai-summary');if(!r.ok)throw new Error('summary');var d=await r.json();updateHTML(el,'<p>'+h(d.summary||'No summary available.')+'</p>')}catch(e){if(e.name!=='AbortError')updateHTML(el,homeEmpty('ph-info','Summary unavailable','Dashboard data is still available.'))}}
+async function loadHomeAISummary(){var el=document.getElementById('home-ai-summary');if(!el)return;try{var r=await apiFetch('/api/home/ai-summary','home-ai-summary');if(!r.ok)throw new Error('intelligence');var d=await r.json();var items=d.insights||[];if(!items.length){updateHTML(el,homeEmpty('ph-check-circle','No unusual patterns detected','Kurtex will surface emerging problems or repeat repairs when there is enough evidence.'));return}updateHTML(el,items.map(function(x){var icon=x.type==='repair_followup'?'ph-arrow-counter-clockwise':'ph-trend-up';return '<div class="home-intel-item"><span class="home-intel-icon"><i class="ph '+icon+'"></i></span><div><div class="home-intel-label">'+h(x.title)+'</div><p>'+h(x.text)+'</p>'+(x.meta?'<small>'+h(x.meta)+'</small>':'')+'</div></div>'}).join(''))}catch(e){if(e.name!=='AbortError')updateHTML(el,homeEmpty('ph-info','Intelligence temporarily unavailable','Your dashboard and live case data are still available.'))}}
