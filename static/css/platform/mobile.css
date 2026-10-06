@@ -782,3 +782,137 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
  .mobile-header,.mobile-tabbar,.mobile-more-sheet,#modal-overlay .modal,#report-view-overlay .modal,#unit-modal-overlay .modal{animation:glassSettle .32s cubic-bezier(.2,.8,.2,1)}
  @keyframes glassSettle{from{opacity:.72;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
 }
+
+/* v146 — mechanic-first mobile refinement */
+@media(max-width:760px){
+  :root{--m-radius:18px;--m-red:#df2b31;--m-ink:#111827;--m-soft:#f3f5f7}
+  body{font-size:14px!important;background:#f3f5f7!important}
+  .mobile-header{background:rgba(250,251,252,.88)!important;border:1px solid rgba(255,255,255,.92)!important;box-shadow:0 10px 32px rgba(20,28,38,.08)!important}
+  .mobile-logo{font-size:17px!important}.mobile-tabbar{background:rgba(250,251,252,.91)!important;border:1px solid rgba(255,255,255,.94)!important;box-shadow:0 12px 35px rgba(20,28,38,.14)!important}
+  .mobile-tabbar button span{font-size:10px!important;font-weight:700!important}.mobile-tabbar button i{font-size:21px!important}
+  .page-heading h1{font-size:25px!important}.page-heading p{font-size:13.5px!important}.section-title,.card-title{font-size:16px!important}
+
+  /* Parts: designed for one-handed shop-floor use */
+  #page-parts_manual{padding:10px 12px 18px!important}
+  .parts-manual-header{padding:8px 2px 14px!important}.parts-manual-header h2{font-size:26px!important;letter-spacing:-.8px!important}.parts-manual-header p{font-size:13.5px!important;line-height:1.5!important;color:#667085!important}.parts-total-inline{font-size:11px!important;font-weight:750!important;padding:7px 9px!important;border-radius:10px!important}
+  .parts-toolbar{position:sticky!important;top:calc(72px + env(safe-area-inset-top))!important;z-index:20!important;margin:0 -2px 12px!important;padding:8px 2px!important;background:linear-gradient(#f3f5f7 75%,rgba(243,245,247,0))!important}
+  .parts-search-shell{gap:7px!important}.parts-search{border-radius:16px!important;box-shadow:0 5px 18px rgba(20,28,38,.06)!important}.parts-search input{height:50px!important;font-size:16px!important}.parts-web-search-btn{height:44px!important;border-radius:14px!important;font-weight:750!important}.parts-category-select,.parts-category-select select{height:44px!important;border-radius:14px!important}
+  .parts-index{border-radius:20px!important;overflow:hidden!important;background:#fff!important;box-shadow:0 4px 18px rgba(20,28,38,.05)!important}.parts-index-head{padding:13px 14px!important;border-bottom:1px solid #eceff2!important}.parts-row{min-height:72px!important;padding:12px 14px!important;border-bottom:1px solid #edf0f2!important}.parts-row:last-child{border-bottom:0!important}.parts-row strong{font-size:14.5px!important;line-height:1.25!important}.parts-row small{font-size:11.5px!important;line-height:1.4!important}
+  .part-detail{border-radius:22px!important;background:#fff!important;box-shadow:0 5px 20px rgba(20,28,38,.06)!important}.part-detail h2,.part-detail h3{letter-spacing:-.3px!important}.parts-disclaimer{font-size:11px!important;line-height:1.5!important;border-radius:15px!important}
+
+  /* AI Assistant: less chrome, stronger conversation hierarchy */
+  body[data-current-page="ai_assistant"] .mobile-header{height:58px!important}
+  body[data-current-page="ai_assistant"] #page-ai_assistant{background:#f7f8fa!important}
+  body[data-current-page="ai_assistant"] .ai-page-chatbar{height:58px!important;min-height:58px!important;padding:0 14px!important;background:rgba(255,255,255,.91)!important;backdrop-filter:blur(18px)!important}
+  body[data-current-page="ai_assistant"] .ai-chat-title strong{font-size:15px!important}
+  body[data-current-page="ai_assistant"] .ai-page-welcome{padding:42px 16px 165px!important}.ai-hero-spark{width:48px!important;height:48px!important;border-radius:16px!important}.ai-page-welcome h3{font-size:27px!important;letter-spacing:-.8px!important;margin:14px 0 7px!important}.ai-page-welcome>p{max-width:340px!important;font-size:13.5px!important;line-height:1.55!important}
+  body[data-current-page="ai_assistant"] .ai-start-grid{grid-template-columns:1fr!important;gap:8px!important;margin-top:18px!important}.ai-start-grid button{min-height:58px!important;text-align:left!important;display:flex!important;align-items:center!important;gap:11px!important;border-radius:16px!important;font-size:13px!important}.ai-start-grid button i{font-size:20px!important}
+  body[data-current-page="ai_assistant"] .ai-page-messages{padding:14px 12px 165px!important}.ai-page-msg{font-size:14px!important;line-height:1.55!important}.ai-page-msg.user{border-radius:18px 18px 5px 18px!important}.ai-page-msg.assistant{border-radius:5px 18px 18px 18px!important}
+  body[data-current-page="ai_assistant"] .ai-page-compose{left:0!important;right:0!important;padding:12px 12px!important}.ai-compose-input{padding:8px!important;border:1px solid #dfe3e8!important;background:#fff!important;box-shadow:0 14px 35px rgba(20,28,38,.13)!important}.ai-compose-input textarea{min-height:44px!important;font-size:16px!important;line-height:1.4!important}.ai-compose-left button,.ai-web-option{min-height:36px!important;border-radius:11px!important}.ai-compose-left button span,.ai-web-option>span:last-child{font-size:11px!important}
+
+  /* Cases: cards instead of a desktop table viewport */
+  body[data-current-page="cases"] #page-cases{padding:10px 12px 18px!important}.cases-toolbar,.cases-filters{gap:7px!important}.search-wrap{min-height:48px!important;border-radius:15px!important;background:#fff!important}.search-wrap input{font-size:16px!important}
+  body[data-current-page="cases"] #cases-table .table-scroll,body[data-current-page="cases"] #cases-table{overflow:visible!important}
+  body[data-current-page="cases"] #cases-table table{min-width:0!important;width:100%!important;border-collapse:separate!important;border-spacing:0 9px!important;background:transparent!important}
+  body[data-current-page="cases"] #cases-table thead{display:none!important}
+  body[data-current-page="cases"] #cases-table tbody,body[data-current-page="cases"] #cases-table tr{display:block!important;width:100%!important}
+  body[data-current-page="cases"] #cases-table tr{position:relative!important;margin:0 0 9px!important;padding:13px 14px!important;border:1px solid #e3e7eb!important;border-radius:18px!important;background:#fff!important;box-shadow:0 3px 14px rgba(20,28,38,.045)!important}
+  body[data-current-page="cases"] #cases-table td{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:12px!important;width:100%!important;min-height:28px!important;padding:4px 0!important;border:0!important;font-size:12.5px!important;text-align:right!important;white-space:normal!important}
+  body[data-current-page="cases"] #cases-table td:before{content:attr(data-label);flex:0 0 38%;color:#7b8490!important;font-size:10px!important;font-weight:800!important;letter-spacing:.04em!important;text-align:left!important;text-transform:uppercase!important}
+  body[data-current-page="cases"] #cases-table td:first-child{font-size:14px!important;font-weight:800!important}
+
+  /* Case/report viewer: strong native-feeling bottom sheets */
+  #modal-overlay,#report-view-overlay,#unit-modal-overlay{background:rgba(12,17,24,.48)!important;backdrop-filter:blur(9px)!important}
+  #modal-overlay .modal,#report-view-overlay .modal,#unit-modal-overlay .modal{max-height:92dvh!important;border-radius:26px 26px 0 0!important;background:#f7f8fa!important;box-shadow:0 -22px 65px rgba(10,15,22,.24)!important}
+  #modal-overlay #modal-title,#report-view-title,#unit-modal-title{min-height:66px!important;padding:20px 62px 16px 18px!important;background:rgba(247,248,250,.96)!important;border-bottom:1px solid #e4e7eb!important;font-size:20px!important;font-weight:800!important;letter-spacing:-.5px!important}
+  #modal-overlay .modal-close,#report-view-overlay .modal-close,#unit-modal-overlay .modal-close{top:12px!important;width:42px!important;height:42px!important;border:1px solid #e1e5e9!important;border-radius:14px!important;background:#fff!important;color:#151a22!important;box-shadow:0 4px 14px rgba(20,28,38,.08)!important}
+  #modal-body,#report-view-body,#unit-modal-body{padding-top:4px!important;font-size:13.5px!important}
+  #modal-body .detail-grid,#report-view-body .detail-grid,#unit-modal-body .detail-grid{grid-template-columns:1fr 1fr!important;gap:9px!important}
+  #modal-body .detail-item,#report-view-body .detail-item,#unit-modal-body .detail-item{padding:12px!important;border:1px solid #e4e7eb!important;border-radius:16px!important;background:#fff!important;box-shadow:none!important}
+  #modal-body .detail-item label,#report-view-body .detail-item label,#unit-modal-body .detail-item label{font-size:9.5px!important;font-weight:800!important;letter-spacing:.055em!important;text-transform:uppercase!important;color:#8a929d!important}
+  #modal-body .detail-item strong,#report-view-body .detail-item strong,#unit-modal-body .detail-item strong{font-size:13.5px!important;color:#151a22!important}
+  #modal-body .desc-box,#modal-body .notes-box,#report-view-body .report-card{margin-top:10px!important;padding:14px!important;border:1px solid #e4e7eb!important;border-radius:18px!important;background:#fff!important;box-shadow:none!important;font-size:13.5px!important;line-height:1.6!important}
+  #report-view-overlay .modal>div:last-child{position:sticky!important;bottom:0!important;margin:12px -14px -18px!important;padding:12px 14px calc(12px + env(safe-area-inset-bottom))!important;background:linear-gradient(180deg,rgba(247,248,250,.70),#f7f8fa 32%)!important}
+  #report-view-overlay .modal>div:last-child button{width:100%!important;min-height:46px!important;border-radius:14px!important;font-size:13px!important;justify-content:center!important}
+
+  /* Full report workspace */
+  #report-modal-overlay{align-items:flex-end!important;padding:0!important;background:rgba(12,17,24,.48)!important;backdrop-filter:blur(9px)!important}.report-workspace{width:100%!important;max-width:none!important;height:92dvh!important;max-height:92dvh!important;margin:0!important;border-radius:26px 26px 0 0!important;overflow:hidden!important;background:#f7f8fa!important}.report-header{padding:15px 14px!important;gap:10px!important;background:#fff!important}.report-brand{min-width:0!important}.report-brand h2{font-size:19px!important}.report-brand p,.report-kicker{display:none!important}.report-seal{width:38px!important;height:38px!important;flex:0 0 38px!important}.report-tabs{display:none!important}.report-close{width:40px!important;height:40px!important;border-radius:13px!important}.report-body{padding:12px!important;overflow:auto!important}.report-period-bar{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}.report-period-bar select,.report-period-bar input,.report-generate-btn{width:100%!important;min-height:44px!important;border-radius:13px!important;font-size:14px!important}.report-footer{padding:10px 12px calc(10px + env(safe-area-inset-bottom))!important;gap:8px!important;background:#fff!important}.report-footer .ts{display:none!important}.report-footer-actions{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important;gap:8px!important}.report-footer-actions>*{min-width:0!important;min-height:44px!important;justify-content:center!important;border-radius:13px!important;font-size:11px!important}
+}
+@media(max-width:390px){#modal-body .detail-grid,#report-view-body .detail-grid,#unit-modal-body .detail-grid{grid-template-columns:1fr!important}.report-footer-actions{grid-template-columns:1fr!important}}
+
+/* ============================================================
+   v138 MOBILE — AI Knowledge workspace + stable AI navigation
+   ============================================================ */
+@media (max-width:760px){
+  body[data-current-page="ai_knowledge"] .main{padding-top:calc(var(--mo-head) + env(safe-area-inset-top))!important;background:#f5f6f8!important}
+  body[data-current-page="ai_knowledge"] #page-ai_knowledge{padding:12px!important;background:#f5f6f8!important}
+  body[data-current-page="ai_knowledge"] .ai-training-page{display:flex!important;flex-direction:column!important;gap:12px!important;width:100%!important}
+  body[data-current-page="ai_knowledge"] .ai-training-hero{padding:18px!important;border-radius:18px!important;display:block!important;min-height:0!important}
+  body[data-current-page="ai_knowledge"] .ai-hero-copy h2{font-size:24px!important;line-height:1.12!important;letter-spacing:-.035em!important;margin:5px 0 8px!important}
+  body[data-current-page="ai_knowledge"] .ai-hero-copy p{font-size:14px!important;line-height:1.5!important;max-width:none!important}
+  body[data-current-page="ai_knowledge"] .ai-training-flow{margin-top:15px!important;display:grid!important;grid-template-columns:1fr 18px 1fr 18px 1fr!important;gap:3px!important;width:100%!important;align-items:center!important}
+  body[data-current-page="ai_knowledge"] .ai-training-flow span{min-width:0!important;height:42px!important;padding:0 7px!important;justify-content:center!important;font-size:11px!important;border-radius:11px!important}
+  body[data-current-page="ai_knowledge"] .ai-training-flow>i{text-align:center!important;font-size:12px!important}
+
+  body[data-current-page="ai_knowledge"] .ai-training-card{border-radius:18px!important;padding:16px!important;box-shadow:none!important;overflow:hidden!important}
+  body[data-current-page="ai_knowledge"] .ai-card-head{gap:11px!important;margin-bottom:14px!important;align-items:flex-start!important}
+  body[data-current-page="ai_knowledge"] .ai-card-head-row{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:12px!important}
+  body[data-current-page="ai_knowledge"] .ai-heading-group{min-width:0!important;width:100%!important}
+  body[data-current-page="ai_knowledge"] .ai-card-icon{width:40px!important;height:40px!important;min-width:40px!important;border-radius:12px!important}
+  body[data-current-page="ai_knowledge"] .ai-card-head h3{font-size:18px!important;line-height:1.2!important;letter-spacing:-.02em!important;margin:0 0 4px!important}
+  body[data-current-page="ai_knowledge"] .ai-card-head p{font-size:13px!important;line-height:1.45!important;margin:0!important}
+  body[data-current-page="ai_knowledge"] .ai-learning-toolbar{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;width:100%!important}
+  body[data-current-page="ai_knowledge"] .ai-learning-toolbar .btn{width:100%!important;justify-content:center!important;font-size:13px!important}
+  body[data-current-page="ai_knowledge"] .ai-stat-row{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+  body[data-current-page="ai_knowledge"] .ai-stat-row>div{min-height:72px!important;padding:12px 13px!important;display:grid!important;grid-template-columns:38px 1fr!important;grid-template-rows:auto auto!important;column-gap:10px!important;align-items:center!important}
+  body[data-current-page="ai_knowledge"] .ai-stat-icon{grid-row:1/3!important;width:38px!important;height:38px!important}
+  body[data-current-page="ai_knowledge"] .ai-stat-row strong{font-size:22px!important;line-height:1!important;align-self:end!important}
+  body[data-current-page="ai_knowledge"] .ai-stat-row>div>span:last-child{font-size:12px!important;align-self:start!important;margin-top:3px!important}
+  body[data-current-page="ai_knowledge"] .ai-import-strip{display:grid!important;grid-template-columns:1fr!important;gap:10px!important;padding:13px!important;margin-top:10px!important;border-radius:14px!important}
+  body[data-current-page="ai_knowledge"] .ai-import-strip>div strong{font-size:14px!important}.ai-import-strip>div span{font-size:12px!important;line-height:1.4!important}
+  body[data-current-page="ai_knowledge"] .ai-compact-file,body[data-current-page="ai_knowledge"] .ai-import-strip>.btn{width:100%!important;max-width:none!important;min-height:46px!important;justify-content:center!important}
+  body[data-current-page="ai_knowledge"] .ai-inline-status{font-size:11px!important;line-height:1.35!important;margin-top:9px!important;color:#7b8189!important}
+
+  body[data-current-page="ai_knowledge"] .ai-knowledge-workspace{display:flex!important;flex-direction:column!important;gap:12px!important;width:100%!important}
+  body[data-current-page="ai_knowledge"] .ai-training-main{display:contents!important}
+  body[data-current-page="ai_knowledge"] .ai-upload-main{order:1!important}
+  body[data-current-page="ai_knowledge"] .ai-library-side{order:2!important;width:100%!important;max-width:none!important;position:static!important}
+  body[data-current-page="ai_knowledge"] .ai-add-card{order:3!important}
+  body[data-current-page="ai_knowledge"] .ai-reference-main{order:4!important}
+  body[data-current-page="ai_knowledge"] .ai-system-main{order:5!important}
+  body[data-current-page="ai_knowledge"] .ai-library-card{width:100%!important;min-height:0!important;padding:16px!important}
+  body[data-current-page="ai_knowledge"] .ai-library-card .ai-card-head-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important;align-items:start!important}
+  body[data-current-page="ai_knowledge"] .ai-library-card .ai-card-head h3{font-size:20px!important}
+  body[data-current-page="ai_knowledge"] .ai-library-actions{display:flex!important;align-items:center!important;gap:6px!important;white-space:nowrap!important}
+  body[data-current-page="ai_knowledge"] .ai-count-pill{font-size:11px!important;height:34px!important;padding:0 9px!important}
+  body[data-current-page="ai_knowledge"] .ai-icon-action{width:36px!important;height:36px!important;min-height:36px!important;padding:0!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-list{width:100%!important;min-height:0!important;padding:0!important;border:0!important;background:transparent!important;display:flex!important;flex-direction:column!important;gap:8px!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-item{width:100%!important;min-width:0!important;padding:12px!important;border:1px solid #e1e4e8!important;border-radius:14px!important;background:#fff!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-item-top{display:grid!important;grid-template-columns:36px minmax(0,1fr)!important;gap:10px!important;align-items:start!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-source{width:36px!important;height:36px!important;grid-row:1!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-item-copy{min-width:0!important;width:100%!important;overflow:hidden!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-title-line{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:6px!important;min-width:0!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-title-line strong{display:block!important;width:100%!important;font-size:14px!important;line-height:1.3!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-tags-inline{display:flex!important;flex-wrap:wrap!important;gap:5px!important;max-width:100%!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-tag{font-size:10px!important;line-height:1!important;padding:5px 7px!important;max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-item-copy small{display:block!important;font-size:11px!important;line-height:1.35!important;margin-top:6px!important;color:#7b8189!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-actions{grid-column:1/3!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:7px!important;width:100%!important;margin-top:2px!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-actions button{width:100%!important;height:40px!important;min-height:40px!important;border-radius:10px!important}
+
+  body[data-current-page="ai_knowledge"] .ai-upload-layout{display:flex!important;flex-direction:column!important;gap:9px!important}
+  body[data-current-page="ai_knowledge"] .ai-file-picker{width:100%!important;min-height:142px!important;padding:18px 14px!important;text-align:center!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;gap:10px!important}
+  body[data-current-page="ai_knowledge"] .ai-file-picker>span{min-width:0!important}.ai-file-picker strong{font-size:14px!important}.ai-file-picker small{font-size:11px!important;line-height:1.4!important;overflow-wrap:anywhere!important}
+  body[data-current-page="ai_knowledge"] .ai-browse-file{font-size:12px!important;padding:8px 12px!important}
+  body[data-current-page="ai_knowledge"] .ai-upload-layout>.btn{width:100%!important;min-height:46px!important}
+
+  body[data-current-page="ai_knowledge"] .ai-approved-explainer{padding:12px!important;gap:10px!important;border-radius:13px!important}.ai-approved-explainer strong{font-size:13px!important}.ai-approved-explainer span{font-size:12px!important;line-height:1.45!important}
+  body[data-current-page="ai_knowledge"] .ai-training-help{border-radius:12px!important}.ai-training-help summary{font-size:12px!important;min-height:44px!important;display:flex!important;align-items:center!important;gap:7px!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-form{display:flex!important;flex-direction:column!important;gap:12px!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-form label,body[data-current-page="ai_knowledge"] .ai-field-wide{width:100%!important;grid-column:auto!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-form label>span,body[data-current-page="ai_knowledge"] .ai-tag-color-field>span{font-size:12px!important;font-weight:750!important}
+  body[data-current-page="ai_knowledge"] .ai-kb-form input{height:48px!important}.ai-kb-form textarea{min-height:170px!important;line-height:1.5!important}
+  body[data-current-page="ai_knowledge"] .ai-tag-color-picker{display:flex!important;flex-wrap:wrap!important;gap:8px!important}.ai-color-swatch{width:34px!important;height:34px!important;min-height:34px!important}
+  body[data-current-page="ai_knowledge"] .ai-form-submit .btn{width:100%!important;min-height:48px!important}
+  body[data-current-page="ai_knowledge"] .ai-reference-row{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}.ai-reference-row>div{min-width:0!important}.ai-trust-note{grid-column:1/3!important}
+  body[data-current-page="ai_knowledge"] .ai-system-main .ai-card-head-row>.btn{width:100%!important}
+}

@@ -168,7 +168,14 @@ function showPage(page) {
   currentPage = page;
   document.body.setAttribute("data-current-page", page);
   preferences.set("kurtex-page", page);
-  refresh(true);
+  // AI workspaces manage their own data. Do not trigger the global dashboard
+  // refresh when switching between AI Assistant / AI Knowledge: it causes
+  // unrelated stats requests and makes navigation feel like a page reload.
+  if (page === "ai_assistant") {
+    if (typeof ensureAIPageReady === "function") ensureAIPageReady();
+  } else if (page !== "ai_knowledge") {
+    refresh(true);
+  }
 }
 
 function setCaseFilter(f, btn) {

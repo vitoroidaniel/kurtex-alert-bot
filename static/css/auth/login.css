@@ -253,3 +253,31 @@ html,body{width:100%!important;min-height:100%!important;overflow-x:hidden!impor
  .telegram-box{margin-top:20px!important}.divider{margin:20px 0 17px!important}.trust>i{background:rgba(255,255,255,.66)!important;border:1px solid rgba(255,255,255,.8)!important}.system-row{margin-top:18px!important}
 }
 @media(max-width:520px){.hero-copy{padding-top:28px!important}.login-card-wrap{align-self:end!important}.login-card{padding:21px 18px 18px!important}.trust span{line-height:1.45!important}}
+
+/* v146 — mobile mechanic-first login: full-bleed, no white card */
+@media(max-width:760px){
+  html,body{background:#080b10!important}
+  .login-shell{display:block!important;min-height:100dvh!important;background:#080b10!important;overflow:hidden!important}
+  .scene-slider,.scene-overlay{position:fixed!important;inset:0!important;width:100%!important;height:100%!important;min-height:100%!important}
+  .scene-slide{background-position:62% center!important;transform:scale(1.025)!important}
+  .scene-overlay{background:linear-gradient(180deg,rgba(5,8,12,.22) 0%,rgba(5,8,12,.48) 42%,rgba(5,8,12,.91) 72%,#080b10 100%)!important}
+  .topbar{display:flex!important;position:relative!important;z-index:10!important;padding:calc(18px + env(safe-area-inset-top)) 20px 0!important}
+  .brand{color:#fff!important;font-size:18px!important}.brand small{color:rgba(255,255,255,.58)!important}.brand img{width:42px!important;height:42px!important}
+  .hero-copy{position:relative!important;z-index:5!important;left:auto!important;right:auto!important;bottom:auto!important;top:auto!important;width:auto!important;min-height:0!important;padding:clamp(76px,14vh,132px) 20px 0!important}
+  .hero-copy .eyebrow{font-size:10px!important;color:#ff6267!important;letter-spacing:1.8px!important}
+  .hero-copy h1{max-width:350px!important;margin:10px 0 0!important;font-size:clamp(39px,11vw,52px)!important;line-height:.94!important;letter-spacing:-2.2px!important;color:#fff!important}
+  .hero-copy h1 em{color:#ff3f45!important}.hero-copy>p,.hero-features{display:none!important}
+  .login-card-wrap{position:absolute!important;z-index:9!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;width:100%!important;padding:0 20px calc(24px + env(safe-area-inset-bottom))!important;background:transparent!important;transform:none!important}
+  .login-card{width:100%!important;max-width:480px!important;min-height:0!important;margin:0 auto!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;color:#fff!important}
+  .login-card:after{display:none!important}.card-kicker{color:#ff6267!important;font-size:9px!important;letter-spacing:1.7px!important}
+  .login-card h2{margin:8px 0 5px!important;font-size:30px!important;line-height:1!important;letter-spacing:-1.1px!important;color:#fff!important}
+  .intro{max-width:330px!important;margin:0!important;color:rgba(255,255,255,.70)!important;font-size:13px!important;line-height:1.5!important}
+  .telegram-box{justify-content:flex-start!important;margin-top:17px!important;padding:9px!important;width:max-content!important;max-width:100%!important;border:1px solid rgba(255,255,255,.16)!important;border-radius:14px!important;background:rgba(255,255,255,.08)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important}
+  .help{justify-content:flex-start!important;text-align:left!important;margin:9px 0 0!important;max-width:330px!important;color:rgba(255,255,255,.52)!important;font-size:10.5px!important}.help i{color:#ff6267!important}
+  .divider{height:1px!important;margin:17px 0 14px!important;background:rgba(255,255,255,.12)!important;border:0!important}
+  .trust{gap:11px!important}.trust>i{width:36px!important;height:36px!important;flex-basis:36px!important;border:1px solid rgba(255,255,255,.14)!important;background:rgba(255,255,255,.08)!important;color:#ff6267!important}.trust b{color:#fff!important;font-size:12.5px!important}.trust span{color:rgba(255,255,255,.56)!important;font-size:10.5px!important}
+  .system-row{margin-top:15px!important;padding-top:12px!important;border-top:1px solid rgba(255,255,255,.10)!important;color:rgba(255,255,255,.48)!important;font-size:9.5px!important}.system-row span:first-child{color:rgba(255,255,255,.68)!important}
+  .error{border-color:rgba(255,80,85,.30)!important;background:rgba(151,22,28,.25)!important;color:#fff!important}
+  .page-footer{display:none!important}
+}
+@media(max-height:700px) and (max-width:760px){.hero-copy{padding-top:48px!important}.hero-copy h1{font-size:35px!important}.trust{display:none!important}.divider{margin:12px 0!important}.login-card-wrap{padding-bottom:calc(15px + env(safe-area-inset-bottom))!important}}
