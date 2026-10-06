@@ -732,7 +732,12 @@ def _save_user_chats(chats):
 
 def _chat_title(text):
     clean=re.sub(r"\s+"," ",str(text or "")).strip()
-    return (clean[:52]+"…") if len(clean)>52 else (clean or "New maintenance chat")
+    if not clean:
+        return "New maintenance chat"
+    # Keep mobile/desktop conversation labels concise and scannable.
+    words=clean.split()[:5]
+    title=" ".join(words).strip(" -:,.!?;")
+    return title or "New maintenance chat"
 
 def _now_iso():
     return chicago_now().isoformat(timespec="seconds")
