@@ -98,3 +98,5 @@ Resolved/reported case records are automatically indexed into `fleet_knowledge.s
 - Workers AI connection diagnostics moved out of AI Knowledge and into Developer settings.
 - Added Remember last page and Default landing page preferences.
 - Sign out now uses a dedicated confirmation dialog.
+
+- v68: Developer workspace rearranged into Connections & Bot Health header, Manage Users main panel, and compact System Status side panel.

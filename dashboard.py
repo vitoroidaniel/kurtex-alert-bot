@@ -4,7 +4,7 @@ Routes and read-only API. Presentation lives in templates/ and static/.
 """
 import base64, csv, hashlib, hmac, io, json, logging, os, re, secrets, time, uuid, urllib.parse, urllib.request
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Thread, Lock
 from functools import wraps
@@ -1116,24 +1116,72 @@ def api_developer_status():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     if not _developer_only(): return jsonify({"error":"forbidden"}), 403
     from backend.storage.user_store import get_all_users
+    from backend.core.app_time import chicago_date_str, today_str
     data_dir = Path(os.getenv("DATA_DIR", "/app/data"))
     try:
         data_writable = data_dir.exists() and os.access(str(data_dir), os.W_OK)
     except Exception:
         data_writable = False
     try:
-        case_count = len(load_cases())
+        cases = load_cases()
     except Exception:
-        case_count = 0
+        cases = []
+    today = today_str()
+    received_today = sum(1 for c in cases if chicago_date_str(c.get("opened_at")) == today)
+    resolved_today = sum(1 for c in cases if c.get("status") == "done" and chicago_date_str(c.get("closed_at")) == today)
+    assigned_now = sum(1 for c in cases if c.get("status") == "assigned")
+    reported_now = sum(1 for c in cases if c.get("status") == "reported")
+
+    heartbeat = {}
+    heartbeat_path = data_dir / "bot_runtime.json"
+    try:
+        heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8")) if heartbeat_path.exists() else {}
+    except Exception:
+        heartbeat = {}
+    heartbeat_age = None
+    bot_alive = False
+    try:
+        hb = datetime.fromisoformat(str(heartbeat.get("heartbeat_at") or "").replace("Z", "+00:00"))
+        if hb.tzinfo is None: hb = hb.replace(tzinfo=timezone.utc)
+        heartbeat_age = max(0, int((datetime.now(timezone.utc) - hb).total_seconds()))
+        bot_alive = heartbeat_age <= 75 and bool(heartbeat.get("polling_running"))
+    except Exception:
+        pass
+    uptime_seconds = None
+    try:
+        started = datetime.fromisoformat(str(heartbeat.get("started_at") or "").replace("Z", "+00:00"))
+        if started.tzinfo is None: started = started.replace(tzinfo=timezone.utc)
+        uptime_seconds = max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+    except Exception:
+        pass
+
     return jsonify({
         "telegram_configured": bool(os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")),
         "ai_configured": bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),
         "data_writable": data_writable,
         "data_dir": str(data_dir),
-        "case_count": case_count,
+        "case_count": len(cases),
         "user_count": len(get_all_users()),
         "ai_model": KURTEX_AI_MODEL if (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN) else "",
         "environment": "Railway" if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID") else "Local",
+        "bot_runtime": {
+            "alive": bot_alive,
+            "heartbeat_age_seconds": heartbeat_age,
+            "uptime_seconds": uptime_seconds,
+            "started_at": heartbeat.get("started_at"),
+            "last_update_at": heartbeat.get("last_update_at"),
+            "updates_processed": heartbeat.get("updates_processed", 0),
+            "callbacks_processed": heartbeat.get("callbacks_processed", 0),
+            "polling_running": bool(heartbeat.get("polling_running")),
+            "username": heartbeat.get("username", ""),
+            "railway_service": heartbeat.get("railway_service", ""),
+            "railway_environment": heartbeat.get("railway_environment", ""),
+            "railway_deployment_id": heartbeat.get("railway_deployment_id", ""),
+            "received_today": received_today,
+            "resolved_today": resolved_today,
+            "assigned_now": assigned_now,
+            "reported_now": reported_now,
+        },
     })
 
 @app.route("/api/developer/test/telegram", methods=["POST"])

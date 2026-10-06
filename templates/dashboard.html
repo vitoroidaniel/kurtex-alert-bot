@@ -344,12 +344,18 @@
   {% if is_developer %}
   <div class="page" id="page-developer">
     <div class="developer-workspace">
-      <div class="developer-status-grid" id="developer-status-grid"><div class="card"><div class="loading">Checking services...</div></div></div>
-      <div class="developer-grid developer-grid-users-first">
+      <section class="card developer-card developer-health-card">
+        <div class="developer-card-head developer-health-head"><div><span class="developer-card-icon"><i class="ph ph-activity"></i></span><div><h3>Connections &amp; bot health</h3><p>Live Telegram, AI and Railway runtime status.</p></div></div><button class="btn secondary" type="button" onclick="loadDeveloperWorkspace(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div>
+        <div class="developer-status-grid" id="developer-status-grid"><div class="loading">Checking services...</div></div>
+        <div class="developer-health-tests">
+          <div class="developer-health-test"><div><span class="developer-health-test-icon"><i class="ph ph-paper-plane-tilt"></i></span><div><strong>Telegram Bot API</strong><small>Verify the bot can reach Telegram.</small></div></div><button class="developer-test-btn" type="button" onclick="developerTestTelegram()"><i class="ph ph-plugs-connected"></i><span>Test connection</span></button><div id="developer-telegram-result" class="developer-test-result"></div></div>
+          <div class="developer-health-test"><div><span class="developer-health-test-icon"><i class="ph ph-brain"></i></span><div><strong>Workers AI</strong><small>Verify the configured AI service.</small></div></div><button class="developer-test-btn" type="button" onclick="developerTestAI()"><i class="ph ph-wave-sine"></i><span>Test connection</span></button><div id="developer-ai-result" class="developer-test-result"></div></div>
+        </div>
+      </section>
+      <div class="developer-grid developer-main-grid">
         <section class="card developer-card developer-users-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-users-three"></i></span><div><h3>Manage users</h3><p>Authorized Telegram users and dashboard roles.</p></div></div><button class="btn secondary" type="button" onclick="developerOpenAddUser()"><i class="ph ph-plus"></i> Add user</button></div><div id="developer-users"><div class="loading">Loading users...</div></div></section>
-        <aside class="card developer-card developer-connections-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-plugs-connected"></i></span><div><h3>Connections</h3><p>Quick service checks.</p></div></div></div><div class="developer-connection-list"><div class="developer-connection-row"><div><strong>Workers AI</strong><small>Cloudflare AI</small></div><button class="developer-test-btn" type="button" onclick="developerTestAI()" title="Test Workers AI"><i class="ph ph-wave-sine"></i><span>Test</span></button></div><div id="developer-ai-result" class="developer-test-result"></div><div class="developer-connection-row"><div><strong>Telegram</strong><small>Bot API</small></div><button class="developer-test-btn" type="button" onclick="developerTestTelegram()" title="Test Telegram"><i class="ph ph-paper-plane-tilt"></i><span>Test</span></button></div><div id="developer-telegram-result" class="developer-test-result"></div></div></aside>
+        <aside class="card developer-card developer-runtime-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-hard-drives"></i></span><div><h3>System status</h3><p>Live bot activity and safe runtime details.</p></div></div></div><div id="developer-runtime" class="developer-runtime"></div></aside>
       </div>
-      <section class="card developer-card developer-runtime-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-hard-drives"></i></span><div><h3>Runtime</h3><p>Safe deployment details for troubleshooting. Secret values are never displayed.</p></div></div><button class="btn secondary" type="button" onclick="loadDeveloperWorkspace(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div><div id="developer-runtime" class="developer-runtime"></div></section>
     </div>
   </div>
   {% endif %}

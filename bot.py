@@ -4,9 +4,11 @@ Dynamic user management via Telegram commands + forward-to-add flow.
 """
 
 import asyncio
+import json
 import logging
 import os
 import signal
+from datetime import datetime, timezone
 from pathlib import Path
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -51,6 +53,56 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+# Lightweight runtime heartbeat consumed by the Developer workspace. It lives on
+# the same Railway volume as cases, so the dashboard can verify the bot process
+# itself is alive without requiring Railway API credentials.
+_BOT_STARTED_AT = datetime.now(timezone.utc)
+_BOT_RUNTIME = {"updates_processed": 0, "callbacks_processed": 0, "last_update_at": None}
+
+def _heartbeat_path():
+    return Path(config.DATA_DIR) / "bot_runtime.json"
+
+def _write_bot_heartbeat(username=""):
+    path = _heartbeat_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pid": os.getpid(),
+        "started_at": _BOT_STARTED_AT.isoformat(),
+        "heartbeat_at": datetime.now(timezone.utc).isoformat(),
+        "last_update_at": _BOT_RUNTIME.get("last_update_at"),
+        "updates_processed": int(_BOT_RUNTIME.get("updates_processed", 0)),
+        "callbacks_processed": int(_BOT_RUNTIME.get("callbacks_processed", 0)),
+        "polling_running": bool(_BOT_RUNTIME.get("polling_running", False)),
+        "username": username or "",
+        "railway_service": os.getenv("RAILWAY_SERVICE_NAME", ""),
+        "railway_environment": os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RAILWAY_ENVIRONMENT", ""),
+        "railway_deployment_id": os.getenv("RAILWAY_DEPLOYMENT_ID", ""),
+    }
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        os.replace(tmp, path)
+    except Exception as exc:
+        logger.warning("[HEALTH] Could not write bot heartbeat: %s", exc)
+        try: tmp.unlink(missing_ok=True)
+        except OSError: pass
+
+async def _bot_heartbeat_loop(application):
+    while True:
+        try:
+            me = application.bot_data.get("bot_identity") or {}
+            _BOT_RUNTIME["polling_running"] = bool(application.updater and application.updater.running)
+            _write_bot_heartbeat(me.get("username", ""))
+        except Exception:
+            logger.exception("[HEALTH] Bot heartbeat failed")
+        await asyncio.sleep(20)
+
+async def runtime_update_middleware(update: Update, ctx):
+    _BOT_RUNTIME["updates_processed"] += 1
+    _BOT_RUNTIME["last_update_at"] = datetime.now(timezone.utc).isoformat()
+    if update.callback_query is not None:
+        _BOT_RUNTIME["callbacks_processed"] += 1
 # httpx logs Telegram URLs at INFO level, which exposes the bot token and
 # creates enough noise to hide real callback errors in Railway logs.
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -195,6 +247,9 @@ async def post_init(application: Application) -> None:
                 logger.warning(f"Could not set commands for {uid_str}: {e}")
 
     me = await application.bot.get_me()
+    application.bot_data["bot_identity"] = {"id": me.id, "username": me.username or ""}
+    _write_bot_heartbeat(me.username or "")
+    application.create_task(_bot_heartbeat_loop(application), name="kurtex-bot-heartbeat")
     logger.info(f"{BOT_NAME} started as @{me.username}")
 
 
@@ -452,6 +507,7 @@ def main():
     app.bot_data["alert_handler"] = alert_h
     _register_sigterm(app)
 
+    app.add_handler(TypeHandler(Update, runtime_update_middleware), group=-3)
     app.add_handler(TypeHandler(Update, callback_trace_middleware), group=-2)
     app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
 
