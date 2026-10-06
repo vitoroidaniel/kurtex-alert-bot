@@ -5479,3 +5479,12 @@ body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:30px!importan
 .analytics-access-denied>i{display:grid;place-items:center;width:46px;height:46px;margin:0 auto 14px;border-radius:14px;background:var(--surface2);font-size:22px;color:var(--muted)}
 .analytics-access-denied h2{margin:0 0 7px;font-size:20px}.analytics-access-denied p{margin:0 0 7px;font-weight:600}.analytics-access-denied small{color:var(--muted);line-height:1.5}
 @media(max-width:760px){.analytics-access-denied{margin:38px 0;padding:26px 18px;border-radius:16px}}
+/* v43 management analytics: background refresh + compact mobile web search */
+.management-toolbar-controls-only{justify-content:flex-end!important}
+.analytics-background-refresh{opacity:.72;transition:opacity .18s ease;pointer-events:none}
+.management-metric{position:relative}.management-metric-icon{font-size:18px;margin-bottom:8px}.management-metric>span{display:block;margin-top:5px;color:var(--muted);font-size:11px}
+.analytics-empty{padding:18px 2px;color:var(--muted);font-size:12px}
+@media(max-width:700px){
+  .parts-web-search-btn{width:38px!important;min-width:38px!important;max-width:38px!important;padding:0!important;justify-content:center!important;flex:0 0 38px!important}
+  .parts-web-search-btn span{display:none!important}.parts-web-search-btn i{margin:0!important;font-size:17px!important}
+}

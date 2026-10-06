@@ -2,16 +2,38 @@ function toggleGroup(id) {
   var el=document.getElementById(id), caret=document.getElementById("caret-"+id), open=el.classList.contains("open");
   el.classList.toggle("open",!open); if(caret) caret.classList.toggle("open",!open);
 }
-var trendPeriod=7;
-function setTrendPeriod(days,btn){trendPeriod=days;document.querySelectorAll("#page-trends .toggle-btn").forEach(b=>b.classList.remove("active"));if(btn)btn.classList.add("active");loadTrends()}
-function deltaText(v){if(v===null||v===undefined)return "No previous data";return (v>0?"↑ ":v<0?"↓ ":"— ")+Math.abs(v)+"% vs previous period"}
-function kpi(label,value,delta){return '<div class="card mgmt-kpi"><small>'+h(label)+'</small><strong>'+h(value)+'</strong><span class="delta">'+h(deltaText(delta))+'</span></div>'}
+var trendPeriod=30;
+function setTrendPeriod(days,btn){trendPeriod=days;document.querySelectorAll("#page-trends .toggle-btn").forEach(b=>b.classList.remove("active"));if(btn)btn.classList.add("active");loadTrends(false)}
+function deltaText(v,suffix){if(v===null||v===undefined)return "No comparison";var n=Number(v)||0;return (n>0?"↑ ":n<0?"↓ ":"— ")+Math.abs(n)+(suffix||"%")+" vs previous"}
+function mgmtKpi(label,value,sub,icon){return '<div class="card mgmt-kpi management-metric"><div class="management-metric-icon"><i class="ph '+(icon||'ph-chart-bar')+'"></i></div><small>'+h(label)+'</small><strong>'+h(value)+'</strong><span>'+h(sub||'')+'</span></div>'}
 function rankRows(rows){return '<div class="analytics-rank">'+(rows||[]).map(function(x){return '<div class="analytics-rank-row"><div><b>'+h(x.label)+'</b><small>'+h(x.detail||'')+'</small></div><strong>'+h(x.value)+'</strong></div>'}).join('')+'</div>'}
-async function loadTrends(){var el=document.getElementById('fleet-analytics-content');if(!el)return;updateHTML(el,'<div class="loading">Calculating fleet analytics...</div>');try{var r=await apiFetch('/api/trends?period='+trendPeriod),d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load analytics');var m=d.metrics||{};updateHTML(el,
-'<div class="mgmt-kpis">'+kpi('Total cases',m.total,null)+kpi('Open',m.open,null)+kpi('Resolved',m.resolved,null)+kpi('Incomplete',m.incomplete,null)+kpi('Affected units',m.units,null)+kpi('Recurring units',m.recurring_units,null)+kpi('Repeat problems',m.repeat_problems,null)+kpi('Reports today',m.today,null)+'</div>'+
-'<div class="card ai-brief-card"><div class="ai-brief-head"><div class="card-title"><i class="ph ph-sparkle"></i> AI Fleet Brief</div><small>Based on '+h(d.sample_size)+' cases · live data</small></div><div class="ai-brief-list">'+(d.insights||[]).slice(0,3).map(x=>'<div class="ai-brief-item">'+h(x)+'</div>').join('')+'</div></div>'+
-'<div class="analytics-two"><div class="card"><div class="card-title"><i class="ph ph-warning-circle"></i> Problem Concentration</div>'+rankRows(d.categories)+'</div><div class="card"><div class="card-title"><i class="ph ph-truck"></i> Equipment Mix</div>'+rankRows(d.equipment_mix)+'</div><div class="card"><div class="card-title"><i class="ph ph-repeat"></i> Units Requiring Attention</div>'+rankRows(d.units_to_watch)+'</div><div class="card"><div class="card-title"><i class="ph ph-list-checks"></i> Case Status</div>'+rankRows(d.status_breakdown)+'</div></div>');}catch(e){updateHTML(el,errorContent(e))}}
-async function loadComparison(){var el=document.getElementById('comparison-content');if(!el)return;var sel=document.getElementById('compare-days'),days=sel?sel.value:30;updateHTML(el,'<div class="loading">Building comparison...</div>');try{var r=await apiFetch('/api/comparison?period='+days),d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to compare');var cards=(d.rows||[]).map(function(x){return '<div class="card compare-card"><small>'+h(x.label)+'</small><div class="compare-values"><strong>'+h(x.current)+'</strong><span>Previous '+h(x.previous)+'</span></div><div class="delta">'+h(deltaText(x.delta))+'</div></div>'}).join('');updateHTML(el,'<div class="compare-grid">'+cards+'</div><div class="analytics-two"><div class="card"><div class="card-title"><i class="ph ph-chart-bar"></i> Category Change</div>'+rankRows(d.category_change)+'</div><div class="card"><div class="card-title"><i class="ph ph-sparkle"></i> Management Summary</div><div class="ai-brief-list">'+(d.insights||[]).map(x=>'<div class="ai-brief-item">'+h(x)+'</div>').join('')+'</div></div></div>');}catch(e){updateHTML(el,errorContent(e))}}
+function analyticsCard(title,icon,rows,empty){return '<div class="card"><div class="card-title"><i class="ph '+icon+'"></i> '+h(title)+'</div>'+((rows||[]).length?rankRows(rows):'<div class="analytics-empty">'+h(empty||'No data for this period.')+'</div>')+'</div>'}
+function setAnalyticsBusy(el,busy){if(el)el.classList.toggle('analytics-background-refresh',!!busy)}
+async function loadTrends(initial){var el=document.getElementById('fleet-analytics-content');if(!el)return;var empty=!el.dataset.loaded;if(empty)updateHTML(el,'<div class="loading">Calculating management analytics...</div>');else setAnalyticsBusy(el,true);try{var r=await apiFetch('/api/trends?period='+trendPeriod),d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load analytics');var m=d.metrics||{};updateHTML(el,
+'<div class="mgmt-kpis">'+
+mgmtKpi('Cases in period',m.total,m.units+' affected units','ph-files')+
+mgmtKpi('Recurring units',m.recurring_units,(m.recurrence_rate||0)+'% of affected units','ph-repeat')+
+mgmtKpi('Repeat events',m.repeat_problems,(m.repeat_case_share||0)+'% of case volume','ph-arrows-counter-clockwise')+
+mgmtKpi('Open backlog',m.open_backlog,(m.aged_open||0)+' open 7+ days','ph-warning')+
+mgmtKpi('Resolved records',m.resolved,(m.resolution_share||0)+'% of period cases','ph-check-circle')+
+mgmtKpi('Incomplete records',m.incomplete,(m.incomplete_share||0)+'% need better data','ph-note-pencil')+
+'</div>'+
+'<div class="card ai-brief-card"><div class="ai-brief-head"><div class="card-title"><i class="ph ph-sparkle"></i> Management Brief</div><small>Based on '+h(d.sample_size)+' cases · calculated from live fleet data</small></div><div class="ai-brief-list">'+(d.insights||[]).slice(0,4).map(x=>'<div class="ai-brief-item">'+h(x)+'</div>').join('')+'</div></div>'+
+'<div class="analytics-two">'+
+analyticsCard('Recurring Hotspots','ph-crosshair',d.recurring_hotspots,'No recurring hotspots detected.')+
+analyticsCard('Problem Concentration','ph-warning-circle',d.categories)+
+analyticsCard('Equipment Burden','ph-truck',d.equipment_mix)+
+analyticsCard('Data Quality','ph-clipboard-text',d.data_quality)+
+'</div>');el.dataset.loaded='1';}catch(e){if(empty)updateHTML(el,errorContent(e));else if(typeof showToast==='function')showToast(e.message||'Analytics refresh failed','error')}finally{setAnalyticsBusy(el,false)}}
+async function loadComparison(initial){var el=document.getElementById('comparison-content');if(!el)return;var sel=document.getElementById('compare-days'),days=sel?sel.value:30;var empty=!el.dataset.loaded;if(empty)updateHTML(el,'<div class="loading">Building management comparison...</div>');else setAnalyticsBusy(el,true);try{var r=await apiFetch('/api/comparison?period='+days),d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to compare');var cards=(d.rows||[]).map(function(x){return '<div class="card compare-card"><small>'+h(x.label)+'</small><div class="compare-values"><strong>'+h(x.current)+'</strong><span>Previous '+h(x.previous)+'</span></div><div class="delta">'+h(deltaText(x.delta,x.unit||'%'))+'</div></div>'}).join('');updateHTML(el,
+'<div class="compare-grid">'+cards+'</div>'+
+'<div class="card ai-brief-card"><div class="ai-brief-head"><div class="card-title"><i class="ph ph-scales"></i> Executive Comparison</div><small>'+h(days)+' days vs previous '+h(days)+' days</small></div><div class="ai-brief-list">'+(d.insights||[]).map(x=>'<div class="ai-brief-item">'+h(x)+'</div>').join('')+'</div></div>'+
+'<div class="analytics-two">'+
+analyticsCard('Problem Category Movement','ph-chart-line-up',d.category_change)+
+analyticsCard('Equipment Movement','ph-truck-trailer',d.equipment_change)+
+analyticsCard('New Recurring Units','ph-warning-diamond',d.new_recurring,'No units became newly recurring.')+
+analyticsCard('Improved Recurring Units','ph-trend-down',d.cleared_recurring,'No recurring units cleared in this comparison.')+
+'</div>');el.dataset.loaded='1';}catch(e){if(empty)updateHTML(el,errorContent(e));else if(typeof showToast==='function')showToast(e.message||'Comparison refresh failed','error')}finally{setAnalyticsBusy(el,false)}}
 
 // ── Issue Search ──────────────────────────────────────────────────────────────
 var issueSearchVtype = "";

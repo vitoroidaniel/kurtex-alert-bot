@@ -175,6 +175,10 @@ function showPage(page) {
   // unrelated stats requests and makes navigation feel like a page reload.
   if (page === "ai_assistant") {
     if (typeof ensureAIPageReady === "function") ensureAIPageReady();
+  } else if (page === "trends") {
+    if (typeof loadTrends === "function") loadTrends(true);
+  } else if (page === "comparison") {
+    if (typeof loadComparison === "function") loadComparison(true);
   } else if (page !== "ai_knowledge") {
     refresh(true);
   }

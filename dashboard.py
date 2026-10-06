@@ -1810,44 +1810,42 @@ def api_trends():
     try:
         days=max(1,min(366,int(request.args.get("period","30"))))
         cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date()
+        resolved_status={"done","resolved","closed"}
         def cat(c):
             t=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes")).lower()
             groups=[("Tires & Wheel End",("tire","wheel","hub","bearing","seal")),("Air & Suspension",("air bag","suspension","air leak","shock")),("Brakes",("brake","abs")),("Electrical & Battery",("electrical","battery","voltage","alternator","wiring")),("Cooling System",("coolant","radiator","overheat","cooling")),("Reefer System",("reefer","thermo king","carrier unit","temperature")),("Engine",("engine","oil pressure","misfire","def","dpf")),("Lighting",("light","lamp","headlight","marker")),("Fuel System",("fuel","diesel","injector"))]
             return next((n for n,ks in groups if any(k in t for k in ks)),"Other")
-        def subset(start,end): return [c for c in cases if start<=case_local_date(c)<=end]
-        cur_start=today-timedelta(days=days-1); prev_end=cur_start-timedelta(days=1); prev_start=prev_end-timedelta(days=days-1)
-        cur=subset(cur_start.isoformat(),today.isoformat()); prev=subset(prev_start.isoformat(),prev_end.isoformat())
-        def stats(rows):
-            units={(str(c.get("unit_number") or "").strip(),str(c.get("vehicle_type") or "").lower()) for c in rows if str(c.get("unit_number") or "").strip()}
-            pairs=Counter((str(c.get("unit_number") or "").strip(),cat(c)) for c in rows if str(c.get("unit_number") or "").strip())
-            recurring={u for (u,_),n in pairs.items() if n>=2}; repeat=sum(max(0,n-1) for n in pairs.values())
-            incomplete=sum(1 for c in rows if str(c.get("status") or "").lower() in ("incomplete","pending","open") or not str(c.get("issue_text") or c.get("description") or "").strip())
-            resolved=sum(1 for c in rows if str(c.get("status") or "").lower() in ("done","resolved","closed"))
-            return {"total":len(rows),"resolved":resolved,"open":len(rows)-resolved,"incomplete":incomplete,"units":len(units),"recurring_units":len(recurring),"repeat_problems":repeat}
-        cs,ps=stats(cur),stats(prev)
-        def delta(k):
-            a,b=cs[k],ps[k]
-            if not b:return 0 if not a else 100
-            return round((a-b)/b*100)
-        metrics={**cs,"today":len(subset(today.isoformat(),today.isoformat()))}
-        for k in ("total","resolved","open","incomplete","units","recurring_units","repeat_problems"): metrics["delta_"+("recurring" if k=="recurring_units" else "repeat" if k=="repeat_problems" else k)]=delta(k)
-        cats=Counter(cat(c) for c in cur); categories=[{"label":k,"value":v,"detail":f"{round(v/len(cur)*100) if cur else 0}% of cases"} for k,v in cats.most_common(7)]
-        upairs=Counter(str(c.get("unit_number") or "").strip() for c in cur if str(c.get("unit_number") or "").strip()); watch=[]
-        for u,n in upairs.most_common(7):
-            uc=[c for c in cur if str(c.get("unit_number") or "").strip()==u]; top=Counter(cat(c) for c in uc).most_common(1)[0][0]
-            watch.append({"label":u,"value":n,"detail":f"{top} · {n} case{'s' if n!=1 else ''}"})
-        insights=[]
-        if categories: insights.append(f"{categories[0]['label']} is the largest problem category with {categories[0]['value']} cases in this period.")
-        if watch: insights.append(f"Unit {watch[0]['label']} has the highest case volume in the selected period ({watch[0]['value']} cases).")
-        if cs['recurring_units']: insights.append(f"{cs['recurring_units']} units show repeated problems in the same category and should be reviewed for recurrence.")
-        if cs['total']!=ps['total']: insights.append(f"Overall case volume is {'up' if cs['total']>ps['total'] else 'down'} {abs(delta('total'))}% versus the previous {days}-day period.")
-        if not insights: insights=["No significant fleet pattern is available for the selected period yet."]
-        
+        start=today-timedelta(days=days-1); cur=[c for c in cases if start.isoformat()<=case_local_date(c)<=today.isoformat()]
+        units={(str(c.get("unit_number") or "").strip(),str(c.get("vehicle_type") or "").lower()) for c in cur if str(c.get("unit_number") or "").strip()}
+        pairs=Counter((str(c.get("unit_number") or "").strip(),cat(c)) for c in cur if str(c.get("unit_number") or "").strip())
+        recurring={u for (u,_),n in pairs.items() if n>=2}; repeat=sum(max(0,n-1) for n in pairs.values())
+        incomplete=sum(1 for c in cur if not str(c.get("issue_text") or c.get("description") or "").strip() or str(c.get("status") or "").lower() in ("incomplete","pending"))
+        resolved=sum(1 for c in cur if str(c.get("status") or "").lower() in resolved_status)
+        open_all=[c for c in cases if str(c.get("status") or "").lower() not in resolved_status]
+        aged=0
+        for c in open_all:
+            try:
+                d=case_local_date(c); aged += bool(d and (today-datetime.fromisoformat(d).date()).days>=7)
+            except Exception: pass
+        metrics={"total":len(cur),"units":len(units),"recurring_units":len(recurring),"recurrence_rate":round(len(recurring)/len(units)*100) if units else 0,"repeat_problems":repeat,"repeat_case_share":round(repeat/len(cur)*100) if cur else 0,"resolved":resolved,"resolution_share":round(resolved/len(cur)*100) if cur else 0,"incomplete":incomplete,"incomplete_share":round(incomplete/len(cur)*100) if cur else 0,"open_backlog":len(open_all),"aged_open":aged}
+        cats=Counter(cat(c) for c in cur); categories=[{"label":k,"value":v,"detail":f"{round(v/len(cur)*100) if cur else 0}% of selected-period cases"} for k,v in cats.most_common(7)]
         equipment=Counter((str(c.get("vehicle_type") or "Unknown").strip().title() or "Unknown") for c in cur)
-        equipment_mix=[{"label":k,"value":v,"detail":f"{round(v/len(cur)*100) if cur else 0}% of cases"} for k,v in equipment.most_common()]
-        status_counts=Counter((str(c.get("status") or "Open").strip().title() or "Open") for c in cur)
-        status_breakdown=[{"label":k,"value":v,"detail":"Current selected period"} for k,v in status_counts.most_common()]
-        return jsonify(metrics=metrics,categories=categories,units_to_watch=watch,equipment_mix=equipment_mix,status_breakdown=status_breakdown,insights=insights,sample_size=len(cur),period=days)
+        equipment_mix=[{"label":k,"value":v,"detail":f"{round(v/len(cur)*100) if cur else 0}% of case volume"} for k,v in equipment.most_common()]
+        hotspots=[]
+        for (u,k),n in sorted(pairs.items(),key=lambda x:x[1],reverse=True):
+            if n<2: continue
+            vt=next((str(c.get("vehicle_type") or "Unit").title() for c in cur if str(c.get("unit_number") or "").strip()==u),"Unit")
+            hotspots.append({"label":u,"value":n,"detail":f"{vt} · {k} · repeated {n} times"})
+            if len(hotspots)>=7: break
+        complete=max(0,len(cur)-incomplete)
+        data_quality=[{"label":"Complete case records","value":complete,"detail":f"{round(complete/len(cur)*100) if cur else 0}% usable without cleanup"},{"label":"Incomplete / pending records","value":incomplete,"detail":"May reduce analytics confidence"},{"label":"Cases with unit number","value":sum(1 for c in cur if str(c.get('unit_number') or '').strip()),"detail":"Can be linked to unit history"}]
+        insights=[]
+        if hotspots: insights.append(f"{hotspots[0]['label']} is the strongest recurring hotspot: {hotspots[0]['detail']}.")
+        if categories: insights.append(f"{categories[0]['label']} represents {categories[0]['detail']} ({categories[0]['value']} cases).")
+        if aged: insights.append(f"{aged} currently open cases are at least 7 days old and may need management review.")
+        if incomplete: insights.append(f"{incomplete} records in the selected period are incomplete or pending, which can reduce analytics reliability.")
+        if not insights: insights=["No significant management risk signal is available for the selected period."]
+        return jsonify(metrics=metrics,categories=categories,recurring_hotspots=hotspots,equipment_mix=equipment_mix,data_quality=data_quality,insights=insights,sample_size=len(cur),period=days)
     except Exception:
         logger.exception("Fleet analytics failed"); return jsonify({"error":"Unable to load fleet analytics."}),500
 
@@ -1860,21 +1858,27 @@ def api_comparison():
     try:
         days=max(1,min(366,int(request.args.get("period","30")))); cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date(); start=today-timedelta(days=days-1); pe=start-timedelta(days=1); ps=pe-timedelta(days=days-1)
         cur=[c for c in cases if start.isoformat()<=case_local_date(c)<=today.isoformat()]; prev=[c for c in cases if ps.isoformat()<=case_local_date(c)<=pe.isoformat()]
-        def resolved(rows):return sum(1 for c in rows if str(c.get("status") or "").lower() in ("done","resolved","closed"))
-        def units(rows):return len({str(c.get("unit_number") or "").strip() for c in rows if str(c.get("unit_number") or "").strip()})
-        def recurring(rows):
-            x=Counter(str(c.get("unit_number") or "").strip() for c in rows if str(c.get("unit_number") or "").strip());return sum(1 for n in x.values() if n>=2)
-        def pct(a,b):return (0 if not a else 100) if not b else round((a-b)/b*100)
-        vals=[("Total cases",len(cur),len(prev)),("Resolved",resolved(cur),resolved(prev)),("Open",len(cur)-resolved(cur),len(prev)-resolved(prev)),("Affected units",units(cur),units(prev)),("Recurring units",recurring(cur),recurring(prev))]
-        rows=[{"label":l,"current":a,"previous":b,"delta":pct(a,b)} for l,a,b in vals]
-        def simplecat(c):
-            t=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes")).lower(); maps=[("Tires / Wheel",("tire","wheel","bearing")),("Air / Suspension",("air leak","suspension","air bag")),("Brakes",("brake","abs")),("Electrical",("battery","electrical","wiring","voltage")),("Reefer",("reefer","thermo king","temperature")),("Engine",("engine","dpf","def","oil pressure"))];return next((n for n,ks in maps if any(k in t for k in ks)),"Other")
-        cc,pc=Counter(simplecat(c) for c in cur),Counter(simplecat(c) for c in prev); cats=[]
-        for k in set(cc)|set(pc): cats.append({"label":k,"value":cc[k],"detail":f"Previous {pc[k]} · {pct(cc[k],pc[k]):+d}%"})
-        cats=sorted(cats,key=lambda x:x['value'],reverse=True)[:7]
-        insights=[f"Case volume is {'higher' if len(cur)>len(prev) else 'lower' if len(cur)<len(prev) else 'unchanged'} compared with the previous {days}-day period.",f"{recurring(cur)} recurring units are present now versus {recurring(prev)} in the previous period."]
-        if cats: insights.append(f"{cats[0]['label']} currently has the highest category volume with {cats[0]['value']} cases.")
-        return jsonify(rows=rows,category_change=cats,insights=insights,period=days)
+        resolved_status={"done","resolved","closed"}
+        def category(c):
+            t=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes")).lower(); maps=[("Tires / Wheel",("tire","wheel","bearing","hub","seal")),("Air / Suspension",("air leak","suspension","air bag")),("Brakes",("brake","abs")),("Electrical",("battery","electrical","wiring","voltage")),("Cooling",("coolant","radiator","overheat")),("Reefer",("reefer","thermo king","temperature")),("Engine",("engine","dpf","def","oil pressure"))];return next((n for n,ks in maps if any(k in t for k in ks)),"Other")
+        def snapshot(rows):
+            us={str(c.get("unit_number") or "").strip() for c in rows if str(c.get("unit_number") or "").strip()}; pairs=Counter((str(c.get("unit_number") or "").strip(),category(c)) for c in rows if str(c.get("unit_number") or "").strip()); recurring={u for (u,_),n in pairs.items() if n>=2}; repeats=sum(max(0,n-1) for n in pairs.values()); res=sum(1 for c in rows if str(c.get("status") or "").lower() in resolved_status); inc=sum(1 for c in rows if not str(c.get("issue_text") or c.get("description") or "").strip() or str(c.get("status") or "").lower() in ("incomplete","pending")); return {"total":len(rows),"units":len(us),"recurring":recurring,"repeat":repeats,"resolved_pct":round(res/len(rows)*100) if rows else 0,"incomplete_pct":round(inc/len(rows)*100) if rows else 0}
+        a,b=snapshot(cur),snapshot(prev)
+        def pct(x,y): return (0 if not x else 100) if not y else round((x-y)/y*100)
+        vals=[("Case volume",a['total'],b['total'],"%"),("Affected units",a['units'],b['units'],"%"),("Recurring units",len(a['recurring']),len(b['recurring']),"%"),("Repeat events",a['repeat'],b['repeat'],"%"),("Resolved share",a['resolved_pct'],b['resolved_pct']," pp"),("Incomplete share",a['incomplete_pct'],b['incomplete_pct']," pp")]
+        rows=[]
+        for l,x,y,u in vals:
+            delta=(x-y) if u==" pp" else pct(x,y); rows.append({"label":l,"current":f"{x}%" if u==" pp" else x,"previous":f"{y}%" if u==" pp" else y,"delta":delta,"unit":u})
+        cc,pc=Counter(category(c) for c in cur),Counter(category(c) for c in prev); category_change=[]
+        for k in set(cc)|set(pc): category_change.append({"label":k,"value":cc[k],"detail":f"Previous {pc[k]} · {pct(cc[k],pc[k]):+d}%"})
+        category_change=sorted(category_change,key=lambda x:abs(int(x['detail'].split()[-1].replace('%',''))),reverse=True)[:7]
+        ce=Counter((str(c.get("vehicle_type") or "Unknown").title()) for c in cur); peq=Counter((str(c.get("vehicle_type") or "Unknown").title()) for c in prev); equipment_change=[]
+        for k in set(ce)|set(peq): equipment_change.append({"label":k,"value":ce[k],"detail":f"Previous {peq[k]} · {pct(ce[k],peq[k]):+d}%"})
+        equipment_change=sorted(equipment_change,key=lambda x:x['value'],reverse=True)
+        new=sorted(a['recurring']-b['recurring']); cleared=sorted(b['recurring']-a['recurring'])
+        new_rows=[{"label":u,"value":"New","detail":"Recurring in current period, not previous"} for u in new[:8]]; cleared_rows=[{"label":u,"value":"Improved","detail":"Was recurring in previous period"} for u in cleared[:8]]
+        insights=[f"Case volume changed {pct(a['total'],b['total']):+d}% ({a['total']} vs {b['total']}).",f"Recurring units changed from {len(b['recurring'])} to {len(a['recurring'])}; {len(new)} are newly recurring and {len(cleared)} cleared from the recurring list.",f"Repeat maintenance events changed {pct(a['repeat'],b['repeat']):+d}% ({a['repeat']} vs {b['repeat']}).",f"Incomplete-record share is {a['incomplete_pct']}% now versus {b['incomplete_pct']}% previously."]
+        return jsonify(rows=rows,category_change=category_change,equipment_change=equipment_change,new_recurring=new_rows,cleared_recurring=cleared_rows,insights=insights,period=days)
     except Exception:
         logger.exception("Management comparison failed");return jsonify({"error":"Unable to build comparison."}),500
 
