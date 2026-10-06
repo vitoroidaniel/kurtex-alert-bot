@@ -1176,7 +1176,7 @@ def api_developer_users():
 def api_developer_user(user_id):
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     if not _developer_only(): return jsonify({"error":"forbidden"}), 403
-    from backend.storage.user_store import edit_role, remove_user, VALID_ROLES
+    from backend.storage.user_store import edit_user, remove_user, VALID_ROLES
     current_id = int(session["user"].get("id") or 0)
     if request.method == "DELETE":
         if user_id == current_id: return jsonify({"error":"You cannot remove your own developer access while signed in."}), 400
@@ -1184,10 +1184,13 @@ def api_developer_user(user_id):
         return jsonify({"ok":True})
     payload = request.get_json(silent=True) or {}
     role = str(payload.get("role") or "").strip()
+    name = str(payload.get("name") or "").strip()
+    username = str(payload.get("username") or "").strip().lstrip("@")
     if role not in VALID_ROLES: return jsonify({"error":"Invalid role."}), 400
+    if not name: return jsonify({"error":"Name is required."}), 400
     if user_id == current_id and role != "developer":
         return jsonify({"error":"You cannot remove your own developer role while signed in."}), 400
-    if not edit_role(user_id, role): return jsonify({"error":"User not found."}), 404
+    if not edit_user(user_id, name, username, role): return jsonify({"error":"User not found."}), 404
     return jsonify({"ok":True})
 
 # ── API ───────────────────────────────────────────────────────────────────────

@@ -84,6 +84,24 @@ def edit_role(user_id: int, role: str) -> bool:
     return True
 
 
+
+def edit_user(user_id: int, name: str, username: str, role: str) -> bool:
+    """Update an existing user's display details and role without changing Telegram ID."""
+    if role not in VALID_ROLES:
+        return False
+    users = _load()
+    key = str(user_id)
+    if key not in users:
+        return False
+    users[key] = {
+        "name": name.strip(),
+        "username": (username or "").strip().lstrip("@"),
+        "role": role,
+    }
+    _save(users)
+    logger.info("User updated: %s (%s) as %s", user_id, name, role)
+    return True
+
 def has_role(user_id: int, *roles: str) -> bool:
     u = get_user(user_id)
     return u is not None and u["role"] in roles
