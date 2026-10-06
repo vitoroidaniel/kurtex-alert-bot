@@ -310,7 +310,13 @@ async function openUnitModal(unitNumber, vtype) {
     } else {
       rows = '<div class="empty-state">No cases found for this unit.</div>';
     }
-    body.innerHTML = statsHtml + issuesHtml + rows;
+    var mobileHistory = '';
+    if (d.cases && d.cases.length) {
+      mobileHistory = '<section class="mobile-case-history"><div class="mobile-case-history-head"><div><span>CASE HISTORY</span><strong>'+d.cases.length+' recent cases</strong></div><small>Latest first</small></div><div id="mobile-unit-history-list"></div><div class="mobile-history-pager"><button type="button" id="mobile-history-prev" onclick="pageMobileUnitHistory(-1)"><i class="ph ph-arrow-left"></i> Previous</button><span id="mobile-history-page"></span><button type="button" id="mobile-history-next" onclick="pageMobileUnitHistory(1)">Next <i class="ph ph-arrow-right"></i></button></div></section>';
+    }
+    body.innerHTML = statsHtml + issuesHtml + '<div class="desktop-unit-history">' + rows + '</div>' + mobileHistory;
+    window._mobileUnitHistory = {cases:d.cases||[],page:1,perPage:5};
+    renderMobileUnitHistory();
   } catch (e) {
     if (e.name === "AbortError") return;
     body.innerHTML = '<div class="loading">Error: ' + h(e.message) + "</div>";
@@ -325,3 +331,13 @@ function closeUnitModal() {
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────
+
+function renderMobileUnitHistory(){
+  var state=window._mobileUnitHistory,el=document.getElementById('mobile-unit-history-list');if(!state||!el)return;
+  var pages=Math.max(1,Math.ceil(state.cases.length/state.perPage));state.page=Math.max(1,Math.min(pages,state.page));
+  var start=(state.page-1)*state.perPage,rows=state.cases.slice(start,start+state.perPage);
+  el.innerHTML=rows.map(function(c){var cid=c.full_id||c.id||'';var type=(c.vehicle_type||'').toLowerCase();return '<button type="button" class="mobile-history-case" data-id="'+attr(cid)+'" onclick="openCase(this)"><span class="mobile-history-status">'+statusBadge(c.status)+'</span><span class="mobile-history-copy"><strong>'+h(c.description||c.issue_text||'Maintenance case')+'</strong><small>'+h(c.opened||'Date unavailable')+(c.driver?' · '+h(c.driver):'')+'</small><small>'+(type?h(type.charAt(0).toUpperCase()+type.slice(1))+' · ':'')+h(c.response||'Response —')+'</small></span><i class="ph ph-caret-right"></i></button>'}).join('');
+  var label=document.getElementById('mobile-history-page');if(label)label.textContent=state.page+' / '+pages;
+  var prev=document.getElementById('mobile-history-prev'),next=document.getElementById('mobile-history-next');if(prev)prev.disabled=state.page<=1;if(next)next.disabled=state.page>=pages;
+}
+function pageMobileUnitHistory(delta){if(!window._mobileUnitHistory)return;window._mobileUnitHistory.page+=delta;renderMobileUnitHistory();var el=document.querySelector('.mobile-case-history');if(el)el.scrollIntoView({block:'nearest',behavior:'smooth'});}

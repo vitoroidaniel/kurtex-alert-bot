@@ -273,6 +273,7 @@ function setIssueSearchVtype(vtype) {
       b.classList.toggle("active", b.dataset.vtype === vtype);
     });
   if (document.getElementById("issue-search-input").value.trim()) searchIssue();
+  else renderMobileIssueDefault();
 }
 
 async function searchIssue() {
@@ -280,7 +281,7 @@ async function searchIssue() {
   var vtype = issueSearchVtype;
   var el = document.getElementById("issue-search-results");
   if (!q) {
-    updateHTML(el, "");
+    renderMobileIssueDefault();
     return;
   }
   updateHTML(el, '<div class="loading">Searching...</div>');
@@ -299,7 +300,8 @@ async function searchIssue() {
       updateHTML(el, '<div class="empty-state">No units found for "' + h(q) + '".</div>');
       return;
     }
-    updateHTML(el, '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
+    var mobileCards='<div class="mobile-search-result-count">'+d.total_matches+' matching case(s) across '+d.results.length+' unit(s)</div><div class="mobile-issue-list">'+d.results.map(function(u){return issueUnitCard(u,'count','sample_issue')}).join('')+'</div>';
+    updateHTML(el, mobileCards + '<div class="desktop-issue-results"><div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
       d.total_matches +
       " matching case(s) across " +
       d.results.length +
@@ -335,11 +337,26 @@ async function searchIssue() {
           );
         })
         .join("") +
-      "</tbody></table></div></div>");
+      "</tbody></table></div></div></div>");
   } catch (e) {
     if (e.name === "AbortError") return;
     if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
   }
+}
+
+function issueUnitCard(u, countKey, issueKey) {
+  var type=(u.vtype||'unit').toLowerCase();
+  var icon=type==='truck'?'ph-truck':type==='trailer'?'ph-truck-trailer':type==='reefer'?'ph-snowflake':'ph-wrench';
+  return '<button type="button" class="mobile-issue-unit" data-unit="'+attr(u.unit)+'" data-vtype="'+attr(u.vtype||'')+'" onclick="openUnitModal(this.dataset.unit,this.dataset.vtype)">'+
+    '<span class="mobile-issue-icon"><i class="ph '+icon+'"></i></span><span class="mobile-issue-copy"><span><strong>'+h(u.unit)+'</strong><em class="mobile-unit-type '+attr(type)+'">'+h(u.vtype||'Unit')+'</em></span><small>'+h(u[issueKey]||'No issue description')+'</small><small class="mobile-issue-meta">'+h(u[countKey]||0)+' report'+(Number(u[countKey]||0)===1?'':'s')+(u.last_seen?' · '+h(u.last_seen):'')+'</small></span><i class="ph ph-caret-right"></i></button>';
+}
+function renderMobileIssueDefault(){
+  if(!window.matchMedia('(max-width:700px)').matches)return;
+  var el=document.getElementById('issue-search-results');if(!el)return;
+  var q=(document.getElementById('issue-search-input')||{}).value||'';if(q.trim())return;
+  var rows=((window._intelData||{}).top_units||[]).filter(function(u){return !issueSearchVtype || (u.vtype||'').toLowerCase()===issueSearchVtype}).slice(0,10);
+  if(!rows.length){updateHTML(el,'<div class="mobile-search-empty"><i class="ph ph-magnifying-glass"></i><strong>Fleet search</strong><span>Search a unit, issue, part, code, driver or case history.</span></div>');return;}
+  updateHTML(el,'<div class="mobile-search-default-head"><span>Most reported units</span><small>Tap a unit to view case history</small></div><div class="mobile-issue-list">'+rows.map(function(u){return issueUnitCard(u,'total','top_issue')}).join('')+'</div>');
 }
 
 // ── Fleet Intelligence ────────────────────────────────────────────────────────
@@ -350,6 +367,7 @@ async function loadFleetIntel() {
     var r = await apiFetch("/api/fleet_intelligence");
     var d = await r.json();
     window._intelData = d;
+    renderMobileIssueDefault();
 
     var driversHtml =
       '<div class="table-wrap"><div class="table-scroll"><table>' +
@@ -414,7 +432,7 @@ function intelUniversalSearch(value) {
     drivers.style.display = !q || visible ? "" : "none";
   }
   if (q.length >= 2) searchIssue();
-  else updateHTML(document.getElementById("issue-search-results"), "");
+  else renderMobileIssueDefault();
 }
 
 var intelFilter = { vtype: "all", search: "", page: 1 };
