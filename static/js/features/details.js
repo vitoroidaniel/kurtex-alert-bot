@@ -1,7 +1,15 @@
 async function viewFullReport(caseIdOrEl) {
   var caseId =
     typeof caseIdOrEl === "string" ? caseIdOrEl : caseIdOrEl.dataset.id;
-  document.getElementById("report-view-overlay").classList.add("open");
+  // Report view is the next drill-down level; don't leave a case/unit sheet
+  // visually stacked above or below it on phones.
+  var caseOverlay = document.getElementById("modal-overlay");
+  var unitOverlay = document.getElementById("unit-modal-overlay");
+  if (caseOverlay) caseOverlay.classList.remove("open");
+  if (unitOverlay) unitOverlay.classList.remove("open");
+  var reportOverlay = document.getElementById("report-view-overlay");
+  reportOverlay.style.zIndex = "540";
+  reportOverlay.classList.add("open");
   lockBodyScroll();
   document.getElementById("report-view-body").innerHTML =
     '<div class="loading">Loading report...</div>';

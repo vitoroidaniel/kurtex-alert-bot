@@ -473,7 +473,15 @@ function renderAgentCards(rows){
 // ── Modals ─────────────────────────────────────────────────────────────────
 async function openCase(el) {
   var caseId = typeof el === "string" ? el : el.dataset.id;
-  document.getElementById("modal-overlay").classList.add("open");
+  // A case opened from Unit/Issue Search must replace that sheet on mobile,
+  // otherwise the case renders behind the unit history overlay.
+  var unitOverlay = document.getElementById("unit-modal-overlay");
+  if (unitOverlay && unitOverlay.classList.contains("open")) {
+    unitOverlay.classList.remove("open");
+  }
+  var caseOverlay = document.getElementById("modal-overlay");
+  caseOverlay.style.zIndex = "520";
+  caseOverlay.classList.add("open");
   lockBodyScroll();
   updateHTML(document.getElementById("modal-body"), '<div class="loading">Loading...</div>');
   document.getElementById("modal-title").textContent = "Loading...";
