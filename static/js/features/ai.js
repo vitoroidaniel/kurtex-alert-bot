@@ -122,14 +122,14 @@ async function openAIPageHistory(){
  var old=document.getElementById('ai-page-history');if(old){old.remove();return}
  var panel=document.createElement('div');panel.id='ai-page-history';panel.className='ai-page-history';
  panel.innerHTML='<div class="ai-page-history-head"><strong>Chat history</strong><button onclick="document.getElementById(\'ai-page-history\').remove()"><i class="ph ph-x"></i></button></div><div class="ai-page-history-list">Loading…</div>';
- shell.appendChild(panel);
+ document.body.appendChild(panel);
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
   var list=panel.querySelector('.ai-page-history-list');
   list.innerHTML=items.length?items.map(function(c){return '<button class="ai-page-history-row" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\')"><strong>'+escapeAI(shortAIChatTitle(c.title||'Maintenance conversation'))+'</strong><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button>'}).join(''):'<div class="ai-history-empty ai-history-empty-rich"><span class="ai-empty-icon"><i class="ph ph-chats-circle"></i></span><strong>No conversations yet</strong><small>Start a maintenance chat and it will appear here automatically for quick access later.</small><button type="button" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i> Start a chat</button></div>'
  }catch(e){panel.querySelector('.ai-page-history-list').textContent='Unable to load chat history.'}
 }
-async function openAIPageSavedChat(id,clicked){if(aiBusy||aiUploading)return;var sequence=++aiOpenSequence;
+async function openAIPageSavedChat(id,clicked){if(aiBusy||aiUploading)return;var hp=document.getElementById('ai-page-history');if(hp)hp.remove();var sequence=++aiOpenSequence;
  var list=document.getElementById('ai-page-sidebar-list');
  if(list){
   list.querySelectorAll('.ai-side-chat.active').forEach(function(el){el.classList.remove('active')});

@@ -816,7 +816,21 @@ async function loadRecurringProblems(){
       var issues=u.issues.sort(function(a,b){return b.count-a.count;});
       var typeLabel=u.type==='reefer'?'Reefer':u.type==='trailer'?'Trailer':u.type==='truck'?'Truck':'Unit';
       var typeIcon=u.type==='reefer'?'ph-snowflake':u.type==='trailer'?'ph-truck-trailer':'ph-truck';
-      return '<details class="recurring-unit-tree"><summary><span class="recurring-unit-main"><i class="ph '+typeIcon+'"></i><strong>'+h(u.unit)+' <span class="recurring-type-badge recurring-type-'+h(u.type||'unit')+'">'+typeLabel+'</span></strong><small>'+u.total+' recurring reports'+(u.latest?' · latest '+h(u.latest):'')+'</small></span><span class="recurring-unit-count">'+u.total+'</span><i class="ph ph-caret-down recurring-caret"></i></summary><div class="recurring-issue-tree">'+issues.map(function(z){return '<div class="recurring-issue-line"><span><i class="ph ph-corner-down-right"></i>'+h(z.problem)+'</span><b>'+z.count+'×</b></div>';}).join('')+'</div></details>';
+      function issuePresentation(problem){
+        var raw=String(problem||'Unknown issue'), key=raw.toLowerCase(), icon='ph-wrench', label=raw;
+        if(key.indexOf('air')!==-1 || key.indexOf('suspension')!==-1){icon='ph-wind';label='Air & Suspension';}
+        else if(key.indexOf('tire')!==-1 || key.indexOf('tyre')!==-1 || key.indexOf('wheel')!==-1){icon='ph-circle';label='Tires & Wheel End';}
+        else if(key.indexOf('brake')!==-1){icon='ph-disc';label='Brakes';}
+        else if(key.indexOf('battery')!==-1 || key.indexOf('electric')!==-1 || key.indexOf('voltage')!==-1){icon='ph-battery-charging';label='Electrical & Battery';}
+        else if(key.indexOf('cool')!==-1 || key.indexOf('overheat')!==-1 || key.indexOf('temperature')!==-1){icon='ph-thermometer';label='Cooling System';}
+        else if(key.indexOf('reefer')!==-1 || key.indexOf('refriger')!==-1){icon='ph-snowflake';label='Reefer System';}
+        else if(key.indexOf('engine')!==-1 || key.indexOf('motor')!==-1){icon='ph-engine';label='Engine';}
+        else if(key.indexOf('light')!==-1 || key.indexOf('lamp')!==-1){icon='ph-lightbulb';label='Lighting';}
+        else if(key.indexOf('fuel')!==-1){icon='ph-gas-pump';label='Fuel System';}
+        else if(key.indexOf('alarm')!==-1 || key.indexOf('warning')!==-1){icon='ph-warning';label='Alarms & Warnings';}
+        return {icon:icon,label:label};
+      }
+      return '<details class="recurring-unit-tree"><summary><span class="recurring-unit-main"><i class="ph '+typeIcon+'"></i><strong>'+h(u.unit)+' <span class="recurring-type-badge recurring-type-'+h(u.type||'unit')+'">'+typeLabel+'</span></strong><small>'+u.total+' recurring reports'+(u.latest?' · latest '+h(u.latest):'')+'</small></span><span class="recurring-unit-count">'+u.total+'</span><i class="ph ph-caret-down recurring-caret"></i></summary><div class="recurring-issue-tree">'+issues.map(function(z){var meta=issuePresentation(z.problem);return '<div class="recurring-issue-line"><span class="recurring-issue-icon"><i class="ph '+meta.icon+'"></i></span><span class="recurring-issue-copy"><strong>'+h(meta.label)+'</strong><small>'+h(z.problem)+'</small></span><b class="recurring-issue-count">'+z.count+'×</b></div>';}).join('')+'</div></details>';
     }).join(''):'<div class="intel-empty">No repeated unit/problem patterns detected yet.</div>';
     var oldPager=document.getElementById('recurring-pager'); if(oldPager)oldPager.remove();
     if(recurringTotalUnits>recurringPerPage){

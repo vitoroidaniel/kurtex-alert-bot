@@ -5251,3 +5251,44 @@ body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:30px!importan
 
 /* v30 guard: mobile AI history/new-chat controls do not alter desktop UI */
 @media (min-width:701px){.ai-mobile-history-btn,.ai-mobile-new-btn{display:none!important}}
+
+/* v32 - desktop Intelligence hierarchy */
+@media(min-width:701px){
+  #page-fleet_intel .recurring-panel{margin:0 0 12px!important;padding:14px 16px!important;border:1px solid var(--border)!important;border-radius:14px!important;background:var(--surface)!important;box-shadow:0 1px 2px rgba(20,24,31,.025)!important}
+  #page-fleet_intel .recurring-panel .agent-section-head{align-items:center!important;margin-bottom:10px!important}
+  #page-fleet_intel .recurring-panel .agent-section-head h3{margin:0!important;font-size:16px!important;letter-spacing:-.2px!important}
+  #page-fleet_intel #intel-units-wrap{margin-top:12px!important;padding:14px 16px 12px!important;border:1px solid var(--border)!important;border-radius:14px!important;background:var(--surface)!important;box-shadow:0 1px 2px rgba(20,24,31,.025)!important}
+  #page-fleet_intel #intel-units-wrap .intel-units-head{margin:0 0 10px!important}
+  #page-fleet_intel #intel-units-wrap .section-title{font-size:16px!important;font-weight:800!important}
+  #page-fleet_intel #intel-units-wrap .toggle-tabs{margin:0 0 10px!important}
+  #page-fleet_intel #intel-units-wrap .table-wrap{border:1px solid var(--border)!important;border-radius:11px!important;background:var(--surface)!important}
+  #page-fleet_intel #intel-units-wrap .fleet-list-footer{padding:10px 2px 0!important}
+}
+
+/* v33 — Fleet Intelligence recurring problem card polish */
+@media (min-width:701px){
+  #page-fleet_intel .recurring-panel{padding:0!important;overflow:hidden!important}
+  #page-fleet_intel .recurring-panel::before,
+  #page-fleet_intel .recurring-panel .agent-section-head::before{content:none!important;display:none!important}
+  #page-fleet_intel .recurring-panel .agent-section-head{
+    min-height:62px;margin:0!important;padding:14px 16px!important;border-bottom:1px solid var(--border)!important;
+    background:var(--surface)!important;display:flex!important;align-items:center!important;justify-content:space-between!important;
+  }
+  #page-fleet_intel .recurring-panel .agent-section-head>div:first-child{display:flex;align-items:center;min-width:0}
+  #page-fleet_intel .recurring-panel .agent-section-head h3{font-size:16px!important;font-weight:800!important;line-height:1.2!important;margin:0!important}
+  #page-fleet_intel #recurring-problems-content{padding:12px 16px!important;gap:10px!important}
+  #page-fleet_intel .recurring-issue-tree{padding:10px 12px 12px!important;background:var(--surface2,#fafafa)!important;border-top:1px solid var(--border)!important}
+  #page-fleet_intel .recurring-issue-line{
+    display:grid!important;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px!important;
+    min-height:54px;padding:8px 10px!important;margin:0 0 7px;border:1px solid var(--border)!important;border-radius:10px!important;
+    background:var(--surface,#fff)!important;
+  }
+  #page-fleet_intel .recurring-issue-line:last-child{margin-bottom:0!important;border-bottom:1px solid var(--border)!important}
+  #page-fleet_intel .recurring-issue-icon{width:34px;height:34px;border-radius:9px;background:var(--accent-bg,#fff0f0);color:var(--accent,#df2027);display:grid!important;place-items:center;flex:none}
+  #page-fleet_intel .recurring-issue-icon i{font-size:17px!important;color:inherit!important}
+  #page-fleet_intel .recurring-issue-copy{display:flex!important;flex-direction:column;align-items:flex-start!important;gap:2px!important;min-width:0}
+  #page-fleet_intel .recurring-issue-copy strong{font-size:12px!important;line-height:1.25;color:var(--text);font-weight:750}
+  #page-fleet_intel .recurring-issue-copy small{font-size:10px!important;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #page-fleet_intel .recurring-issue-count{min-width:34px;padding:4px 8px;border-radius:999px;background:var(--accent-bg,#fff0f0);color:var(--accent,#df2027);font-size:11px!important;text-align:center}
+  #page-fleet_intel .recurring-pager{margin:0!important;padding:10px 16px 12px!important;border-top:1px solid var(--border)!important}
+}

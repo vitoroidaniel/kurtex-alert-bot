@@ -1349,3 +1349,30 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
   body[data-current-page="ai_assistant"] .ai-mobile-history-btn{width:42px!important;min-width:42px!important;padding:0!important}
   body[data-current-page="ai_assistant"] .ai-mobile-history-btn span{display:none!important}
 }
+
+/* v32 - mobile AI scroll/history + stronger Issue Search */
+@media(max-width:700px){
+  /* The page itself does not scroll; only messages/history do. */
+  body[data-current-page="ai_assistant"] main,
+  body[data-current-page="ai_assistant"] .main,
+  body[data-current-page="ai_assistant"] #page-ai_assistant{overflow:hidden!important;overscroll-behavior:none!important}
+  body[data-current-page="ai_assistant"] #page-ai_assistant{height:calc(100dvh - 78px)!important;min-height:0!important;padding-bottom:0!important}
+  body[data-current-page="ai_assistant"] .ai-assistant-workspace,
+  body[data-current-page="ai_assistant"] .ai-page-shell,
+  body[data-current-page="ai_assistant"] .ai-page-main{height:100%!important;min-height:0!important;overflow:hidden!important}
+  body[data-current-page="ai_assistant"] #ai-page-messages{min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;-webkit-overflow-scrolling:touch!important}
+  body[data-current-page="ai_assistant"] .ai-page-history{position:fixed!important;left:14px!important;right:14px!important;top:78px!important;bottom:auto!important;width:auto!important;max-width:402px!important;margin:0 auto!important;max-height:min(62dvh,520px)!important;overflow:hidden!important;z-index:10020!important}
+  body[data-current-page="ai_assistant"] .ai-page-history-list{max-height:calc(min(62dvh,520px) - 54px)!important;overflow-y:auto!important;overscroll-behavior:contain!important}
+
+  /* Search is one obvious action instead of a pale input + detached button. */
+  #page-fleet_intel .intelligence-search-shell{padding:10px!important;border:1px solid #e1e4e8!important;background:#fff!important;box-shadow:0 8px 24px rgba(25,31,40,.075)!important;border-radius:17px!important}
+  #page-fleet_intel .intel-search-row{display:grid!important;grid-template-columns:20px minmax(0,1fr) 42px!important;align-items:center!important;gap:7px!important;min-height:48px!important;padding:4px 5px 4px 11px!important;border:1.5px solid #d9dde3!important;border-radius:13px!important;background:#f9fafb!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.9)!important;transition:border-color .15s,box-shadow .15s,background .15s!important}
+  #page-fleet_intel .intel-search-row:focus-within{border-color:#e32d34!important;background:#fff!important;box-shadow:0 0 0 3px rgba(227,45,52,.10)!important}
+  #page-fleet_intel .intel-search-row>i{font-size:16px!important;color:#8b929c!important}
+  #page-fleet_intel #issue-search-input{height:40px!important;min-height:40px!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;font-size:13px!important;font-weight:550!important;color:#20242b!important;outline:0!important}
+  #page-fleet_intel #issue-search-input:focus{border:0!important;box-shadow:none!important}
+  #page-fleet_intel #issue-search-input::placeholder{color:#858c96!important;opacity:1!important}
+  #page-fleet_intel .intel-search-btn{display:grid!important;place-items:center!important;width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important;margin:0!important;padding:0!important;border:0!important;border-radius:11px!important;background:#e32d34!important;color:#fff!important;box-shadow:0 4px 11px rgba(227,45,52,.22)!important}
+  #page-fleet_intel .intel-search-btn i{font-size:17px!important}
+  #page-fleet_intel .intel-type-tabs{margin-top:8px!important}
+}
