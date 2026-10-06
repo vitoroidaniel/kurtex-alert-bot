@@ -1077,6 +1077,34 @@ def logout():
     return redirect("/login")
 
 
+# ── Persistent UI preferences ────────────────────────────────────────────────
+
+@app.route("/api/preferences/overview", methods=["GET", "PUT"])
+def api_overview_preferences():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    from backend.storage.preference_store import get_overview, save_overview
+    user_id = session["user"].get("id")
+    if request.method == "GET":
+        return jsonify({"overview": get_overview(user_id)})
+    payload = request.get_json(silent=True) or {}
+    overview = payload.get("overview")
+    if not isinstance(overview, dict):
+        return jsonify({"error": "Invalid overview preferences."}), 400
+    allowed_widgets = {"metrics", "agents", "units", "cases"}
+    clean = {}
+    for device in ("desktop", "mobile"):
+        src = overview.get(device, {})
+        if not isinstance(src, dict):
+            src = {}
+        order = [x for x in src.get("order", []) if x in allowed_widgets]
+        order += [x for x in ("metrics", "agents", "units", "cases") if x not in order]
+        hidden = [x for x in src.get("hidden", []) if x in allowed_widgets]
+        metrics = [x for x in src.get("metrics", []) if isinstance(x, int) and 0 <= x <= 20]
+        clean[device] = {"order": order, "hidden": hidden, "metrics": metrics}
+    save_overview(user_id, clean)
+    return jsonify({"ok": True, "overview": clean})
+
 # ── API ───────────────────────────────────────────────────────────────────────
 
 
