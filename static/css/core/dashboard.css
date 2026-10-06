@@ -5488,3 +5488,57 @@ body[data-current-page="ai_assistant"] .ai-inline-kb-remove{height:30px!importan
   .parts-web-search-btn{width:38px!important;min-width:38px!important;max-width:38px!important;padding:0!important;justify-content:center!important;flex:0 0 38px!important}
   .parts-web-search-btn span{display:none!important}.parts-web-search-btn i{margin:0!important;font-size:17px!important}
 }
+
+/* v44 — polished AI attachment previews and compact knowledge chips */
+#page-ai_assistant .ai-attach-card.is-image{
+  width:76px!important;min-width:76px!important;height:76px!important;padding:0!important;
+  overflow:visible!important;border:0!important;border-radius:13px!important;background:transparent!important;
+  box-shadow:none!important;
+}
+#page-ai_assistant .ai-attach-card.is-image .ai-attach-image-open{
+  width:76px!important;height:76px!important;overflow:hidden!important;border:1px solid #dfe3e8!important;
+  border-radius:13px!important;background:#f7f8fa!important;box-shadow:0 1px 3px rgba(17,24,39,.06)!important;
+}
+#page-ai_assistant .ai-attach-card.is-image .ai-attach-image-open img{
+  width:100%!important;height:100%!important;display:block!important;object-fit:cover!important;border-radius:12px!important;
+}
+#page-ai_assistant .ai-attach-card .ai-attach-remove{
+  right:-7px!important;top:-7px!important;width:22px!important;height:22px!important;padding:0!important;
+  border:2px solid #fff!important;border-radius:50%!important;background:#dc3545!important;color:#fff!important;
+  box-shadow:0 2px 7px rgba(120,20,30,.25)!important;opacity:0!important;transform:scale(.86)!important;
+  transition:opacity .14s ease,transform .14s ease,background .14s ease!important;z-index:3!important;
+}
+#page-ai_assistant .ai-attach-card:hover .ai-attach-remove,
+#page-ai_assistant .ai-attach-card:focus-within .ai-attach-remove{opacity:1!important;transform:scale(1)!important}
+#page-ai_assistant .ai-attach-card .ai-attach-remove:hover{background:#b42332!important}
+#page-ai_assistant .ai-attach-card .ai-attach-remove i{font-size:12px!important;font-weight:700!important}
+
+body[data-current-page="ai_assistant"] .ai-inline-kb{
+  position:relative!important;overflow:visible!important;height:32px!important;min-height:32px!important;
+  padding:0!important;border:1px solid #d9dee5!important;border-radius:9px!important;background:#fff!important;
+  box-shadow:none!important;color:#303640!important;
+}
+body[data-current-page="ai_assistant"] .ai-inline-kb:hover{background:#f8f9fb!important;border-color:#cbd2da!important}
+body[data-current-page="ai_assistant"] .ai-inline-kb-open{
+  height:30px!important;max-width:190px!important;padding:0 10px!important;border-radius:8px!important;
+}
+body[data-current-page="ai_assistant"] .ai-inline-kb-remove{
+  position:absolute!important;right:-7px!important;top:-8px!important;width:18px!important;height:18px!important;
+  min-width:18px!important;margin:0!important;padding:0!important;border:2px solid #fff!important;border-radius:50%!important;
+  background:#dc3545!important;color:#fff!important;box-shadow:0 2px 6px rgba(120,20,30,.22)!important;
+  opacity:0!important;overflow:visible!important;z-index:4!important;transform:scale(.84)!important;
+  transition:opacity .14s ease,transform .14s ease,background .14s ease!important;
+}
+body[data-current-page="ai_assistant"] .ai-inline-kb:hover .ai-inline-kb-remove,
+body[data-current-page="ai_assistant"] .ai-inline-kb:focus-within .ai-inline-kb-remove{
+  width:18px!important;opacity:1!important;transform:scale(1)!important;border-left:2px solid #fff!important;
+}
+body[data-current-page="ai_assistant"] .ai-inline-kb-remove:hover{background:#b42332!important;color:#fff!important}
+body[data-current-page="ai_assistant"] .ai-inline-kb-remove i{font-size:10px!important;line-height:1!important}
+
+@media(max-width:760px){
+  #page-ai_assistant .ai-attach-card .ai-attach-remove{opacity:1!important;transform:scale(1)!important}
+  body[data-current-page="ai_assistant"] .ai-inline-kb-remove{opacity:1!important;transform:scale(1)!important}
+  body[data-current-page="ai_assistant"] .ai-inline-kb{max-width:160px!important}
+  body[data-current-page="ai_assistant"] .ai-inline-kb-open{max-width:158px!important;padding:0 9px!important}
+}
