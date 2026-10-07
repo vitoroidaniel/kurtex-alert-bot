@@ -6030,3 +6030,90 @@ body[data-current-page="overview"] .page-heading{
     cursor:pointer!important;
   }
 }
+
+/* v75 — settings hierarchy + compact brand mark */
+#layout-settings-overlay .settings-first-heading{margin-top:0!important}
+@media(min-width:701px){
+  #layout-settings-overlay:not(.home-only-settings) .settings-nav button[data-settings-tab="appearance"]{margin-top:10px!important}
+  #layout-settings-overlay:not(.home-only-settings) .settings-nav button[data-settings-tab="interface"],
+  #layout-settings-overlay:not(.home-only-settings) .settings-nav button[data-settings-tab="notifications"]{margin-top:4px!important}
+}
+@media(min-width:761px){
+  html.sidebar-compact .sidebar-logo{overflow:hidden!important;height:60px!important;padding:4px 0 10px!important}
+  html.sidebar-compact .sidebar-logo .logo-text{display:none!important}
+  html.sidebar-compact .sidebar-logo img{
+    width:54px!important;height:54px!important;min-width:54px!important;
+    border-radius:0!important;object-fit:cover!important;object-position:center top!important;
+    clip-path:inset(0 0 17px 0 round 18px)!important;
+    transform:translateY(7px) scale(1.06)!important;
+  }
+}
+
+/* v76 — true application-wide dark theme. Keep this block last so legacy light rules cannot win. */
+[data-theme="dark"] body,
+[data-theme="dark"] .layout,
+[data-theme="dark"] .main,
+[data-theme="dark"] .page,
+[data-theme="dark"] .page-content,
+[data-theme="dark"] .page-heading,
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .overview-page,
+[data-theme="dark"] #page-overview{background:#0f141d!important;color:#f2f4f8!important}
+[data-theme="dark"] .sidebar{background:#111824!important;border-color:#293342!important}
+[data-theme="dark"] .sidebar-logo,[data-theme="dark"] .sidebar-footer,[data-theme="dark"] .nav-group{border-color:#2c3544!important}
+[data-theme="dark"] .card,
+[data-theme="dark"] .stat-card,
+[data-theme="dark"] .overview-widget,
+[data-theme="dark"] .section,
+[data-theme="dark"] .table-wrap,
+[data-theme="dark"] .agent-card,
+[data-theme="dark"] .chicago-calendar,
+[data-theme="dark"] .search-wrap,
+[data-theme="dark"] .modal,
+[data-theme="dark"] .report-modal,
+[data-theme="dark"] .report-header,
+[data-theme="dark"] .report-footer,
+[data-theme="dark"] .detail-item,
+[data-theme="dark"] .desc-box,
+[data-theme="dark"] .timeline,
+[data-theme="dark"] #report-sections-bar,
+[data-theme="dark"] .welcome-card,
+[data-theme="dark"] .overview-welcome,
+[data-theme="dark"] .home-welcome{background:#171e29!important;border-color:#303a49!important;color:#f2f4f8!important;box-shadow:none!important}
+[data-theme="dark"] .stat-card:hover,[data-theme="dark"] .card:hover{border-color:#3c485a!important}
+[data-theme="dark"] .page-heading,[data-theme="dark"] .topbar{border-color:#293342!important}
+[data-theme="dark"] h1,[data-theme="dark"] h2,[data-theme="dark"] h3,[data-theme="dark"] h4,[data-theme="dark"] h5,[data-theme="dark"] strong,[data-theme="dark"] .title,[data-theme="dark"] .widget-title{color:#f5f7fa!important}
+[data-theme="dark"] .muted,[data-theme="dark"] small,[data-theme="dark"] .subtitle,[data-theme="dark"] .page-subtitle,[data-theme="dark"] .widget-subtitle{color:#a9b2c0!important}
+[data-theme="dark"] input,[data-theme="dark"] textarea,[data-theme="dark"] select{background:#111823!important;color:#edf1f6!important;border-color:#364253!important}
+[data-theme="dark"] input::placeholder,[data-theme="dark"] textarea::placeholder{color:#7f8b9b!important}
+[data-theme="dark"] .btn-outline,[data-theme="dark"] .icon-btn,[data-theme="dark"] #refresh-button,[data-theme="dark"] .badge-btn{background:#171e29!important;color:#e7ebf1!important;border-color:#364253!important}
+[data-theme="dark"] .btn-outline:hover,[data-theme="dark"] .icon-btn:hover,[data-theme="dark"] #refresh-button:hover{background:#202936!important}
+[data-theme="dark"] .toggle-tabs,[data-theme="dark"] .report-tabs{background:#111823!important;border-color:#303a49!important}
+[data-theme="dark"] .toggle-btn,[data-theme="dark"] .tab-btn,[data-theme="dark"] .report-tab{color:#aeb7c5!important}
+[data-theme="dark"] .toggle-btn.active,[data-theme="dark"] .tab-btn.active,[data-theme="dark"] .report-tab.active{background:#293342!important;color:#fff!important}
+[data-theme="dark"] table,[data-theme="dark"] thead,[data-theme="dark"] tbody,[data-theme="dark"] tr,[data-theme="dark"] td,[data-theme="dark"] th{border-color:#2e3948!important}
+[data-theme="dark"] th{background:#151c27!important;color:#cbd2dc!important}
+[data-theme="dark"] tr:hover td{background:#1b2431!important}
+[data-theme="dark"] .agent-card-statbox,[data-theme="dark"] .metric-card,[data-theme="dark"] .metric-options label{background:#111823!important;border-color:#303a49!important}
+[data-theme="dark"] .modal>h2,[data-theme="dark"] #report-view-overlay .modal>div:last-child{background:#171e29!important;border-color:#303a49!important;color:#f2f4f8!important}
+[data-theme="dark"] .modal-close{background:#202936!important;color:#e9edf3!important;border-color:#394657!important}
+[data-theme="dark"] .mobile-header{background:#111824!important;color:#f2f4f8!important;border-color:#293342!important}
+[data-theme="dark"] .hamburger{background:#171e29!important;color:#e7ebf1!important;border-color:#364253!important}
+[data-theme="dark"] .heading-actions .live-pill{background:#171e29!important;color:#adb7c5!important;border-color:#303a49!important}
+[data-theme="dark"] .table-scroll:before{background:#151c27!important;border-color:#303a49!important}
+[data-theme="dark"] .notes-box{background:#171e29!important;border-color:#303a49!important;color:#edf1f6!important}
+[data-theme="dark"] .sidebar-footer .user-chip{background:#171e29!important;color:#f1f3f7!important;border-color:#303a49!important}
+[data-theme="dark"] .sidebar-account-actions button{background:#151c27!important;color:#dce2ea!important;border-color:#303a49!important}
+[data-theme="dark"] .sidebar-account-actions button:hover{background:#202936!important}
+[data-theme="dark"] .nav-item.active{background:#273142!important;color:#fff!important;box-shadow:none!important}
+[data-theme="dark"] .nav-item:hover:not(.active){background:#1d2633!important;color:#fff!important}
+[data-theme="dark"] .nav-item,[data-theme="dark"] .nav-group-header{color:#c0c9d6!important}
+[data-theme="dark"] .nav-item i,[data-theme="dark"] .nav-group-header i{color:#9da9b9!important}
+[data-theme="dark"] .nav-item.active i{color:#ff5960!important}
+[data-theme="dark"] .chicago-calendar *{color:inherit}
+[data-theme="dark"] .calendar-date-tile{background:#111823!important;border-color:#303a49!important}
+[data-theme="dark"] hr{border-color:#303a49!important}
+@media(max-width:760px){
+ [data-theme="dark"] .main,[data-theme="dark"] .page-heading{background:#0f141d!important}
+ [data-theme="dark"] .overview-toolbar .badge-btn,[data-theme="dark"] .chicago-calendar,[data-theme="dark"] #refresh-button{background:#171e29!important;color:#e7ebf1!important;border-color:#364253!important}
+}
