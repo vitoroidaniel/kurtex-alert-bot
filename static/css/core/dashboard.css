@@ -6117,3 +6117,58 @@ body[data-current-page="overview"] .page-heading{
  [data-theme="dark"] .main,[data-theme="dark"] .page-heading{background:#0f141d!important}
  [data-theme="dark"] .overview-toolbar .badge-btn,[data-theme="dark"] .chicago-calendar,[data-theme="dark"] #refresh-button{background:#171e29!important;color:#e7ebf1!important;border-color:#364253!important}
 }
+
+/* v77 — Developer user role hierarchy */
+.developer-role-pill{gap:6px;border:1px solid transparent;font-weight:800}
+.developer-role-pill i{font-size:13px}
+.developer-role-pill.role-agent{background:#eef6ff;color:#2563a9;border-color:#d9eaff}
+.developer-role-pill.role-super_admin{background:linear-gradient(135deg,#fff8df,#f7edc2);color:#7a5a08;border-color:#eadb9e;box-shadow:0 2px 8px rgba(122,90,8,.08)}
+.developer-role-pill.role-developer{background:#fff0f1;color:#c91d2e;border-color:#ffcfd4}
+[data-theme="dark"] .developer-role-pill.role-agent{background:#14283d;color:#8cc8ff;border-color:#23496c}
+[data-theme="dark"] .developer-role-pill.role-super_admin{background:linear-gradient(135deg,#3a3117,#2b2617);color:#f1d77c;border-color:#5b4d22}
+[data-theme="dark"] .developer-role-pill.role-developer{background:#3a171d;color:#ff8f9b;border-color:#67232d}
+
+/* v78 final consistency pass ------------------------------------------------ */
+:root{--kx-radius:12px;--kx-border:#e5e8ec;--kx-surface:#fff;--kx-surface-soft:#f7f8fa;--kx-text:#20242a;--kx-muted:#747b84;--kx-shadow:0 8px 28px rgba(25,31,38,.055)}
+.card,.home-welcome,.home-widget,.settings-modal,.modal-card,.case-detail,.report-detail{border-color:var(--kx-border)!important;border-radius:var(--kx-radius)!important;box-shadow:none}
+button,.btn,input,select,textarea{font-family:inherit}button:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[role="button"]:focus-visible{outline:2px solid rgba(220,55,50,.28)!important;outline-offset:2px!important}
+.btn,.badge-btn,.settings-wide-action,.developer-test-btn{transition:background .16s ease,border-color .16s ease,transform .16s ease,box-shadow .16s ease}.btn:active,.badge-btn:active,.settings-wide-action:active{transform:translateY(1px)}
+input,select,textarea{border-color:var(--kx-border)!important;border-radius:9px!important}.loading{color:var(--kx-muted)!important}.empty-state{border-radius:11px!important}
+.notification-bell{border-color:var(--kx-border)!important}.notification-panel{width:400px!important;background:var(--kx-surface)!important;border-color:var(--kx-border)!important;box-shadow:0 18px 52px rgba(18,23,29,.16)!important}.notification-panel .notification-panel-head,.notification-panel .notification-tabs,.notification-panel .notification-list,.notification-panel .notification-item,.notification-panel .notification-empty{background:var(--kx-surface)!important}.notification-panel .notification-item{cursor:default!important}.notification-panel .notification-item[class*="case"]{cursor:pointer!important}.notification-panel .notification-item[class*="case"]:hover{background:var(--kx-surface-soft)!important}.notification-panel .notification-item.unseen:before{background:#dc3833!important}.notification-panel .case_priority .notification-icon,.notification-panel .case_missed .notification-icon{background:#fff1ef!important;color:#c43a34!important}.notification-panel .case_resolved .notification-icon{background:#edf8f1!important;color:#26834a!important}
+@media(max-width:760px){.notification-panel{left:8px!important;right:8px!important;top:60px!important;width:auto!important;max-width:none!important;max-height:calc(100svh - 72px)!important}.notification-panel .notification-list{max-height:calc(100svh - 180px)!important}.notification-panel .notification-mark-all{font-size:8px!important}}
+body.dark-theme{--kx-border:#303640;--kx-surface:#1b2028;--kx-surface-soft:#212730;--kx-text:#f1f3f5;--kx-muted:#a4abb5;--kx-shadow:none}
+body.dark-theme .notification-bell{background:#1b2028!important;color:#e7e9ec!important}
+body.dark-theme .notification-count{border-color:#1b2028!important}
+body.dark-theme .notification-panel .notification-title strong,body.dark-theme .notification-panel .notification-copy strong,body.dark-theme .notification-panel .notification-empty strong{color:#f0f2f4!important}
+body.dark-theme .notification-panel .notification-title small,body.dark-theme .notification-panel .notification-copy>span,body.dark-theme .notification-panel .notification-copy small,body.dark-theme .notification-seen{color:#9da5af!important}
+body.dark-theme .notification-panel .notification-title-icon,body.dark-theme .notification-panel .notification-icon,body.dark-theme .notification-empty-icon{background:#252b34!important;border-color:#343b45!important;color:#cbd0d6!important}
+body.dark-theme .notification-panel .notification-tabs button.active{background:#2a3039!important;color:#fff!important}
+body.dark-theme .notification-panel .notification-item{border-color:#2c323b!important}
+body.dark-theme .notification-panel .notification-item.unseen{background:#201f24!important}
+body.dark-theme .notification-panel .case_priority .notification-icon,body.dark-theme .notification-panel .case_missed .notification-icon{background:#3a2525!important;color:#ff918a!important}
+body.dark-theme .notification-panel .case_resolved .notification-icon{background:#20342a!important;color:#77d49a!important}
+
+/* v79 — notification center readability */
+.notification-panel{width:440px!important;border-radius:16px!important}
+.notification-panel .notification-panel-head{padding:16px 16px 13px!important;gap:14px!important}
+.notification-panel .notification-title{gap:11px!important}
+.notification-panel .notification-title-icon{width:36px!important;height:36px!important;border-radius:10px!important;font-size:17px!important}
+.notification-panel .notification-title strong{font-size:14px!important;line-height:1.25!important}
+.notification-panel .notification-title small{font-size:11px!important;line-height:1.35!important;margin-top:3px!important}
+.notification-head-actions{display:flex;align-items:center;gap:5px;flex:none}
+.notification-panel .notification-mark-all,.notification-panel .notification-clear{display:inline-flex!important;align-items:center!important;gap:5px!important;border:0!important;background:transparent!important;padding:7px 8px!important;border-radius:8px!important;font:700 10px/1.2 Inter,sans-serif!important;white-space:nowrap!important;cursor:pointer!important}
+.notification-panel .notification-mark-all{color:#d93632!important}.notification-panel .notification-clear{color:#6e747c!important}.notification-panel .notification-mark-all:hover,.notification-panel .notification-clear:hover{background:#f4f5f6!important}
+.notification-panel .notification-tabs{padding:10px 14px!important;gap:7px!important}
+.notification-panel .notification-tabs button{padding:7px 11px!important;border-radius:8px!important;font:700 10.5px/1.2 Inter,sans-serif!important}
+.notification-panel .notification-list{max-height:450px!important;padding:9px!important}
+.notification-panel .notification-item{grid-template-columns:38px minmax(0,1fr) auto!important;gap:11px!important;padding:12px!important;margin-bottom:8px!important;border-radius:12px!important}
+.notification-panel .notification-icon{width:38px!important;height:38px!important;border-radius:10px!important;font-size:17px!important}
+.notification-panel .notification-copy{gap:4px!important}
+.notification-panel .notification-copy strong,.notification-panel .notification-item-title{font-size:12px!important;line-height:1.35!important}
+.notification-panel .notification-copy>span,.notification-panel .notification-item-message{font-size:11px!important;line-height:1.45!important}
+.notification-panel .notification-copy small{font-size:10px!important;line-height:1.3!important;margin-top:2px!important}
+.notification-panel .notification-actions button,.notification-panel .notification-seen{font-size:10px!important;line-height:1.2!important;padding:5px 4px!important;white-space:nowrap!important}
+.notification-panel .notification-actions button{border:0;background:transparent;color:#68717b;cursor:pointer;border-radius:7px}.notification-panel .notification-actions button:hover{background:#f2f3f5;color:#292d33}
+.notification-panel .notification-empty strong{font-size:13px!important}.notification-panel .notification-empty span{font-size:11px!important}
+body.dark-theme .notification-panel .notification-mark-all:hover,body.dark-theme .notification-panel .notification-clear:hover,body.dark-theme .notification-panel .notification-actions button:hover{background:#272e38!important;color:#fff!important}
+@media(max-width:520px){.notification-panel{width:auto!important}.notification-panel .notification-panel-head{padding:14px 13px 11px!important}.notification-head-actions{gap:1px}.notification-panel .notification-mark-all,.notification-panel .notification-clear{font-size:9.5px!important;padding:6px!important}.notification-panel .notification-tabs{padding:9px 11px!important}.notification-panel .notification-tabs button{font-size:10px!important}.notification-panel .notification-list{padding:7px!important}.notification-panel .notification-item{grid-template-columns:36px minmax(0,1fr) auto!important;padding:10px!important;gap:9px!important}}

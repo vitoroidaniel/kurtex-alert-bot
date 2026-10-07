@@ -41,7 +41,7 @@ from bot_app.handlers.admin_handler import (
 from bot_app.handlers.scheduler import register_jobs
 from dashboard import start_dashboard_thread
 from backend.storage.user_store import (
-    is_authorized, has_role,
+    is_authorized, has_role, sync_telegram_username,
 )
 from backend.storage.case_store import async_get_untouched_unassigned_cases
 
@@ -163,6 +163,15 @@ async def auth_middleware(update: Update, ctx):
     if not user:
         return
     chat = update.effective_chat
+
+    # Keep the dashboard identity current from Telegram itself. Telegram has no
+    # bulk username lookup by numeric user ID, so every live interaction is an
+    # opportunity to refresh an authorized user's @username.
+    if is_authorized(user.id):
+        try:
+            sync_telegram_username(user.id, user.username or "")
+        except Exception:
+            logger.exception("Unable to refresh Telegram username for user=%s", user.id)
 
     # Allow group messages through (alert triggers, etc.)
     if chat and chat.type in ("group", "supergroup"):

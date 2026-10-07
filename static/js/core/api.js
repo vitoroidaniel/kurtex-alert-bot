@@ -28,7 +28,7 @@ function connectionState() {
     lastSuccessfulRead ? "Updated " + lastSuccessfulRead.toLocaleTimeString("en-US", {
       timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit"
     }) + " CT" : "Connecting…";
-  if (message && typeof pushLocalNotification === "function")
+  if (message && document.body && document.body.dataset.isDeveloper === "true" && typeof pushLocalNotification === "function")
     pushLocalNotification("system","Dashboard refresh issue",message,"warning");
 }
 async function apiFetch(url, key, options) {
@@ -103,7 +103,7 @@ async function apiFetch(url, key, options) {
 function errorContent(e) {
   return (
     '<div class="empty-state error-state">' +
-    h(e.message || "Unable to load data.") +
+    h((document.body && document.body.dataset.isDeveloper === "true") ? (e.message || "Unable to load data.") : "Temporarily unavailable. Please try again.") +
     "</div>"
   );
 }

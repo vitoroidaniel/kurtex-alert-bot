@@ -102,6 +102,26 @@ def edit_user(user_id: int, name: str, username: str, role: str) -> bool:
     logger.info("User updated: %s (%s) as %s", user_id, name, role)
     return True
 
+
+def sync_telegram_username(user_id: int, username: str) -> bool:
+    """Refresh an authorized user's Telegram username from a live Telegram update.
+
+    Telegram does not provide a bulk lookup by numeric user ID, so the bot refreshes
+    the stored username whenever that user interacts with Kurtex. Custom display
+    names and roles are intentionally left untouched.
+    """
+    users = _load()
+    key = str(user_id)
+    if key not in users:
+        return False
+    clean = (username or "").strip().lstrip("@")
+    if users[key].get("username", "") == clean:
+        return False
+    users[key]["username"] = clean
+    _save(users)
+    logger.info("Telegram username refreshed: %s -> @%s", user_id, clean or "none")
+    return True
+
 def has_role(user_id: int, *roles: str) -> bool:
     u = get_user(user_id)
     return u is not None and u["role"] in roles

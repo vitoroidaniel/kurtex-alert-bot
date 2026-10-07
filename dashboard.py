@@ -492,6 +492,9 @@ def _notify_user(kind,title,message,severity="info"):
 def api_notifications():
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
     key=_ai_user_key(); items=[n for n in _read_notifications() if n.get("user")==key]
+    # Operational users only need actionable fleet notifications. AI/system diagnostics stay developer-only.
+    if not _ai_is_trainer():
+        items=[n for n in items if n.get("kind") not in ("ai","system","developer")]
     items.sort(key=lambda x:x.get("created_at") or "",reverse=True)
     return jsonify({"items":items[:100],"unseen":sum(1 for n in items if not n.get("seen"))})
 
