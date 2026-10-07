@@ -88,6 +88,9 @@ async function loadStats() {
 
 var leaderboardTrendChart = null;
 var leaderboardOutcomeChart = null;
+var leaderboardRankFilter = "overall";
+var leaderboardRankPage = 0;
+var leaderboardRankPageSize = 5;
 
 function leaderboardPeriodKey() {
   return lbPeriod === "day" ? "day" : lbPeriod === "week" ? "week" : "month";
@@ -143,21 +146,64 @@ function leaderboardChartColors() {
   };
 }
 
+function updateLeaderboardChart(chart, labels, datasets) {
+  if (!chart) return;
+  chart.data.labels = labels;
+  datasets.forEach(function(ds, i){
+    if (!chart.data.datasets[i]) return;
+    chart.data.datasets[i].data = ds;
+  });
+  chart.update("none");
+}
+
 function renderLeaderboardCharts(perf, trend) {
   if (typeof Chart === "undefined") return;
   var c = leaderboardChartColors();
+  var trendLabels=(trend||[]).map(function(x){return x.date;});
+  var trendData=[(trend||[]).map(function(x){return x.total;}),(trend||[]).map(function(x){return x.resolved;})];
   var trendCanvas = document.getElementById("leaderboard-trend-chart");
   if (trendCanvas) {
-    if (leaderboardTrendChart) leaderboardTrendChart.destroy();
-    leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:(trend||[]).map(function(x){return x.date;}),datasets:[{label:"Cases",data:(trend||[]).map(function(x){return x.total;}),borderColor:c.accent,backgroundColor:"rgba(239,68,68,.08)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5},{label:"Resolved",data:(trend||[]).map(function(x){return x.resolved;}),borderColor:c.green,backgroundColor:"rgba(34,197,94,.06)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+    if (!leaderboardTrendChart) {
+      leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:trendLabels,datasets:[{label:"Cases",data:trendData[0],borderColor:c.accent,backgroundColor:"rgba(239,68,68,.07)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5},{label:"Resolved",data:trendData[1],borderColor:c.green,backgroundColor:"rgba(34,197,94,.05)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+    } else updateLeaderboardChart(leaderboardTrendChart, trendLabels, trendData);
   }
   var outCanvas = document.getElementById("leaderboard-outcome-chart");
+  var agents=((perf&&perf.agents)||[]).slice(0,7);
+  var outLabels=agents.map(function(a){return a.name;});
+  var outData=[agents.map(function(a){return a.resolved;}),agents.map(function(a){return a.active;}),agents.map(function(a){return a.reassigned;})];
   if (outCanvas) {
-    if (leaderboardOutcomeChart) leaderboardOutcomeChart.destroy();
-    var agents=((perf&&perf.agents)||[]).slice(0,7);
-    leaderboardOutcomeChart = new Chart(outCanvas,{type:"bar",data:{labels:agents.map(function(a){return a.name;}),datasets:[{label:"Resolved",data:agents.map(function(a){return a.resolved;}),backgroundColor:c.green},{label:"Active",data:agents.map(function(a){return a.active;}),backgroundColor:c.blue},{label:"Reassigned",data:agents.map(function(a){return a.reassigned;}),backgroundColor:c.accent}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},scales:{x:{stacked:true,ticks:{color:c.text,maxRotation:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{stacked:true,beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+    if (!leaderboardOutcomeChart) {
+      leaderboardOutcomeChart = new Chart(outCanvas,{type:"bar",data:{labels:outLabels,datasets:[{label:"Resolved",data:outData[0],backgroundColor:c.green},{label:"Active",data:outData[1],backgroundColor:c.blue},{label:"Reassigned",data:outData[2],backgroundColor:"#8b5cf6"}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},scales:{x:{stacked:true,ticks:{color:c.text,maxRotation:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{stacked:true,beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+    } else updateLeaderboardChart(leaderboardOutcomeChart, outLabels, outData);
   }
 }
+
+function toggleLeaderboardFilter(ev){
+  if(ev) ev.stopPropagation();
+  var m=document.getElementById("leaderboard-filter-menu"); if(m)m.hidden=!m.hidden;
+}
+function setLeaderboardRankFilter(filter, btn){
+  leaderboardRankFilter=filter||"overall"; leaderboardRankPage=0;
+  var labels={overall:"Overall",resolved:"Resolved",active:"Active",missed:"Missed",reassigned:"Reassigned"};
+  var l=document.getElementById("leaderboard-filter-label");if(l)l.textContent=labels[leaderboardRankFilter]||"Overall";
+  var m=document.getElementById("leaderboard-filter-menu");if(m)m.hidden=true;
+  renderLeaderboard();
+}
+function changeLeaderboardRankPage(delta){ leaderboardRankPage=Math.max(0,leaderboardRankPage+delta); renderLeaderboard(); }
+function renderLeaderboardRanking(agents){
+  var sorted=agents.slice();
+  var key=leaderboardRankFilter;
+  if(key!=="overall") sorted.sort(function(a,b){return Number(b[key]||0)-Number(a[key]||0)||Number(b.resolved||0)-Number(a.resolved||0);});
+  var totalPages=Math.max(1,Math.ceil(sorted.length/leaderboardRankPageSize));
+  if(leaderboardRankPage>=totalPages)leaderboardRankPage=totalPages-1;
+  var start=leaderboardRankPage*leaderboardRankPageSize, page=sorted.slice(start,start+leaderboardRankPageSize);
+  var el=document.getElementById("leaderboard-full"), medals=["#1","#2","#3","#4","#5"];
+  if(el) updateHTML(el,page.length?page.map(function(a,i){return '<div class="agent-rank-row"><span class="agent-rank-pos">#'+(start+i+1)+'</span><div class="agent-rank-main"><strong>'+h(a.name)+'</strong><span>'+h(a.handled)+' handled · '+h(a.active)+' active</span></div><div class="agent-rank-stats"><b>'+h(a.resolved)+'</b><span>resolved</span></div><div class="agent-rank-mini '+(a.missed?'has-alert':'')+'">'+h(a.missed)+' missed</div></div>';}).join(""):'<div class="leaderboard-empty">No agent activity in this period.</div>');
+  var pg=document.getElementById("leaderboard-pagination");
+  if(pg) pg.innerHTML=sorted.length>leaderboardRankPageSize?'<button type="button" '+(leaderboardRankPage===0?'disabled':'')+' onclick="changeLeaderboardRankPage(-1)"><i class="ph ph-caret-left"></i> Previous</button><span>'+(leaderboardRankPage+1)+' / '+totalPages+'</span><button type="button" '+(leaderboardRankPage>=totalPages-1?'disabled':'')+' onclick="changeLeaderboardRankPage(1)">Next <i class="ph ph-caret-right"></i></button>':'';
+}
+
+document.addEventListener("click",function(e){var m=document.getElementById("leaderboard-filter-menu");if(m&&!m.hidden&&!e.target.closest(".leaderboard-filter-wrap"))m.hidden=true;});
 
 function renderLeaderboard() {
   if (!stats.leaderboard_day) return;
@@ -174,9 +220,8 @@ function renderLeaderboard() {
     ["ph-phone-x","Missed",perf.missed||0],
     ["ph-arrows-clockwise","Reassigned",perf.reassigned||0]
   ].map(function(m){return '<div class="leaderboard-metric"><span><i class="ph '+m[0]+'"></i>'+m[1]+'</span><strong>'+h(m[2])+'</strong></div>';}).join(""));
-  var el=document.getElementById("leaderboard-full");
   var agents=(perf.agents||[]);
-  if(el) updateHTML(el,agents.length?agents.slice(0,10).map(function(a,i){return '<div class="agent-rank-row"><span class="agent-rank-pos">'+(medals[i]||("#"+(i+1)))+'</span><div class="agent-rank-main"><strong>'+h(a.name)+'</strong><span>'+h(a.handled)+' handled · '+h(a.active)+' active</span></div><div class="agent-rank-stats"><b>'+h(a.resolved)+'</b><span>resolved</span></div><div class="agent-rank-mini '+(a.missed?'has-alert':'')+'">'+h(a.missed)+' missed</div></div>';}).join(""):'<div class="leaderboard-empty">No agent activity in this period.</div>');
+  renderLeaderboardRanking(agents);
   var insights=document.getElementById("leaderboard-insights"); if(insights) updateHTML(insights,leaderboardInsightHTML(perf));
   renderLeaderboardCharts(perf,trend);
 }

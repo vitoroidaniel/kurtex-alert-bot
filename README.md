@@ -109,3 +109,10 @@ Resolved/reported case records are automatically indexed into `fleet_knowledge.s
 
 ## v97
 Leaderboard upgraded into a team performance workspace with real case metrics, agent ranking, trend/outcome charts, and deterministic Kurtex performance insights. No response-time scoring is used.
+
+### v102
+- Leaderboard charts update in place with animation disabled for invisible background refreshes.
+- Resolved, Active, and Reassigned now use distinct colors.
+- Agent ranking has a working metric filter and 5-agent pagination with Previous/Next controls.
+- Chicago time card is hidden on Developer and Agents workspaces.
+- Developer workspace cards were reorganized into compact service health, overview/runtime, connection tests, live activity, and health checks.
