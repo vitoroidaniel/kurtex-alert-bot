@@ -1595,3 +1595,47 @@ body[data-current-page="ai_assistant"] .ai-side-chat{border:1px solid rgba(255,2
   .mobile-report-section{margin:0 0 14px!important}.mobile-report-section-title{display:flex!important;align-items:center!important;gap:7px!important;margin:0 2px 7px!important;color:#2a3038!important;font-size:12px!important;font-weight:850!important}.mobile-report-section-title i{display:grid!important;place-items:center!important;width:26px!important;height:26px!important;border-radius:9px!important;background:#fff0f0!important;color:#d72c33!important;font-size:14px!important}
   #report-view-overlay .report-view-surface>div:last-child{position:static!important;margin:7px 0 2px!important;padding:0!important;background:transparent!important;border:0!important}#report-view-overlay .report-view-surface>div:last-child button{width:100%!important;min-height:44px!important;border-radius:14px!important;background:#252a31!important;font-size:11px!important;justify-content:center!important}
 }
+
+/* v72 — settings scrolling + complete mobile dark theme */
+@media(max-width:700px){
+  #layout-settings-overlay .settings-center{max-height:min(78dvh,680px)!important}
+  #layout-settings-overlay .settings-shell{min-height:0!important;flex:1 1 auto!important}
+  #layout-settings-overlay .settings-content{min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:calc(24px + env(safe-area-inset-bottom))!important}
+  #layout-settings-overlay.home-only-settings .settings-content{overflow-y:auto!important}
+  #layout-settings-overlay .settings-kicker{display:none!important}
+}
+@media(max-width:760px){
+  [data-theme="dark"] body,[data-theme="dark"] .main{background:#111317!important;color:#f2f3f5!important}
+  [data-theme="dark"] .mobile-header,[data-theme="dark"] .mobile-tabbar{background:rgba(24,27,32,.94)!important;border-color:#30343a!important}
+  [data-theme="dark"] .mobile-brand strong,[data-theme="dark"] .mobile-tabbar button.active,[data-theme="dark"] .mobile-tabbar button{color:#f2f3f5!important}
+  [data-theme="dark"] #page-overview,[data-theme="dark"] .page{background:#111317!important;color:#f2f3f5!important}
+  [data-theme="dark"] body[data-current-page="overview"] #stat-grid .stat-card,
+  [data-theme="dark"] body[data-current-page="overview"] .overview-widget.card,
+  [data-theme="dark"] body[data-current-page="overview"] .overview-widget.section{background:#1b1e23!important;border-color:#30343a!important;box-shadow:none!important;color:#f2f3f5!important}
+  [data-theme="dark"] body[data-current-page="overview"] #page-overview>.overview-toolbar>span,
+  [data-theme="dark"] body[data-current-page="overview"] .overview-widget .card-title,
+  [data-theme="dark"] body[data-current-page="overview"] .overview-widget .section-title{color:#f2f3f5!important}
+  [data-theme="dark"] .mobile-home-ai{background:linear-gradient(135deg,#282c33,#181a1f)!important;border-color:#353a42!important}
+  [data-theme="dark"] .mobile-home-grid button{background:#1b1e23!important;border-color:#30343a!important;color:#f2f3f5!important}
+  [data-theme="dark"] #layout-settings-overlay .settings-center,
+  [data-theme="dark"] #layout-settings-overlay .settings-nav{background:#17191e!important;border-color:#30343a!important;color:#f2f3f5!important}
+  [data-theme="dark"] #layout-settings-overlay .settings-head,[data-theme="dark"] #layout-settings-overlay .settings-content{background:#17191e!important;color:#f2f3f5!important}
+  [data-theme="dark"] #layout-settings-overlay .settings-list,
+  [data-theme="dark"] #layout-settings-overlay .setting-row,
+  [data-theme="dark"] #layout-settings-overlay .metric-options label,
+  [data-theme="dark"] #layout-settings-overlay .theme-choice button,
+  [data-theme="dark"] #layout-settings-overlay .density-option,
+  [data-theme="dark"] #layout-settings-overlay .settings-wide-action,
+  [data-theme="dark"] #layout-settings-overlay .settings-select-row{background:#202329!important;border-color:#343840!important;color:#f2f3f5!important}
+  [data-theme="dark"] #layout-settings-overlay .settings-section-title p,
+  [data-theme="dark"] #layout-settings-overlay small{color:#aeb4bd!important}
+  [data-theme="dark"] #layout-settings-overlay .settings-nav button{color:#b9bec6!important}
+  [data-theme="dark"] #layout-settings-overlay .settings-nav button.active{background:#24272d!important;color:#fff!important;border-color:#e34a4f!important}
+  [data-theme="dark"] #layout-settings-overlay .setting-row label input,
+  [data-theme="dark"] #layout-settings-overlay .metric-options label input{background:#17191e!important;border-color:#50555e!important}
+  [data-theme="dark"] #layout-settings-overlay .setting-row label input:checked,
+  [data-theme="dark"] #layout-settings-overlay .metric-options label input:checked{background:#e04449!important;border-color:#e04449!important}
+  [data-theme="dark"] #modal-overlay>.modal,[data-theme="dark"] #report-view-overlay>.modal{background:#17191e!important;border-color:#30343a!important;color:#f2f3f5!important}
+  [data-theme="dark"] #modal-overlay #modal-title,[data-theme="dark"] #report-view-overlay #report-view-title{background:rgba(23,25,30,.96)!important;border-color:#30343a!important;color:#fff!important}
+  [data-theme="dark"] #modal-overlay .modal-close,[data-theme="dark"] #report-view-overlay .modal-close{background:#23262c!important;border-color:#383c44!important;color:#fff!important}
+}

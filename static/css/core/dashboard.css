@@ -5883,3 +5883,25 @@ body[data-current-page="overview"] .page-heading{
 @media (max-width:700px){
   #page-fleet_intel .recurring-panel .agent-section-head{padding-top:9px!important;padding-bottom:9px!important}
 }
+
+/* v72 — compact desktop sidebar preference */
+@media(min-width:761px){
+  html.sidebar-compact .sidebar{width:76px!important;padding-left:10px!important;padding-right:10px!important;overflow-x:hidden!important}
+  html.sidebar-compact.sidebar-fixed .main{margin-left:76px!important;width:calc(100% - 76px)!important}
+  html.sidebar-compact .sidebar-logo{justify-content:center!important;padding-left:0!important;padding-right:0!important}
+  html.sidebar-compact .sidebar-logo img{width:40px!important;height:40px!important}
+  html.sidebar-compact .sidebar .logo-text,
+  html.sidebar-compact .sidebar .nav-item:not(.active){font-size:0!important}
+  html.sidebar-compact .sidebar .nav-item.active{font-size:0!important}
+  html.sidebar-compact .sidebar .nav-item{justify-content:center!important;padding-left:0!important;padding-right:0!important;gap:0!important}
+  html.sidebar-compact .sidebar .nav-item>i{font-size:20px!important;margin:0!important}
+  html.sidebar-compact .sidebar .nav-badge{position:absolute!important;right:6px!important;top:5px!important;font-size:8px!important}
+  html.sidebar-compact .sidebar .nav-group-header{justify-content:center!important;padding-left:0!important;padding-right:0!important}
+  html.sidebar-compact .sidebar .nav-group-header span{font-size:0!important}
+  html.sidebar-compact .sidebar .nav-group-header span i{font-size:20px!important;margin:0!important}
+  html.sidebar-compact .sidebar .nav-caret,html.sidebar-compact .sidebar .nav-group-items{display:none!important}
+  html.sidebar-compact .sidebar-footer .user-chip{justify-content:center!important;padding-left:0!important;padding-right:0!important}
+  html.sidebar-compact .sidebar-footer .user-chip>div:not(.user-avatar-init){display:none!important}
+  html.sidebar-compact .sidebar-account-actions button{justify-content:center!important;padding-left:0!important;padding-right:0!important}
+  html.sidebar-compact .sidebar-account-actions button span,html.sidebar-compact .sidebar-account-actions button .ph-caret-right{display:none!important}
+}
