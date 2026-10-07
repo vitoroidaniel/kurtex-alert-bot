@@ -33,12 +33,22 @@
       <p class="intro">Sign in with your registered Telegram account to open the dashboard.</p>
       {% if error %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>We couldn't verify your account. Please try again or contact your administrator.</span></div>{% endif %}
       {% if bot_username %}
-      <div class="telegram-box"><div class="tg-wrap"><script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="medium" data-radius="10" data-auth-url="/auth/telegram" data-request-access="write"></script></div></div>
-      <p class="help"><i class="ph ph-info"></i> No sign-in button? Allow Telegram to load, then refresh this page.</p>
+      <div class="telegram-login" id="telegramLogin">
+        <div class="telegram-visual" aria-hidden="true">
+          <span class="telegram-icon"><i class="ph ph-telegram-logo"></i></span>
+          <span class="telegram-label">Continue with Telegram</span>
+          <i class="ph ph-arrow-right telegram-arrow"></i>
+        </div>
+        <div class="telegram-native" id="telegramNative">
+          <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="12" data-auth-url="/auth/telegram" data-request-access="write"></script>
+        </div>
+      </div>
+      <div class="secure-access"><i class="ph ph-lock-key"></i><span>Secure access</span><b>·</b><span>Authorized accounts only</span></div>
+      <button class="telegram-retry" id="telegramRetry" type="button"><i class="ph ph-arrow-clockwise"></i> Telegram sign-in unavailable · Retry</button>
       {% else %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>Telegram sign-in isn't configured. Ask your administrator to set BOT_USERNAME.</span></div>{% endif %}
       <div class="divider"></div>
       <div class="trust"><i class="ph ph-shield-check"></i><div><b>Same bot. Clearer picture.</b><span>Case assignment, alerts and report submission stay in Telegram. Review fleet activity and maintenance intelligence here.</span></div></div>
-      <div class="system-row"><span><i></i> Operations connected</span><span>Chicago time</span></div>
+      <div class="system-row"><span><i></i> Operations connected</span><span>Secure workspace</span></div>
     </div>
   </section>
 
@@ -46,6 +56,27 @@
 </main>
 <script>
 (() => {
+  const login = document.getElementById('telegramLogin');
+  const native = document.getElementById('telegramNative');
+  const retry = document.getElementById('telegramRetry');
+  if (login && native && retry) {
+    const updateTelegramState = () => {
+      const frame = native.querySelector('iframe');
+      if (frame) {
+        login.classList.add('is-ready');
+        login.classList.remove('is-loading');
+        retry.classList.remove('is-visible');
+        return true;
+      }
+      return false;
+    };
+    login.classList.add('is-loading');
+    const observer = new MutationObserver(updateTelegramState);
+    observer.observe(native, {childList:true, subtree:true});
+    setTimeout(() => { if (!updateTelegramState()) { login.classList.remove('is-loading'); retry.classList.add('is-visible'); } }, 7000);
+    retry.addEventListener('click', () => window.location.reload());
+  }
+
   const slides = [...document.querySelectorAll('.scene-slide')];
   if (!slides.length) return;
   let current = 0;
