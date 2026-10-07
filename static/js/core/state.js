@@ -282,6 +282,14 @@ function statusBadge(s) {
   );
 }
 
+function priorityBadge(priority) {
+  var value=String(priority||"").trim().toLowerCase();
+  if(!value) return "";
+  var level=value.indexOf("high")>=0?"high":value.indexOf("low")>=0?"low":"medium";
+  var label=level.charAt(0).toUpperCase()+level.slice(1);
+  return '<span class="mobile-priority-pill priority-'+level+'">'+h(label)+'</span>';
+}
+
 function h(v) {
   return String(v == null ? "" : v).replace(/[&<>"']/g, function (ch) {
     return {

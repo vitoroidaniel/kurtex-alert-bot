@@ -513,13 +513,13 @@ async function openCase(el) {
     var issue = c.issue_text || c.full_description || c.description || 'Maintenance case';
     var reportBtn = (c.status === "reported" || c.status === "done") ? '<button class="mobile-report-open" data-id="'+attr(c.full_id || caseId)+'" onclick="viewFullReport(this.dataset.id)"><i class="ph ph-file-text"></i><span>View report</span><i class="ph ph-caret-right"></i></button>' : '';
     var html = '<div class="mobile-case-view">' +
-      '<div class="mobile-case-summary"><div><div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+((c.ki_tags||[]).map(function(t){return '<button type="button" class="ki-case-tag ki-'+attr(t.kind||'pattern')+'" data-finding="'+attr(t.finding_id||'')+'" onclick="closeModal();openKIFinding(this.dataset.finding)"><i class="ph ph-brain"></i> KI: '+h(t.label)+'</button>'}).join(''))+'</div><h3 class="mobile-case-issue">'+h(issue)+'</h3><p class="mobile-case-origin">'+h(c.opened || 'Date unavailable')+(c.driver?' · Reported by '+h(c.driver):'')+'</p></div>'+reportBtn+'</div>'+
+      '<div class="mobile-case-summary"><div><div class="mobile-case-badges">'+statusBadge(c.status)+priorityBadge(c.priority)+((c.ki_tags||[]).map(function(t){return '<button type="button" class="ki-case-tag ki-'+attr(t.kind||'pattern')+'" data-finding="'+attr(t.finding_id||'')+'" onclick="closeModal();openKIFinding(this.dataset.finding)"><i class="ph ph-brain"></i> KI: '+h(t.label)+'</button>'}).join(''))+'</div><h3 class="mobile-case-issue">'+h(issue)+'</h3><p class="mobile-case-origin">'+h(c.opened || 'Date unavailable')+(c.driver?' · Reported by '+h(c.driver):'')+'</p></div>'+reportBtn+'</div>'+
       '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-clock-counter-clockwise"></i><span>Case history</span></div><section class="mobile-detail-card mobile-timeline-card">'+buildTimeline(c)+'</section></div>'+
       '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-info"></i><span>Case details</span></div><section class="mobile-detail-card mobile-case-facts">'+
-        mobileCaseRow('Reported by', c.report_driver||c.driver||'—', 'ph-user')+
+        mobileCaseRow('Reported driver', c.report_driver||c.driver||'—', 'ph-user')+
         mobileCaseRow('Group', c.group||'—', 'ph-users-three')+
-        mobileCaseRow('Assigned to', c.agent||'—', 'ph-user-check')+
         mobileCaseRow('Equipment', ((c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:'')), 'ph-truck')+
+        mobileCaseRow('Assigned to', c.agent||'—', 'ph-user-check')+
       '</section></div>'+
       (c.full_description?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-text-align-left"></i><span>Description</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_description)+'</section></div>':'')+
       (c.full_notes?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-note"></i><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_notes)+'</section></div>':'')+'</div>';
