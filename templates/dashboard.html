@@ -65,10 +65,10 @@
     <div class="nav-ai-cluster">
       <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
       {% if is_developer %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
+      {% if is_developer %}<div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
     </div>
     <div class="nav-bottom-cluster">
       {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
-      {% if is_developer %}<div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
     </div>
   </nav>
   <div class="sidebar-footer">
@@ -279,8 +279,8 @@
 
   <!-- Kurtex Intelligence -->
   <div class="page" id="page-kurtex_intelligence">
-    <section class="ki-hero"><div><span class="eyebrow">KURTEX INTELLIGENCE</span><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div><div class="ki-live"><span></span> Live analysis</div></section>
-    <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div>
+    <section class="ki-hero"><div><span class="eyebrow">KURTEX INTELLIGENCE</span><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div></section>
+    <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><div class="ki-toolbar-actions"><div class="ki-live"><span></span> Live analysis</div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
     <div id="ki-summary" class="ki-summary"></div>
     <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
   </div>

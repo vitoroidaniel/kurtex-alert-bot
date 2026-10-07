@@ -513,17 +513,15 @@ async function openCase(el) {
     var issue = c.issue_text || c.full_description || c.description || 'Maintenance case';
     var reportBtn = (c.status === "reported" || c.status === "done") ? '<button class="mobile-report-open" data-id="'+attr(c.full_id || caseId)+'" onclick="viewFullReport(this.dataset.id)"><i class="ph ph-file-text"></i><span>View report</span><i class="ph ph-caret-right"></i></button>' : '';
     var html = '<div class="mobile-case-view">' +
-      '<div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+((c.ki_tags||[]).map(function(t){return '<button type="button" class="ki-case-tag ki-'+attr(t.kind||'pattern')+'" data-finding="'+attr(t.finding_id||'')+'" onclick="closeModal();openKIFinding(this.dataset.finding)"><i class="ph ph-brain"></i> KI: '+h(t.label)+'</button>'}).join(''))+'</div>'+
-      '<h3 class="mobile-case-issue">'+h(issue)+'</h3>'+
-      '<p class="mobile-case-origin">'+h(c.opened || 'Date unavailable')+(c.driver?' · '+h(c.driver):'')+'</p>'+
-      '<section class="mobile-detail-card mobile-case-facts">'+
-        mobileCaseRow('Equipment', ((c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:'')))+
-        mobileCaseRow('Group', c.group||'—')+mobileCaseRow('Assigned to', c.agent||'—')+
-        mobileCaseRow('Response', c.response||'—')+mobileCaseRow('Resolution', c.resolution_secs||'—')+
-      '</section>'+
-      (c.full_description?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><span>Description</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_description)+'</section></div>':'')+
-      (c.full_notes?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_notes)+'</section></div>':'')+
-      '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><span>Case history</span></div><section class="mobile-detail-card mobile-timeline-card">'+buildTimeline(c)+'</section></div>'+reportBtn+'</div>';
+      '<div class="mobile-case-summary"><div><div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+((c.ki_tags||[]).map(function(t){return '<button type="button" class="ki-case-tag ki-'+attr(t.kind||'pattern')+'" data-finding="'+attr(t.finding_id||'')+'" onclick="closeModal();openKIFinding(this.dataset.finding)"><i class="ph ph-brain"></i> KI: '+h(t.label)+'</button>'}).join(''))+'</div><h3 class="mobile-case-issue">'+h(issue)+'</h3><p class="mobile-case-origin">'+h(c.opened || 'Date unavailable')+(c.driver?' · Reported by '+h(c.driver):'')+'</p></div>'+reportBtn+'</div>'+
+      '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-clock-counter-clockwise"></i><span>Case history</span></div><section class="mobile-detail-card mobile-timeline-card">'+buildTimeline(c)+'</section></div>'+
+      '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-info"></i><span>Case details</span></div><section class="mobile-detail-card mobile-case-facts">'+
+        mobileCaseRow('Equipment', ((c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:'')), 'ph-truck')+
+        mobileCaseRow('Group', c.group||'—', 'ph-users-three')+mobileCaseRow('Assigned to', c.agent||'—', 'ph-user-check')+
+        mobileCaseRow('Response', c.response||'—', 'ph-timer')+mobileCaseRow('Resolution', c.resolution_secs||'—', 'ph-check-circle')+
+      '</section></div>'+
+      (c.full_description?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-text-align-left"></i><span>Description</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_description)+'</section></div>':'')+
+      (c.full_notes?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-note"></i><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_notes)+'</section></div>':'')+'</div>';
     updateHTML(document.getElementById("modal-body"), html);
   } catch (e) {
     if (e.name === "AbortError") return;
@@ -531,8 +529,8 @@ async function openCase(el) {
     updateHTML(document.getElementById("modal-body"), '<div class="loading">Error loading case.</div>');
   }
 }
-function mobileCaseRow(label, value){
-  return '<div class="mobile-case-row"><span>'+h(label)+'</span><strong>'+h(value || '—')+'</strong></div>';
+function mobileCaseRow(label, value, icon){
+  return '<div class="mobile-case-row"><i class="ph '+(icon||'ph-info')+'"></i><span>'+h(label)+'</span><strong>'+h(value || '—')+'</strong></div>';
 }
 
 function closeModal() {
@@ -836,4 +834,4 @@ function renderHomeActivity(cases){
   if(!cases||!cases.length){updateHTML(el,homeEmpty('ph-check-circle','No activity yet today','New case activity will appear here automatically.'));return}
   updateHTML(el,cases.slice(0,5).map(function(c){var status=(c.status||'open').toLowerCase(),icon=status==='done'?'ph-check-circle':status==='missed'?'ph-warning-circle':status==='assigned'||status==='reported'?'ph-user-check':'ph-clipboard-text';var label=status==='done'?'Case resolved':status==='missed'?'Case missed':status==='assigned'||status==='reported'?'Case assigned':'Case opened';var detail=[c.unit_number||'',c.vehicle_type||'',c.agent_name||''].filter(Boolean).join(' · ');return '<div class="home-activity-row"><span class="home-activity-icon"><i class="ph '+icon+'"></i></span><span class="home-activity-copy"><strong>'+h(label)+'</strong><small>'+h(detail||c.description||'Maintenance case')+'</small></span></div>'}).join(''));
 }
-async function loadHomeAISummary(){var el=document.getElementById('home-ai-summary');if(!el)return;try{var r=await apiFetch('/api/home/ai-summary','home-ai-summary');if(!r.ok)throw new Error('intelligence');var d=await r.json();var items=d.insights||[];if(!items.length){updateHTML(el,homeEmpty('ph-check-circle','No unusual patterns detected','Kurtex will surface emerging problems or repeat repairs when there is enough evidence.'));return}updateHTML(el,items.map(function(x){var icon=x.type==='repair_followup'?'ph-arrow-counter-clockwise':'ph-trend-up';return '<button type="button" class="home-intel-item home-intel-link" onclick="showPage(\'kurtex_intelligence\')"><span class="home-intel-icon"><i class="ph '+icon+'"></i></span><div><div class="home-intel-label">'+h(x.title)+'</div><p>'+h(x.text)+'</p>'+(x.meta?'<small>'+h(x.meta)+'</small>':'')+'</div><i class="ph ph-arrow-right home-intel-arrow"></i></button>'}).join(''))}catch(e){if(e.name!=='AbortError')updateHTML(el,homeEmpty('ph-info','Intelligence temporarily unavailable','Your dashboard and live case data are still available.'))}}
+async function loadHomeAISummary(){var el=document.getElementById('home-ai-summary');if(!el)return;try{var r=await apiFetch('/api/home/ai-summary','home-ai-summary');if(!r.ok)throw new Error('intelligence');var d=await r.json();var items=d.insights||[];if(!items.length){updateHTML(el,homeEmpty('ph-check-circle','No unusual patterns detected','Kurtex will surface emerging problems or repeat repairs when there is enough evidence.'));return}updateHTML(el,items.map(function(x){var icon=x.type==='repair_followup'?'ph-arrow-counter-clockwise':'ph-trend-up';return '<button type="button" class="home-intel-item home-intel-link" onclick="showPage(\'kurtex_intelligence\')"><span class="home-intel-icon"><i class="ph '+icon+'"></i></span><div><div class="home-intel-label">'+h(x.title)+'</div><p>'+h(x.text)+'</p><div class="home-intel-meta">'+(x.meta?'<small>'+h(x.meta)+'</small>':'<small>Open intelligence</small>')+'<i class="ph ph-arrow-right home-intel-arrow"></i></div></div></button>'}).join(''))}catch(e){if(e.name!=='AbortError')updateHTML(el,homeEmpty('ph-info','Intelligence temporarily unavailable','Your dashboard and live case data are still available.'))}}

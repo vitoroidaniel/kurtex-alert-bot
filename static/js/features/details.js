@@ -12,15 +12,16 @@ async function viewFullReport(caseIdOrEl) {
     if (!r.ok) { document.getElementById("report-view-body").innerHTML='<div class="loading">Error loading report.</div>'; return; }
     var c=await r.json();
     document.getElementById("report-view-title").innerHTML='<span class="mobile-detail-kicker">REPORT VIEW</span><span class="mobile-detail-title">'+h(c.unit_number?('Unit '+c.unit_number):(c.driver||'Case report'))+'</span>';
-    function field(label,value){return '<div class="mobile-report-row"><span>'+h(label)+'</span><strong>'+h(value||'Not provided')+'</strong></div>';}
-    function section(icon,title,content){return '<section class="mobile-report-section"><div class="mobile-report-section-title"><i class="ph '+icon+'"></i><span>'+h(title)+'</span></div><div class="mobile-detail-card">'+content+'</div></section>';}
+    function field(label,value,icon){return '<div class="mobile-report-row"><i class="ph '+(icon||'ph-info')+'"></i><span>'+h(label)+'</span><strong>'+h(value||'Not provided')+'</strong></div>';}
+    function section(icon,title,content,wide){return '<section class="mobile-report-section'+(wide?' mobile-report-wide':'')+'"><div class="mobile-report-section-title"><i class="ph '+icon+'"></i><span>'+h(title)+'</span></div><div class="mobile-detail-card">'+content+'</div></section>';}
     var issue=c.issue_text||c.full_description||'Maintenance report';
-    var report='<div class="mobile-report-view"><div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+'</div><h3 class="mobile-case-issue">'+h(issue)+'</h3><p class="mobile-case-origin">'+h(c.opened||'Date unavailable')+'</p>';
-    report+=section('ph-wrench','Issue & responsibility',field('Reported by',c.report_driver||c.driver)+field('Assigned to',c.agent)+field('Group',c.group)+field('Equipment',(c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:'')));
-    report+=section('ph-map-pin','Load & location',field('Load type',c.load_type)+field('Current location',c.location)+field('Pickup',c.pickup)+field('Delivery',c.delivery));
-    if(c.vehicle_type==='reefer') report+=section('ph-thermometer','Temperature',field('Setpoint',c.setpoint)+field('Current temperature',c.current_temp)+field('Recorder',c.temp_recorder));
-    report+=section('ph-note','Report notes',field('Comments',c.comments||(c.full_notes!=='case reported'?c.full_notes:'')));
-    report+='</div>';
+    var report='<div class="mobile-report-view"><div class="mobile-case-summary"><div><div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+'</div><h3 class="mobile-case-issue">'+h(issue)+'</h3><p class="mobile-case-origin">'+h(c.opened||'Date unavailable')+(c.report_driver||c.driver?' · Reported by '+h(c.report_driver||c.driver):'')+'</p></div></div>';
+    report+='<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-clock-counter-clockwise"></i><span>Case history</span></div><section class="mobile-detail-card mobile-timeline-card">'+buildTimeline(c)+'</section></div><div class="mobile-report-grid">';
+    report+=section('ph-wrench','Issue & responsibility',field('Reported by',c.report_driver||c.driver,'ph-user')+field('Assigned to',c.agent,'ph-user-check')+field('Group',c.group,'ph-users-three')+field('Equipment',(c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:''),'ph-truck'));
+    report+=section('ph-map-pin','Load & location',field('Load type',c.load_type,'ph-package')+field('Current location',c.location,'ph-map-pin')+field('Pickup',c.pickup,'ph-arrow-circle-up')+field('Delivery',c.delivery,'ph-arrow-circle-down'));
+    if(c.vehicle_type==='reefer') report+=section('ph-thermometer','Temperature',field('Setpoint',c.setpoint,'ph-thermometer')+field('Current temperature',c.current_temp,'ph-thermometer-hot')+field('Recorder',c.temp_recorder,'ph-device-mobile'));
+    report+=section('ph-note','Report notes',field('Comments',c.comments||(c.full_notes!=='case reported'?c.full_notes:''),'ph-note'),true);
+    report+='</div></div>';
     document.getElementById('report-view-body').innerHTML=report;
   } catch(e){ if(e.name==='AbortError')return; document.getElementById('report-view-body').innerHTML='<div class="loading">Error loading report.</div>'; }
 }
