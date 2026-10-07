@@ -80,8 +80,8 @@
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ user.role if user.role else "Manager" }}</div></div>
     </div>
     <div class="sidebar-account-actions">
-      <button class="sidebar-settings-btn" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
-      <button class="sidebar-signout-btn" onclick="openSignOutConfirm()"><i class="ph ph-sign-out"></i><span>Sign out</span></button>
+      <button class="sidebar-settings-btn" title="Settings" aria-label="Settings" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
+      <button class="sidebar-signout-btn" title="Sign out" aria-label="Sign out" onclick="openSignOutConfirm()"><i class="ph ph-sign-out"></i><span>Sign out</span></button>
     </div>
   </div>
 </aside>
