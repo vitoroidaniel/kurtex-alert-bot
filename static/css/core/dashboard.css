@@ -6172,3 +6172,89 @@ body.dark-theme .notification-panel .case_resolved .notification-icon{background
 .notification-panel .notification-empty strong{font-size:13px!important}.notification-panel .notification-empty span{font-size:11px!important}
 body.dark-theme .notification-panel .notification-mark-all:hover,body.dark-theme .notification-panel .notification-clear:hover,body.dark-theme .notification-panel .notification-actions button:hover{background:#272e38!important;color:#fff!important}
 @media(max-width:520px){.notification-panel{width:auto!important}.notification-panel .notification-panel-head{padding:14px 13px 11px!important}.notification-head-actions{gap:1px}.notification-panel .notification-mark-all,.notification-panel .notification-clear{font-size:9.5px!important;padding:6px!important}.notification-panel .notification-tabs{padding:9px 11px!important}.notification-panel .notification-tabs button{font-size:10px!important}.notification-panel .notification-list{padding:7px!important}.notification-panel .notification-item{grid-template-columns:36px minmax(0,1fr) auto!important;padding:10px!important;gap:9px!important}}
+
+
+/* v80 - compact live Chicago clock */
+.chicago-calendar{min-width:292px!important;padding:10px 14px!important;gap:12px!important;align-items:center!important;border-radius:15px!important}
+.calendar-date-tile{display:none!important}
+.calendar-clock-icon{width:42px;height:42px;flex:0 0 42px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:12px;background:var(--surface-soft,#f7f8fa);color:var(--accent);font-size:21px}
+.calendar-date-copy{gap:3px!important}
+.calendar-date-copy>strong{font-size:14px!important;font-weight:750!important;line-height:1.25!important}
+.calendar-time-line{display:flex!important;align-items:center!important;gap:10px!important;font-size:12px!important;color:var(--muted)!important;font-variant-numeric:tabular-nums}
+#chicago-time{font-size:12px!important;font-weight:600!important;color:var(--muted)!important}
+.calendar-update.live-pill{display:inline-flex!important;align-items:center!important;gap:5px!important;margin:0!important;font-size:11px!important;font-weight:700!important;color:#23864a!important}
+.calendar-update .dot{width:7px!important;height:7px!important;background:#39b866!important;box-shadow:0 0 0 3px rgba(57,184,102,.13)!important}
+.calendar-update.is-stale{color:#b56a19!important}
+.calendar-update.is-stale .dot{background:#e0a33b!important;box-shadow:0 0 0 3px rgba(224,163,59,.13)!important}
+[data-theme="dark"] .calendar-clock-icon{background:#111823!important;border-color:#303a49!important;color:#ff5a5f!important}
+[data-theme="dark"] #chicago-time{color:#aeb7c4!important}
+[data-theme="dark"] .calendar-update.live-pill{color:#68d391!important}
+@media(max-width:760px){.chicago-calendar{min-width:0!important;padding:9px 11px!important;gap:10px!important}.calendar-clock-icon{width:38px;height:38px;flex-basis:38px;font-size:19px}.calendar-date-copy>strong{font-size:13px!important}.calendar-time-line,#chicago-time{font-size:11px!important}.calendar-update.live-pill{font-size:10px!important}}
+
+/* v81 — notification header actions */
+.notification-panel-head{
+  align-items:center;
+  gap:14px;
+}
+.notification-head-actions{
+  display:flex !important;
+  flex-direction:row !important;
+  align-items:center !important;
+  justify-content:flex-end !important;
+  gap:8px !important;
+  flex-wrap:nowrap !important;
+}
+.notification-head-actions .notification-mark-all,
+.notification-head-actions .notification-clear{
+  position:static !important;
+  margin:0 !important;
+  min-height:34px !important;
+  height:34px !important;
+  padding:0 12px !important;
+  border-radius:10px !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:6px !important;
+  font-size:12px !important;
+  font-weight:700 !important;
+  line-height:1 !important;
+  white-space:nowrap !important;
+}
+.notification-head-actions .notification-clear{
+  border:1px solid var(--border, #e2e5e9) !important;
+  background:var(--surface, #fff) !important;
+  color:var(--text-secondary, #5f6670) !important;
+}
+.notification-head-actions .notification-mark-all{
+  order:1;
+}
+.notification-head-actions .notification-clear{
+  order:2;
+}
+@media (max-width:520px){
+  .notification-panel-head{align-items:flex-start}
+  .notification-head-actions{
+    flex-direction:column !important;
+    align-items:stretch !important;
+  }
+  .notification-head-actions .notification-mark-all,
+  .notification-head-actions .notification-clear{
+    width:100% !important;
+  }
+}
+
+/* v82 floating AI parity with full Assistant */
+.kurtex-ai-compose textarea:focus,.ai-compose-box:focus-within .kurtex-ai-compose textarea{border:0!important;border-color:transparent!important;outline:0!important;box-shadow:none!important}
+.ai-compose-box:focus-within{border-color:#c9cdd3!important;box-shadow:0 0 0 2px rgba(40,44,51,.035)!important}
+.kurtex-ai-compose .ai-compose-tools{gap:8px;padding:5px 7px 7px 9px}
+.kurtex-ai-compose-actions{display:flex;align-items:center;gap:5px;min-width:0;flex:1;overflow-x:auto;scrollbar-width:none}.kurtex-ai-compose-actions::-webkit-scrollbar{display:none}
+.kurtex-ai-compose .kurtex-ai-tool-btn{width:auto!important;height:30px!important;min-height:30px!important;padding:0 8px!important;border:1px solid #e0e3e7!important;background:#fff!important;color:#555b64!important;border-radius:8px!important;display:inline-flex!important;align-items:center!important;gap:5px!important;font-size:9px!important;font-weight:650!important;white-space:nowrap}
+.kurtex-ai-compose .kurtex-ai-tool-btn i{font-size:13px;color:#e53935}
+.kurtex-ai-panel-option{height:30px;padding:0 8px;border:1px solid #e0e3e7;border-radius:8px;display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:650;color:#555b64;cursor:pointer;white-space:nowrap}.kurtex-ai-panel-option input{width:12px;height:12px;accent-color:#e53935}.kurtex-ai-panel-option i{font-size:13px;color:#e53935}
+.kurtex-ai-languages{font-size:8px;color:#9aa0a8;letter-spacing:.4px;white-space:nowrap;padding:0 3px}.kurtex-ai-compose .kurtex-ai-send{flex:0 0 34px;width:34px!important;height:34px!important;min-height:34px!important}.ai-panel-chat-context{padding:7px 8px 0}#kurtex-ai-chat-knowledge-inline{padding:0 8px 7px}#kurtex-ai-upload-status{padding:0 11px}
+html[data-theme="dark"] .kurtex-ai-compose .kurtex-ai-tool-btn,html[data-theme="dark"] .kurtex-ai-panel-option{background:var(--surface,#20242a)!important;border-color:var(--border,#383d45)!important;color:var(--text,#eceff3)!important}
+@media(max-width:760px){.kurtex-ai-compose-actions{gap:4px}.kurtex-ai-compose .kurtex-ai-tool-btn,.kurtex-ai-panel-option{padding:0 7px!important}.kurtex-ai-languages{display:none}}
+
+/* v83 — one AI experience: dedicated AI Assistant page only */
+#kurtex-ai-fab,.kurtex-ai-fab,#kurtex-ai-panel,.kurtex-ai-panel{display:none!important}

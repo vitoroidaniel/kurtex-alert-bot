@@ -24,10 +24,7 @@ function connectionState() {
   var status = document.getElementById("connection-status");
   if (status) status.classList.toggle("is-stale", !!message);
   var updated = document.getElementById("last-update");
-  if (updated) updated.textContent = message ? "Refresh needed" :
-    lastSuccessfulRead ? "Updated " + lastSuccessfulRead.toLocaleTimeString("en-US", {
-      timeZone:"America/Chicago",hour:"2-digit",minute:"2-digit"
-    }) + " CT" : "Connecting…";
+  if (updated) updated.textContent = message ? "Refresh needed" : "Live";
   if (message && document.body && document.body.dataset.isDeveloper === "true" && typeof pushLocalNotification === "function")
     pushLocalNotification("system","Dashboard refresh issue",message,"warning");
 }

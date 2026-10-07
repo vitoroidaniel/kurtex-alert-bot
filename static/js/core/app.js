@@ -89,8 +89,6 @@ function updateChicagoClock() {
     var el = document.getElementById(id);
     if (el.textContent !== value) el.textContent = value;
   }
-  setClockText("chicago-month", now.toLocaleDateString("en-US", {...options, month:"short"}));
-  setClockText("chicago-day", now.toLocaleDateString("en-US", {...options, day:"numeric"}));
   setClockText("chicago-date", now.toLocaleDateString("en-US", {...options, weekday:"long", month:"short", day:"numeric"}));
   setClockText("chicago-time", now.toLocaleTimeString("en-US", {...options, hour:"numeric", minute:"2-digit", timeZoneName:"short"}));
   document.getElementById("today-label").dateTime = now.toISOString();
