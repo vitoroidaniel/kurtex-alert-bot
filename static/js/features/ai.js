@@ -157,7 +157,7 @@ async function openAIPageSavedChat(id,clicked){if(aiBusy||aiUploading)return;var
    var d=document.createElement('div'),role=m.role==='assistant'?'assistant':'user';
    d.className='ai-page-msg '+role;
    var body=role==='assistant'?kurtexAIFormat(m.content||m.text||'')+aiSourceLinks(m.sources,m.research_status):escapeAI(m.content||m.text||'');
-   d.innerHTML=aiWrapMessage(role,body+(role==='assistant'?aiEvidenceCards(m.similar_cases,m.parts):''),aiAttachmentCards(kurtexAIChatId,chat.attachments||[],m.attachment_ids||[]),m.id||String(index));
+   d.innerHTML=aiWrapMessage(role,body+(role==='assistant'?aiEvidenceCards([],m.parts):''),aiAttachmentCards(kurtexAIChatId,chat.attachments||[],m.attachment_ids||[]),m.id||String(index));
    box.appendChild(d)
   });
   // Important: an empty saved chat remains the SAME saved chat.
@@ -218,7 +218,7 @@ async function sendKurtexAIPage(e){
   var r=await apiFetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,request_id:requestKey,chat_id:kurtexAIChatId,page:'ai_assistant',web_search:!!document.getElementById('ai-web-search')?.checked,similar_cases:!!document.getElementById('ai-similar-cases')?.checked,attachment_ids:sentAttachments.map(function(a){return a.id})})}),x=await r.json();
   if(!r.ok)throw new Error(x.error||'Kurtex AI request failed');
   aiLastSendAttempt=null;
-  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;if(x.title)updateAIPageChatTitle(x.title);wait.classList.remove('thinking');wait.innerHTML=aiWrapMessage('assistant',kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.')+aiEvidenceCards(x.similar_cases,x.parts)+aiSourceLinks(x.sources,x.research_status),'',x.message_id);aiLoadEvidencePhotos(wait);aiClearAttachmentTray();await refreshAIChatContext();
+  kurtexAIChatId=x.chat_id||x.id||kurtexAIChatId;if(x.title)updateAIPageChatTitle(x.title);wait.classList.remove('thinking');wait.innerHTML=aiWrapMessage('assistant',kurtexAIFormat(x.answer||x.response||x.reply||x.message||'No response returned.')+aiEvidenceCards([],x.parts)+aiSourceLinks(x.sources,x.research_status),'',x.message_id);aiLoadEvidencePhotos(wait);aiClearAttachmentTray();await refreshAIChatContext();
   loadKurtexAIChats();loadAIPageSidebar()
  }catch(err){aiChatPendingAttachments=sentAttachments;await refreshAIChatContext();wait.classList.remove('thinking');input.value=msg;wait.textContent='Message failed. Your draft is restored. '+(err.message||'Check AI Training diagnostics.')}
  aiSetBusy(false);input.focus();dst.scrollTop=dst.scrollHeight;return false

@@ -6480,3 +6480,16 @@ html.sidebar-compact .nav-section-divider{width:34px!important;margin:7px auto!i
 @media(max-width:700px){
   #layout-settings-overlay .settings-content{padding-top:18px!important}
 }
+
+
+/* v96 - compact case/report history */
+.mobile-history-section{margin-bottom:14px!important}
+.mobile-timeline-card{padding:0!important;overflow:hidden}
+.mobile-history-card-head{display:flex;align-items:center;gap:8px;padding:10px 13px 7px;font-size:12px;font-weight:800;color:var(--text)}
+.mobile-history-card-head i{display:grid;place-items:center;width:25px;height:25px;border-radius:8px;background:rgba(229,47,53,.08);color:var(--accent,#e52f35);font-size:14px}
+.mobile-timeline-card .timeline{margin:0 10px 9px!important;padding:9px 10px 8px!important;border:0!important;background:var(--surface2)!important;border-radius:9px!important}
+.mobile-timeline-card .tl-dot{width:22px;height:22px;font-size:9px}
+.mobile-timeline-card .tl-step:not(:last-child)::after{top:11px;left:calc(50% + 11px);width:calc(100% - 22px)}
+.mobile-timeline-card .tl-label{margin-top:4px;font-size:8px}
+.mobile-timeline-card .tl-time{margin-top:2px;font-size:9px;font-weight:750;color:var(--text)}
+[data-theme="dark"] .mobile-history-card-head i{background:rgba(229,47,53,.14)}
