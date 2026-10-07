@@ -100,3 +100,8 @@ Resolved/reported case records are automatically indexed into `fleet_knowledge.s
 - Sign out now uses a dedicated confirmation dialog.
 
 - v68: Developer workspace rearranged into Connections & Bot Health header, Manage Users main panel, and compact System Status side panel.
+
+## v74 compact sidebar fix
+- Compact desktop navigation keeps every real destination visible, including items that normally live inside Analytics and Fleet groups.
+- The center navigation rail scrolls independently on shorter screens while logo and account controls stay fixed.
+- Full icon rows are clickable and keyboard accessible; hover tooltips expose destination names.

@@ -70,3 +70,22 @@ applyOverviewLayout();
   };
   applyOverviewLayout();
 })();
+
+// v74: compact navigation accessibility/tooltips. The whole row remains the
+// click target; title/aria labels expose names after visible labels collapse.
+(function initCompactSidebarNavigation(){
+  function labelFor(el){
+    var clone=el.cloneNode(true);
+    clone.querySelectorAll('.nav-badge,.nav-caret').forEach(function(n){n.remove()});
+    return (clone.textContent||'').replace(/\s+/g,' ').trim();
+  }
+  document.querySelectorAll('.sidebar .nav-item').forEach(function(item){
+    var label=labelFor(item);
+    if(label){item.setAttribute('title',label);item.setAttribute('aria-label',label)}
+    item.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();item.click()}
+    });
+  });
+  var nav=document.querySelector('.sidebar>nav');
+  if(nav)nav.setAttribute('tabindex','0');
+})();

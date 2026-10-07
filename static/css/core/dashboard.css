@@ -5905,3 +5905,128 @@ body[data-current-page="overview"] .page-heading{
   html.sidebar-compact .sidebar-account-actions button{justify-content:center!important;padding-left:0!important;padding-right:0!important}
   html.sidebar-compact .sidebar-account-actions button span,html.sidebar-compact .sidebar-account-actions button .ph-caret-right{display:none!important}
 }
+
+
+/* v73 — settings scrolling, desktop dark theme, polished compact sidebar */
+.home-only-settings .settings-shell{display:flex!important;flex-direction:column!important;flex:1 1 auto!important;min-height:0!important;overflow:hidden!important}
+.home-only-settings .settings-content{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding:20px 24px 28px!important;scrollbar-gutter:stable}
+.home-only-settings .settings-footer{flex:0 0 auto!important}
+
+[data-theme="dark"] body,[data-theme="dark"] .layout,[data-theme="dark"] .main{background:var(--bg)!important;color:var(--text)!important}
+[data-theme="dark"] .sidebar{background:#151c29!important;border-color:#2e394c!important;color:var(--text)!important}
+[data-theme="dark"] .sidebar-logo,[data-theme="dark"] .sidebar-footer{border-color:#2e394c!important}
+[data-theme="dark"] .sidebar .nav-item,[data-theme="dark"] .sidebar .nav-group-header{color:#b9c3d3!important}
+[data-theme="dark"] .sidebar .nav-item:hover,[data-theme="dark"] .sidebar .nav-group-header:hover{background:#202a3a!important;color:#fff!important}
+[data-theme="dark"] .sidebar .nav-item.active{background:#252f42!important;color:#fff!important;border-color:#3a465d!important}
+[data-theme="dark"] .sidebar-account-actions button,[data-theme="dark"] .sidebar .user-chip{color:#c8d0dc!important;border-color:#303b4e!important;background:transparent!important}
+[data-theme="dark"] .topbar,[data-theme="dark"] .page,[data-theme="dark"] #page-overview{background:var(--bg)!important;color:var(--text)!important}
+[data-theme="dark"] .card,[data-theme="dark"] .section,[data-theme="dark"] .stat-card,[data-theme="dark"] .overview-widget{background:var(--surface)!important;border-color:var(--border)!important;color:var(--text)!important}
+[data-theme="dark"] .modal-overlay{background:rgba(3,7,14,.72)!important}
+[data-theme="dark"] #layout-settings-overlay .settings-center{background:#171e2b!important;border-color:#344057!important;color:#eef3fb!important}
+[data-theme="dark"] #layout-settings-overlay .settings-head,[data-theme="dark"] #layout-settings-overlay .settings-footer{background:#171e2b!important;border-color:#303b4e!important}
+[data-theme="dark"] #layout-settings-overlay .settings-shell,[data-theme="dark"] #layout-settings-overlay .settings-content{background:#171e2b!important;color:#eef3fb!important}
+[data-theme="dark"] #layout-settings-overlay .settings-nav{background:#131a26!important;border-color:#303b4e!important}
+[data-theme="dark"] #layout-settings-overlay .settings-nav button{color:#b9c3d3!important}
+[data-theme="dark"] #layout-settings-overlay .settings-nav button:hover{background:#202938!important;color:#fff!important}
+[data-theme="dark"] #layout-settings-overlay .settings-nav button.active{background:#252f40!important;border-color:#3c485e!important;color:#fff!important}
+[data-theme="dark"] #layout-settings-overlay .settings-section-title>span,[data-theme="dark"] #layout-settings-overlay h2,[data-theme="dark"] #layout-settings-overlay h3,[data-theme="dark"] #layout-settings-overlay strong{color:#f3f6fb!important}
+[data-theme="dark"] #layout-settings-overlay .settings-section-title p,[data-theme="dark"] #layout-settings-overlay small{color:#aeb9ca!important}
+[data-theme="dark"] #layout-settings-overlay .settings-list,[data-theme="dark"] #layout-settings-overlay .setting-row,[data-theme="dark"] #layout-settings-overlay .metric-options label,[data-theme="dark"] #layout-settings-overlay .theme-choice button,[data-theme="dark"] #layout-settings-overlay .density-option,[data-theme="dark"] #layout-settings-overlay .settings-wide-action,[data-theme="dark"] #layout-settings-overlay .settings-select-row{background:#1d2635!important;border-color:#354156!important;color:#eef3fb!important}
+[data-theme="dark"] #layout-settings-overlay .setting-row:hover,[data-theme="dark"] #layout-settings-overlay .metric-options label:hover,[data-theme="dark"] #layout-settings-overlay .settings-wide-action:hover{background:#222d3e!important}
+[data-theme="dark"] #layout-settings-overlay .modal-close,[data-theme="dark"] #layout-settings-overlay .settings-reset{background:#202938!important;border-color:#3a465a!important;color:#e8edf5!important}
+[data-theme="dark"] #layout-settings-overlay select{background:#151d2a!important;color:#eef3fb!important;border-color:#3a465a!important}
+
+@media(min-width:761px){
+ html.sidebar-compact .sidebar{width:76px!important;padding:12px 10px!important}
+ html.sidebar-compact.sidebar-fixed .main{margin-left:76px!important;width:calc(100% - 76px)!important}
+ html.sidebar-compact .sidebar-logo{height:58px!important;padding:7px 0 12px!important;margin:0 0 8px!important;display:flex!important;justify-content:center!important;align-items:center!important;overflow:hidden!important}
+ html.sidebar-compact .sidebar-logo img{width:38px!important;height:38px!important;min-width:38px!important;border-radius:50%!important;object-fit:cover!important;margin:0!important}
+ html.sidebar-compact .sidebar nav{width:100%!important}
+ html.sidebar-compact .sidebar .nav-item,html.sidebar-compact .sidebar .nav-group-header{position:relative!important;width:48px!important;height:46px!important;min-height:46px!important;margin:2px auto!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:12px!important;overflow:visible!important}
+ html.sidebar-compact .sidebar .nav-item>i,html.sidebar-compact .sidebar .nav-group-header span>i{font-size:20px!important;line-height:1!important;margin:0!important}
+ html.sidebar-compact .sidebar .nav-item.active:before{content:"";position:absolute;left:-10px;top:11px;width:3px;height:24px;border-radius:0 3px 3px 0;background:var(--red,#df3036)}
+ html.sidebar-compact .sidebar-footer{width:100%!important;padding:10px 0 0!important}
+ html.sidebar-compact .sidebar-footer .user-chip,html.sidebar-compact .sidebar-account-actions button{width:48px!important;height:46px!important;margin:3px auto!important;padding:0!important;display:flex!important;justify-content:center!important;align-items:center!important;border-radius:12px!important}
+}
+
+/* v74 — compact sidebar: every destination stays visible, scrollable and clickable */
+@media(min-width:761px){
+  html.sidebar-compact .sidebar{
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+  }
+  html.sidebar-compact .sidebar-logo{
+    flex:0 0 auto!important;
+    margin-bottom:8px!important;
+    padding-bottom:12px!important;
+  }
+  html.sidebar-compact .sidebar>nav{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    overscroll-behavior:contain!important;
+    scrollbar-width:none!important;
+    padding:2px 0 8px!important;
+    margin:0!important;
+    gap:4px!important;
+  }
+  html.sidebar-compact .sidebar>nav::-webkit-scrollbar{width:0!important;height:0!important}
+  html.sidebar-compact .sidebar-footer{
+    flex:0 0 auto!important;
+    margin-top:0!important;
+    padding-top:8px!important;
+    background:inherit!important;
+    position:relative!important;
+    z-index:2!important;
+  }
+  /* A collapsed group used to hide Fleet Analytics, Management Compare,
+     Fleet Stats, Intelligence and Parts Manual. In compact mode the group
+     label disappears and every actual destination becomes its own icon. */
+  html.sidebar-compact .sidebar .nav-group-header{display:none!important}
+  html.sidebar-compact .sidebar .nav-group-items,
+  html.sidebar-compact .sidebar .nav-group-items.open{
+    display:flex!important;
+    flex-direction:column!important;
+    gap:4px!important;
+  }
+  html.sidebar-compact .sidebar .nav-group-items .nav-item.nav-sub{
+    min-height:42px!important;
+    width:100%!important;
+    padding:0!important;
+    margin:0!important;
+    justify-content:center!important;
+    border-radius:10px!important;
+    position:relative!important;
+  }
+  html.sidebar-compact .sidebar .nav-item{
+    min-height:42px!important;
+    width:100%!important;
+    padding:0!important;
+    margin:0!important;
+    justify-content:center!important;
+    border-radius:10px!important;
+    position:relative!important;
+    cursor:pointer!important;
+    pointer-events:auto!important;
+  }
+  html.sidebar-compact .sidebar .nav-item>i,
+  html.sidebar-compact .sidebar .nav-group-items .nav-item.nav-sub>i{
+    font-size:19px!important;
+    pointer-events:none!important;
+  }
+  html.sidebar-compact .sidebar .nav-ai-cluster,
+  html.sidebar-compact .sidebar .nav-bottom-cluster{
+    margin-top:4px!important;
+    padding-top:6px!important;
+    flex:0 0 auto!important;
+  }
+  html.sidebar-compact .sidebar .nav-bottom-cluster{margin-top:4px!important}
+  html.sidebar-compact .sidebar .user-chip,
+  html.sidebar-compact .sidebar-account-actions button{
+    min-height:42px!important;
+    width:100%!important;
+    cursor:pointer!important;
+  }
+}
