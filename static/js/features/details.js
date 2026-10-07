@@ -1,50 +1,28 @@
 async function viewFullReport(caseIdOrEl) {
-  var caseId =
-    typeof caseIdOrEl === "string" ? caseIdOrEl : caseIdOrEl.dataset.id;
-  // Report view is the next drill-down level; don't leave a case/unit sheet
-  // visually stacked above or below it on phones.
+  var caseId = typeof caseIdOrEl === "string" ? caseIdOrEl : caseIdOrEl.dataset.id;
   var caseOverlay = document.getElementById("modal-overlay");
   var unitOverlay = document.getElementById("unit-modal-overlay");
   if (caseOverlay) caseOverlay.classList.remove("open");
   if (unitOverlay) unitOverlay.classList.remove("open");
   var reportOverlay = document.getElementById("report-view-overlay");
-  reportOverlay.style.zIndex = "540";
-  reportOverlay.classList.add("open");
-  lockBodyScroll();
-  document.getElementById("report-view-body").innerHTML =
-    '<div class="loading">Loading report...</div>';
+  reportOverlay.style.zIndex = "540"; reportOverlay.classList.add("open"); reportOverlay.dataset.caseId=caseId; lockBodyScroll();
+  document.getElementById("report-view-body").innerHTML = '<div class="loading">Loading report...</div>';
   try {
-    var r = await apiFetch(
-      "/api/case?id=" + encodeURIComponent(caseId),
-      "case-report",
-    );
-    if (!r.ok) {
-      document.getElementById("report-view-body").innerHTML =
-        '<div class="loading">Error loading report.</div>';
-      return;
-    }
-    var c = await r.json();
-    document.getElementById("report-view-title").textContent =
-      "Report — " + (c.driver || "—") + " / " + (c.group || "—");
-
-    function field(label, value) {
-      return '<div class="report-field"><dt>' + h(label) + '</dt><dd>' + h(value || 'Not provided') + '</dd></div>';
-    }
-    function section(title, content) {
-      return '<section class="report-section"><h3>' + h(title) + '</h3><dl class="report-fields">' + content + '</dl></section>';
-    }
-    var report = '<div class="report-summary">' + statusBadge(c.status) + '<span>Priority: <b>' + h(c.priority || 'Not specified') + '</b></span><span>' + h(c.vehicle_type || 'Vehicle') + ' ' + h(c.unit_number || '') + '</span></div>';
-    report += section('Issue & responsibility', field('Issue', c.issue_text || c.full_description) + field('Reported by', c.report_driver || c.driver) + field('Assigned to', c.agent) + field('Group', c.group));
-    report += section('Load & location', field('Load type', c.load_type) + field('Current location', c.location) + field('Pickup location / time', c.pickup) + field('Delivery location / time', c.delivery));
-    if (c.vehicle_type === 'reefer') report += section('Temperature', field('Setpoint', c.setpoint) + field('Current temperature', c.current_temp) + field('Recorder', c.temp_recorder));
-    report += section('Report notes', field('Comments', c.comments || (c.full_notes !== 'case reported' ? c.full_notes : '') ));
-    document.getElementById('report-view-body').innerHTML = report;
-
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    document.getElementById("report-view-body").innerHTML =
-      '<div class="loading">Error loading report.</div>';
-  }
+    var r = await apiFetch("/api/case?id=" + encodeURIComponent(caseId), "case-report");
+    if (!r.ok) { document.getElementById("report-view-body").innerHTML='<div class="loading">Error loading report.</div>'; return; }
+    var c=await r.json();
+    document.getElementById("report-view-title").innerHTML='<span class="mobile-detail-kicker">REPORT VIEW</span><span class="mobile-detail-title">'+h(c.unit_number?('Unit '+c.unit_number):(c.driver||'Case report'))+'</span>';
+    function field(label,value){return '<div class="mobile-report-row"><span>'+h(label)+'</span><strong>'+h(value||'Not provided')+'</strong></div>';}
+    function section(icon,title,content){return '<section class="mobile-report-section"><div class="mobile-report-section-title"><i class="ph '+icon+'"></i><span>'+h(title)+'</span></div><div class="mobile-detail-card">'+content+'</div></section>';}
+    var issue=c.issue_text||c.full_description||'Maintenance report';
+    var report='<div class="mobile-report-view"><div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+'</div><h3 class="mobile-case-issue">'+h(issue)+'</h3><p class="mobile-case-origin">'+h(c.opened||'Date unavailable')+'</p>';
+    report+=section('ph-wrench','Issue & responsibility',field('Reported by',c.report_driver||c.driver)+field('Assigned to',c.agent)+field('Group',c.group)+field('Equipment',(c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:'')));
+    report+=section('ph-map-pin','Load & location',field('Load type',c.load_type)+field('Current location',c.location)+field('Pickup',c.pickup)+field('Delivery',c.delivery));
+    if(c.vehicle_type==='reefer') report+=section('ph-thermometer','Temperature',field('Setpoint',c.setpoint)+field('Current temperature',c.current_temp)+field('Recorder',c.temp_recorder));
+    report+=section('ph-note','Report notes',field('Comments',c.comments||(c.full_notes!=='case reported'?c.full_notes:'')));
+    report+='</div>';
+    document.getElementById('report-view-body').innerHTML=report;
+  } catch(e){ if(e.name==='AbortError')return; document.getElementById('report-view-body').innerHTML='<div class="loading">Error loading report.</div>'; }
 }
 
 function closeReportView() {

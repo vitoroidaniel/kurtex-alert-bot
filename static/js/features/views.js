@@ -495,97 +495,46 @@ function renderAgentCards(rows){
 // ── Modals ─────────────────────────────────────────────────────────────────
 async function openCase(el) {
   var caseId = typeof el === "string" ? el : el.dataset.id;
-  // A case opened from Unit/Issue Search must replace that sheet on mobile,
-  // otherwise the case renders behind the unit history overlay.
   var unitOverlay = document.getElementById("unit-modal-overlay");
-  if (unitOverlay && unitOverlay.classList.contains("open")) {
-    unitOverlay.classList.remove("open");
-  }
+  if (unitOverlay && unitOverlay.classList.contains("open")) unitOverlay.classList.remove("open");
   var caseOverlay = document.getElementById("modal-overlay");
   caseOverlay.style.zIndex = "520";
   caseOverlay.classList.add("open");
+  caseOverlay.dataset.caseId = caseId;
   lockBodyScroll();
   updateHTML(document.getElementById("modal-body"), '<div class="loading">Loading...</div>');
-  document.getElementById("modal-title").textContent = "Loading...";
+  document.getElementById("modal-title").textContent = "Case View";
   try {
-    var r = await apiFetch(
-      "/api/case?id=" + encodeURIComponent(caseId),
-      "case-detail",
-    );
-    if (!r.ok) {
-      updateHTML(document.getElementById("modal-body"), '<div class="loading">Case not found.</div>');
-      return;
-    }
+    var r = await apiFetch("/api/case?id=" + encodeURIComponent(caseId), "case-detail");
+    if (!r.ok) { updateHTML(document.getElementById("modal-body"), '<div class="loading">Case not found.</div>'); return; }
     var c = await r.json();
-    document.getElementById("modal-title").textContent =
-      (c.driver || "—") + " — " + (c.group || "—");
-    var extra = "";
-    if (c.vehicle_type) {
-      extra +=
-        '<div class="detail-grid" style="margin-bottom:14px">' +
-        '<div class="detail-item"><div class="detail-label">Vehicle Type</div><div class="detail-val">' +
-        h(c.vehicle_type || "—") +
-        "</div></div>" +
-        '<div class="detail-item"><div class="detail-label">Unit Number</div><div class="detail-val">' +
-        h(c.unit_number || "—") +
-        "</div></div>" +
-        '<div class="detail-item"><div class="detail-label">Priority</div><div class="detail-val">' +
-        h(c.priority || "—") +
-        "</div></div>" +
-        '<div class="detail-item"><div class="detail-label">Load Type</div><div class="detail-val">' +
-        h(c.load_type || "—") +
-        "</div></div>" +
-        "</div>";
-    }
-    updateHTML(document.getElementById("modal-body"), buildTimeline(c) +
-      '<div class="detail-grid">' +
-      '<div class="detail-item"><div class="detail-label">Status</div><div class="detail-val">' +
-      statusBadge(c.status) +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Assigned To</div><div class="detail-val">' +
-      h(c.agent || "—") +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Reported By</div><div class="detail-val">' +
-      h(c.driver || "—") +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Group</div><div class="detail-val">' +
-      h(c.group || "—") +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Opened</div><div class="detail-val">' +
-      h(c.opened || "—") +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Assigned At</div><div class="detail-val">' +
-      h(c.assigned_at || "—") +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Response Time</div><div class="detail-val">' +
-      h(c.response || "—") +
-      "</div></div>" +
-      '<div class="detail-item"><div class="detail-label">Resolution Time</div><div class="detail-val">' +
-      h(c.resolution_secs || "—") +
-      "</div></div>" +
-      "</div>" +
-      extra +
-      (c.full_description
-        ? '<div class="desc-box"><span class="box-label">Issue Description</span><p class="box-text">' +
-          h(c.full_description) +
-          "</p></div>"
-        : "") +
-      (c.full_notes
-        ? '<div class="notes-box"><span class="box-label">Report / Notes</span><p class="box-text">' +
-          h(c.full_notes) +
-          "</p></div>"
-        : "") +
-      (c.status === "reported" || c.status === "done"
-        ? '<div style="margin-top:14px;text-align:center"><button data-id="' +
-          attr(c.full_id) +
-          '" onclick="viewFullReport(this.dataset.id)" style="background:var(--accent);color:#fff;border:none;border-radius:10px;padding:10px 24px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:8px"> View Full Report</button></div>'
-        : ""));
+    var title = document.getElementById("modal-title");
+    title.innerHTML = '<span class="mobile-detail-kicker">CASE VIEW</span><span class="mobile-detail-title">' + h(c.unit_number ? ('Unit ' + c.unit_number) : (c.driver || 'Maintenance case')) + '</span>';
+    var issue = c.issue_text || c.full_description || c.description || 'Maintenance case';
+    var reportBtn = (c.status === "reported" || c.status === "done") ? '<button class="mobile-report-open" data-id="'+attr(c.full_id || caseId)+'" onclick="viewFullReport(this.dataset.id)"><i class="ph ph-file-text"></i><span>View report</span><i class="ph ph-caret-right"></i></button>' : '';
+    var html = '<div class="mobile-case-view">' +
+      '<div class="mobile-case-badges">'+statusBadge(c.status)+(c.priority?'<span class="mobile-priority-pill">'+h(c.priority)+'</span>':'')+'</div>'+
+      '<h3 class="mobile-case-issue">'+h(issue)+'</h3>'+
+      '<p class="mobile-case-origin">'+h(c.opened || 'Date unavailable')+(c.driver?' · '+h(c.driver):'')+'</p>'+
+      '<section class="mobile-detail-card mobile-case-facts">'+
+        mobileCaseRow('Equipment', ((c.vehicle_type||'Vehicle')+(c.unit_number?' · '+c.unit_number:'')))+
+        mobileCaseRow('Group', c.group||'—')+mobileCaseRow('Assigned to', c.agent||'—')+
+        mobileCaseRow('Response', c.response||'—')+mobileCaseRow('Resolution', c.resolution_secs||'—')+
+      '</section>'+
+      (c.full_description?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><span>Description</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_description)+'</section></div>':'')+
+      (c.full_notes?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_notes)+'</section></div>':'')+
+      '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><span>Case history</span></div><section class="mobile-detail-card mobile-timeline-card">'+buildTimeline(c)+'</section></div>'+reportBtn+'</div>';
+    updateHTML(document.getElementById("modal-body"), html);
   } catch (e) {
     if (e.name === "AbortError") return;
     console.error("openCase error:", e);
     updateHTML(document.getElementById("modal-body"), '<div class="loading">Error loading case.</div>');
   }
 }
+function mobileCaseRow(label, value){
+  return '<div class="mobile-case-row"><span>'+h(label)+'</span><strong>'+h(value || '—')+'</strong></div>';
+}
+
 function closeModal() {
   var overlay = document.getElementById("modal-overlay");
   if (overlay.classList.contains("open")) {
