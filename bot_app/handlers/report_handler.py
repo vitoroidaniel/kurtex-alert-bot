@@ -314,6 +314,7 @@ async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Setpoint temperature (e.g. -10°C):", reply_markup=SKIP_KB)
         return ASK_SETPOINT
     # truck/trailer — skip straight to comments, no temp questions
+    ctx.user_data["report_awaiting"] = "comments"
     await update.message.reply_text("Comments:", reply_markup=SKIP_KB)
     return ASK_COMMENTS
 
@@ -344,6 +345,7 @@ async def cb_temp_recorder(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _missing_report_session(query)
         return ConversationHandler.END
     ctx.user_data["report"]["temp_recorder"] = query.data.split("|")[1]
+    ctx.user_data["report_awaiting"] = "comments"
     await query.edit_message_text("Comments:", reply_markup=None)
     return ASK_COMMENTS
 
@@ -355,6 +357,7 @@ async def recv_comments(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     logger.info("[REPORT] COMMENTS ENTER user=%s", update.effective_user.id)
     ctx.user_data["report"]["comments"] = update.message.text.strip()
+    ctx.user_data["report_awaiting"] = "media"
     await update.message.reply_text(
         "Send photo(s) or video(s). Press Done when finished:",
         reply_markup=InlineKeyboardMarkup([[
@@ -422,6 +425,7 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("Setpoint temperature:", reply_markup=SKIP_KB)
             return ASK_SETPOINT
         # truck / trailer — straight to comments, never ask temp
+        ctx.user_data["report_awaiting"] = "comments"
         await query.edit_message_text("Comments:", reply_markup=SKIP_KB)
         return ASK_COMMENTS
     elif vtype == "reefer" and "setpoint" not in report:
@@ -440,12 +444,27 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return ASK_TEMP_RECORDER
     elif "comments" not in report:
         report["comments"] = None
+        ctx.user_data["report_awaiting"] = "media"
         await query.edit_message_text(
             "Send photo(s) or video(s), or press Done:",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done (no media)", callback_data="rpt_mediadone")]])
         )
         return ASK_MEDIA
     return ASK_COMMENTS
+
+
+async def recover_report_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Recover report text when PTB conversation state is stale but report data is still alive.
+
+    This is intentionally registered *after* the ConversationHandler, so normal
+    report-state handling always wins. It only consumes text when the report
+    workflow explicitly marked itself as waiting for comments.
+    """
+    if ctx.user_data.get("report_awaiting") != "comments" or not _report_ready(ctx):
+        return
+    logger.warning("[REPORT] recovering COMMENTS from stale conversation state user=%s",
+                   update.effective_user.id if update.effective_user else None)
+    await recv_comments(update, ctx)
 
 
 async def cb_media_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -455,6 +474,7 @@ async def cb_media_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         logger.warning("[REPORT] %s missing report session user=%s", "MEDIA_DONE", update.effective_user.id)
         await _missing_report_session(query)
         return ConversationHandler.END
+    ctx.user_data.pop("report_awaiting", None)
     vtype       = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
     vtype_label = VTYPE_LABELS.get(vtype, vtype.title())
     await query.edit_message_text(
@@ -494,10 +514,12 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     action = query.data.split("|")[1]
 
     if action == "no":
+        ctx.user_data.pop("report_awaiting", None)
         ctx.user_data.pop("report", None)
         await query.edit_message_text("Report cancelled.", reply_markup=None)
         return ConversationHandler.END
 
+    ctx.user_data.pop("report_awaiting", None)
     data    = ctx.user_data.pop("report", {})
     dest_id = config.REPORTS_GROUP_ID
     if not dest_id:
@@ -582,6 +604,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.pop("report_awaiting", None)
     ctx.user_data.pop("report", None)
     ctx.user_data.pop("report_case_id", None)
     ctx.user_data.pop("report_handler", None)
