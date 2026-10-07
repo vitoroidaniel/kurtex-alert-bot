@@ -86,26 +86,86 @@ async function loadStats() {
   }
 }
 
+var leaderboardTrendChart = null;
+var leaderboardOutcomeChart = null;
+
+function leaderboardPeriodKey() {
+  return lbPeriod === "day" ? "day" : lbPeriod === "week" ? "week" : "month";
+}
+
+function leaderboardInsightHTML(perf) {
+  var agents = (perf && perf.agents) || [];
+  if (!agents.length) return '<div class="leaderboard-empty">Not enough team activity in this period yet.</div>';
+  var insights = [];
+  var activeCounts = agents.map(function(a){ return Number(a.active || 0); }).sort(function(a,b){return a-b;});
+  var median = activeCounts.length ? activeCounts[Math.floor(activeCounts.length / 2)] : 0;
+  var busiest = agents.slice().sort(function(a,b){return Number(b.active||0)-Number(a.active||0);})[0];
+  if (busiest && busiest.active > Math.max(2, median * 2)) {
+    insights.push({icon:"ph-scales", title:"Workload imbalance", text:h(busiest.name)+" has <b>"+h(busiest.active)+" active cases</b> while the team median is "+h(median)+"."});
+  }
+  var top = agents.slice().sort(function(a,b){return Number(b.resolved||0)-Number(a.resolved||0);})[0];
+  if (top && top.resolved > 0) {
+    insights.push({icon:"ph-trend-up", title:"Strong resolution volume", text:h(top.name)+" resolved <b>"+h(top.resolved)+" cases</b> in this period"+(top.reassigned ? " with "+h(top.reassigned)+" reassignment"+(top.reassigned===1?"":"s") : " with no recorded reassignments")+"."});
+  }
+  if (perf.missed > 0) {
+    insights.push({icon:"ph-warning", title:"Missed cases need attention", text:"The team has <b>"+h(perf.missed)+" missed case"+(perf.missed===1?"":"s")+"</b> in this period."});
+  }
+  if (perf.active > 0) {
+    var activeAgents = agents.filter(function(a){return a.active>0;}).length;
+    insights.push({icon:"ph-users-three", title:"Current workload", text:"<b>"+h(perf.active)+" active cases</b> are spread across "+h(activeAgents)+" agent"+(activeAgents===1?"":"s")+"."});
+  }
+  if (!insights.length) insights.push({icon:"ph-check-circle",title:"Team activity looks stable",text:"No workload or case-outcome pattern needs attention in this period."});
+  return insights.slice(0,3).map(function(x){return '<div class="performance-insight"><span class="performance-insight-icon"><i class="ph '+x.icon+'"></i></span><div><strong>'+x.title+'</strong><p>'+x.text+'</p></div></div>';}).join("");
+}
+
+function leaderboardChartColors() {
+  var cs = getComputedStyle(document.documentElement);
+  return {
+    text: cs.getPropertyValue("--muted").trim() || "#6b7280",
+    grid: cs.getPropertyValue("--border").trim() || "#e5e7eb",
+    accent: cs.getPropertyValue("--accent").trim() || "#ef4444",
+    green: cs.getPropertyValue("--green").trim() || "#22c55e",
+    red: cs.getPropertyValue("--red").trim() || "#ef4444",
+    blue: cs.getPropertyValue("--blue").trim() || "#3b82f6"
+  };
+}
+
+function renderLeaderboardCharts(perf, trend) {
+  if (typeof Chart === "undefined") return;
+  var c = leaderboardChartColors();
+  var trendCanvas = document.getElementById("leaderboard-trend-chart");
+  if (trendCanvas) {
+    if (leaderboardTrendChart) leaderboardTrendChart.destroy();
+    leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:(trend||[]).map(function(x){return x.date;}),datasets:[{label:"Cases",data:(trend||[]).map(function(x){return x.total;}),borderColor:c.accent,backgroundColor:"transparent",tension:.35,pointRadius:3,borderWidth:2},{label:"Resolved",data:(trend||[]).map(function(x){return x.resolved;}),borderColor:c.green,backgroundColor:"transparent",tension:.35,pointRadius:3,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:c.text,usePointStyle:true,boxWidth:7}}},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8},grid:{display:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0},grid:{color:c.grid}}}}});
+  }
+  var outCanvas = document.getElementById("leaderboard-outcome-chart");
+  if (outCanvas) {
+    if (leaderboardOutcomeChart) leaderboardOutcomeChart.destroy();
+    var agents=((perf&&perf.agents)||[]).slice(0,7);
+    leaderboardOutcomeChart = new Chart(outCanvas,{type:"bar",data:{labels:agents.map(function(a){return a.name;}),datasets:[{label:"Resolved",data:agents.map(function(a){return a.resolved;}),backgroundColor:c.green},{label:"Active",data:agents.map(function(a){return a.active;}),backgroundColor:c.blue},{label:"Reassigned",data:agents.map(function(a){return a.reassigned;}),backgroundColor:c.accent}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:c.text,usePointStyle:true,boxWidth:7}}},scales:{x:{stacked:true,ticks:{color:c.text,maxRotation:0},grid:{display:false}},y:{stacked:true,beginAtZero:true,ticks:{color:c.text,precision:0},grid:{color:c.grid}}}}});
+  }
+}
+
 function renderLeaderboard() {
   if (!stats.leaderboard_day) return;
-  var lb = stats["leaderboard_" + lbPeriod] || [];
-  var el = document.getElementById("leaderboard-full");
-  if (!el) return;
-  updateHTML(el, lb.length
-    ? lb
-        .map(function (a, i) {
-          return (
-            '<div class="list-row"><span class="medal">' +
-            (medals[i] || i + 1 + ".") +
-            '</span><span class="list-name">' +
-            h(a.name) +
-            '</span><span class="list-count">' +
-            h(a.count) +
-            " cases</span></div>"
-          );
-        })
-        .join("")
-    : '<div style="color:var(--muted);font-size:13px;padding:8px 0">No data</div>');
+  var key = leaderboardPeriodKey();
+  var perf = stats["performance_" + key] || {agents:[],total:0,resolved:0,active:0,missed:0,reassigned:0};
+  var trend = stats["performance_trend_" + key] || [];
+  var labels={day:"Today",week:"Last 7 days",month:"Last 30 days"};
+  var pl=document.getElementById("leaderboard-period-label"); if(pl) pl.textContent=labels[key];
+  var metrics=document.getElementById("leaderboard-metrics");
+  if(metrics) updateHTML(metrics,[
+    ["ph-clipboard-text","Cases handled",perf.total||0],
+    ["ph-check-circle","Resolved",perf.resolved||0],
+    ["ph-hourglass","Active",perf.active||0],
+    ["ph-phone-x","Missed",perf.missed||0],
+    ["ph-arrows-clockwise","Reassigned",perf.reassigned||0]
+  ].map(function(m){return '<div class="leaderboard-metric"><span><i class="ph '+m[0]+'"></i>'+m[1]+'</span><strong>'+h(m[2])+'</strong></div>';}).join(""));
+  var el=document.getElementById("leaderboard-full");
+  var agents=(perf.agents||[]);
+  if(el) updateHTML(el,agents.length?agents.slice(0,10).map(function(a,i){return '<div class="agent-rank-row"><span class="agent-rank-pos">'+(medals[i]||("#"+(i+1)))+'</span><div class="agent-rank-main"><strong>'+h(a.name)+'</strong><span>'+h(a.handled)+' handled · '+h(a.active)+' active</span></div><div class="agent-rank-stats"><b>'+h(a.resolved)+'</b><span>resolved</span></div><div class="agent-rank-mini '+(a.missed?'has-alert':'')+'">'+h(a.missed)+' missed</div></div>';}).join(""):'<div class="leaderboard-empty">No agent activity in this period.</div>');
+  var insights=document.getElementById("leaderboard-insights"); if(insights) updateHTML(insights,leaderboardInsightHTML(perf));
+  renderLeaderboardCharts(perf,trend);
 }
 
 function renderAnalytics() {

@@ -25,6 +25,7 @@ var pages = [
   "ai_knowledge",
   "my_profile",
   "agents",
+  "users",
   "developer",
 ];
 var titles = {
@@ -42,6 +43,7 @@ var titles = {
   ai_knowledge: "AI Knowledge",
   my_profile: "My Profile",
   agents: "Agent Profiles",
+  users: "Users",
   developer: "Developer",
 };
 var medals = ["01", "02", "03"];
@@ -119,6 +121,8 @@ function anyModalOpen() {
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 function showPage(page) {
+  var allowed=(document.body.dataset.allowedPages||"").split(",").filter(Boolean);
+  if(page!=="my_profile" && allowed.length && allowed.indexOf(page)<0) page="overview";
   // Some pages (for example My Profile) are intentionally opened from
   // controls outside the navigation menu. They must not require a matching
   // .nav-item in order to be routable.
@@ -152,7 +156,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",kurtex_intelligence:"ph-brain",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",developer:"ph-code"};
+    var iconMap = {overview:"ph-house",leaderboard:"ph-trophy",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",kurtex_intelligence:"ph-brain",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",users:"ph-users-four",developer:"ph-code"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var headerRefresh = document.getElementById("refresh-button");
@@ -169,8 +173,10 @@ function showPage(page) {
           ? "Automatic fleet patterns, repeat repairs and evidence from real case history."
         : page === "ai_assistant"
           ? "Full workspace for maintenance diagnosis, Kurtex history and approved knowledge."
+        : page === "users"
+          ? "Manage authorized users and website access by role."
         : page === "developer"
-          ? "Connections, access and system diagnostics."
+          ? "Live bot health, connections and system diagnostics."
         : "Review " +
           (titles[page] || page).toLowerCase() +
           " and case history.";
@@ -180,6 +186,7 @@ function showPage(page) {
   document.body.setAttribute("data-current-page", page);
   if (page === "kurtex_intelligence" && typeof loadKurtexIntelligence === "function") loadKurtexIntelligence();
   if (page === "developer" && typeof loadDeveloperWorkspace === "function") loadDeveloperWorkspace();
+  if (page === "users" && typeof loadUsersWorkspace === "function") loadUsersWorkspace();
   if (page === "ai_knowledge" && typeof loadAIKnowledge === "function") { loadAIKnowledge(); if (typeof loadFleetKnowledgeStats === "function") loadFleetKnowledgeStats(); }
   // Every workspace opens at its top. Prevent a previous page's scroll position
   // from making AI Knowledge (or any other tab) appear hundreds of pixels down.
@@ -505,3 +512,9 @@ function buildTimeline(c) {
 }
 
 // ── Data loading ───────────────────────────────────────────────────────────
+
+// v98 — apply configured website role permissions to navigation.
+(function(){
+ function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile')return;n.hidden=allowed.indexOf(p)<0});document.querySelectorAll('.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyRoleNavigation);else applyRoleNavigation();
+})();

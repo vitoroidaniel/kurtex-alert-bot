@@ -1111,6 +1111,60 @@ def api_overview_preferences():
     return jsonify({"ok": True, "overview": clean})
 
 
+# ── Website role permissions ─────────────────────────────────────────────────
+ROLE_PERMISSION_DEFAULTS = {
+    "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","my_profile"],
+    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","my_profile"],
+    "developer": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","users","developer","my_profile"],
+}
+ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents"]
+
+def _permissions_path():
+    return Path(os.getenv("DATA_DIR", "/app/data")) / "role_permissions.json"
+
+def _load_role_permissions():
+    data = {k:list(v) for k,v in ROLE_PERMISSION_DEFAULTS.items()}
+    try:
+        path=_permissions_path()
+        if path.exists():
+            raw=json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw,dict):
+                for role in ("agent","super_admin"):
+                    vals=raw.get(role)
+                    if isinstance(vals,list): data[role]=[x for x in vals if x in ROLE_PERMISSION_PAGES or x=="my_profile"]
+    except Exception as e:
+        logger.warning("Role permissions read failed: %s", e)
+    data["developer"]=list(ROLE_PERMISSION_DEFAULTS["developer"])
+    for role in data:
+        if "overview" not in data[role]: data[role].insert(0,"overview")
+        if "my_profile" not in data[role]: data[role].append("my_profile")
+    return data
+
+def _save_role_permissions(data):
+    path=_permissions_path(); path.parent.mkdir(parents=True,exist_ok=True)
+    clean={}
+    for role in ("agent","super_admin"):
+        vals=data.get(role,[]); clean[role]=[x for x in ROLE_PERMISSION_PAGES if x in vals]
+        if "overview" not in clean[role]: clean[role].insert(0,"overview")
+    tmp=path.with_suffix('.tmp'); tmp.write_text(json.dumps(clean,indent=2),encoding='utf-8'); tmp.replace(path)
+    return clean
+
+def _website_role(role):
+    return "super_admin" if role in ("manager","admin","super_admin") else ("developer" if role=="developer" else "agent")
+
+def _current_allowed_pages():
+    user=session.get("user") or {}; return _load_role_permissions().get(_website_role(user.get("role","agent")), ROLE_PERMISSION_DEFAULTS["agent"])
+
+@app.route("/api/developer/permissions", methods=["GET","PUT"])
+def api_developer_permissions():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    if not _developer_only(): return jsonify({"error":"forbidden"}),403
+    if request.method=="GET": return jsonify({"permissions":_load_role_permissions(),"pages":ROLE_PERMISSION_PAGES})
+    payload=request.get_json(silent=True) or {}; incoming=payload.get("permissions") or {}
+    if not isinstance(incoming,dict): return jsonify({"error":"Invalid permissions."}),400
+    saved=_save_role_permissions(incoming)
+    return jsonify({"ok":True,"permissions":_load_role_permissions()})
+
 # ── Developer workspace ─────────────────────────────────────────────────────
 def _developer_only():
     user = session.get("user") or {}
@@ -1421,6 +1475,48 @@ def api_stats():
         def lb(lst):
             cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
             return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
+
+        def agent_performance(lst):
+            agents = {}
+            for c in lst:
+                name = (c.get("agent_name") or "").strip()
+                if not name:
+                    continue
+                a = agents.setdefault(name, {"name": name, "handled": 0, "resolved": 0, "active": 0, "missed": 0, "reassigned": 0})
+                a["handled"] += 1
+                status = c.get("status") or "open"
+                if status == "done": a["resolved"] += 1
+                elif status in ("assigned", "reported", "open"): a["active"] += 1
+                if status == "missed": a["missed"] += 1
+                if c.get("reassigned"): a["reassigned"] += 1
+            return sorted(agents.values(), key=lambda a: (-a["resolved"], -a["handled"], a["missed"], a["name"].lower()))
+
+        def performance_summary(lst):
+            perf = agent_performance(lst)
+            return {
+                "total": len(lst),
+                "resolved": sum(1 for c in lst if c.get("status") == "done"),
+                "active": sum(1 for c in lst if c.get("status") in ("open", "assigned", "reported")),
+                "missed": sum(1 for c in lst if c.get("status") == "missed"),
+                "reassigned": sum(1 for c in lst if c.get("reassigned")),
+                "agents": perf,
+            }
+
+        def performance_trend(days):
+            end = chicago_now().date()
+            start = end - timedelta(days=days - 1)
+            buckets = []
+            for i in range(days):
+                d = start + timedelta(days=i)
+                ds = d.isoformat()
+                day_cases = [c for c in real if case_local_date(c) == ds]
+                buckets.append({
+                    "date": d.strftime("%b %d"),
+                    "total": len(day_cases),
+                    "resolved": sum(1 for c in day_cases if c.get("status") == "done"),
+                    "missed": sum(1 for c in day_cases if c.get("status") == "missed"),
+                })
+            return buckets
         # Group resolution rates (all-time, min 3 cases to be meaningful)
         from collections import defaultdict
         grp_data = defaultdict(lambda: {"total":0,"done":0,"missed":0})
@@ -1446,6 +1542,12 @@ def api_stats():
             "month": {"total":len(mc),"done":sum(1 for c in mc if c.get("status")=="done"),"missed":sum(1 for c in mc if c.get("status")=="missed")},
             "all_time": {"total":len(cases),"done":sum(1 for c in cases if c.get("status")=="done"),"avg_resp":fmt_secs(avg)},
             "leaderboard_day": lb(tc), "leaderboard_week": lb(wc), "leaderboard_month": lb(mc), "leaderboard_all": lb(real),
+            "performance_day": performance_summary(tc),
+            "performance_week": performance_summary([c for c in real if case_local_date(c) >= (chicago_now().date()-timedelta(days=6)).isoformat()]),
+            "performance_month": performance_summary([c for c in real if case_local_date(c) >= (chicago_now().date()-timedelta(days=29)).isoformat()]),
+            "performance_trend_day": performance_trend(1),
+            "performance_trend_week": performance_trend(7),
+            "performance_trend_month": performance_trend(30),
             "top_groups": group_stats[:6],
             "top_problem_units": top_problem_units,
             "top_problem_units_day": top_units_for(tc, 6),
@@ -2424,7 +2526,8 @@ def index():
     user = session["user"]
     is_manager = user.get("role","agent") in ("manager","admin","developer","super_admin")
     is_developer = user.get("role","agent") == "developer"
-    return render_template("dashboard.html", user=user, is_manager=is_manager, is_developer=is_developer)
+    allowed_pages = _load_role_permissions().get(_website_role(user.get("role","agent")), ROLE_PERMISSION_DEFAULTS["agent"])
+    return render_template("dashboard.html", user=user, is_manager=is_manager, is_developer=is_developer, allowed_pages=allowed_pages)
 
 def _learning_sync_worker():
     from threading import Event

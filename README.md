@@ -105,3 +105,7 @@ Resolved/reported case records are automatically indexed into `fleet_knowledge.s
 - Compact desktop navigation keeps every real destination visible, including items that normally live inside Analytics and Fleet groups.
 - The center navigation rail scrolls independently on shorter screens while logo and account controls stay fixed.
 - Full icon rows are clickable and keyboard accessible; hover tooltips expose destination names.
+
+
+## v97
+Leaderboard upgraded into a team performance workspace with real case metrics, agent ranking, trend/outcome charts, and deterministic Kurtex performance insights. No response-time scoring is used.
