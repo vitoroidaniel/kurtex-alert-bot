@@ -118,6 +118,19 @@ function leaderboardInsightHTML(perf) {
   return insights.slice(0,3).map(function(x){return '<div class="performance-insight"><span class="performance-insight-icon"><i class="ph '+x.icon+'"></i></span><div><strong>'+x.title+'</strong><p>'+x.text+'</p></div></div>';}).join("");
 }
 
+
+function toggleLeaderboardSeries(chartName, datasetIndex, btn) {
+  var chart = chartName === "trend" ? leaderboardTrendChart : leaderboardOutcomeChart;
+  if (!chart || !chart.data || !chart.data.datasets[datasetIndex]) return;
+  var currentlyVisible = chart.isDatasetVisible(datasetIndex);
+  chart.setDatasetVisibility(datasetIndex, !currentlyVisible);
+  chart.update();
+  if (btn) {
+    btn.classList.toggle("active", !currentlyVisible);
+    btn.setAttribute("aria-pressed", String(!currentlyVisible));
+  }
+}
+
 function leaderboardChartColors() {
   var cs = getComputedStyle(document.documentElement);
   return {
@@ -136,7 +149,7 @@ function renderLeaderboardCharts(perf, trend) {
   var trendCanvas = document.getElementById("leaderboard-trend-chart");
   if (trendCanvas) {
     if (leaderboardTrendChart) leaderboardTrendChart.destroy();
-    leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:(trend||[]).map(function(x){return x.date;}),datasets:[{label:"Cases",data:(trend||[]).map(function(x){return x.total;}),borderColor:c.accent,backgroundColor:"transparent",tension:.35,pointRadius:3,borderWidth:2},{label:"Resolved",data:(trend||[]).map(function(x){return x.resolved;}),borderColor:c.green,backgroundColor:"transparent",tension:.35,pointRadius:3,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+    leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:(trend||[]).map(function(x){return x.date;}),datasets:[{label:"Cases",data:(trend||[]).map(function(x){return x.total;}),borderColor:c.accent,backgroundColor:"rgba(239,68,68,.08)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5},{label:"Resolved",data:(trend||[]).map(function(x){return x.resolved;}),borderColor:c.green,backgroundColor:"rgba(34,197,94,.06)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
   }
   var outCanvas = document.getElementById("leaderboard-outcome-chart");
   if (outCanvas) {

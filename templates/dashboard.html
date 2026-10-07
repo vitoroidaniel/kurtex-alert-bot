@@ -248,11 +248,11 @@
     </div>
     <div class="leaderboard-grid leaderboard-chart-grid">
       <div class="card">
-        <div class="leaderboard-chart-head"><div class="card-title"><i class="ph ph-chart-line-up"></i>Cases handled over time</div><div class="chart-key"><span class="chart-key-item cases"><i></i>Cases</span><span class="chart-key-item resolved"><i></i>Resolved</span></div></div>
+        <div class="leaderboard-chart-head"><div class="card-title"><i class="ph ph-chart-line-up"></i>Cases handled over time</div><div class="chart-key"><button type="button" class="chart-key-item cases active" data-chart="trend" data-series="0" onclick="toggleLeaderboardSeries('trend',0,this)"><i></i>Cases</button><button type="button" class="chart-key-item resolved active" data-chart="trend" data-series="1" onclick="toggleLeaderboardSeries('trend',1,this)"><i></i>Resolved</button></div></div>
         <div class="leaderboard-chart-wrap"><canvas id="leaderboard-trend-chart"></canvas></div>
       </div>
       <div class="card">
-        <div class="leaderboard-chart-head"><div class="card-title"><i class="ph ph-chart-bar"></i>Case outcomes by agent</div><div class="chart-key"><span class="chart-key-item resolved"><i></i>Resolved</span><span class="chart-key-item active"><i></i>Active</span><span class="chart-key-item reassigned"><i></i>Reassigned</span></div></div>
+        <div class="leaderboard-chart-head"><div class="card-title"><i class="ph ph-chart-bar"></i>Case outcomes by agent</div><div class="chart-key"><button type="button" class="chart-key-item resolved active" data-chart="outcome" data-series="0" onclick="toggleLeaderboardSeries('outcome',0,this)"><i></i>Resolved</button><button type="button" class="chart-key-item active active" data-chart="outcome" data-series="1" onclick="toggleLeaderboardSeries('outcome',1,this)"><i></i>Active</button><button type="button" class="chart-key-item reassigned active" data-chart="outcome" data-series="2" onclick="toggleLeaderboardSeries('outcome',2,this)"><i></i>Reassigned</button></div></div>
         <div class="leaderboard-chart-wrap"><canvas id="leaderboard-outcome-chart"></canvas></div>
       </div>
     </div>

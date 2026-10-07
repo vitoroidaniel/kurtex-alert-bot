@@ -1503,6 +1503,28 @@ def api_stats():
             }
 
         def performance_trend(days):
+            # Today needs more than a single point, otherwise a line chart renders as dots.
+            # Use 2-hour Chicago-time buckets for Today; longer ranges remain daily.
+            if days == 1:
+                now = chicago_now()
+                today_date = now.date()
+                buckets = []
+                for hour in range(0, 24, 2):
+                    bucket_start = hour
+                    bucket_end = hour + 2
+                    opened_count = 0
+                    resolved_count = 0
+                    for c in real:
+                        opened = chicago_timestamp(c.get("opened_at")) if c.get("opened_at") else None
+                        if opened and opened.date() == today_date and bucket_start <= opened.hour < bucket_end:
+                            opened_count += 1
+                        closed = chicago_timestamp(c.get("closed_at")) if c.get("closed_at") else None
+                        if closed and closed.date() == today_date and bucket_start <= closed.hour < bucket_end:
+                            resolved_count += 1
+                    label_hour = hour % 12 or 12
+                    suffix = "AM" if hour < 12 else "PM"
+                    buckets.append({"date": f"{label_hour} {suffix}", "total": opened_count, "resolved": resolved_count})
+                return buckets
             end = chicago_now().date()
             start = end - timedelta(days=days - 1)
             buckets = []

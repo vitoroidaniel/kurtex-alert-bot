@@ -6543,3 +6543,11 @@ body[data-current-page="users"] .heading-actions{display:none!important}
 body[data-current-page="leaderboard"] #refresh-button{display:none!important}
 .leaderboard-chart-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.leaderboard-chart-head .card-title{margin:0!important}.chart-key{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}.chart-key-item{display:inline-flex;align-items:center;gap:6px;min-height:27px;padding:0 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--muted);font-size:9px;font-weight:700;line-height:1}.chart-key-item i{display:block;width:14px;height:3px;border-radius:999px;background:var(--muted)}.chart-key-item.cases i{background:var(--accent)}.chart-key-item.resolved i{background:var(--green)}.chart-key-item.active i{background:var(--blue)}.chart-key-item.reassigned i{background:var(--accent)}.leaderboard-chart-wrap{height:270px;padding:4px 2px 0}.leaderboard-chart-grid .card{overflow:hidden}
 @media(max-width:640px){.leaderboard-chart-head{align-items:flex-start;flex-direction:column}.chart-key{justify-content:flex-start}.chart-key-item{min-height:25px;padding:0 8px}.leaderboard-chart-wrap{height:235px}}
+
+/* v101 interactive leaderboard chart controls */
+.chart-key-item{appearance:none;cursor:pointer;font-family:inherit;transition:background .16s ease,border-color .16s ease,color .16s ease,opacity .16s ease}
+.chart-key-item:hover{border-color:color-mix(in srgb,var(--text) 22%,var(--border));background:var(--surface)}
+.chart-key-item:not(.active){opacity:.48;background:transparent}
+.chart-key-item:not(.active) i{background:var(--muted)!important}
+.chart-key-item.active{color:var(--text);background:var(--surface2);box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.chart-key-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
