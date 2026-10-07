@@ -1460,6 +1460,111 @@ def api_stats():
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
 
+
+
+def _ki_category(c):
+    text=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes","report_text","comments")).lower()
+    groups=[
+        ("Tires & Wheel End",("tire","tyre","wheel","hub","bearing","seal")),
+        ("Air & Suspension",("air bag","suspension","air leak","shock")),
+        ("Brakes",("brake","abs")),
+        ("Electrical & Battery",("electrical","battery","voltage","alternator","wiring")),
+        ("Cooling System",("coolant","radiator","overheat","cooling")),
+        ("Reefer System",("reefer","thermo king","carrier unit","temperature","setpoint")),
+        ("Engine / Emissions",("engine","oil pressure","misfire","def","dpf")),
+        ("Lighting",("light","lamp","headlight","marker")),
+        ("Fuel System",("fuel","diesel","injector"))]
+    return next((name for name,words in groups if any(w in text for w in words)),"Other")
+
+def _ki_date(c):
+    try:
+        value=case_local_date(c)
+        return datetime.fromisoformat(value).date() if value else None
+    except Exception:
+        return None
+
+def _ki_case_id(c):
+    return str(c.get("full_id") or c.get("id") or "")
+
+def build_kurtex_intelligence(cases):
+    """Deterministic evidence engine. AI may explain findings elsewhere, never invent them."""
+    cases=[c for c in cases if not is_testing(c)]
+    today=chicago_now().date(); resolved={"done","resolved","closed"}
+    recent_start=today-timedelta(days=13); prev_start=today-timedelta(days=27); prev_end=recent_start-timedelta(days=1)
+    recent=[c for c in cases if _ki_date(c) and recent_start<=_ki_date(c)<=today]
+    previous=[c for c in cases if _ki_date(c) and prev_start<=_ki_date(c)<=prev_end]
+    findings=[]; case_tags={}
+    def tag(case_ids, label, kind, finding_id):
+        for cid in case_ids:
+            if cid: case_tags.setdefault(cid,[]).append({"label":label,"kind":kind,"finding_id":finding_id})
+    rc=Counter(_ki_category(c) for c in recent); pc=Counter(_ki_category(c) for c in previous)
+    for cat,n in rc.items():
+        old=pc.get(cat,0)
+        if cat=="Other" or n<3 or n<old+2 or (old and n<old*2): continue
+        related=[c for c in recent if _ki_category(c)==cat]; ids=[_ki_case_id(c) for c in related]
+        units=sorted({str(c.get("unit_number") or "").strip() for c in related if str(c.get("unit_number") or "").strip()})
+        pct=None if old==0 else round((n-old)/old*100)
+        fid="emerging:"+cat.lower().replace(" ","-").replace("&","and").replace("/","-")
+        severity="critical" if n>=8 and (old==0 or n>=old*3) else "elevated"
+        evidence=f"{n} cases · {len(units)} units · " + ("new pattern vs previous 14 days" if old==0 else f"+{pct}% vs previous 14 days")
+        findings.append({"id":fid,"type":"emerging_problem","title":f"{cat} reports are increasing","category":cat,"severity":severity,"evidence":evidence,"summary":f"Kurtex found {n} {cat.lower()} cases in the last 14 days compared with {old} in the previous 14 days.","case_ids":ids,"units":units,"count":n,"previous_count":old})
+        tag(ids,"Emerging","emerging",fid)
+    by_unit={}
+    for c in cases:
+        u=str(c.get("unit_number") or "").strip(); d=_ki_date(c)
+        if u and d: by_unit.setdefault(u,[]).append((d,c))
+    for unit,rows in by_unit.items():
+        rows.sort(key=lambda x:x[0]); unit_recent=[c for d,c in rows if d>=today-timedelta(days=29)]
+        if len(unit_recent)>=4:
+            ids=[_ki_case_id(c) for c in unit_recent]; cats=Counter(_ki_category(c) for c in unit_recent if _ki_category(c)!="Other")
+            fid="chronic:"+unit
+            findings.append({"id":fid,"type":"chronic_unit","title":f"Unit {unit} has frequent maintenance reports","category":cats.most_common(1)[0][0] if cats else "Multiple systems","severity":"elevated" if len(unit_recent)<6 else "critical","evidence":f"{len(unit_recent)} cases in the last 30 days","summary":f"Unit {unit} has returned {len(unit_recent)} times in the last 30 days. Review its case history for related failures.","case_ids":ids,"units":[unit],"count":len(unit_recent)})
+            tag(ids,"Chronic unit","chronic",fid)
+        for i,(d,c) in enumerate(rows):
+            if str(c.get("status") or "").lower() in resolved: continue
+            fam=_ki_category(c)
+            if fam=="Other" or d<today-timedelta(days=30): continue
+            prior=[(pd,p) for pd,p in rows[:i] if str(p.get("status") or "").lower() in resolved and _ki_category(p)==fam and 0<=(d-pd).days<=30]
+            if not prior: continue
+            pd,prior_case=prior[-1]; days=(d-pd).days; ids=[_ki_case_id(prior_case),_ki_case_id(c)]
+            fid="repeat:"+unit+":"+fam.lower().replace(" ","-").replace("/","-")
+            findings.append({"id":fid,"type":"repeat_repair","title":f"Unit {unit} returned with a similar issue","category":fam,"severity":"watch" if days>7 else "elevated","evidence":f"Returned {days} day{'s' if days!=1 else ''} after resolution","summary":f"A {fam.lower()} case on unit {unit} appeared {days} day{'s' if days!=1 else ''} after a similar case was resolved.","case_ids":ids,"units":[unit],"count":2})
+            tag(ids,"Repeat issue","repeat",fid)
+    # De-duplicate repeated unit/category findings, keeping newest evidence.
+    unique={}
+    for f in findings: unique[f["id"]]=f
+    findings=list(unique.values())
+    rank={"critical":0,"elevated":1,"watch":2}
+    findings.sort(key=lambda f:(rank.get(f["severity"],9),-f.get("count",0),f["title"]))
+    return findings,case_tags
+
+KI_STATE_FILE=DATA_DIR/"kurtex_intelligence_state.json"
+def _load_ki_state():
+    try:
+        data=json.loads(KI_STATE_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data,dict) else {}
+    except Exception:return {}
+def _save_ki_state(data):
+    tmp=KI_STATE_FILE.with_suffix(".tmp");tmp.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8");tmp.replace(KI_STATE_FILE)
+
+@app.route("/api/kurtex_intelligence")
+def api_kurtex_intelligence():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    try:
+        findings,_=build_kurtex_intelligence(load_cases()); state=_load_ki_state()
+        for f in findings: f["state"]=state.get(f["id"],{}).get("state","new")
+        return jsonify({"findings":findings,"generated_at":chicago_now().isoformat(),"source":"live case history"})
+    except Exception:
+        logger.exception("Kurtex Intelligence failed");return jsonify({"error":"Unable to build intelligence."}),500
+
+@app.route("/api/kurtex_intelligence/state",methods=["POST"])
+def api_kurtex_intelligence_state():
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    body=request.get_json(silent=True) or {}; fid=str(body.get("id") or "").strip(); value=str(body.get("state") or "").strip().lower()
+    if not fid or value not in {"new","watching","acknowledged","investigating","resolved","dismissed"}: return jsonify({"error":"Invalid intelligence state."}),400
+    state=_load_ki_state(); state[fid]={"state":value,"updated_at":chicago_now().isoformat(),"updated_by":(session.get("user") or {}).get("first_name","")}; _save_ki_state(state)
+    return jsonify({"ok":True,"state":value})
+
 @app.route("/api/home/ai-summary")
 def api_home_ai_summary():
     """Surface actionable fleet intelligence; never repeat Home KPI totals."""
@@ -1591,8 +1696,16 @@ def api_cases():
         cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)
         total = len(cases)
         page = cases[offset:offset+limit]
+        try:
+            _,ki_tags=build_kurtex_intelligence([c for c in load_cases() if not is_testing(c)])
+        except Exception:
+            ki_tags={}
+        serialized=[]
+        for c in page:
+            row=serialize_case(c); cid=_ki_case_id(c); row["ki_tags"]=ki_tags.get(cid,[])
+            serialized.append(row)
         return jsonify({
-            "cases": [serialize_case(c) for c in page],
+            "cases": serialized,
             "total": total, "offset": offset, "limit": limit,
             "has_more": offset + limit < total,
         })
@@ -1616,6 +1729,11 @@ def api_case_detail():
         for c in matches:
             if c:
                 data = serialize_case(c)
+                try:
+                    _,ki_tags=build_kurtex_intelligence([x for x in load_cases() if not is_testing(x)])
+                    data["ki_tags"]=ki_tags.get(_ki_case_id(c),[])
+                except Exception:
+                    data["ki_tags"]=[]
                 data.update({
                     "full_description": c.get("description",""),
                     "full_notes":       c.get("notes","") or "",

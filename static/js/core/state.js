@@ -19,6 +19,7 @@ var pages = [
   "comparison",
   "fleet",
   "fleet_intel",
+  "kurtex_intelligence",
   "parts_manual",
   "ai_assistant",
   "ai_knowledge",
@@ -34,7 +35,8 @@ var titles = {
   trends: "Fleet Analytics",
   comparison: "Management Compare",
   fleet: "Fleet Stats",
-  fleet_intel: "Fleet Intelligence",
+  fleet_intel: "Fleet Search",
+  kurtex_intelligence: "Kurtex Intelligence",
   parts_manual: "Parts Manual",
   ai_assistant: "AI Assistant",
   ai_knowledge: "AI Knowledge",
@@ -150,7 +152,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",developer:"ph-code"};
+    var iconMap = {overview:"ph-house",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",kurtex_intelligence:"ph-brain",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",developer:"ph-code"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var headerRefresh = document.getElementById("refresh-button");
@@ -163,6 +165,8 @@ function showPage(page) {
         ? "Find cases and review progress. Assign and resolve cases in Telegram."
         : page === "parts_manual"
           ? "Look up truck and reefer parts, how they work, common symptoms, checks, and source material."
+        : page === "kurtex_intelligence"
+          ? "Automatic fleet patterns, repeat repairs and evidence from real case history."
         : page === "ai_assistant"
           ? "Full workspace for maintenance diagnosis, Kurtex history and approved knowledge."
         : page === "developer"
@@ -174,6 +178,7 @@ function showPage(page) {
   // inherits the previous workspace while AI panels are being rebuilt.
   currentPage = page;
   document.body.setAttribute("data-current-page", page);
+  if (page === "kurtex_intelligence" && typeof loadKurtexIntelligence === "function") loadKurtexIntelligence();
   if (page === "developer" && typeof loadDeveloperWorkspace === "function") loadDeveloperWorkspace();
   if (page === "ai_knowledge" && typeof loadAIKnowledge === "function") { loadAIKnowledge(); if (typeof loadFleetKnowledgeStats === "function") loadFleetKnowledgeStats(); }
   // Every workspace opens at its top. Prevent a previous page's scroll position
@@ -315,6 +320,7 @@ function caseTable(cases) {
         "<td>" +
         statusBadge(c.status) +
         (c.reassigned ? '<span class="reassign-badge">reassigned</span>' : "") +
+        ((c.ki_tags||[]).slice(0,2).map(function(t){return '<button type="button" class="ki-case-tag ki-'+attr(t.kind||'pattern')+'" onclick="event.stopPropagation();openKIFinding(\''+attr(t.finding_id||'')+'\')"><i class="ph ph-brain"></i> KI: '+h(t.label)+'</button>'}).join('')) +
         "</td>" +
         '<td style="color:var(--muted);font-size:11px">' +
         h(c.opened || "—") +

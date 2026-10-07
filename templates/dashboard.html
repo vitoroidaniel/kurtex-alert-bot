@@ -46,6 +46,7 @@
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     <div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
+    <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
     <div class="nav-group">
       <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')"><span><i class="ph ph-chart-bar"></i> Analytics</span><i class="ph ph-caret-down nav-caret open" id="caret-group-analytics"></i></div>
       <div class="nav-group-items open" id="group-analytics">
@@ -57,7 +58,7 @@
       <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')"><span><i class="ph ph-truck"></i> Fleet</span><i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i></div>
       <div class="nav-group-items open" id="group-fleet">
         <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
-        <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Intelligence</div>
+        <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Fleet Search</div>
         <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
       </div>
     </div>
@@ -274,6 +275,14 @@
     {% else %}
     <div class="analytics-access-denied"><i class="ph ph-lock-key"></i><h2>Management Compare</h2><p>This tab is not available for your role.</p><small>Management comparisons are available to managers, admins, super admins and developers.</small></div>
     {% endif %}
+  </div>
+
+  <!-- Kurtex Intelligence -->
+  <div class="page" id="page-kurtex_intelligence">
+    <section class="ki-hero"><div><span class="eyebrow">KURTEX INTELLIGENCE</span><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div><div class="ki-live"><span></span> Live analysis</div></section>
+    <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div>
+    <div id="ki-summary" class="ki-summary"></div>
+    <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
   </div>
 
   <!-- Fleet Intelligence -->
