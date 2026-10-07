@@ -37,18 +37,26 @@ async function developerRemoveUser(id){var u=developerUsersCache.find(function(x
 async function developerTestAI(){var el=document.getElementById('developer-ai-result');el.className='developer-test-result testing';el.textContent='Testing connection...';try{var r=await apiFetch('/api/ai/test','developer-ai-test',{method:'POST'}),d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Connection failed');el.className='developer-test-result ok';el.textContent='Connected · '+(d.model||'Workers AI')}catch(e){el.className='developer-test-result bad';el.textContent='Failed · '+e.message}}
 async function developerTestTelegram(){var el=document.getElementById('developer-telegram-result');el.className='developer-test-result testing';el.textContent='Testing connection...';try{var r=await apiFetch('/api/developer/test/telegram','developer-telegram-test',{method:'POST'}),d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Connection failed');el.className='developer-test-result ok';el.textContent='Connected · @'+(d.username||'bot')}catch(e){el.className='developer-test-result bad';el.textContent='Failed · '+e.message}}
 
+var developerAutoTestBusy=false,developerLastAutoTest=0;
+async function developerRunAutoTests(force){
+ var page=document.getElementById('page-developer');if(!page||!page.classList.contains('active')||document.hidden)return;
+ var now=Date.now();if(developerAutoTestBusy||(!force&&now-developerLastAutoTest<60000))return;
+ developerAutoTestBusy=true;developerLastAutoTest=now;
+ try{await Promise.all([developerTestTelegram(),developerTestAI()])}finally{developerAutoTestBusy=false}
+}
+
 // Developer data should be ready as soon as the workspace is opened. This also
 // covers restoring a saved Developer tab before deferred feature scripts finish.
 (function(){
- function ready(){var page=document.getElementById('page-developer');if(page&&page.classList.contains('active'))loadDeveloperWorkspace(false);var usersPage=document.getElementById('page-users');if(usersPage&&usersPage.classList.contains('active'))loadUsersWorkspace(false)}
+ function ready(){var page=document.getElementById('page-developer');if(page&&page.classList.contains('active')){loadDeveloperWorkspace(false);setTimeout(function(){developerRunAutoTests(true)},700)};var usersPage=document.getElementById('page-users');if(usersPage&&usersPage.classList.contains('active'))loadUsersWorkspace(false)}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready);else setTimeout(ready,0);
  window.setInterval(function(){var page=document.getElementById('page-developer');if(page&&page.classList.contains('active')&&!document.hidden)loadDeveloperWorkspace(true)},15000);
+ window.setInterval(function(){developerRunAutoTests(false)},15000);
 })();
 
 function renderDeveloperOperations(d,b){
- var overall=document.getElementById('developer-overall'),logs=document.getElementById('developer-live-logs'),health=document.getElementById('developer-health-summary');
+ var logs=document.getElementById('developer-live-logs'),health=document.getElementById('developer-health-summary');
  var checks=[{ok:!!b.alive,label:'Telegram bot',detail:b.alive?'Polling and heartbeat active':'Bot heartbeat is offline or stale'},{ok:!!d.ai_configured,label:'Workers AI',detail:d.ai_configured?'AI credentials configured':'AI configuration needs attention'},{ok:!!d.data_writable,label:'Data storage',detail:d.data_writable?'Persistent data is writable':'Storage is not writable'}],good=checks.every(function(x){return x.ok});
- if(overall)overall.innerHTML='<div class="developer-overall-state '+(good?'ok':'warn')+'"><span><i class="ph '+(good?'ph-check-circle':'ph-warning-circle')+'"></i></span><div><strong>'+(good?'All systems operational':'Attention required')+'</strong><small>'+(good?'Core Kurtex services are healthy.':'One or more core services need attention.')+'</small></div></div>';
  if(logs){var rows=[['ph-heartbeat','Heartbeat',b.heartbeat_age_seconds==null?'No heartbeat received':developerAge(b.heartbeat_age_seconds)+' ago'],['ph-paper-plane-tilt','Telegram update',b.last_update_at?developerDate(b.last_update_at):'No updates since start'],['ph-cursor-click','Callbacks processed',String(b.callbacks_processed||0)],['ph-arrows-clockwise','Updates processed',String(b.updates_processed||0)],['ph-clipboard-text','Cases received today',String(b.received_today||0)],['ph-check-circle','Cases resolved today',String(b.resolved_today||0)]];logs.innerHTML=rows.map(function(x){return '<div class="developer-log-row"><i class="ph '+x[0]+'"></i><span>'+developerEsc(x[1])+'</span><strong>'+developerEsc(x[2])+'</strong></div>'}).join('')}
  if(health)health.innerHTML=checks.map(function(x){return '<div class="developer-health-row '+(x.ok?'ok':'warn')+'"><i class="ph '+(x.ok?'ph-check-circle':'ph-warning-circle')+'"></i><div><strong>'+developerEsc(x.label)+'</strong><small>'+developerEsc(x.detail)+'</small></div></div>'}).join('');
 }
