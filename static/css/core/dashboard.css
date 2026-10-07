@@ -6319,7 +6319,38 @@ html[data-theme="dark"] .kurtex-ai-compose .kurtex-ai-tool-btn,html[data-theme="
  .ki-toolbar-actions{width:100%;justify-content:space-between;margin-left:0}
  .ki-toolbar-actions>.btn{display:inline-flex!important}
 }
-\n\n/* v87 — compact sidebar header + clear navigation groups */\n@media(min-width:901px){\n  .sidebar{padding-top:10px!important}\n  .sidebar-logo{padding:0 10px 10px!important;margin:0 0 5px!important;min-height:48px!important}\n  .sidebar-logo img{width:38px!important;height:38px!important}\n  .sidebar-logo .logo-text h2{font-size:20px!important;line-height:1!important;margin:0!important}\n  .sidebar-logo .logo-text small{margin-top:3px!important}\n  .nav-section-divider{height:1px!important;background:var(--sidebar-border,#ffffff16)!important;margin:6px 9px!important;flex:0 0 auto!important}\n  .nav-ai-cluster,.nav-bottom-cluster{display:flex!important;flex-direction:column!important;gap:2px!important}\n}\n[data-theme="light"] .nav-section-divider{background:#dedfe3!important}\n[data-theme="dark"] .nav-section-divider{background:#2e394c!important}\nhtml.sidebar-compact .nav-section-divider{width:34px!important;margin:7px auto!important}\n@media(max-width:900px){.nav-section-divider{height:1px;background:var(--border,#e3e5e8);margin:7px 10px}}\n\n\n/* v90 — report balance, navigation state, notification control, priority badges */\n.mobile-priority-pill{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.035em;border:1px solid transparent}\n.mobile-priority-pill.priority-low{background:#eaf7ef!important;color:#237a45!important;border-color:#cfead9!important}\n.mobile-priority-pill.priority-medium{background:#fff7dc!important;color:#966600!important;border-color:#f1dfa2!important}\n.mobile-priority-pill.priority-high{background:#ffebeb!important;color:#c82d33!important;border-color:#f4c8ca!important}\n[data-theme="dark"] .mobile-priority-pill.priority-low{background:#183729!important;color:#82d9a4!important;border-color:#28563c!important}\n[data-theme="dark"] .mobile-priority-pill.priority-medium{background:#403619!important;color:#f2cf66!important;border-color:#5d4d21!important}\n[data-theme="dark"] .mobile-priority-pill.priority-high{background:#482324!important;color:#ff9da1!important;border-color:#663033!important}\n@media(min-width:701px){\n  .sidebar .nav-item.active:before{left:5px!important;top:50%!important;transform:translateY(-50%)!important;height:20px!important;width:3px!important;border-radius:3px!important}\n  html.sidebar-compact .sidebar .nav-item.active:before{left:3px!important;top:50%!important;transform:translateY(-50%)!important;height:20px!important;width:3px!important;border-radius:3px!important}\n  .topbar-right .notification-bell{width:42px!important;height:38px!important;min-height:38px!important;padding:0!important;border-radius:8px!important}\n}\n
+
+
+/* v87 — compact sidebar header + clear navigation groups */
+@media(min-width:901px){
+  .sidebar{padding-top:10px!important}
+  .sidebar-logo{padding:0 10px 10px!important;margin:0 0 5px!important;min-height:48px!important}
+  .sidebar-logo img{width:38px!important;height:38px!important}
+  .sidebar-logo .logo-text h2{font-size:20px!important;line-height:1!important;margin:0!important}
+  .sidebar-logo .logo-text small{margin-top:3px!important}
+  .nav-section-divider{height:1px!important;background:var(--sidebar-border,#ffffff16)!important;margin:6px 9px!important;flex:0 0 auto!important}
+  .nav-ai-cluster,.nav-bottom-cluster{display:flex!important;flex-direction:column!important;gap:2px!important}
+}
+[data-theme="light"] .nav-section-divider{background:#dedfe3!important}
+[data-theme="dark"] .nav-section-divider{background:#2e394c!important}
+html.sidebar-compact .nav-section-divider{width:34px!important;margin:7px auto!important}
+@media(max-width:900px){.nav-section-divider{height:1px;background:var(--border,#e3e5e8);margin:7px 10px}}
+
+
+/* v90 — report balance, navigation state, notification control, priority badges */
+.mobile-priority-pill{display:inline-flex;align-items:center;min-height:22px;padding:0 8px;border-radius:999px;font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.035em;border:1px solid transparent}
+.mobile-priority-pill.priority-low{background:#eaf7ef!important;color:#237a45!important;border-color:#cfead9!important}
+.mobile-priority-pill.priority-medium{background:#fff7dc!important;color:#966600!important;border-color:#f1dfa2!important}
+.mobile-priority-pill.priority-high{background:#ffebeb!important;color:#c82d33!important;border-color:#f4c8ca!important}
+[data-theme="dark"] .mobile-priority-pill.priority-low{background:#183729!important;color:#82d9a4!important;border-color:#28563c!important}
+[data-theme="dark"] .mobile-priority-pill.priority-medium{background:#403619!important;color:#f2cf66!important;border-color:#5d4d21!important}
+[data-theme="dark"] .mobile-priority-pill.priority-high{background:#482324!important;color:#ff9da1!important;border-color:#663033!important}
+@media(min-width:701px){
+  .sidebar .nav-item.active:before{left:5px!important;top:50%!important;transform:translateY(-50%)!important;height:20px!important;width:3px!important;border-radius:3px!important}
+  html.sidebar-compact .sidebar .nav-item.active:before{left:3px!important;top:50%!important;transform:translateY(-50%)!important;height:20px!important;width:3px!important;border-radius:3px!important}
+  .topbar-right .notification-bell{width:42px!important;height:38px!important;min-height:38px!important;padding:0!important;border-radius:8px!important}
+}
+
 /* v91 — compact account actions + selected-item-only navigation accent */
 @media(min-width:901px){
   .sidebar-account-actions{
@@ -6372,4 +6403,43 @@ html[data-theme="dark"] .kurtex-ai-compose .kurtex-ai-tool-btn,html[data-theme="
   html.sidebar-compact .sidebar .nav-item.active::before{
     left:0!important;top:8px!important;bottom:8px!important;height:auto!important;transform:none!important
   }
+}
+
+
+/* v92 - authoritative sidebar/topbar/detail fixes */
+@media (min-width:901px){
+  .sidebar{padding-top:8px!important}
+  .sidebar-logo{padding:0 10px 8px!important;margin:0 0 4px!important;min-height:46px!important}
+  .sidebar-logo img{width:38px!important;height:38px!important}
+  .sidebar-account-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important;margin-top:7px!important}
+  .sidebar .sidebar-account-actions .sidebar-settings-btn,
+  .sidebar .sidebar-account-actions .sidebar-signout-btn{width:100%!important;min-width:0!important;height:36px!important;min-height:36px!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:9px!important}
+  .sidebar .sidebar-account-actions button span,
+  .sidebar .sidebar-account-actions .sidebar-settings-btn>i:last-child{display:none!important}
+  .sidebar .sidebar-account-actions button>i:first-child{font-size:18px!important;margin:0!important}
+  .sidebar-footer{padding-bottom:8px!important}
+
+  .sidebar .nav-item,.sidebar .nav-group-header{position:relative!important}
+  .sidebar .nav-item:not(.active)::before,.sidebar .nav-group-header::before{content:none!important;display:none!important}
+  .sidebar .nav-item.active{position:relative!important;overflow:hidden!important}
+  .sidebar .nav-item.active::before{content:""!important;display:block!important;position:absolute!important;left:0!important;top:8px!important;bottom:8px!important;width:3px!important;height:auto!important;transform:none!important;border-radius:0 3px 3px 0!important;background:var(--accent,#df3036)!important}
+  html.sidebar-compact .sidebar .nav-item.active::before{left:0!important;top:8px!important;bottom:8px!important;height:auto!important;transform:none!important}
+
+  .topbar-right .notification-bell{width:42px!important;height:38px!important;min-width:42px!important;min-height:38px!important;padding:0!important;border-radius:9px!important;border:1px solid var(--border)!important;background:var(--surface)!important;box-sizing:border-box!important}
+  .topbar-right .notification-bell i{font-size:18px!important}
+}
+
+.mobile-priority-pill{display:inline-flex!important;align-items:center!important;min-height:22px!important;padding:0 8px!important;border-radius:999px!important;font-size:9px!important;font-weight:850!important;text-transform:uppercase!important;letter-spacing:.035em!important;border:1px solid transparent!important;box-shadow:none!important}
+.mobile-priority-pill::before,.mobile-priority-pill::after{content:none!important;display:none!important}
+.mobile-priority-pill.priority-low{background:#eaf7ef!important;color:#237a45!important;border-color:#cfead9!important}
+.mobile-priority-pill.priority-medium{background:#fff7dc!important;color:#966600!important;border-color:#f1dfa2!important}
+.mobile-priority-pill.priority-high{background:#ffebeb!important;color:#c82d33!important;border-color:#f4c8ca!important}
+[data-theme="dark"] .mobile-priority-pill.priority-low{background:#183729!important;color:#82d9a4!important;border-color:#28563c!important}
+[data-theme="dark"] .mobile-priority-pill.priority-medium{background:#403619!important;color:#f2cf66!important;border-color:#5d4d21!important}
+[data-theme="dark"] .mobile-priority-pill.priority-high{background:#482324!important;color:#ff9da1!important;border-color:#663033!important}
+
+@media (min-width:701px){
+  .mobile-report-grid.has-temperature .mobile-report-section.mobile-report-temperature,
+  .mobile-report-grid.has-temperature .mobile-report-section.mobile-report-notes{grid-column:auto!important}
+  .mobile-report-grid.has-temperature .mobile-report-section.mobile-report-notes .mobile-detail-card{height:calc(100% - 37px)!important}
 }
