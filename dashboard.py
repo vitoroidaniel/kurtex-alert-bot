@@ -1129,14 +1129,14 @@ def api_home_grid_preferences():
     layout = payload.get("layout", {})
     if not isinstance(layout, dict):
         return jsonify({"error": "Invalid layout"}), 400
-    allowed = {"metrics", "trend", "status", "top_agents", "recent", "activity", "attention", "briefing", "units", "my_cases", "recommendations", "reminders", "assistant", "quick_access", "banner"}
+    allowed = {"metrics", "trend", "status", "top_agents", "recent", "activity", "attention", "briefing", "units", "my_cases", "recommendations", "reminders", "assistant", "quick_access", "banner", "metric_0", "metric_1", "metric_2", "metric_3", "metric_4", "metric_5"}
     clean = {}
     for device in ("desktop", "mobile"):
         item = layout.get(device, {})
         if not isinstance(item, dict): item = {}
-        order = list(dict.fromkeys(x for x in item.get("order", []) if isinstance(x, str) and x in allowed))[:20]
-        hidden = list(dict.fromkeys(x for x in item.get("hidden", []) if isinstance(x, str) and x in allowed))[:20]
-        sizes = {k: int(v) for k, v in item.get("sizes", {}).items() if k in allowed and isinstance(v, int) and 1 <= v <= 4} if isinstance(item.get("sizes"), dict) else {}
+        order = list(dict.fromkeys(x for x in item.get("order", []) if isinstance(x, str) and x in allowed))[:32]
+        hidden = list(dict.fromkeys(x for x in item.get("hidden", []) if isinstance(x, str) and x in allowed))[:32]
+        sizes = {k: int(v) for k, v in item.get("sizes", {}).items() if k in allowed and isinstance(v, int) and 1 <= v <= 6} if isinstance(item.get("sizes"), dict) else {}
         hidden_metrics = [int(x) for x in item.get("hiddenMetrics", []) if isinstance(x, int) and 0 <= x < 12][:12]
         clean[device] = {"order": order, "hidden": hidden, "sizes": sizes, "hiddenMetrics": hidden_metrics, "density": "compact" if item.get("density") == "compact" else "comfortable"}
     save_home_grid(user_id, clean)
@@ -1586,6 +1586,27 @@ def api_stats():
                 group_stats.append({"name":gn,"total":d["total"],"done":d["done"],"missed":d["missed"],"rate":rate})
         group_stats.sort(key=lambda x: -x["total"])
 
+        # Home cards use actual case records; one unit is counted once across its reports.
+        # Counts describe units with recorded cases, not an external asset inventory.
+        period_cases = {
+            "day": [c for c in real if case_local_date(c) == today],
+            "week": [c for c in real if case_local_date(c) >= (chicago_now().date()-timedelta(days=6)).isoformat()],
+            "month": [c for c in real if case_local_date(c) >= (chicago_now().date()-timedelta(days=29)).isoformat()],
+        }
+        def fleet_card_period(lst):
+            units = {(str(c.get("unit_number") or "").strip().casefold(),
+                      str(c.get("vehicle_type") or "").strip().casefold())
+                     for c in lst if str(c.get("unit_number") or "").strip()}
+            active_agents = {str(c.get("agent_name") or "").strip().casefold()
+                             for c in lst if str(c.get("agent_name") or "").strip()
+                             and str(c.get("status") or "").lower() in ("open", "assigned", "reported")}
+            statuses = Counter(str(c.get("status") or "open").lower() for c in lst)
+            return {"unit_count": len(units), "active_agent_count": len(active_agents),
+                    "status_counts": {"resolved": statuses.get("done", 0)+statuses.get("resolved",0)+statuses.get("closed",0),
+                                      "active": sum(statuses.get(x,0) for x in ("open", "assigned", "reported")),
+                                      "missed": statuses.get("missed",0),
+                                      "other": sum(v for k,v in statuses.items() if k not in ("done","resolved","closed","open","assigned","reported","missed"))}}
+        home_periods = {key: fleet_card_period(value) for key,value in period_cases.items()}
         top_problem_units = top_units_for(real, 6)
         hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in real).lower())
         rt = [c["response_secs"] for c in real if c.get("response_secs") is not None]
@@ -1609,6 +1630,7 @@ def api_stats():
             "top_problem_units_month": top_units_for(mc, 6),
             "top_problem_units_all": top_problem_units,
             "top_words": [{"word":w,"count":v} for w,v in Counter(hashtags).most_common(15)],
+            "home_periods": home_periods,
             "reassigned_count": sum(1 for c in cases if c.get("reassigned")),
         })
     except DataUnavailable:
@@ -1839,6 +1861,75 @@ def api_home_briefing():
                     "attention": [row for _, row in attention[:6]], "activity": events[:8],
                     "recent_cases": [serialize_case(c) for c in recent]})
 
+
+@app.route("/api/home/agent-dashboard")
+def api_home_agent_dashboard():
+    """Case data belonging to the current agent, used by their personal Home widgets."""
+    if not session.get("user"):
+        return jsonify({"error":"unauthorized"}), 401
+    if "cases" not in _current_allowed_pages():
+        return jsonify({"error":"forbidden"}), 403
+    from backend.storage.case_store import is_maintenance_report
+    user = session["user"]
+    identity_ids = {str(user.get("id") or "").strip()}
+    identity_names = {str(user.get(k) or "").strip().casefold() for k in ("username", "name", "full_name")}
+    name = " ".join(str(user.get(k) or "").strip() for k in ("first_name", "last_name")).strip()
+    identity_names.add(name.casefold())
+    identity_names.discard("")
+    def mine(case):
+        if str(case.get("agent_id") or "").strip() in identity_ids and case.get("agent_id") is not None:
+            return True
+        return any(str(case.get(k) or "").strip().casefold() in identity_names
+                   for k in ("agent_username", "agent_name") if case.get(k))
+    all_cases = [c for c in load_cases() if not is_testing(c) and mine(c)]
+    now = chicago_now()
+    result = {}
+    for key,delta in (("day",0),("week",6),("month",29)):
+        threshold = (now.date()-timedelta(days=delta)).isoformat()
+        relevant = [c for c in all_cases if str(case_local_date(c) or "") >= threshold]
+        active = [c for c in relevant if _home_case_active(c)]
+        attention = [c for c in active if _home_case_attention(c,now)]
+        resolved = [c for c in relevant if str(c.get("status") or "").lower() in ("done","resolved","closed")]
+        result[key] = {"total":len(relevant),"active":len(active),"attention":len(attention),"resolved":len(resolved)}
+    active_cases = [c for c in all_cases if _home_case_active(c)]
+    active_cases.sort(key=lambda c: str(c.get("opened_at") or ""),reverse=True)
+    activity=[]
+    for case in all_cases:
+        for kind, key in (("reported","opened_at"),("updated","updated_at"),("resolved","closed_at")):
+            stamp=case.get(key)
+            if stamp:
+                dt=_home_timestamp(stamp)
+                if dt and dt <= now:
+                    activity.append({"id":str(case.get("id") or "")+":"+kind,
+                                     "case_id":str(case.get("id") or ""),"unit":str(case.get("unit_number") or ""),
+                                     "kind":kind,"at":dt.isoformat(),
+                                     "issue":str(case.get("issue_text") or case.get("description") or "Case update")[:160]})
+    activity.sort(key=lambda row:row["at"],reverse=True)
+    # Return only their own cases and the fields permitted by the existing case serializer.
+    return jsonify({"metrics":result,"activity":activity[:8],
+                    "active_cases":[serialize_case(c) for c in active_cases[:12]],
+                    "total_active":len(active_cases),
+                    "recent_cases":[serialize_case(c) for c in sorted(all_cases,key=lambda c:str(c.get("opened_at") or ""),reverse=True)[:12]],
+                    "generated_at":now.isoformat()})
+
+@app.route("/api/preferences/home-notes", methods=["GET","PUT"])
+def api_home_notes():
+    """Account-specific reminders; saved using the existing persistent preference store."""
+    if not session.get("user"): return jsonify({"error":"unauthorized"}),401
+    from backend.storage.preference_store import get_home_notes, save_home_notes
+    uid = session["user"].get("id")
+    if request.method == "GET": return jsonify({"notes":get_home_notes(uid)})
+    body = request.get_json(silent=True) or {}
+    notes = body.get("notes")
+    if not isinstance(notes,list) or len(notes)>100: return jsonify({"error":"Invalid notes"}),400
+    clean=[]
+    for note in notes:
+        if not isinstance(note,dict): return jsonify({"error":"Invalid note"}),400
+        txt = str(note.get("text") or "").strip()
+        if not txt or len(txt)>1500: return jsonify({"error":"Note text must be 1-1500 characters"}),400
+        clean.append({"id":str(note.get("id") or "")[:80],"text":txt,"done":bool(note.get("done"))})
+    save_home_notes(uid,clean)
+    return jsonify({"ok":True,"notes":clean})
 
 @app.route("/api/home/ai-summary")
 def api_home_ai_summary():
@@ -2085,6 +2176,8 @@ def _workspace_actor_read():
 @app.route("/api/cases")
 def api_cases():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if "cases" not in _current_allowed_pages():
+        return jsonify({"error": "You do not have access to Cases."}), 403
     try:
         f = request.args.get("filter","today")
         search = request.args.get("search","").lower().strip()
@@ -2294,7 +2387,7 @@ def api_agent():
 @app.route("/api/agents")
 def api_agents():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
-    if session["user"].get("role","agent") not in ("developer","super_admin"):
+    if "agents" not in _current_allowed_pages():
         return jsonify({"error":"forbidden"}), 403
     try:
         cases = load_cases()

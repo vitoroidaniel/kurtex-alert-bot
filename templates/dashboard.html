@@ -32,7 +32,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/home-fleet-v123.css', v='123') }}">
 
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace-fullbleed-v124.css', v='124') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/home-grid-v126.css', v='126') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/home-studio-v128.css', v='129') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/home-ux-v129.css', v='129') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -45,15 +46,15 @@
 <div id="mobile-more-sheet" class="mobile-more-sheet" hidden>
  {% if "cases" in allowed_pages %}<button onclick="mobileGo('cases')"><i class="ph ph-clipboard-text"></i><span>Cases</span></button><button onclick="mobileGo('case_workspace')"><i class="ph ph-kanban"></i><span>Case Workspace</span></button>{% endif %}
  {% if is_manager and "agents" in allowed_pages %}<button onclick="mobileGo('agents')"><i class="ph ph-users"></i><span>Agents</span></button>{% endif %}
- <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts Manual</span></button>
- <button onclick="mobileGo('fleet_intel')"><i class="ph ph-truck"></i><span>Fleet lookup</span></button>
+ {% if "parts_manual" in allowed_pages %}<button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts Manual</span></button>{% endif %}
+ {% if "fleet_intel" in allowed_pages %}<button onclick="mobileGo('fleet_intel')"><i class="ph ph-truck"></i><span>Fleet lookup</span></button>{% endif %}
  <button onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>Profile</span></button>
  <button onclick="openLayoutSettings();toggleMobileMore(false)"><i class="ph ph-gear"></i><span>Settings</span></button>
 </div>
 <nav class="mobile-tabbar" aria-label="Mobile navigation">
  <button data-mobile-page="overview" onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Home</span></button>
  {% if "cases" in allowed_pages %}<button data-mobile-page="cases" onclick="mobileGo('cases')"><i class="ph ph-clipboard-text"></i><span>Cases</span></button><button data-mobile-page="case_workspace" onclick="mobileGo('case_workspace')"><i class="ph ph-kanban"></i><span>Workspace</span></button>{% endif %}
- <button data-mobile-page="ai_assistant" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span>AI</span></button>
+ {% if "ai_assistant" in allowed_pages %}<button data-mobile-page="ai_assistant" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span>AI</span></button>{% endif %}
  <button type="button" class="mobile-more-trigger" onclick="toggleMobileMore()" aria-controls="mobile-more-sheet" aria-expanded="false"><i class="ph ph-dots-three"></i><span>More</span></button>
 </nav>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -66,34 +67,34 @@
   </div>
   <nav aria-label="Main navigation">
     <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
-    <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
-    <div class="nav-item" data-page="case_workspace" role="button" tabindex="0" onclick="showPage('case_workspace')"><i class="ph ph-kanban"></i> Case Workspace</div>
-    <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
+    {% if "cases" in allowed_pages %}<div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
+    <div class="nav-item" data-page="case_workspace" role="button" tabindex="0" onclick="showPage('case_workspace')"><i class="ph ph-kanban"></i> Case Workspace</div>{% endif %}
+    {% if "missed" in allowed_pages %}<div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>{% endif %}
     {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
-    <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
-    <div class="nav-group">
+    {% if "kurtex_intelligence" in allowed_pages %}<div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>{% endif %}
+    {% if "trends" in allowed_pages or "comparison" in allowed_pages %}<div class="nav-group">
       <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')"><span><i class="ph ph-chart-bar"></i> Analytics</span><i class="ph ph-caret-down nav-caret" id="caret-group-analytics"></i></div>
       <div class="nav-group-items" id="group-analytics">
-        <div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-chart-donut"></i> Fleet Analytics</div>
-        <div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-scales"></i> Management Compare</div>
+        {% if "trends" in allowed_pages %}<div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-chart-donut"></i> Fleet Analytics</div>{% endif %}
+        {% if "comparison" in allowed_pages %}<div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-scales"></i> Management Compare</div>{% endif %}
       </div>
-    </div>
-    <div class="nav-group">
+    </div>{% endif %}
+    {% if "fleet" in allowed_pages or "fleet_intel" in allowed_pages or "parts_manual" in allowed_pages %}<div class="nav-group">
       <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')"><span><i class="ph ph-truck"></i> Fleet</span><i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i></div>
       <div class="nav-group-items open" id="group-fleet">
-        <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
-        <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Fleet Search</div>
-        <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
+        {% if "fleet" in allowed_pages %}<div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>{% endif %}
+        {% if "fleet_intel" in allowed_pages %}<div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Fleet Search</div>{% endif %}
+        {% if "parts_manual" in allowed_pages %}<div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>{% endif %}
       </div>
-    </div>
+    </div>{% endif %}
     <div class="nav-section-divider" aria-hidden="true"></div>
     <div class="nav-ai-cluster">
-      <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
-      {% if is_developer %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
+      {% if "ai_assistant" in allowed_pages %}<div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>{% endif %}
+      {% if is_developer and "ai_knowledge" in allowed_pages %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
     </div>
     {% if is_manager or is_developer %}<div class="nav-section-divider" aria-hidden="true"></div>{% endif %}
     <div class="nav-bottom-cluster">
-      {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
+      {% if is_manager and "agents" in allowed_pages %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
       {% if is_developer %}<div class="nav-item" data-page="users" role="button" tabindex="0" onclick="showPage('users')"><i class="ph ph-users-four"></i> Users</div><div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
     </div>
   </nav>
@@ -120,8 +121,10 @@
       <button type="button" class="badge-btn btn-outline topbar-print-action" aria-label="Print current page" onclick="uiPrintCurrentPage()"><i class="ph ph-printer"></i><span>Print</span></button>
       <button type="button" class="badge-btn btn-outline topbar-export-action" aria-label="Export cases" onclick="uiExportCurrentPage()"><i class="ph ph-download-simple"></i><span>Export</span></button>
       <button type="button" class="badge-btn btn-outline topbar-refresh-action" id="refresh-button" onclick="refresh(true)" aria-label="Refresh dashboard"><i class="ph ph-arrows-clockwise"></i><span>Refresh</span></button>
-      <time id="today-label" class="topbar-clock" aria-label="Current Chicago date and time"><i class="ph ph-clock" aria-hidden="true"></i><span><strong id="chicago-time"></strong><small id="chicago-date"></small></span></time>
-      <span class="topbar-connection" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Live</span></span>
+      <div class="kh-header-status" aria-label="Chicago clock and connection status">
+        <time id="today-label" class="topbar-clock" aria-label="Current Chicago date and time"><span class="kh-clock-time"><i class="ph ph-clock" aria-hidden="true"></i><strong id="chicago-time"></strong></span><span class="kh-clock-date"><i class="ph ph-calendar-blank" aria-hidden="true"></i><small id="chicago-date"></small></span></time>
+        <span class="topbar-connection" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Live</span></span>
+      </div>
       <div class="notification-center">
         <button id="notification-bell" class="badge-btn notification-bell" type="button" onclick="toggleNotifications()" aria-label="Notifications" aria-expanded="false" aria-controls="notification-panel"><i class="ph ph-bell"></i><span id="notification-count" class="notification-count" hidden>0</span></button>
         <section id="notification-panel" class="notification-panel" aria-labelledby="notification-title" hidden>
@@ -147,7 +150,7 @@
   <div id="connection-banner" class="connection-banner" role="alert" hidden></div>
   <div class="page active home-dashboard" id="page-overview" data-dashboard-role="{{ 'management' if is_manager else 'agent' }}">
   {% if is_manager %}
-  <section class="kx-hero kx-manager-hero"><div><h2><span id="home-greeting">Good afternoon</span>, {{ user.first_name or 'there' }}</h2><p id="home-welcome-detail">Here's what's happening with your fleet operations today.</p><span id="home-day-label" class="kx-hidden-date"></span></div><div class="kx-hero-actions"><div class="kx-period"><button class="active" data-range="day" onclick="kxPeriod(this)">Today</button><button data-range="week" onclick="kxPeriod(this)">7 days</button><button data-range="month" onclick="kxPeriod(this)">30 days</button></div><button class="kx-icon-btn" onclick="openHomeSettings()" title="Customize widgets"><i class="ph ph-sliders-horizontal"></i></button></div></section>
+  <section class="kx-hero kx-manager-hero"><div><h2><span id="home-greeting">Good afternoon</span>, {{ user.first_name or 'there' }}</h2><p id="home-welcome-detail">Your fleet, at a glance.</p><span id="home-day-label" hidden></span></div><div class="kx-hero-actions"><div class="kx-period"><button class="active" data-range="day" onclick="kxPeriod(this)">Today</button><button data-range="week" onclick="kxPeriod(this)">7 days</button><button data-range="month" onclick="kxPeriod(this)">30 days</button></div><button class="kx-icon-btn" onclick="openHomeSettings()" title="Customize widgets"><i class="ph ph-sliders-horizontal"></i></button></div></section>
   <div class="stat-grid kx-manager-stats" id="stat-grid"><div class="loading">Loading...</div></div>
   <div class="kx-manager-charts"><section class="card kx-panel"><div class="kx-panel-title"><h3>Cases Trend</h3><span class="kx-shared-filter-note">Uses dashboard date filter</span></div><p>New, resolved and open cases over time</p><div class="kx-chart-wrap"><canvas id="kx-cases-trend"></canvas></div></section><section class="card kx-panel"><h3>Cases by Status</h3><div class="kx-donut-area"><div class="kx-donut-wrap"><canvas id="kx-status-donut"></canvas><div class="kx-donut-center" id="kx-donut-total"></div></div><div id="kx-status-legend" class="kx-legend"></div></div></section><section class="card kx-panel"><div class="kx-panel-title"><h3>Top Agents by Cases</h3></div><div id="lb-overview"></div></section></div>
   <div class="kx-manager-bottom"><section class="card kx-panel"><div class="kx-panel-title"><h3>Recent Cases</h3><button class="kx-icon-btn" onclick="showPage('cases')">View all →</button></div><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></section><section class="card kx-panel"><div class="kx-panel-title"><h3>Latest Activity</h3><button class="kx-icon-btn" onclick="homeCases('all')">View all →</button></div><div id="home-recent-activity" class="home-recent-activity"></div></section></div>
@@ -459,6 +462,6 @@
 <script defer src="{{ url_for('static', filename='js/features/home-reference.js', v='20261010v123') }}"></script>
 
 
-<script defer src="{{ url_for('static', filename='js/features/home-grid-v126.js', v='126') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/home-studio-v128.js', v='129') }}"></script>
 </body>
 </html>

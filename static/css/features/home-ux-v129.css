@@ -1,0 +1,94 @@
+/* Kurtex v129 — focused Home arrangement, global clock, and full-bleed Case Workspace. */
+html body .main>.topbar .kh-header-status {
+  display: inline-flex!important; align-items: center!important; justify-content: flex-start;
+  gap: 0!important; background: #111316!important; border: 1px solid #272a30!important;
+  color:#f8fafc!important; border-radius: 12px!important; padding: 5px 10px!important;
+  min-height: 41px; box-shadow: 0 2px 8px rgba(0,0,0,.10);
+  white-space:nowrap; flex-shrink:0;
+}
+html body .main>.topbar .kh-header-status .topbar-clock {
+ display:flex!important;flex-direction:row!important;align-items:center!important;gap:0!important;
+ padding:0!important;margin:0!important;background:transparent!important;border:0!important;
+ color:#e5e7eb!important;min-width:0!important;
+}
+html body .main>.topbar .kh-header-status .topbar-clock>span {display:flex!important;align-items:center!important;gap:8px!important;line-height:1!important}
+html body .main>.topbar .kh-header-status .kh-clock-time {padding:0 13px 0 4px!important;border-right:1px solid #3b414a}
+html body .main>.topbar .kh-header-status .kh-clock-date {padding:0 12px!important;border-right:1px solid #3b414a}
+html body .main>.topbar .kh-header-status .topbar-clock i {display:inline-block!important;color:#cbd3df!important;font-size:14px!important;line-height:1}
+html body .main>.topbar .kh-header-status #chicago-time {font-size:12px!important;line-height:18px!important;color:#f9fafb!important;font-weight:750!important;font-variant-numeric:tabular-nums}
+html body .main>.topbar .kh-header-status #chicago-date {font-size:12px!important;color:#e4e9ef!important;line-height:18px!important;font-weight:600!important;white-space:nowrap}
+html body .main>.topbar .kh-header-status .topbar-connection {
+ display:inline-flex!important;align-items:center!important;gap:7px!important;
+ margin:0!important;padding:4px 8px!important;border-radius:8px!important;
+ border:0!important;background:#083822!important;color:#6ee7a0!important;
+ font-size:11px!important;line-height:18px!important;font-weight:750!important;
+}
+html body .main>.topbar .kh-header-status .topbar-connection .dot {
+ width:8px!important;height:8px!important;display:inline-block!important;flex:0 0 8px;
+ border-radius:99px;background:#20d476!important;box-shadow:0 0 0 3px #1f6b4420!important;
+}
+html body .main>.topbar .kh-header-status .topbar-connection.is-stale {background:#482b19!important;color:#ffc68c!important}
+html body .main>.topbar .kh-header-status .topbar-connection.is-stale .dot {background:#ffb15f!important}
+/* Keep the status pill legible in light and dark themes alike. */
+html[data-theme="dark"] body .main>.topbar .kh-header-status {background:#0e1014!important;border-color:#353a41!important}
+/* Remove the duplicate global bar only in Case Workspace. The board's own toolbar is retained. */
+html body[data-current-page="case_workspace"] .main>.topbar {display:none!important;height:0!important;margin:0!important;padding:0!important}
+html body[data-current-page="case_workspace"] #page-case_workspace {
+ margin:0!important;padding:0!important;max-width:none!important;width:100%!important;
+ height:100dvh!important;min-height:0!important;overflow:hidden!important;
+}
+html body[data-current-page="case_workspace"] #cw-shell:not(.full-case) {height:100dvh!important;max-height:100dvh!important;border:0!important;box-shadow:none!important;border-radius:0!important;}
+html body[data-current-page="case_workspace"] .main {padding:0!important;overflow:hidden!important;}
+/* Hide dated greeting text and replace it with concise, unchanging copy. */
+#page-overview.kh-ready #home-day-label{display:none!important}
+#page-overview.kh-ready .kx-manager-hero #home-welcome-detail {font-size:12px!important;letter-spacing:.02px!important;color:#79869c!important;margin:5px 0 0!important}
+/* Single visible editing state; no cards should appear to vanish while being dragged. */
+#page-overview.kh-ready .kh-dragging,
+#page-overview.kh-ready .kh-widget.kh-dragging {opacity:.96!important;visibility:visible!important;filter:saturate(.96);box-shadow:0 8px 30px #142c4b20!important;transform:scale(.995);}
+#page-overview.kh-editing .kh-widget:not([hidden]) {outline:1px dashed #ef9daa!important;outline-offset:2px}
+#page-overview.kh-ready .kh-drop-hover {outline:3px solid #e7485d!important;outline-offset:3px;box-shadow:0 6px 22px #e7485d1a!important}
+#page-overview.kh-editing .kh-editor {top:8px!important;right:8px!important;background:#fff!important;box-shadow:0 5px 17px #17385820!important;border:1px solid #f1d1d7!important;z-index:25!important}
+#page-overview.kh-editing .kh-draghandle {padding:0 7px!important;user-select:none!important;cursor:grab!important}
+#page-overview.kh-editing .kh-draghandle:active {cursor:grabbing!important}
+#page-overview.kh-editing .kh-draghandle:focus-visible {outline:2px solid #e43447;outline-offset:2px}
+#page-overview.kh-editing .kh-card-header,#page-overview.kh-editing .kh-metric-inner {padding-top:44px!important}
+#page-overview.kh-editing .kh-metric{min-height:178px}
+#page-overview.kh-ready .kh-arrange-toggle {
+ display:inline-flex;align-items:center;justify-content:center;gap:7px;
+ min-height:42px;padding:8px 13px;border:1px solid #e1e6ed;border-radius:10px;
+ background:#fff;font-size:11px;color:#4b5a72;font-weight:750;cursor:pointer;
+}
+#page-overview.kh-ready .kh-arrange-toggle:hover{color:#bd263a;border-color:#efc0c8;background:#fff7f8}
+#page-overview.kh-ready .kh-arrange-toggle.is-active {background:#db2f43;border-color:#db2f43;color:#fff;box-shadow:0 3px 12px #db2f4330}
+#page-overview.kh-ready .kh-arrange-toggle:focus-visible {outline:3px solid #f5bdc5;outline-offset:2px}
+/* Settings controls are real checkbox/switch/select elements; preserve native keyboard behavior. */
+.kh-arrange-setting{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 15px;margin:13px 0 6px;background:#fff;border:1px solid #e9edf3;border-radius:12px;cursor:pointer}
+.kh-switch-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
+.kh-switch-copy strong{font-size:12px;font-weight:800;color:#27374d}
+.kh-switch-copy small{font-size:11px;line-height:1.35;color:#7a8a9d}
+.kh-arrange-setting input{position:absolute!important;width:24px;height:24px;opacity:0;cursor:pointer;}
+.kh-switch-track{display:block;position:relative;flex:0 0 38px;height:22px;border-radius:20px;background:#d4dae5;transition:background .18s}
+.kh-switch-track:after{content:'';position:absolute;width:16px;height:16px;top:3px;left:3px;background:white;border-radius:50%;box-shadow:0 1px 3px #263c5c30;transition:transform .18s}
+.kh-arrange-setting input:checked + .kh-switch-track{background:#d82f43}
+.kh-arrange-setting input:checked + .kh-switch-track:after{transform:translateX(16px)}
+.kh-arrange-setting input:focus-visible + .kh-switch-track{outline:3px solid #f5b3bf;outline-offset:3px}
+.kh-row-actions{display:inline-flex;gap:3px;flex:0 0 auto}
+.kh-row-actions button{width:27px;height:28px;display:grid;place-items:center;border:1px solid #e7ebf1;background:white;border-radius:8px;color:#7a879d;cursor:pointer;font-size:12px}
+.kh-row-actions button:hover{border-color:#f3b5c0;color:#c9263c;background:#fff2f4}
+.kh-setting-item select{min-width:96px;max-width:108px;font-size:11px!important}
+.kh-arrange-bar{border-radius:14px;min-height:48px;box-shadow:0 10px 36px #11283b2e}
+[data-theme="dark"] .kh-arrange-setting{background:#252f3e;border-color:#3c4656}
+[data-theme="dark"] .kh-switch-copy strong{color:#ecf0f7}
+[data-theme="dark"] .kh-row-actions button{background:#283544;border-color:#3b4a5c;color:#ebeff7}
+@media(max-width:1220px){html body .main>.topbar .kh-header-status{padding:5px 8px!important}html body .main>.topbar .kh-header-status .kh-clock-time{padding-right:9px!important}html body .main>.topbar .kh-header-status .kh-clock-date{padding:0 9px!important}}
+@media(max-width:920px){html body .main>.topbar .kh-header-status .kh-clock-date{display:none!important}html body .main>.topbar .kh-header-status .kh-clock-time{border-right:1px solid #3b414a!important;margin-right:8px!important}}
+@media(max-width:760px){
+ html body .main>.topbar .kh-header-status{min-height:34px;padding:4px 7px!important;margin-left:auto}
+ html body .main>.topbar .kh-header-status .kh-clock-time{padding:0 6px 0 1px!important}
+ html body .main>.topbar .kh-header-status #chicago-time{font-size:10px!important}
+ html body .main>.topbar .kh-header-status .topbar-connection{font-size:10px!important;padding:2px 5px!important}
+ .kh-setting-item{gap:7px!important}.kh-setting-item label{gap:6px!important}.kh-row-actions button{width:24px;height:26px}
+ .kh-setting-item select{max-width:76px!important;min-width:76px!important;padding:3px!important}
+ #page-overview.kh-ready .kh-arrange-toggle{min-height:36px;padding:6px 9px}
+ #page-overview.kh-editing .kh-metric-inner{padding-top:46px!important}
+}

@@ -53,3 +53,18 @@ def save_home_grid(user_id, value):
         row["home_grid"] = value
         _save(data)
         return value
+
+
+def get_home_notes(user_id):
+    with _lock:
+        row = _load().get(str(user_id), {})
+        result = row.get("home_notes", []) if isinstance(row, dict) else []
+        return result if isinstance(result, list) else []
+
+def save_home_notes(user_id, value):
+    with _lock:
+        data = _load()
+        row = data.setdefault(str(user_id), {})
+        row["home_notes"] = value
+        _save(data)
+        return value

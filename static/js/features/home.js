@@ -111,7 +111,7 @@ async function loadHomeBriefing() {
     homeState.data=data;
     updateHTML(document.getElementById('stat-grid'),homeMetricHTML(data.metrics));if(typeof kxUpdateHome==='function')kxUpdateHome(data);
     var m=data.metrics;
-    document.getElementById('home-welcome-detail').textContent=m.resolved?'The team has closed '+m.resolved+' case'+(m.resolved===1?'':'s')+' today. '+(m.attention?m.attention+' still need'+(m.attention===1?'s':'')+' attention.':'Your attention queue is clear.'):(m.attention?'Let’s keep things moving. '+m.attention+' case'+(m.attention===1?' needs':'s need')+' attention.':'A clear queue and a fresh start. You’re ready for what’s next.');
+    document.getElementById('home-welcome-detail').textContent=window.kurtexIsManager?'Your fleet, at a glance.':'Your assigned work, in one place.';
     renderHomeAttention(data);renderHomeActivity(data.activity);renderHomeBriefing();
     updateHTML(document.getElementById('recent-table'),caseTable(data.recent_cases));
     var updated='';
