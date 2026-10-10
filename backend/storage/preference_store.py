@@ -39,3 +39,17 @@ def save_overview(user_id, value):
         row["overview"] = value
         _save(data)
         return value
+
+
+def get_home_grid(user_id):
+    with _lock:
+        row = _load().get(str(user_id), {})
+        return row.get("home_grid", {}) if isinstance(row, dict) else {}
+
+def save_home_grid(user_id, value):
+    with _lock:
+        data = _load()
+        row = data.setdefault(str(user_id), {})
+        row["home_grid"] = value
+        _save(data)
+        return value

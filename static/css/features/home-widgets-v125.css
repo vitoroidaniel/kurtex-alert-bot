@@ -1,0 +1,21 @@
+/* v125 Home widget system: scoped, compact, no giant empty panels */
+#page-overview .kx-manager-stats{gap:16px!important;margin-bottom:18px!important}
+#page-overview .kx-manager-charts,#page-overview .kx-manager-bottom,#page-overview .kx-extra-widgets{gap:16px!important;margin-bottom:18px!important}
+#page-overview .kx-manager-charts>.kx-panel{min-height:290px!important}
+#page-overview .kx-extra-widgets{margin-top:0!important}
+#page-overview .kx-extra-widgets>.card{min-height:140px;height:auto}
+#page-overview .kx-panel,#page-overview .home-ai-summary-card,#page-overview .home-attention-card,#page-overview .home-units-card{padding:18px!important;border-radius:15px!important;min-width:0}
+#page-overview .kx-panel-title h3,#page-overview .home-panel-heading h3{font-size:14px!important;line-height:1.4!important}
+#page-overview .kx-shared-filter-note{font-size:11px;color:var(--muted,#778399);background:var(--surface2,#f7f8fb);border-radius:7px;padding:6px 9px}
+#page-overview .kx-manager-charts canvas{display:block;max-width:100%}
+#page-overview .kx-donut-area{min-height:220px;align-items:center}
+#page-overview .kx-panel:has(>#home-recent-activity:empty),#page-overview .kx-panel:has(>#lb-overview:empty){min-height:155px}
+#page-overview .kx-manager-stats .stat-card{border-top:3px solid var(--kh-accent,#3182f6)!important}
+#page-overview .home-ai-summary-card .kx-icon-btn,#page-overview .home-ai-summary-card .home-panel-heading button{display:inline-flex;align-items:center;justify-content:center;min-width:34px;min-height:34px;border:1px solid var(--border,#e1e5eb);border-radius:9px;background:var(--surface,#fff);color:var(--text,#172033);font-size:15px;cursor:pointer}
+#page-overview .kx-extra-widgets>.home-units-card{grid-column:1/-1}
+#page-overview .kx-manager-charts>.kx-panel[hidden],#page-overview .kx-manager-bottom>.kx-panel[hidden],#page-overview .kx-extra-widgets>.card[hidden]{display:none!important}
+#page-overview .kx-widget-empty{padding:20px 12px;color:var(--muted,#778399);font-size:12px;text-align:center}
+#page-overview .kx-widget-empty i{display:block;font-size:21px;margin-bottom:8px;color:#b5bfce}
+#page-overview .kx-widget-drag-handle{display:inline-flex;align-items:center;justify-content:center;color:#8b97aa;cursor:grab;touch-action:none;border-radius:7px;width:28px;height:28px}
+#page-overview .kx-widget-drag-handle:hover{background:#fff0f0;color:#d9272d}
+@media(max-width:850px){#page-overview .kx-manager-charts,#page-overview .kx-manager-bottom,#page-overview .kx-extra-widgets{grid-template-columns:1fr!important}}

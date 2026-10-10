@@ -1117,6 +1117,32 @@ def api_overview_preferences():
     return jsonify({"ok": True, "overview": clean})
 
 
+@app.route("/api/preferences/home-grid", methods=["GET", "PUT"])
+def api_home_grid_preferences():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    from backend.storage.preference_store import get_home_grid, save_home_grid
+    user_id = session["user"].get("id")
+    if request.method == "GET":
+        return jsonify({"layout": get_home_grid(user_id)})
+    payload = request.get_json(silent=True) or {}
+    layout = payload.get("layout", {})
+    if not isinstance(layout, dict):
+        return jsonify({"error": "Invalid layout"}), 400
+    allowed = {"metrics", "trend", "status", "top_agents", "recent", "activity", "attention", "briefing", "units", "my_cases", "recommendations", "reminders", "assistant", "quick_access", "banner"}
+    clean = {}
+    for device in ("desktop", "mobile"):
+        item = layout.get(device, {})
+        if not isinstance(item, dict): item = {}
+        order = list(dict.fromkeys(x for x in item.get("order", []) if isinstance(x, str) and x in allowed))[:20]
+        hidden = list(dict.fromkeys(x for x in item.get("hidden", []) if isinstance(x, str) and x in allowed))[:20]
+        sizes = {k: int(v) for k, v in item.get("sizes", {}).items() if k in allowed and isinstance(v, int) and 1 <= v <= 4} if isinstance(item.get("sizes"), dict) else {}
+        hidden_metrics = [int(x) for x in item.get("hiddenMetrics", []) if isinstance(x, int) and 0 <= x < 12][:12]
+        clean[device] = {"order": order, "hidden": hidden, "sizes": sizes, "hiddenMetrics": hidden_metrics, "density": "compact" if item.get("density") == "compact" else "comfortable"}
+    save_home_grid(user_id, clean)
+    return jsonify({"ok": True, "layout": clean})
+
+
 # ── Website role permissions ─────────────────────────────────────────────────
 ROLE_PERMISSION_DEFAULTS = {
     "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","my_profile"],
