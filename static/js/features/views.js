@@ -915,7 +915,7 @@ function renderHomeRangeWidgets(){
   var lb=stats['leaderboard_'+ar]||[]; var lbo=document.getElementById('lb-overview');
   if(lbo) updateHTML(lbo,homeTeamRows(ar,lb));
   var units=stats['top_problem_units_'+ur]||[]; var uo=document.getElementById('units-overview');
-  if(uo) updateHTML(uo,units.length?unitProblemRows(units):homeEmpty('ph-check-circle','No problem units in this period','No unit reports found.'));
+  if(uo&&!uo.contains(document.activeElement)) updateHTML(uo,units.length?homeUnitRows(units):homeEmpty('ph-check-circle','No problem units in this period','No unit reports found.'));
   var as=document.getElementById('agents-home-range'),us=document.getElementById('units-home-range'); if(as)as.value=ar;if(us)us.value=ur;
 }
 function setHomeRange(kind,value){if(!['day','week','month','all'].includes(value))return;homeRanges[kind]=value;preferences.set('kurtex-home-'+kind+'-range',value);renderHomeRangeWidgets()}

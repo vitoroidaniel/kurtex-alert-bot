@@ -1,7 +1,7 @@
 // Workspace preferences: desktop and mobile Overview layouts are independent and account-backed.
 var overviewDevice=window.matchMedia('(max-width:760px)').matches?'mobile':'desktop';
 var layoutKeyBase='kurtex-overview-v3-'+document.body.dataset.userId;
-var widgetCatalog=[['metrics','At a glance'],['ai_summary','Kurtex briefing'],['attention','Needs your attention'],['activity','Latest activity'],['agents','Team progress'],['units','Recurring unit reports'],['cases','Recent cases']];
+var widgetCatalog=[['metrics','At a glance'],['attention','Needs attention'],['ai_summary','Fleet briefing'],['activity','Recent updates'],['agents','Team progress'],['units','Recurring unit reports'],['cases','Recent cases']];
 var metricLabels=['Reported today','Active maintenance','Needs attention','Resolved today'];
 function defaultOverviewWorkspace(){return {order:widgetCatalog.map(w=>w[0]),hidden:['cases'],metrics:[]}}
 function normalizeOverviewWorkspace(saved){
@@ -10,7 +10,7 @@ function normalizeOverviewWorkspace(saved){
   var old=['metrics','agents','units','ai_summary','activity','cases'];
   var order=saved.order.filter(k=>widgetCatalog.some(w=>w[0]===k));
   // Move the former default to the daily-briefing layout; preserve custom orders.
-  if(JSON.stringify(order.filter(k=>k!=='attention'))===JSON.stringify(old))order=d.order.slice();
+  if(JSON.stringify(order.filter(k=>k!=='attention'))===JSON.stringify(old)||JSON.stringify(order)===JSON.stringify(['metrics','ai_summary','attention','activity','agents','units','cases']))order=d.order.slice();
   else if(!order.includes('attention'))order.splice(Math.max(0,order.indexOf('activity')),0,'attention');
   d.order=[...new Set(order.concat(d.order))];
  }

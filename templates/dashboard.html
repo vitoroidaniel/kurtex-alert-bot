@@ -12,16 +12,16 @@
 <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v23.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/ui-refinements.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/theme.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/chrome.css', v='20261010g') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/home.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v23.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/ui-refinements.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/theme.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/chrome.css', v='20261010i') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/home.css', v='20261010i') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -92,10 +92,11 @@
       {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ "Manager" if user.role in ["super_admin","manager","admin"] else ("Developer" if user.role == "developer" else "Agent") }}</div></div>
     </div>
-    <button type="button" class="v18-theme-toggle k23-theme-switch" onclick="toggleTheme()" aria-label="Toggle dark theme" title="Toggle light/dark theme"><i class="ph ph-sun k23-sun"></i><i class="ph ph-moon k23-moon"></i><span class="k23-switch-knob"></span></button></div>
-    <div class="sidebar-account-actions k23-account-actions">
-      <button class="sidebar-settings-btn" title="Settings" aria-label="Settings" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
-      <button class="sidebar-signout-btn" title="Sign out" aria-label="Sign out" onclick="openSignOutConfirm()"><i class="ph ph-sign-out"></i><span>Sign out</span></button>
+    </div>
+    <div class="sidebar-account-actions sidebar-utility-actions" role="group" aria-label="Appearance and account controls">
+      <button type="button" class="sidebar-theme-btn" onclick="toggleTheme()" aria-label="Switch to dark theme" title="Switch to dark theme"><i id="sidebar-theme-icon" class="ph ph-moon" aria-hidden="true"></i></button>
+      <button type="button" class="sidebar-settings-btn" title="Settings" aria-label="Settings" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six" aria-hidden="true"></i></button>
+      <button type="button" class="sidebar-signout-btn" title="Sign out" aria-label="Sign out" onclick="openSignOutConfirm()"><i class="ph ph-sign-out" aria-hidden="true"></i></button>
     </div>
   </div>
 </aside>
@@ -136,23 +137,23 @@
   <div class="page active home-dashboard" id="page-overview">
   <section class="home-welcome" aria-label="Home welcome">
     <div class="home-welcome-copy"><span class="home-day-label" id="home-day-label">Your daily briefing</span><h2><span id="home-greeting">Welcome back</span>, {{ user.first_name or 'there' }}</h2><p id="home-welcome-detail">Let’s get your day moving.</p></div>
-    <div class="home-welcome-tools"><span class="home-refresh-status" id="home-refresh-status" role="status">Updating your briefing…</span><button class="home-customize-icon" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button></div>
+    <div class="home-welcome-tools"><span class="home-refresh-status" id="home-refresh-status" role="status">Updating your briefing…</span><button class="home-customize-icon" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal" aria-hidden="true"></i><span>Customize</span></button></div>
   </section>
   <nav class="home-quick-actions" aria-label="Quick actions">
-    {% if "cases" in allowed_pages %}<button type="button" class="home-quick-action home-quick-primary" onclick="homeReportMaintenance()"><span class="home-quick-icon"><i class="ph ph-plus-circle"></i></span><span><strong>Report maintenance</strong><small>Log a new fleet issue</small></span><i class="ph ph-arrow-up-right"></i></button>
-    <button type="button" class="home-quick-action" onclick="showPage('case_workspace')"><span class="home-quick-icon"><i class="ph ph-kanban"></i></span><span><strong>Open Workspace</strong><small>Keep cases moving</small></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
-    {% if "fleet_intel" in allowed_pages %}<button type="button" class="home-quick-action" onclick="homeFindUnit()"><span class="home-quick-icon"><i class="ph ph-magnifying-glass"></i></span><span><strong>Find a unit</strong><small>Explore repair history</small></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
-    {% if "ai_assistant" in allowed_pages %}<button type="button" class="home-quick-action" onclick="showPage('ai_assistant')"><span class="home-quick-icon"><i class="ph ph-sparkle"></i></span><span><strong>Ask Kurtex</strong><small>Get maintenance help</small></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
+    {% if "cases" in allowed_pages %}<button type="button" class="home-quick-action home-quick-primary" onclick="homeReportMaintenance()"><span class="home-quick-icon"><i class="ph ph-plus-circle"></i></span><span><strong>Report maintenance</strong></span><i class="ph ph-arrow-up-right"></i></button>
+    <button type="button" class="home-quick-action" onclick="showPage('case_workspace')"><span class="home-quick-icon"><i class="ph ph-kanban"></i></span><span><strong>Open Workspace</strong></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
+    {% if "fleet_intel" in allowed_pages %}<button type="button" class="home-quick-action" onclick="homeFindUnit()"><span class="home-quick-icon"><i class="ph ph-magnifying-glass"></i></span><span><strong>Find a unit</strong></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
+    {% if "ai_assistant" in allowed_pages %}<button type="button" class="home-quick-action" onclick="showPage('ai_assistant')"><span class="home-quick-icon"><i class="ph ph-sparkle"></i></span><span><strong>Ask Kurtex</strong></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
   </nav>
     <div class="overview-label"><span>At a glance</span><small>Today & open work</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
-    <section class="card home-attention-card"><div class="home-panel-heading"><div><h3>Needs your attention <span class="home-count" id="home-attention-count">—</span></h3><p>Priority issues, missed cases, and waiting work.</p></div><button type="button" class="home-text-action" onclick="showPage('case_workspace')">Workspace <i class="ph ph-arrow-right"></i></button></div><div id="home-attention-list"><div class="loading">Loading your queue…</div></div><p class="home-queue-note" id="home-queue-note"></p></section>
+    <section class="card home-attention-card"><div class="home-panel-heading"><div><h3>Needs attention <span class="home-count" id="home-attention-count">—</span></h3><p>Highest priority first</p></div><button type="button" class="home-text-action" onclick="homeCases('home_attention')">View all <i class="ph ph-arrow-right"></i></button></div><div id="home-attention-list"><div class="loading">Loading your queue…</div></div><p class="home-queue-note" id="home-queue-note"></p></section>
     <div class="two-col">
       <div class="card home-team-card"><div class="card-title"><i class="ph ph-users-three"></i>Team progress <select class="home-range" id="agents-home-range" onchange="setHomeRange('agents',this.value)" aria-label="Team progress time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></div><div id="lb-overview"></div></div>
       <div class="card home-units-card"><div class="card-title"><i class="ph ph-wrench"></i>Recurring unit reports <select class="home-range" id="units-home-range" onchange="setHomeRange('units',this.value)" aria-label="Recurring reports time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all" selected>All time</option></select></div><div id="units-overview"></div></div>
     </div>
-    <section class="card home-ai-summary-card home-intelligence-card"><div class="home-panel-heading"><div><h3><i class="ph ph-sparkle"></i> Kurtex briefing</h3><p id="home-briefing-source">A quick read on your fleet’s day.</p></div><button type="button" class="home-icon-action" id="home-briefing-refresh" aria-label="Refresh Kurtex briefing" onclick="homeRefreshBriefing()"><i class="ph ph-arrow-clockwise"></i></button></div><div id="home-ai-summary" class="home-ai-summary home-intelligence"><span class="home-ai-loading">Preparing your briefing…</span></div></section>
-    <section class="card home-activity-card"><div class="home-panel-heading"><div><h3>Latest activity</h3><p>Reports, assignments, and case updates.</p></div><i class="ph ph-pulse home-panel-symbol" aria-hidden="true"></i></div><div id="home-recent-activity" class="home-recent-activity"><div class="loading">Loading...</div></div></section>
+    <section class="card home-ai-summary-card home-intelligence-card"><div class="home-panel-heading"><div><h3><i class="ph ph-sparkle"></i> Fleet briefing</h3><p id="home-briefing-source">A quick read on your fleet’s day.</p></div><button type="button" class="home-icon-action" id="home-briefing-refresh" aria-label="Refresh Kurtex briefing" onclick="homeRefreshBriefing()"><i class="ph ph-arrow-clockwise"></i></button></div><div id="home-ai-summary" class="home-ai-summary home-intelligence"><span class="home-ai-loading">Preparing your briefing…</span></div></section>
+    <section class="card home-activity-card"><div class="home-panel-heading"><div><h3>Recent updates</h3><p>Latest recorded case activity</p></div><button type="button" class="home-text-action" onclick="homeCases('all')">Case history <i class="ph ph-arrow-right" aria-hidden="true"></i></button></div><div id="home-recent-activity" class="home-recent-activity"><div class="loading">Loading...</div></div></section>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent cases <small>Latest 10 from today</small></div><button class="text-button" onclick="showPage('cases')">View all cases →</button></div>
       <div class="table-wrap"><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></div>
@@ -436,25 +437,25 @@
 </div><small>Selected color applies to the tags in this entry.</small></div><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <div id="ai-preview-modal" class="ai-edit-modal ai-preview-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgePreview()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true"><header><div><span class="eyebrow">KNOWLEDGE PREVIEW</span><h3 id="ai-preview-title">Maintenance knowledge</h3><small id="ai-preview-meta"></small></div><button type="button" onclick="closeAIKnowledgePreview()"><i class="ph ph-x"></i></button></header><div id="ai-preview-content" class="ai-preview-content"></div></section></div>
 
-<script defer src="{{ url_for('static', filename='js/core/api.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/state.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/custom-select.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/views.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/case-workspace.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/details.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/reports.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/analytics.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/layout.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/agents-v23.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ui-refinements.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/home.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/app.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/platform/mobile.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ai.js', v='20261010g') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/notifications.js', v='20261010g') }}"></script>
-{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js', v='20261010g') }}"></script>{% endif %}
+<script defer src="{{ url_for('static', filename='js/core/api.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/state.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/custom-select.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/views.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/case-workspace.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/details.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/reports.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/analytics.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/layout.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/agents-v23.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ui-refinements.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/home.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/app.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/platform/mobile.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ai.js', v='20261010i') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/notifications.js', v='20261010i') }}"></script>
+{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js', v='20261010i') }}"></script>{% endif %}
 <div id="ai-report-modal" class="ai-transcript-modal ai-report-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><header><div><span class="eyebrow">AI FEEDBACK</span><h3 id="ai-report-title">Report this answer</h3></div><button class="ai-report-close" type="button" onclick="closeAIReport()" aria-label="Close report" title="Close"><i class="ph ph-x"></i></button></header><p class="ai-report-intro">Tell us what looks wrong. Your report is saved as feedback and does not automatically teach the AI.</p><label><span>Reason</span><select id="ai-report-category"><option value="incorrect">Incorrect answer</option><option value="missing_context">Missing important context</option><option value="unclear">Unclear / confusing</option><option value="unsafe">Potentially unsafe guidance</option><option value="outdated">Possibly outdated</option><option value="other">Other</option></select></label><label><span>What should be reviewed?</span><textarea id="ai-report-reason" rows="5" maxlength="12000" placeholder="Example: The fault code points to a different circuit, and the manual says to test connector X first."></textarea></label><p id="ai-report-status" role="status"></p><footer><button type="button" class="ai-report-cancel" onclick="closeAIReport()">Cancel</button><button type="button" class="ai-primary-btn" onclick="submitAIReport()"><i class="ph ph-paper-plane-tilt"></i> Send report</button></footer></section></div>
 <div id="ai-transcript-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-transcript-title"><header><h3 id="ai-transcript-title">Driver explanation</h3><button type="button" onclick="document.getElementById('ai-transcript-modal').hidden=true" aria-label="Close transcript">Close</button></header><p>Check speech recognition, especially fault codes and model names. This explanation is driver-reported, not a confirmed diagnosis.</p><textarea id="ai-transcript-text" aria-label="Driver transcript" rows="10"></textarea><p id="ai-transcript-status" role="status"></p><footer><button type="button" onclick="saveAITranscript(true)">Retry transcription</button><button type="button" onclick="saveAITranscript(false)">Save correction</button></footer></section></div>
-<script defer src="{{ url_for('static', filename='js/features/ai-learning.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ai-learning.js', v='20261010i') }}"></script>
 </body>
 </html>

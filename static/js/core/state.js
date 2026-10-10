@@ -61,6 +61,13 @@ function applyTheme() {
   var label = document.getElementById("theme-label");
   if (icon) icon.className = isDark ? "ph ph-moon" : "ph ph-sun";
   if (label) label.textContent = isDark ? "Dark Mode" : "Light Mode";
+  var sidebarTheme = document.querySelector(".sidebar-theme-btn");
+  if (sidebarTheme) {
+    var themeAction = isDark ? "Switch to light theme" : "Switch to dark theme";
+    sidebarTheme.setAttribute("aria-label", themeAction);
+    sidebarTheme.title = themeAction;
+    sidebarTheme.querySelector("i").className = isDark ? "ph ph-sun" : "ph ph-moon";
+  }
 }
 function toggleTheme() {
   isDark = !isDark;

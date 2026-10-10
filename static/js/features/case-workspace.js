@@ -150,7 +150,29 @@ function cwOpenFull(){if(!cwState.detail)return;cwState.full=true;document.getEl
 function cwBack(){cwState.full=false;document.getElementById('cw-shell').classList.remove('full-case');document.getElementById('cw-full').hidden=true;cwRender();document.getElementById('cw-open-full')?.focus({preventScroll:true});}
 function cwRenderFull(){
  const c=cwState.detail;if(!c)return;const editable=cwCanEdit(c),p=cwPriority(c);
- document.getElementById('cw-full').innerHTML=`<nav class="cw-full-nav" aria-label="Case navigation"><button type="button" class="cw-secondary" id="cw-back" onclick="cwBack()"><i class="ph ph-arrow-left"></i> Workspace</button><strong>Case ${cwEscape(c.unit_number||c.id)}</strong>${cwStatus(c)}<span class="cw-priority cw-${p}">${cwLabel(p)}</span></nav><div class="cw-full-grid"><div class="cw-full-main"><section class="cw-panel cw-overview"><h2>${cwEscape(c.issue_text||c.description||'Maintenance report')}</h2><p>${cwDescription(c)}</p></section><section class="cw-panel"><h3><i class="ph ph-pulse"></i> Activity timeline</h3>${cwHistory(c)}</section><section class="cw-panel"><h3><i class="ph ph-chat-circle"></i> Notes & comments ${cwEditButton(c,'note','Add note')}</h3>${cwNotes(c)}</section></div><aside class="cw-full-sidebar"><section class="cw-panel"><h3>Case details ${cwEditButton(c,'edit','Edit')}</h3>${cwInfo(c)}</section>${editable?'<section class="cw-panel cw-quick-actions"><h3>Quick actions</h3><button type="button" class="cw-secondary" onclick="cwOpenDialog(\'edit\')"><i class="ph ph-pencil-simple"></i> Edit report</button><button type="button" class="cw-secondary" onclick="cwOpenDialog(\'note\')"><i class="ph ph-note-pencil"></i> Add note</button><button type="button" class="cw-primary" onclick="cwOpenDialog(\'close\')"><i class="ph ph-check-circle"></i> Close case</button><p>Closing removes this report from Workspace and keeps it in Cases.</p></section>':''}<section class="cw-panel"><h3>Attachments <span>${(c.attachments||[]).length}</span></h3>${cwAttachments(c)}</section><section class="cw-panel"><h3>Related cases</h3>${cwRelated(c)}</section></aside></div>`;
+ const actions=editable?`<div class="cw-case-actions" role="group" aria-label="Case actions">
+   <button type="button" id="cw-full-edit" class="cw-secondary" onclick="cwOpenDialog('edit')"><i class="ph ph-pencil-simple" aria-hidden="true"></i> Edit report</button>
+   <button type="button" id="cw-full-note" class="cw-secondary" onclick="cwOpenDialog('note')"><i class="ph ph-note-pencil" aria-hidden="true"></i> Add note</button>
+   <button type="button" id="cw-full-close" class="cw-primary" onclick="cwOpenDialog('close')"><i class="ph ph-check-circle" aria-hidden="true"></i> Close case</button>
+   <p class="cw-action-help">Closing marks this case Done. Its report and history stay in Cases.</p>
+  </div>`:'';
+ document.getElementById('cw-full').innerHTML=`
+  <nav class="cw-full-nav" aria-label="Case navigation">
+   <button type="button" class="cw-secondary" id="cw-back" onclick="cwBack()"><i class="ph ph-arrow-left" aria-hidden="true"></i> Workspace</button>
+   <div class="cw-full-identity"><strong>Case ${cwEscape(c.unit_number||c.id)}</strong>${cwStatus(c)}<span class="cw-priority cw-${p}">${cwLabel(p)}</span></div>
+  </nav>
+  <div class="cw-full-grid">
+   <div class="cw-full-main">
+    <section class="cw-panel cw-overview" aria-labelledby="cw-case-heading"><h2 id="cw-case-heading">${cwEscape(c.issue_text||c.description||'Maintenance report')}</h2><p>${cwDescription(c)}</p></section>
+    <section class="cw-panel" aria-labelledby="cw-timeline-heading"><h3 id="cw-timeline-heading"><i class="ph ph-pulse" aria-hidden="true"></i> Activity timeline</h3>${cwHistory(c)}</section>
+    <section class="cw-panel" aria-labelledby="cw-notes-heading"><h3 id="cw-notes-heading"><i class="ph ph-chat-circle" aria-hidden="true"></i> Notes & comments</h3>${cwNotes(c)}</section>
+    <section class="cw-panel cw-files-panel" aria-labelledby="cw-files-heading"><h3 id="cw-files-heading"><i class="ph ph-paperclip" aria-hidden="true"></i> Attachments <span>${(c.attachments||[]).length}</span></h3>${cwAttachments(c)}</section>
+   </div>
+   <aside class="cw-full-sidebar" aria-label="Case information and actions">
+    <section class="cw-panel cw-case-details" aria-labelledby="cw-info-heading">${actions}<h3 id="cw-info-heading">Case details</h3>${!cwIsActive(c)?'<p class="cw-closed-hint">Closed · retained in Cases history.</p>':''}${cwInfo(c)}</section>
+    <section class="cw-panel" aria-labelledby="cw-related-heading"><h3 id="cw-related-heading">Related cases</h3>${cwRelated(c)}</section>
+   </aside>
+  </div>`;
 }
 function cwOpenDialog(kind){
  const c=cwState.detail;if(cwState.writeBusy||(!['new'].includes(kind)&&(!c||!cwCanEdit(c))))return;
@@ -165,8 +187,8 @@ function cwOpenDialog(kind){
  if(kind==='note')fields=area('Note','text','',true);
  if(kind==='close')fields=`<div class="cw-form-wide"><p>Close <strong>${cwEscape(c.unit_number||'this case')}</strong>?</p><p class="cw-muted">It will be marked Done and removed from the active board. Its report, notes and history stay in Cases.</p></div>`;
  document.getElementById('cw-dialog-title').textContent=titles[kind];
- document.getElementById('cw-dialog-body').innerHTML=`<form id="cw-form" onsubmit="event.preventDefault();cwSubmitDialog(this)"><div class="cw-form-grid">${fields}</div><p id="cw-form-error" class="cw-form-error" role="alert" tabindex="-1" hidden></p><div class="cw-form-actions"><button type="button" class="cw-secondary" onclick="cwDismissDialog()">Cancel</button><button type="submit" class="cw-primary">${kind==='close'?'Close case':kind==='new'?'Create case':kind==='note'?'Add note':'Save changes'}</button></div></form>`;
- overlay.classList.add('open');lockBodyScroll();overlay.querySelector('input,textarea,button[type="submit"]')?.focus();
+ document.getElementById('cw-dialog-body').innerHTML=`<form id="cw-form" onsubmit="event.preventDefault();cwSubmitDialog(this)"><div class="cw-form-grid">${fields}</div><p id="cw-form-error" class="cw-form-error" role="alert" tabindex="-1" hidden></p><div class="cw-form-actions"><button type="button" id="cw-dialog-cancel" class="cw-secondary" onclick="cwDismissDialog()">Cancel</button><button type="submit" class="cw-primary">${kind==='close'?'Close case':kind==='new'?'Create case':kind==='note'?'Add note':'Save changes'}</button></div></form>`;
+ overlay.classList.add('open');lockBodyScroll();overlay.querySelector(kind==='close'?'#cw-dialog-cancel':'input,textarea,button[type="submit"]')?.focus();
 }
 function cwDismissDialog(){if(cwState.writeBusy)return;const focus=cwState.dialog?.returnFocus;cwState.dialog=null;document.getElementById('cw-dialog-overlay').classList.remove('open');unlockBodyScroll();if(focus?.isConnected)focus.focus({preventScroll:true});}
 async function cwSubmitDialog(form){

@@ -43,7 +43,7 @@ function homeMetricHTML(m) {
     {id:'attention',icon:'ph-flag',label:'Needs attention',value:m.attention,note:Number(m.attention)?'Priority, missed, or waiting':'All clear in your queue',action:"homeCases('home_attention')"},
     {id:'resolved',icon:'ph-check-circle',label:'Resolved today',value:m.resolved,note:'Closed across the team',action:"homeCases('home_resolved')"}
   ];
-  return items.map(x=>'<button type="button" class="stat-card home-metric" id="home-metric-'+x.id+'" data-tone="'+x.id+'" onclick="'+x.action+'"><span class="home-metric-top"><span class="stat-label">'+x.label+'</span><i class="ph '+x.icon+'" aria-hidden="true"></i></span><strong class="stat-value">'+Number(x.value||0).toLocaleString()+'</strong><span class="home-metric-note">'+h(x.note)+'</span><i class="ph ph-arrow-up-right home-metric-arrow" aria-hidden="true"></i></button>').join('');
+  return items.map(x=>'<button type="button" class="stat-card home-metric" id="home-metric-'+x.id+'" data-tone="'+x.id+'" onclick="'+x.action+'"><span class="home-metric-icon"><i class="ph '+x.icon+'" aria-hidden="true"></i></span><span class="home-metric-content"><strong class="stat-value">'+Number(x.value||0).toLocaleString()+'</strong><span class="stat-label">'+x.label+'</span></span><span class="home-metric-footer"><span class="home-metric-note">'+h(x.note)+'</span><i class="ph ph-arrow-up-right home-metric-arrow" aria-hidden="true"></i></span></button>').join('');
 }
 function homeAge(hours) {
   if(hours==null)return 'Time unavailable';
@@ -58,7 +58,7 @@ function renderHomeAttention(data) {
   document.getElementById('home-queue-note').textContent=data.metrics.attention>data.attention.length?'Showing the first '+data.attention.length+' of '+data.metrics.attention+' cases. Highest priority first.':data.attention.length?'Highest priority first · oldest within each group.':'';
   updateHTML(root,data.attention.length?data.attention.map(c=>{
     var name=c.agent&&c.agent!=='—'?c.agent:'Unassigned',id=c.full_id||c.id;
-    return '<article class="home-attention-row" data-id="'+attr(id)+'" data-tone="'+attr(c.attention_tone)+'"><span class="home-queue-marker" aria-hidden="true"></span><div class="home-attention-copy"><div class="home-case-title"><strong>'+h(c.unit_number||c.driver||'Maintenance case')+'</strong><span class="home-reason">'+h(c.attention_reason)+'</span></div><p>'+h(c.issue_text||c.description||'Open case for details')+'</p><small>'+h(name)+'<span aria-hidden="true"> · </span>'+homeAge(c.age_hours)+'</small></div><button type="button" class="home-review" data-id="'+attr(id)+'" onclick="homeOpenCase(this)" aria-label="Review case '+attr(c.unit_number||c.driver||id)+'">Review <i class="ph ph-arrow-right" aria-hidden="true"></i></button></article>';
+    return '<article class="home-attention-row" data-id="'+attr(id)+'" data-tone="'+attr(c.attention_tone)+'"><span class="home-queue-marker" aria-hidden="true"><i class="ph ph-truck"></i></span><div class="home-attention-copy"><div class="home-case-title"><strong>'+h(c.unit_number||c.driver||'Maintenance case')+'</strong><span class="home-reason">'+h(c.attention_reason)+'</span></div><p>'+h(c.issue_text||c.description||'Open case for details')+'</p><small>'+h(name)+'<span aria-hidden="true"> · </span>'+homeAge(c.age_hours)+'</small></div><button type="button" class="home-review" data-id="'+attr(id)+'" onclick="homeOpenCase(this)" aria-label="Open case '+attr(c.unit_number||c.driver||id)+'">Open <i class="ph ph-arrow-up-right" aria-hidden="true"></i></button></article>';
   }).join(''):homeEmpty('ph-check-circle','You’re all caught up','No priority, missed, unassigned, or aging maintenance cases.'));
   if(data.metrics.attention>data.attention.length)root.insertAdjacentHTML('beforeend','<button type="button" class="home-queue-more" onclick="homeCases(\'home_attention\')">View all '+Number(data.metrics.attention)+' cases <i class="ph ph-arrow-right"></i></button>');
 }
@@ -69,14 +69,13 @@ function renderHomeActivity(events) {
   updateHTML(root,events.length?events.map(event=>{
     var kind=kinds[event.kind]||kinds.updated;
     var person=(event.actor||(event.kind==='assigned'?event.detail:'')).trim();
-    var initial=person?Array.from(person.trim())[0]:'';
     var detail=event.kind==='note'?event.detail:event.issue;
-    return '<button type="button" class="home-event" data-id="'+attr(event.id)+'" data-case="'+attr(event.case_id)+'" data-kind="'+attr(event.kind)+'" onclick="homeOpenCase({dataset:{id:this.dataset.case}})"><span class="home-event-avatar" aria-hidden="true">'+(initial?h(initial.toUpperCase()):'<i class="ph '+kind[0]+'"></i>')+'</span><span class="home-event-copy"><strong>'+h(kind[1])+(event.unit?' <span>· '+h(event.unit)+'</span>':'')+'</strong><span class="home-event-detail">'+h(detail||'Open case for details')+'</span><small>'+(person?h(event.kind==='assigned'?'Assigned to '+person:person)+' · ':'')+'<time datetime="'+attr(event.at)+'">'+h(homeTime(event.at,true))+'</time></small></span><i class="ph ph-caret-right home-event-arrow" aria-hidden="true"></i></button>';
+    return '<button type="button" class="home-event" data-id="'+attr(event.id)+'" data-case="'+attr(event.case_id)+'" data-kind="'+attr(event.kind)+'" onclick="homeOpenCase({dataset:{id:this.dataset.case}})"><span class="home-event-avatar" aria-hidden="true"><i class="ph '+kind[0]+'"></i></span><span class="home-event-copy"><strong>'+h(kind[1])+(event.unit?' <span>· '+h(event.unit)+'</span>':'')+'</strong><span class="home-event-detail">'+h(detail||'Open case for details')+'</span><small>'+(person?h(event.kind==='assigned'?'Assigned to '+person:person)+' · ':'')+'<time datetime="'+attr(event.at)+'">'+h(homeTime(event.at,true))+'</time></small></span><i class="ph ph-caret-right home-event-arrow" aria-hidden="true"></i></button>';
   }).join(''):homeEmpty('ph-coffee','A fresh start','New reports and recorded case updates will appear here.'));
 }
 function renderHomeBriefing() {
   var root=document.getElementById('home-ai-summary'),data=homeState.data;
-  if(!data)return;
+  if(!data||root.contains(document.activeElement))return;
   var m=data.metrics,items=[];
   if(m.high_priority)items.push({icon:'ph-flag',title:'Priority check',text:m.high_priority+' high-priority case'+(m.high_priority===1?' is':'s are')+' still open.',filter:'home_attention'});
   if(m.unassigned)items.push({icon:'ph-user-circle-plus',title:'Waiting for a teammate',text:m.unassigned+' open case'+(m.unassigned===1?' needs':'s need')+' an assignment.',filter:'home_attention'});
@@ -94,6 +93,10 @@ function homeTeamRows(period, fallback) {
   var agents=(stats['performance_'+period]||{}).agents;
   if(!agents)return fallback.length?fallback.slice(0,5).map(a=>'<div class="home-team-row"><span class="home-event-avatar" aria-hidden="true">'+h(Array.from(a.name||'?')[0].toUpperCase())+'</span><span><strong>'+h(a.name)+'</strong><small>'+Number(a.count||0)+' cases handled</small></span></div>').join(''):homeEmpty('ph-users-three','A quiet start','Team activity will appear as cases are handled.');
   return agents.length?agents.slice(0,5).map(a=>'<div class="home-team-row"><span class="home-event-avatar" aria-hidden="true">'+h(Array.from(a.name||'?')[0].toUpperCase())+'</span><span><strong>'+h(a.name)+'</strong><small>'+Number(a.active||0)+' active · '+Number(a.handled||0)+' handled</small></span><span class="home-team-total">'+Number(a.resolved||0)+' resolved</span></div>').join(''):homeEmpty('ph-users-three','A quiet start','Team activity will appear as cases are handled.');
+}
+function homeUnitRows(units){
+  const rows=units.slice(0,6);
+  return '<div class="home-unit-grid">'+rows.map(unit=>'<button type="button" class="home-unit-row" data-unit="'+attr(unit.unit)+'" data-vtype="'+attr(unit.vtype||'')+'" onclick="openUnitModal(this.dataset.unit,this.dataset.vtype)"><span class="home-unit-icon"><i class="ph ph-truck" aria-hidden="true"></i></span><span class="home-unit-copy"><strong>'+h(unit.unit)+'</strong><small>'+h(unit.vtype||'Unit')+'</small></span><span class="home-unit-count"><strong>'+Number(unit.count||0).toLocaleString()+'</strong><small>cases</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>').join('')+'</div>'+(units.length>6?'<p class="home-queue-note">Showing the six most reported units in this period.</p>':'');
 }
 async function loadHomeBriefing() {
   homeWelcome();
@@ -136,12 +139,13 @@ async function loadHomeAISummary(force) {
 async function homeRefreshBriefing() {
   await Promise.allSettled([loadHomeBriefing(),loadHomeAISummary(true)]);
 }
-['home-attention-list','home-recent-activity'].forEach(id=>document.getElementById(id).addEventListener('focusout',()=>setTimeout(()=>{
-  if(homeState.data){renderHomeAttention(homeState.data);renderHomeActivity(homeState.data.activity);}
+['home-attention-list','home-recent-activity','home-ai-summary','units-overview'].forEach(id=>document.getElementById(id).addEventListener('focusout',()=>setTimeout(()=>{
+  if(homeState.data){renderHomeAttention(homeState.data);renderHomeActivity(homeState.data.activity);renderHomeBriefing();}if(typeof renderHomeRangeWidgets==='function')renderHomeRangeWidgets();
 },0)));
 homeWelcome();
 if(!homeAllowed('cases')){
   document.querySelector('.home-attention-card .home-text-action').hidden=true;
+  document.querySelector('.home-activity-card .home-text-action').hidden=true;
   document.getElementById('home-briefing-refresh').hidden=true;
 }
 if(!document.querySelector('.home-quick-actions button'))document.querySelector('.home-quick-actions').hidden=true;
