@@ -309,7 +309,16 @@ function mount(){if(view.ready)return;
  const toolbar=document.createElement('div');toolbar.className='kh-agent-toolbar';toolbar.innerHTML='<div class="kh-agent-period"><button data-range="day" class="active">Today</button><button data-range="week">7 days</button><button data-range="month">30 days</button></div><button class="kh-customize" type="button">'+icon('ph-sliders-horizontal')+' Customize</button>';page.insertBefore(toolbar,grid);
  toolbar.querySelector('.kh-customize').onclick=openSettings;const arrange=document.createElement('button');arrange.type='button';arrange.className='kh-arrange-toggle';arrange.setAttribute('aria-pressed','false');arrange.innerHTML=icon('ph-hand-grabbing')+' <span class="kh-toggle-text">Arrange</span>';toolbar.append(arrange);arrange.onclick=toggleArrange;toolbar.querySelectorAll('[data-range]').forEach(b=>b.onclick=()=>switchRange(b.dataset.range));
  }
- sources.forEach(x=>x.classList.add('kh-legacy-archived'));
+ sources.forEach(x=>{
+   // Legacy containers remain mounted for API updates, but are never displayed.
+   // An inline !important declaration wins against old #stat-grid stylesheets.
+   x.classList.add('kh-legacy-archived');
+   x.setAttribute('aria-hidden','true');
+   x.style.setProperty('display','none','important');
+   x.style.setProperty('visibility','hidden','important');
+   x.style.setProperty('height','0px','important');
+   x.style.setProperty('overflow','hidden','important');
+ });
  const heroButton=page.querySelector('.kx-manager-hero .kx-icon-btn');if(heroButton){heroButton.onclick=openSettings;heroButton.setAttribute('aria-label','Home settings');heroButton.setAttribute('title','Home settings');const toggle=document.createElement('button');toggle.type='button';toggle.className='kh-arrange-toggle';toggle.setAttribute('aria-pressed','false');toggle.innerHTML=icon('ph-hand-grabbing')+' <span class="kh-toggle-text">Arrange</span>';heroButton.before(toggle);toggle.onclick=toggleArrange;}
  // Existing theme, navigation and global date/time bar remain untouched.
  page.classList.add('kh-ready');view.ready=true;

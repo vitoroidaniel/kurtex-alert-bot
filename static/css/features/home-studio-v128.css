@@ -190,3 +190,10 @@
 .kh-arrange-bar button:last-child{background:#d83041;border-color:#d83041;color:#fff}
 .kh-settings footer .kh-arrange{background:#fff1f2;border-color:#facbd2;color:#c42e41}
 @media(max-width:760px){.kh-arrange-bar{width:calc(100vw - 20px);justify-content:space-between;gap:4px;bottom:10px}.kh-arrange-bar>span{font-size:10px}.kh-arrange-bar button{padding:9px 8px;font-size:10px}.kh-settings footer button{padding:9px 7px;font-size:11px}}
+
+/* Legacy dashboard containers must never compete with Home Studio widgets. */
+html body #page-overview.kh-ready > .kh-legacy-archived,
+html body #page-overview.kh-ready .kh-legacy-archived,
+html[data-theme] body[data-current-page="overview"] #page-overview.kh-ready #stat-grid.kh-legacy-archived {
+ display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important;
+}
