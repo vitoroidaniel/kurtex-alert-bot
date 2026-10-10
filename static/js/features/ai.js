@@ -236,7 +236,7 @@ async function sendKurtexAIPage(e){
  var requestKey=aiSendRequestKey(msg,sentAttachments);
  aiChatPendingAttachments=[];aiClearAttachmentTray();
  var u=document.createElement('div');u.className='ai-page-msg user';u.innerHTML=aiWrapMessage('user',escapeAI(msg),aiAttachmentCards(kurtexAIChatId,sentAttachments,sentAttachments.map(function(a){return a.id})));dst.appendChild(u);
- var wait=document.createElement('div');wait.className='ai-page-msg assistant thinking';wait.innerHTML='<div class="ai-msg-content"><div class="ai-msg-body">Reviewing maintenance evidence…</div></div>';dst.appendChild(wait);dst.scrollTop=dst.scrollHeight;
+ var wait=document.createElement('div');wait.className='ai-page-msg assistant thinking';wait.innerHTML='<div class="ai-msg-content"><div class="ai-msg-body">Searching fleet knowledge and relevant cases…</div></div>';dst.appendChild(wait);dst.scrollTop=dst.scrollHeight;
  try{
   // A knowledge selection may exist before a chat exists. Persist it only when
   // the first real message is sent, so opening Knowledge never creates a chat.

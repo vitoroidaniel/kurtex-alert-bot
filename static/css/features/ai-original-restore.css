@@ -1,0 +1,15 @@
+/* AI assistant: original alert-bot workspace restored, scoped visual refinements */
+body[data-current-page="ai_assistant"] .page-header,body[data-current-page="ai_assistant"] .content-header,body[data-current-page="ai_assistant"] #page-title-bar{display:none!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant{padding-top:0!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-assistant-workspace{max-width:none!important;margin:0!important;padding:0!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-page-layout{height:calc(100dvh - 34px)!important;min-height:520px!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-page-compose{position:relative!important;inset:auto!important;transform:none!important;order:1!important;align-self:center!important;width:min(880px,calc(100% - 36px))!important;max-width:880px!important;margin:0 auto 14px!important;padding:0!important;border:0!important;background:transparent!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-compose-input{width:100%!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-web-option{display:inline-flex!important;align-items:center!important;gap:6px!important;white-space:nowrap!important;border-radius:9px!important;padding:6px 9px!important;transition:background .15s,border-color .15s!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-web-option:has(input:checked){background:#edf5ff!important;border-color:#bdd6ff!important;color:#155dc5!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-compose-left{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:5px!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-page-messages{order:0!important;flex:1 1 auto!important;min-height:0!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-assistant-page-shell{display:flex!important;flex-direction:column!important;min-height:0!important}
+body[data-current-page="ai_assistant"] #page-ai_assistant .ai-page-msg.thinking .ai-msg-body:after{content:' ';display:inline-block;width:1.3em;overflow:hidden;vertical-align:bottom;animation:kx-thinking-dots 1.2s steps(4,end) infinite}
+@keyframes kx-thinking-dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%,100%{content:'...'}}
+@media(max-width:720px){body[data-current-page="ai_assistant"] #page-ai_assistant .ai-page-compose{width:calc(100% - 16px)!important;margin-bottom:8px!important}body[data-current-page="ai_assistant"] #page-ai_assistant .ai-web-option{padding:5px!important;font-size:11px!important}}
