@@ -1,0 +1,17 @@
+/* v124: Full-bleed workspace, not a dashboard card. */
+body[data-current-page="case_workspace"] #cw-filter-summary{display:none!important}
+@media(min-width:761px){
+body[data-current-page="case_workspace"] .main{padding:0!important;overflow:hidden!important}
+body[data-current-page="case_workspace"] #page-case_workspace{padding:0!important;margin:0!important;width:100%!important;max-width:none!important;height:100dvh!important;min-height:0!important;overflow:hidden!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case){width:100%!important;height:100dvh!important;min-height:0!important;padding:0!important;margin:0!important;overflow:hidden!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-work-area{flex:1 1 auto!important;min-height:0!important;height:auto!important;padding:0!important;margin:0!important;gap:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:var(--surface2,var(--bg))!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-content{height:100%!important;min-height:0!important;overflow:hidden!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-board{height:100%!important;min-height:0!important;max-height:none!important;border:0!important;border-radius:0!important;padding:0!important;margin:0!important;gap:0!important;overflow-x:auto!important;overflow-y:hidden!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-column{border-radius:0!important;border-top:0!important;border-bottom:0!important;border-left:0!important;margin:0!important;min-height:0!important;height:100%!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-stack{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-detail:not([hidden]){height:100%!important;min-height:0!important;max-height:none!important;top:0!important;margin:0!important;border-radius:0!important;box-shadow:none!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-toolbar{flex:0 0 auto!important;padding:10px 14px!important;margin:0!important;border-radius:0!important}
+body[data-current-page="case_workspace"] #cw-shell:not(.full-case) .cw-footer{flex:0 0 auto!important;padding:3px 12px!important;margin:0!important;border-radius:0!important}
+body[data-current-page="case_workspace"] #cw-shell.full-case{height:100dvh!important;overflow-y:auto!important;padding:12px 20px!important}
+}
+@media(max-width:760px){body[data-current-page="case_workspace"] #page-case_workspace .cw-work-area{padding:0!important;border:0!important;border-radius:0!important;margin:0!important}body[data-current-page="case_workspace"] #page-case_workspace .cw-shell:not(.full-case){border:0!important;border-radius:0!important}}

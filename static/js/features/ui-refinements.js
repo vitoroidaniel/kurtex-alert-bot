@@ -35,7 +35,7 @@ function uiWorkspaceFilters(rows){
  const root=document.getElementById('cw-filter-summary');if(!root)return;
  const q=document.getElementById('cw-search').value.trim(),status=document.getElementById('cw-status').value,priority=document.getElementById('cw-priority-filter').value,equipment=document.getElementById('cw-equipment-filter').value,sort=document.getElementById('cw-sort').value;
  const chips=[];if(status)chips.push(cwLabel(status));if(priority)chips.push(cwLabel(priority)+' priority');if(equipment)chips.push(cwLabel(equipment));if(q)chips.push('Search: '+q);if(sort!=='newest')chips.push(sort==='oldest'?'Oldest first':'Highest priority');
- root.innerHTML='<div class="ui-filter-chips"><span class="ui-filter-neutral">Active maintenance reports</span>'+chips.map(x=>'<span class="ui-filter-chip">'+h(x)+'</span>').join('')+'</div><span class="ui-result-count">'+rows.length+' matching · closed reports stay in Cases</span>'+(chips.length?'<button type="button" class="ui-clear-filters" onclick="cwClearFilters()">Clear filters</button>':'');
+ root.innerHTML=''; // Filters remain accessible through the toolbar; no persistent status strip.
  const count=document.getElementById('cw-filter-count'),n=[status,priority,equipment].filter(Boolean).length;count.hidden=!n;count.textContent=n;
  document.getElementById('cw-search-clear').hidden=!q;
  preferences.set('kurtex-workspace-group',document.getElementById('cw-group').value);
