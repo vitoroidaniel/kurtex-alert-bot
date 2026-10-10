@@ -20,3 +20,9 @@ Light neutral workspace sidebar with blue active indicators, sectional navigatio
 
 ## V4 shared UI
 Shared filter controls use a unified 40px minimum mobile touch area, focus-visible rings, scrollable segmented controls, and consistent spacing. Agent cards and leaderboard prioritize data legibility at 320px-760px. The established blue active navigation and light workspace identity are preserved.
+
+## V5 mobile navigation and surfaces
+The primary bottom bar is Cases / Search / AI / Alerts / More. Secondary tools live in a role-aware More sheet. Cases filter controls use a bottom sheet, while existing filter callbacks and backend APIs remain canonical. Notification center is moved to a body-level portal on phones so it is not hidden by the desktop header.
+
+## V6 corrections
+The navigation is a fixed-height shell with an independently scrolling nav list and fixed footer. Desktop supports persisted icon-only compact mode. Mobile uses a separate drawer with its own scrolling. Page content respects the available width; narrow parts and knowledge screens stack.

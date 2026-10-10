@@ -7,48 +7,40 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Kurtex">
-<link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+<link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
-<script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v4.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile-v5.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-refinement.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v6.css') }}">
+<script defer src="/static/vendor/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/core/dashboard.css">
+<link rel="stylesheet" href="/static/css/platform/mobile.css">
+<link rel="stylesheet" href="/static/css/core/kurtex-v4.css">
+<link rel="stylesheet" href="/static/css/features/maintenance.css">
+<link rel="stylesheet" href="/static/css/core/kurtex-refinement.css">
 </head>
-<body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
+<body data-user-id="1" data-user-role="developer" data-is-developer="true" data-allowed-pages="leaderboard,agents,my_profile,cases,overview,fleet_intel,trends,comparison,reports,ai_assistant,settings">
 
 
 <div class="mobile-header">
-  <button class="mobile-avatar" type="button" onclick="showPage('my_profile')" aria-label="Profile"><img src="{{ user.photo_url or url_for('static', filename='images/kurtex-logo.png') }}" alt=""></button>
+  <button class="mobile-avatar" type="button" onclick="showPage('my_profile')" aria-label="Profile"><img src="/static/images/kurtex-logo.png" alt=""></button>
   <div class="mobile-brand"><strong>Kurtex</strong><small>Maintenance</small></div>
   <button class="mobile-more" type="button" onclick="toggleMobileMore()" aria-label="More"><i class="ph ph-dots-three"></i></button>
 </div>
-<div id="mobile-more-sheet" class="mobile-more-sheet" hidden role="dialog" aria-label="More workspace tools">
- <div class="v5-more-title"><strong>Workspace</strong><button type="button" onclick="toggleMobileMore(false)" aria-label="Close menu"><i class="ph ph-x"></i></button></div>
- <button onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Dashboard</span></button>
- <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts manual</span></button>
- <button onclick="mobileGo('leaderboard')"><i class="ph ph-trophy"></i><span>Leaderboard</span></button>
- <button onclick="mobileGo('agents')"><i class="ph ph-users-three"></i><span>Agent profiles</span></button>
- <button onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>My profile</span></button>
+<div id="mobile-more-sheet" class="mobile-more-sheet" hidden>
+ <button onclick="mobileGo('fleet_intel')"><i class="ph ph-truck"></i><span>Fleet lookup</span></button>
+ <button onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>Profile</span></button>
  <button onclick="openLayoutSettings();toggleMobileMore(false)"><i class="ph ph-gear"></i><span>Settings</span></button>
 </div>
 <nav class="mobile-tabbar" aria-label="Mobile navigation">
- <button type="button" data-mobile-page="cases" onclick="mobileGo('cases')"><i class="ph ph-clipboard-text"></i><span>Cases</span></button>
- <button type="button" data-mobile-page="fleet_intel" onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><span>Search</span></button>
- <button type="button" class="mobile-ai-tab" data-mobile-page="ai_assistant" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span>AI</span></button>
- <button type="button" data-mobile-page="notifications" onclick="mobileV5Notifications()"><i class="ph ph-bell"></i><span>Alerts</span></button>
- <button type="button" data-mobile-page="more" onclick="toggleMobileMore()"><i class="ph ph-squares-four"></i><span>More</span></button>
+ <button data-mobile-page="overview" onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Home</span></button>
+ <button data-mobile-page="parts_manual" onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts</span></button>
+ <button class="mobile-ai-tab" data-mobile-page="ai_assistant" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span>AI</span></button>
+ <button data-mobile-page="fleet_intel" onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><span>Search</span></button>
 </nav>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
 <div class="layout">
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <button type="button" class="k6-sidebar-toggle" id="k6-sidebar-toggle" onclick="kurtexToggleCompactSidebar()" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar"><i class="ph ph-sidebar-simple"></i></button>
-    <img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
+    <img src="/static/images/kurtex-logo.png" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
     <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
   </div>
   <nav aria-label="Main navigation" class="v3-navigation">
@@ -56,7 +48,7 @@
     <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
-    {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
+    <div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>
     <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
     <div class="v3-nav-label v3-nav-label-spaced">Insights & tools</div>
     <div class="nav-group">
@@ -77,20 +69,19 @@
     <div class="v3-nav-label v3-nav-label-spaced">Intelligence</div>
     <div class="nav-ai-cluster">
       <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
-      {% if is_developer %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
+      <div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>
     </div>
-    {% if is_manager or is_developer %}<div class="nav-section-divider" aria-hidden="true"></div>{% endif %}
+    <div class="nav-section-divider" aria-hidden="true"></div>
     <div class="v3-nav-label v3-nav-label-spaced">Team & administration</div>
     <div class="nav-bottom-cluster">
-      {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
-      {% if is_developer %}<div class="nav-item" data-page="users" role="button" tabindex="0" onclick="showPage('users')"><i class="ph ph-users-four"></i> Users</div><div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
+      <div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>
+      <div class="nav-item" data-page="users" role="button" tabindex="0" onclick="showPage('users')"><i class="ph ph-users-four"></i> Users</div><div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>
     </div>
   </nav>
   <div class="sidebar-footer">
     <div class="user-chip user-chip-profile" role="button" tabindex="0" onclick="showPage('my_profile')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('my_profile')}" aria-label="Open my profile">
-      {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
-      {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
-      <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ "Manager" if user.role in ["super_admin","manager","admin"] else ("Developer" if user.role == "developer" else "Agent") }}</div></div>
+      <div class="user-avatar-init">P</div>
+      <div><div class="user-name">Preview</div><div class="user-role">Developer</div></div>
     </div>
     <div class="sidebar-account-actions">
       <button class="sidebar-settings-btn" title="Settings" aria-label="Settings" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
@@ -138,7 +129,7 @@
   <div id="connection-banner" class="connection-banner" role="alert" hidden></div>
   <div class="page active" id="page-overview">
   <section class="home-welcome" aria-label="Home welcome">
-    <div class="home-welcome-copy"><h2>Welcome back, {{ user.first_name or 'there' }}</h2><p>Here’s what’s happening with your cases today.</p></div>
+    <div class="home-welcome-copy"><h2>Welcome back, Preview</h2><p>Here’s what’s happening with your cases today.</p></div>
     <button class="home-customize-icon" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button>
   </section>
   <section class="home-today-summary" aria-label="Today summary">
@@ -200,7 +191,6 @@
 <div id="ai-chat-knowledge-modal" class="ai-chat-kb-modal" hidden><div class="ai-chat-kb-backdrop" onclick="closeAIChatKnowledge()"></div><section class="ai-chat-kb-dialog"><header><div><strong>Knowledge for this chat</strong><small>Select verified sources Kurtex AI should use in this conversation.</small></div><button type="button" onclick="closeAIChatKnowledge()"><i class="ph ph-x"></i></button></header><div class="ai-chat-kb-search"><i class="ph ph-magnifying-glass"></i><input id="ai-chat-kb-search" placeholder="Search knowledge..." oninput="renderAIChatKnowledgeOptions()"></div><div class="ai-chat-kb-toolbar"><span id="ai-chat-kb-selected-label">Selected sources</span><div><button type="button" onclick="selectAllAIChatKnowledge()">Select all</button><button type="button" onclick="clearAIChatKnowledge()">Clear all</button></div></div><div id="ai-chat-kb-list" class="ai-chat-kb-list"></div><footer><span id="ai-chat-kb-count">0 sources selected</span><button type="button" class="ai-chat-kb-apply" onclick="applyAIChatKnowledge()"><span>Apply sources</span><i class="ph ph-check"></i></button></footer></section></div>
 
 <div class="page" id="page-cases">
- <button type="button" class="v5-case-filter-trigger" onclick="mobileV5Filters(true)"><i class="ph ph-sliders-horizontal"></i> Filters <span id="v5-filter-count"></span></button>
     <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search cases" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
     <div class="section">
       <div class="section-header">
@@ -237,7 +227,6 @@
   </div>
 
   <div class="page" id="page-leaderboard">
- <div class="v5-mobile-section-label">Team performance</div>
     <div class="leaderboard-head">
 
       <div class="toggle-tabs leaderboard-period">
@@ -293,22 +282,18 @@
 
   <!-- Fleet Analytics -->
   <div class="page" id="page-trends">
-    {% if is_manager %}
+    
     <div class="management-toolbar management-toolbar-controls-only"><div class="toggle-tabs analytics-period-tabs"><button class="toggle-btn active" onclick="setTrendPeriod(7,this)">7D</button><button class="toggle-btn" onclick="setTrendPeriod(30,this)">30D</button><button class="toggle-btn" onclick="setTrendPeriod(90,this)">90D</button><button class="toggle-btn" onclick="setTrendPeriod(180,this)">6M</button><button class="toggle-btn" onclick="setTrendPeriod(365,this)">1Y</button></div></div>
     <div id="fleet-analytics-content"><div class="loading">Calculating fleet analytics...</div></div>
-    {% else %}
-    <div class="analytics-access-denied"><i class="ph ph-lock-key"></i><h2>Fleet Analytics</h2><p>This tab is not available for your role.</p><small>Management analytics are available to Managers and Developers.</small></div>
-    {% endif %}
+    
   </div>
 
   <!-- Management Compare -->
   <div class="page" id="page-comparison">
-    {% if is_manager %}
+    
     <div class="management-toolbar management-toolbar-controls-only"><select id="compare-days" class="analytics-select" onchange="loadComparison()"><option value="7">7 days vs previous 7</option><option value="30" selected>30 days vs previous 30</option><option value="90">90 days vs previous 90</option></select></div>
     <div id="comparison-content"><div class="loading">Building comparison...</div></div>
-    {% else %}
-    <div class="analytics-access-denied"><i class="ph ph-lock-key"></i><h2>Management Compare</h2><p>This tab is not available for your role.</p><small>Management comparisons are available to Managers and Developers.</small></div>
-    {% endif %}
+    
   </div>
 
   <!-- Kurtex Intelligence -->
@@ -352,7 +337,7 @@
 
 
 
-{% if is_developer %}<div class="page" id="page-ai_knowledge"><section class="ai-training-page">
+<div class="page" id="page-ai_knowledge"><section class="ai-training-page">
 <section class="ai-training-hero"><div class="ai-hero-copy"><span class="eyebrow">AI KNOWLEDGE</span><h2>Train Kurtex with fleet knowledge</h2><p>Manage historical fleet experience and verified maintenance references in one place. Previous cases remain searchable evidence while approved sources stay trusted.</p></div><div class="ai-training-flow" aria-label="Knowledge workflow"><span><i class="ph ph-database"></i> Ingest</span><i class="ph ph-caret-right"></i><span><i class="ph ph-magnifying-glass"></i> Retrieve</span><i class="ph ph-caret-right"></i><span><i class="ph ph-shield-check"></i> Verify</span></div></section>
 <section class="ai-training-card ai-learning-card"><div class="ai-card-head ai-card-head-row"><div class="ai-heading-group"><span class="ai-card-icon"><i class="ph ph-truck"></i></span><div><h3>Fleet experience</h3><p>Historical cases are indexed automatically and used as searchable evidence.</p></div></div><div class="ai-learning-toolbar"><button class="btn secondary" type="button" onclick="loadFleetKnowledgeStats()"><i class="ph ph-arrows-clockwise"></i> Refresh</button><button class="btn" type="button" onclick="syncFleetKnowledge()"><i class="ph ph-database"></i> Sync cases</button></div></div><div class="ai-stat-row"><div><span class="ai-stat-icon"><i class="ph ph-files"></i></span><strong id="fleet-knowledge-total">—</strong><span>Indexed cases</span></div><div><span class="ai-stat-icon"><i class="ph ph-check-circle"></i></span><strong id="fleet-knowledge-resolved">—</strong><span>Resolved evidence</span></div><div><span class="ai-stat-icon"><i class="ph ph-warning-circle"></i></span><strong id="fleet-knowledge-review">—</strong><span>Incomplete evidence</span></div></div><div class="ai-import-strip"><div><strong>Import historical data</strong><span>Bulk-import an older case export into Fleet Knowledge.</span></div><label class="ai-compact-file" for="fleet-knowledge-csv"><i class="ph ph-file-csv"></i><span id="fleet-csv-file-name">Choose CSV</span></label><input id="fleet-knowledge-csv" class="ai-native-file" type="file" accept=".csv,text/csv" onchange="document.getElementById('fleet-csv-file-name').textContent=this.files[0]?this.files[0].name:'Choose CSV'"><button class="btn" type="button" onclick="importFleetKnowledgeCSV()"><i class="ph ph-upload-simple"></i> Import</button></div><div id="fleet-knowledge-status" class="ai-inline-status" role="status"></div></section>
 <div class="ai-training-grid ai-knowledge-workspace">
@@ -385,9 +370,9 @@
       </section>
     </aside>
   </div>
-</section></div>{% endif %}
+</section></div>
 
-  {% if is_developer %}
+  
   <div class="page" id="page-users">
     <div class="users-workspace">
       <section class="card developer-card developer-users-card"><div class="developer-card-head"><div><span class="developer-card-icon"><i class="ph ph-users-three"></i></span><div><h3>Manage users</h3><p>Authorized Telegram users and website roles.</p></div></div><button class="btn secondary" type="button" onclick="developerOpenAddUser()"><i class="ph ph-plus"></i> Add user</button></div><div id="developer-users"><div class="loading">Loading users...</div></div></section>
@@ -409,41 +394,112 @@
       </div>
     </div>
   </div>
-  {% endif %}
+  
 
   <!-- Agent Profiles (manager only) -->
   <div class="page" id="page-agents">
- <div class="v5-mobile-section-label">Your team</div>
     <div id="agents-content"><div class="loading">Loading...</div></div>
   </div>
 </main>
 </div>
 
-{% include 'partials/modals.html' %}
+<!-- Case Modal -->
+<div class="modal-overlay" id="modal-overlay" style="z-index:400" onclick="if(event.target===this)closeModal()">
+<div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
+  <button class="modal-close" aria-label="Close dialog" onclick="closeModal()"><i class="ph ph-x"></i></button>
+  <h2 id="modal-title">Case Detail</h2>
+  <div id="modal-body"><div class="loading">Loading...</div></div>
+</div>
+</div>
+
+<!-- Report Viewer Modal -->
+<div class="modal-overlay" id="report-view-overlay" style="z-index:500" onclick="if(event.target===this)closeReportView()">
+<div class="modal detail-surface report-view-surface" role="dialog" aria-modal="true">
+  <button class="modal-close" aria-label="Close dialog" onclick="closeReportView()"><i class="ph ph-x"></i></button>
+  <h2 id="report-view-title">Case Report</h2>
+  <div id="report-view-body"><div class="loading">Loading...</div></div>
+  <div style="margin-top:16px;text-align:right">
+    <button onclick="printReportView()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px"><i class="ph ph-printer"></i> Print</button>
+  </div>
+</div>
+</div>
+
+<!-- Agent Modal -->
+<div class="modal-overlay" id="agent-modal-overlay" style="z-index:200" onclick="if(event.target===this)closeAgentModal()">
+<div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
+  <button class="modal-close" aria-label="Close dialog" onclick="closeAgentModal()"><i class="ph ph-x"></i></button>
+  <h2 id="agent-modal-title">Agent Profile</h2>
+  <div id="agent-modal-body"><div class="loading">Loading...</div></div>
+</div>
+</div>
+
+<!-- Unit Detail Modal -->
+<div class="modal-overlay" id="unit-modal-overlay" style="z-index:300" onclick="if(event.target===this)closeUnitModal()">
+<div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
+  <button class="modal-close" aria-label="Close dialog" onclick="closeUnitModal()"><i class="ph ph-x"></i></button>
+  <h2 id="unit-modal-title">Unit Detail</h2>
+  <div id="unit-modal-body"><div class="loading">Loading...</div></div>
+</div>
+</div>
+
+<!-- Report Modal -->
+<div class="report-modal-overlay" id="report-modal-overlay" onclick="if(event.target===this)closeReport()">
+<div class="report-modal report-workspace" role="dialog" aria-modal="true" aria-label="Report builder">
+  <div class="report-header">
+    <div class="report-brand"><div class="report-seal"><i class="ph ph-file-text"></i></div><div><div class="report-kicker">KURTEX MAINTENANCE</div><h2>Report Builder</h2><p>Build a professional A4 report from live case data</p></div></div>
+    <button class="report-close" aria-label="Close report" onclick="closeReport()"><i class="ph ph-x"></i></button>
+  </div>
+  <div class="report-body">
+    <section class="report-builder-panel">
+      <div class="report-builder-head"><div><strong>Report setup</strong><span>Choose a period and exactly what management should see.</span></div><div class="report-live-badge"><span></span> Live data</div></div>
+      <div class="report-period-bar" id="report-period-bar">
+        <label><span>Period</span><select id="report-period-select" onchange="toggleCustomDates();generateReport()"><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="custom">Custom range</option></select></label>
+        <div id="custom-date-inputs" class="report-date-range" style="display:none"><label><span>From</span><input type="date" id="report-date-from" onchange="generateReport()"></label><label><span>To</span><input type="date" id="report-date-to" onchange="generateReport()"></label></div>
+      </div>
+      <div id="report-sections-bar" class="report-sections-bar">
+        <div class="report-sections-title"><div><strong>Report sections</strong><span>Choose exactly what appears in the PDF.</span></div><div class="report-section-tools"><button type="button" onclick="setAllReportSections(true)" title="Select all" aria-label="Select all report sections"><i class="ph ph-checks"></i></button><button type="button" onclick="setAllReportSections(false)" title="Clear selection" aria-label="Clear report sections"><i class="ph ph-x"></i></button></div></div>
+        <div class="report-section-grid">
+          <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="summary" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Summary</b><small>Case totals and status overview</small></span></label>
+          <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="agents" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Agent activity</b><small>Cases handled by agent</small></span></label>
+          <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="groups" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Active groups</b><small>Groups generating the most cases</small></span></label>
+          <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="vtype" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Issues by equipment</b><small>Truck, trailer and reefer issues</small></span></label>
+          <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="units" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Problem units</b><small>Units with the most reports</small></span></label>
+          <label class="report-section-option"><input type="checkbox" class="report-section-cb" data-section="missed" checked onchange="renderReportContent()"><span class="report-section-check"><i class="ph ph-check"></i></span><span><b>Unresolved cases</b><small>Cases still requiring attention</small></span></label>
+        </div>
+      </div>
+    </section>
+    <div class="report-preview-label"><div><strong>A4 preview</strong><span id="report-ts"></span></div></div>
+    <div class="report-paper-wrap"><div id="report-content" class="report-paper"><div class="loading">Generating report...</div></div></div>
+  </div>
+  <div class="report-footer">
+    <div class="report-footer-note"><i class="ph ph-shield-check"></i><span>Generated from live Kurtex case data</span></div>
+    <div class="report-footer-actions"><button class="report-share-btn" type="button" onclick="shareReportPDF()"><i class="ph ph-share-network"></i> Share</button><button class="report-download-btn" type="button" onclick="downloadReportPDF()"><i class="ph ph-download-simple"></i> Download PDF</button></div>
+  </div>
+</div>
+</div>
+</div>
 <div id="ai-edit-modal" class="ai-edit-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgeEdit()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-edit-heading"><header><div><span class="eyebrow">APPROVED KNOWLEDGE</span><h3 id="ai-edit-heading">Edit knowledge</h3></div><button type="button" onclick="closeAIKnowledgeEdit()"><i class="ph ph-x"></i></button></header><form onsubmit="updateAIKnowledge(event)"><input id="ai-edit-id" type="hidden"><label><span>Title</span><input id="ai-edit-title" required></label><label><span>Maintenance knowledge</span><textarea id="ai-edit-content" rows="9" required></textarea></label><label><span>Tags</span><input id="ai-edit-tags" placeholder="comma separated"></label><div class="ai-tag-color-field"><span>Tag color</span><div class="ai-tag-color-picker" data-target="ai-edit-tag-color">
 <input id="ai-edit-tag-color" type="hidden" value="blue">
 <button type="button" class="ai-color-swatch red" data-color="red" title="Red"></button><button type="button" class="ai-color-swatch orange" data-color="orange" title="Orange"></button><button type="button" class="ai-color-swatch yellow" data-color="yellow" title="Yellow"></button><button type="button" class="ai-color-swatch green" data-color="green" title="Green"></button><button type="button" class="ai-color-swatch blue selected" data-color="blue" title="Blue"></button><button type="button" class="ai-color-swatch purple" data-color="purple" title="Purple"></button><button type="button" class="ai-color-swatch teal" data-color="teal" title="Teal"></button><button type="button" class="ai-color-swatch gray" data-color="gray" title="Gray"></button>
 </div><small>Selected color applies to the tags in this entry.</small></div><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <div id="ai-preview-modal" class="ai-edit-modal ai-preview-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgePreview()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true"><header><div><span class="eyebrow">KNOWLEDGE PREVIEW</span><h3 id="ai-preview-title">Maintenance knowledge</h3><small id="ai-preview-meta"></small></div><button type="button" onclick="closeAIKnowledgePreview()"><i class="ph ph-x"></i></button></header><div id="ai-preview-content" class="ai-preview-content"></div></section></div>
 
-<script defer src="{{ url_for('static', filename='js/platform/sidebar-v6.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/api.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/state.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/custom-select.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/views.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/details.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/reports.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/analytics.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/layout.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/app.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/platform/mobile.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/platform/mobile-v5.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ai.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/notifications.js') }}"></script>
-{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js') }}"></script>{% endif %}
+<script defer src="/static/js/core/api.js"></script>
+<script defer src="/static/js/core/state.js"></script>
+<script defer src="/static/js/core/custom-select.js"></script>
+<script defer src="/static/js/features/views.js"></script>
+<script defer src="/static/js/features/details.js"></script>
+<script defer src="/static/js/features/reports.js"></script>
+<script defer src="/static/js/features/analytics.js"></script>
+<script defer src="/static/js/features/layout.js"></script>
+<script defer src="/static/js/core/app.js"></script>
+<script defer src="/static/js/platform/mobile.js"></script>
+<script defer src="/static/js/features/ai.js"></script>
+<script defer src="/static/js/features/notifications.js"></script>
+<script defer src="/static/js/features/developer.js"></script>
 <div id="ai-report-modal" class="ai-transcript-modal ai-report-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><header><div><span class="eyebrow">AI FEEDBACK</span><h3 id="ai-report-title">Report this answer</h3></div><button class="ai-report-close" type="button" onclick="closeAIReport()" aria-label="Close report" title="Close"><i class="ph ph-x"></i></button></header><p class="ai-report-intro">Tell us what looks wrong. Your report is saved as feedback and does not automatically teach the AI.</p><label><span>Reason</span><select id="ai-report-category"><option value="incorrect">Incorrect answer</option><option value="missing_context">Missing important context</option><option value="unclear">Unclear / confusing</option><option value="unsafe">Potentially unsafe guidance</option><option value="outdated">Possibly outdated</option><option value="other">Other</option></select></label><label><span>What should be reviewed?</span><textarea id="ai-report-reason" rows="5" maxlength="12000" placeholder="Example: The fault code points to a different circuit, and the manual says to test connector X first."></textarea></label><p id="ai-report-status" role="status"></p><footer><button type="button" class="ai-report-cancel" onclick="closeAIReport()">Cancel</button><button type="button" class="ai-primary-btn" onclick="submitAIReport()"><i class="ph ph-paper-plane-tilt"></i> Send report</button></footer></section></div>
 <div id="ai-transcript-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-transcript-title"><header><h3 id="ai-transcript-title">Driver explanation</h3><button type="button" onclick="document.getElementById('ai-transcript-modal').hidden=true" aria-label="Close transcript">Close</button></header><p>Check speech recognition, especially fault codes and model names. This explanation is driver-reported, not a confirmed diagnosis.</p><textarea id="ai-transcript-text" aria-label="Driver transcript" rows="10"></textarea><p id="ai-transcript-status" role="status"></p><footer><button type="button" onclick="saveAITranscript(true)">Retry transcription</button><button type="button" onclick="saveAITranscript(false)">Save correction</button></footer></section></div>
-<script defer src="{{ url_for('static', filename='js/features/ai-learning.js') }}"></script>
-<script defer src="{{ url_for('static', filename='js/kurtex-accessibility.js') }}"></script>
+<script defer src="/static/js/features/ai-learning.js"></script>
+<script defer src="/static/js/kurtex-accessibility.js"></script>
 </body>
 </html>

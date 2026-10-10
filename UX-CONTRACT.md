@@ -13,3 +13,6 @@ Preserve all existing role-based nav visibility, showPage handlers, group expans
 
 ## V4 mobile contract
 Do not remove or rename existing page identifiers, filter handlers, or Telegram/backend APIs. Mobile filter groups scroll horizontally without clipping actions. Sidebar remains scrollable and keyboard focus visible. Charts shrink in height on mobile and never force horizontal page scrolling. Reduced-motion settings are respected.
+
+## V5 workflow contract
+Mobile case filters retain setCaseFilter, loadCases and setCaseDateFilter. More-menu destinations are hidden when not allowed. The Alerts button uses the existing notification renderer. AI retains its existing chat and composer logic. No API or database migration is needed.

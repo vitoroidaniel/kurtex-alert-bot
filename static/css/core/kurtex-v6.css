@@ -1,0 +1,65 @@
+/* V6 structural corrections; intentionally last stylesheet */
+:root{--k6-side:236px;--k6-line:#e3e8ef;--k6-blue:#2563ad}
+@media(min-width:761px){
+.layout{display:flex!important;align-items:stretch!important;min-width:0!important;width:100%!important}
+.layout>.sidebar{width:var(--k6-side)!important;min-width:var(--k6-side)!important;max-width:var(--k6-side)!important;box-sizing:border-box!important;height:100dvh!important;position:sticky!important;top:0!important;padding:12px 10px!important;overflow:hidden!important;flex:0 0 var(--k6-side)!important;transition:width .18s ease,min-width .18s ease,flex-basis .18s ease!important}
+.layout>.main{flex:1 1 0!important;width:0!important;min-width:0!important;max-width:none!important;overflow-x:clip!important}
+.sidebar-logo{position:relative!important;min-height:54px!important;padding:6px 42px 12px 6px!important;margin:0 0 4px!important;flex:0 0 auto!important}
+.sidebar-logo img{width:36px!important;height:36px!important}
+.sidebar .v3-navigation{min-height:0!important;flex:1 1 auto!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:thin!important;padding:2px 2px 12px!important;overscroll-behavior:contain!important}
+.sidebar .nav-item,.sidebar .nav-group-header{min-height:37px!important;padding:7px 10px!important;font-size:12.5px!important;gap:10px!important;margin:1px 0!important}
+.sidebar .nav-item i,.sidebar .nav-group-header i{font-size:18px!important;flex:0 0 19px!important}
+.sidebar .v3-nav-label{font-size:10px!important;padding:12px 10px 5px!important}
+.sidebar-footer{flex:0 0 auto!important;padding:9px 3px 2px!important;margin-top:0!important}
+.sidebar .user-chip{padding:5px!important;min-height:42px!important}
+.sidebar .sidebar-account-actions{gap:5px!important}
+.k6-sidebar-toggle{position:absolute;right:1px;top:10px;width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--k6-line);background:#fff;border-radius:9px;color:#52677e;cursor:pointer;z-index:2}
+.k6-sidebar-toggle:hover{background:#eef3f8;color:var(--k6-blue)}
+.k6-sidebar-compact .layout>.sidebar{width:68px!important;min-width:68px!important;max-width:68px!important;flex-basis:68px!important}
+.k6-sidebar-compact .sidebar-logo{padding:4px 0 38px!important;justify-content:center!important}
+.k6-sidebar-compact .sidebar-logo img{width:34px!important;height:34px!important}
+.k6-sidebar-compact .k6-sidebar-toggle{top:42px;left:50%;right:auto;transform:translateX(-50%);width:29px;height:27px}
+.k6-sidebar-compact .sidebar .logo-text,.k6-sidebar-compact .sidebar .v3-nav-label,.k6-sidebar-compact .sidebar .nav-caret,.k6-sidebar-compact .sidebar .nav-badge,.k6-sidebar-compact .sidebar .user-chip>div:not(.user-avatar-init),.k6-sidebar-compact .sidebar .sidebar-account-actions button span,.k6-sidebar-compact .sidebar .sidebar-account-actions button .ph-caret-right{display:none!important}
+.k6-sidebar-compact .sidebar .nav-item,.k6-sidebar-compact .sidebar .nav-group-header{font-size:0!important;width:43px!important;height:42px!important;min-height:42px!important;overflow:hidden!important;justify-content:center!important;gap:0!important;padding:0!important;margin:2px auto!important}
+.k6-sidebar-compact .sidebar .nav-item i,.k6-sidebar-compact .sidebar .nav-group-header i{font-size:20px!important;flex:0 0 auto!important}
+.k6-sidebar-compact .sidebar .nav-group-items{margin:0!important;padding:0!important;border:0!important}
+.k6-sidebar-compact .sidebar .nav-group-header>span{display:flex!important;align-items:center!important;justify-content:center!important;font-size:0!important}
+.k6-sidebar-compact .sidebar .sidebar-account-actions{display:flex!important;flex-direction:column!important}
+.k6-sidebar-compact .sidebar .sidebar-account-actions button{width:42px!important;min-height:38px!important;padding:6px!important;justify-content:center!important}
+.k6-sidebar-compact .sidebar .user-chip{justify-content:center!important}
+}
+/* Replace oversize page banners with a compact shared page heading. */
+#page-cases .page-header,#page-agents .page-header,#page-cases .page-title-bar,#page-agents .page-title-bar,#page-cases .page-hero,#page-agents .page-hero{min-height:0!important;padding:16px 19px!important;margin-bottom:14px!important;border-radius:13px!important}
+#page-cases .page-header h1,#page-agents .page-header h1,#page-cases .page-title-bar h1,#page-agents .page-title-bar h1{font-size:22px!important;line-height:1.2!important}
+#page-cases .page-header p,#page-agents .page-header p{font-size:12px!important;margin-top:4px!important}
+/* All long-workspace cards must respect the available column width. */
+.main .page,.main .page>*,.main .page .card,.main .page section{min-width:0;max-width:100%;box-sizing:border-box}
+#page-parts_manual .parts-manual-header{display:flex!important;flex-wrap:wrap!important;gap:12px!important;align-items:center!important;padding:10px 0 14px!important}
+#page-parts_manual .parts-manual-header h2{font-size:22px!important;line-height:1.25!important}
+#page-parts_manual .parts-manual-header p{max-width:720px!important;white-space:normal!important}
+#page-ai_knowledge .ai-training-page{max-width:100%!important;min-width:0!important;overflow-x:clip!important}
+#page-ai_knowledge .ai-training-page :is(input,textarea,section,.card){max-width:100%!important;box-sizing:border-box!important}
+#page-kurtex_intelligence .card{height:auto!important}
+#page-kurtex_intelligence .intelligence-case-list{max-height:370px!important;overflow:auto!important}
+#page-leaderboard .leaderboard-chart-wrap{min-height:200px!important;max-height:300px!important}
+@media(max-width:760px){
+.k6-sidebar-toggle{display:none!important}
+.layout{display:block!important;width:100%!important;min-width:0!important}
+.layout>.main{width:100%!important;min-width:0!important;max-width:100%!important;overflow-x:clip!important}
+.layout>.sidebar{width:min(310px,86vw)!important;max-width:min(310px,86vw)!important;height:100dvh!important;overflow:hidden!important;padding:12px 10px!important;display:flex!important;flex-direction:column!important}
+.sidebar-logo{flex:0 0 auto!important;padding:9px 9px 15px!important}
+.sidebar .v3-navigation{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;overscroll-behavior:contain!important;padding-bottom:14px!important}
+.sidebar-footer{flex:0 0 auto!important;padding:9px 5px max(10px,env(safe-area-inset-bottom))!important}
+#page-cases .page-header,#page-agents .page-header,#page-cases .page-title-bar,#page-agents .page-title-bar{padding:13px!important;border-radius:12px!important;gap:10px!important}
+#page-cases .page-header h1,#page-agents .page-header h1{font-size:19px!important}
+#page-parts_manual .parts-manual-header{padding:8px 0 12px!important}
+#page-parts_manual .parts-manual-header h2{font-size:20px!important}
+#page-parts_manual :is(.parts-layout,.parts-workspace,.parts-manual-layout){display:flex!important;flex-direction:column!important;min-width:0!important;max-width:100%!important}
+#page-parts_manual :is(.parts-sidebar,.parts-list,.parts-catalog){max-height:220px!important;overflow-y:auto!important;max-width:100%!important;width:100%!important}
+#page-parts_manual img{max-width:100%!important;height:auto}
+#page-ai_assistant .ai-page-layout{height:calc(100dvh - 125px)!important;min-height:390px!important}
+#page-ai_knowledge .ai-training-page{padding:0!important}
+#page-ai_knowledge .ai-training-page :is(h1,h2){overflow-wrap:anywhere!important}
+#page-leaderboard .leaderboard-chart-wrap{height:210px!important;min-height:180px!important}
+}
+@media(prefers-reduced-motion:reduce){.layout>.sidebar{transition:none!important}}
