@@ -83,14 +83,14 @@ function renderReportContent() {
   html +=
     '<div style="text-align:center;border-bottom:3px double var(--accent);padding-bottom:16px;margin-bottom:22px">' +
     '<div style="font-size:25px;font-weight:900;letter-spacing:.06em;color:var(--text)">KURTEX MAINTENANCE</div>' +
-    '<div style="font-size:13px;font-weight:600;letter-spacing:.1em;color:var(--accent);text-transform:uppercase;margin-top:3px">Official Fleet Operations Report</div>' +
+    '<div style="font-size:12px;font-weight:600;letter-spacing:.1em;color:var(--accent);text-transform:uppercase;margin-top:3px">Official Fleet Operations Report</div>' +
     '<div style="display:flex;justify-content:center;gap:28px;margin-top:16px;flex-wrap:wrap">' +
-    '<div><div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Report Period</div><div style="font-size:14px;font-weight:700">' +
+    '<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Report Period</div><div style="font-size:14px;font-weight:700">' +
     h(d.label) +
     "</div></div>" +
-    '<div><div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Generated</div><div style="font-size:14px;font-weight:700">' +
+    '<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Generated</div><div style="font-size:14px;font-weight:700">' +
     dateStr +
-    '</div><div style="font-size:12.5px;color:var(--muted)">' +
+    '</div><div style="font-size:11px;color:var(--muted)">' +
     timeStr +
     "</div></div>" +
     "</div></div>";
@@ -102,24 +102,24 @@ function renderReportContent() {
       '<div style="font-size:28px;font-weight:800;color:var(--accent)">' +
       d.total +
       "</div>" +
-      '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Cases</div>' +
+      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Total Cases</div>' +
       "</div>" +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
       '<div style="font-size:28px;font-weight:800;color:var(--green)">' +
       d.done +
       "</div>" +
-      '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Resolved</div>' +
+      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Resolved</div>' +
       "</div>" +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">' +
       '<div style="font-size:28px;font-weight:800;color:var(--red)">' +
       (d.open || 0) +
       "</div>" +
-      '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Open Cases</div>' +
+      '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:3px">Open Cases</div>' +
       "</div>" +
       "</div>" +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px">' +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">' +
-      '<span style="font-size:13px;color:var(--muted);font-weight:500">Resolution Rate</span>' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:500">Resolution Rate</span>' +
       '<span style="font-size:18px;font-weight:800;color:' +
       (resRate >= 80
         ? "var(--green)"
@@ -131,7 +131,7 @@ function renderReportContent() {
       "%</span>" +
       "</div>" +
       '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between">' +
-      '<span style="font-size:13px;color:var(--muted);font-weight:500">Cases Assigned / Worked</span>' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:500">Cases Assigned / Worked</span>' +
       '<span style="font-size:18px;font-weight:800;color:var(--text)">' +
       (d.assigned || 0) +
       "</span>" +
@@ -142,12 +142,12 @@ function renderReportContent() {
   if (reportSectionEnabled("agents") && d.leaderboard.length) {
     html +=
       '<div style="margin-bottom:20px">' +
-      '<div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Agent Performance</div>' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Agent Performance</div>' +
       '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
       "<thead><tr>" +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">#</th>' +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Agent</th>' +
-      '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Cases</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">#</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Agent</th>' +
+      '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Cases</th>' +
       "</tr></thead><tbody>" +
       d.leaderboard
         .map(function (a, i) {
@@ -173,21 +173,21 @@ function renderReportContent() {
   if (reportSectionEnabled("groups") && d.top_groups.length) {
     html +=
       '<div style="margin-bottom:20px">' +
-      '<div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Most Active Groups</div>' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Most Active Groups</div>' +
       d.top_groups
         .map(function (g, i) {
           var maxCount = d.top_groups[0].count;
           var pct = Math.round((g.count / maxCount) * 100);
           return (
             '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--border)">' +
-            '<span style="font-size:13px;font-weight:500;width:180px;flex-shrink:0">' +
+            '<span style="font-size:12px;font-weight:500;width:180px;flex-shrink:0">' +
             h(g.name) +
             "</span>" +
             '<div style="flex:1;height:5px;background:var(--surface3);border-radius:3px">' +
             '<div style="height:100%;border-radius:3px;background:var(--accent);width:' +
             pct +
             '%"></div></div>' +
-            '<span style="font-size:13px;font-weight:700;color:var(--accent);width:30px;text-align:right">' +
+            '<span style="font-size:12px;font-weight:700;color:var(--accent);width:30px;text-align:right">' +
             h(g.count) +
             "</span>" +
             "</div>"
@@ -204,7 +204,7 @@ function renderReportContent() {
         if (!vd || !vd.total) return "";
         return (
           '<div style="margin-bottom:14px">' +
-          '<div style="font-size:13px;font-weight:700;margin-bottom:6px">' +
+          '<div style="font-size:12px;font-weight:700;margin-bottom:6px">' +
           vtypeIcons[vt] +
           " " +
           vtypeLabels[vt] +
@@ -215,7 +215,7 @@ function renderReportContent() {
             ? vd.top_issues
                 .map(function (x) {
                   return (
-                    '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0 4px 20px;border-top:1px solid var(--border);font-size:13px">' +
+                    '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0 4px 20px;border-top:1px solid var(--border);font-size:12px">' +
                     "<span>" +
                     h(x.issue) +
                     '</span><span style="font-weight:700;color:var(--accent);flex-shrink:0">' +
@@ -224,28 +224,28 @@ function renderReportContent() {
                   );
                 })
                 .join("")
-            : '<div style="padding-left:20px;color:var(--muted);font-size:13px">No issues logged</div>') +
+            : '<div style="padding-left:20px;color:var(--muted);font-size:12px">No issues logged</div>') +
           "</div>"
         );
       })
       .join("");
     html +=
       '<div style="margin-bottom:20px">' +
-      '<div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Top Issues by Vehicle Type</div>' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Top Issues by Vehicle Type</div>' +
       (vtypeBlocks ||
-        '<div style="color:var(--muted);font-size:13px">No vehicle-type data for this period</div>') +
+        '<div style="color:var(--muted);font-size:12px">No vehicle-type data for this period</div>') +
       "</div>";
   }
 
   if (reportSectionEnabled("units") && d.top_units && d.top_units.length) {
     html +=
       '<div style="margin-bottom:20px">' +
-      '<div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Top Problem Units</div>' +
-      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Top Problem Units</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
       "<thead><tr>" +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Unit</th>' +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Type</th>' +
-      '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Reports</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Unit</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Type</th>' +
+      '<th style="text-align:right;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Reports</th>' +
       "</tr></thead><tbody>" +
       d.top_units
         .map(function (u) {
@@ -270,14 +270,14 @@ function renderReportContent() {
   if (reportSectionEnabled("missed") && d.missed_cases.length) {
     html +=
       '<div style="margin-bottom:8px">' +
-      '<div style="font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts (' +
+      '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">Unresolved Alerts (' +
       d.missed +
       ")</div>" +
-      '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
       "<thead><tr>" +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Driver</th>' +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Group</th>' +
-      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase">Time</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Driver</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Group</th>' +
+      '<th style="text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase">Time</th>' +
       "</tr></thead><tbody>" +
       d.missed_cases
         .map(function (c) {
@@ -289,7 +289,7 @@ function renderReportContent() {
             '<td style="padding:7px 8px;color:var(--muted)">' +
             h(c.group) +
             "</td>" +
-            '<td style="padding:7px 8px;color:var(--muted);font-size:12.5px">' +
+            '<td style="padding:7px 8px;color:var(--muted);font-size:11px">' +
             h(c.opened) +
             "</td>" +
             "</tr>"
@@ -300,7 +300,7 @@ function renderReportContent() {
   }
 
   html +=
-    '<div style="margin-top:24px;padding-top:12px;border-top:1px solid var(--border);text-align:center;font-size:12px;color:var(--muted)">This is an official Kurtex Maintenance report, generated automatically from live fleet data.</div>';
+    '<div style="margin-top:24px;padding-top:12px;border-top:1px solid var(--border);text-align:center;font-size:10px;color:var(--muted)">This is an official Kurtex Maintenance report, generated automatically from live fleet data.</div>';
 
   document.getElementById("report-content").innerHTML = html;
 }

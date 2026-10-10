@@ -164,10 +164,10 @@ async function loadAgentProfileData(resetHeader) {
       tab("all") +
       "</div>" +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">' +
-      '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases — ' +
+      '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Cases — ' +
       periodLabels[s.period] +
       "</div>" +
-      '<div style="font-size:12.5px;color:var(--muted)">' +
+      '<div style="font-size:11px;color:var(--muted)">' +
       ps.total +
       " total &middot; " +
       ps.done +
@@ -214,7 +214,7 @@ async function openUnitModal(unitNumber, vtype) {
     }
     var d = await r.json();
     var vtypeLabel = d.vtype
-      ? ' <span style="font-size:12.5px;color:var(--muted);text-transform:uppercase;background:var(--surface2);padding:2px 7px;border-radius:5px">' +
+      ? ' <span style="font-size:11px;color:var(--muted);text-transform:uppercase;background:var(--surface2);padding:2px 7px;border-radius:5px">' +
         h(d.vtype) +
         "</span>"
       : "";
@@ -222,15 +222,15 @@ async function openUnitModal(unitNumber, vtype) {
     var issuesHtml = "";
     if (d.top_issues && d.top_issues.length) {
       issuesHtml =
-        '<div style="margin-bottom:16px"><div style="font-size:12.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.05em">Top Issues</div>' +
+        '<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.05em">Top Issues</div>' +
         d.top_issues
           .map(function (x) {
             return (
-              '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">' +
+              '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">' +
               '<span style="flex:1">' +
               h(x.issue || "—") +
               "</span>" +
-              '<span style="font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px;font-size:12.5px">' +
+              '<span style="font-weight:700;color:var(--accent);background:var(--accent-bg);padding:1px 8px;border-radius:20px;font-size:11px">' +
               h(x.count) +
               "x</span>" +
               "</div>"
@@ -257,7 +257,7 @@ async function openUnitModal(unitNumber, vtype) {
     var rows = "";
     if (d.cases && d.cases.length) {
       rows =
-        '<div style="font-size:12.5px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.05em">Recent cases (up to 50)</div>' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.05em">Recent cases (up to 50)</div>' +
         '<div class="table-wrap"><div class="table-scroll">' +
         "<table><thead><tr><th>Reported By</th><th>Status</th><th>Opened</th><th>Response</th><th>Description</th></tr></thead><tbody>" +
         d.cases
@@ -273,10 +273,10 @@ async function openUnitModal(unitNumber, vtype) {
               "<td>" +
               statusBadge(c.status) +
               "</td>" +
-              '<td style="font-size:12.5px;color:var(--muted)">' +
+              '<td style="font-size:11px;color:var(--muted)">' +
               h(c.opened || "—") +
               "</td>" +
-              '<td style="font-size:12.5px">' +
+              '<td style="font-size:11px">' +
               h(c.response || "—") +
               "</td>" +
               '<td class="desc-cell">' +
