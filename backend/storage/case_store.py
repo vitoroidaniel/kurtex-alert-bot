@@ -283,6 +283,16 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             elif payload["action"] == "note":
                 case.setdefault("workspace_notes", []).append({"text": payload["text"],
                     "author": actor["name"], "created_at": now})
+            elif payload["action"] in ("note_edit", "note_delete"):
+                notes = case.setdefault("workspace_notes", [])
+                index = payload["index"]
+                if index < 0 or index >= len(notes):
+                    raise ValueError("Note no longer exists. Refresh the case.")
+                if payload["action"] == "note_edit":
+                    notes[index]["text"] = payload["text"]
+                    notes[index]["edited_at"] = now
+                else:
+                    notes.pop(index)
             elif payload["action"] == "edit":
                 case.update(payload["fields"])
             case["updated_at"] = now
@@ -461,3 +471,41 @@ async def async_set_report_msg_id(case_id, msg_id):
 async def ensure_indexes():
     """No-op — kept so bot.py import doesn't break."""
     pass
+
+
+def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None):
+    """Persist attachment metadata with case authorization and a storage lock."""
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE, strict=True)
+        case = next((c for c in cases if c.get("id") == case_id and is_maintenance_report(c)), None)
+        if not case:
+            raise LookupError("Case not found.")
+        if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
+            raise PermissionError("You cannot manage this case.")
+        if not remove_id and (case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at")):
+            raise ValueError("Cannot upload to a closed case.")
+        items = case.setdefault("workspace_attachments", [])
+        removed = None
+        if remove_id:
+            removed = next((x for x in items if x.get("id") == remove_id), None)
+            if not removed:
+                raise LookupError("Attachment not found.")
+            items.remove(removed)
+        else:
+            items.append(attachment)
+        case["updated_at"] = now_iso()
+        case.setdefault("workspace_history", []).append({"action": "attachment_removed" if remove_id else "attachment_added", "author": actor["name"], "created_at": now_iso()})
+        _save(CASES_FILE, cases, strict=True)
+        return removed
+
+
+def workspace_attachment_lookup(case_id, attachment_id):
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE, strict=True)
+        case = next((c for c in cases if c.get("id") == case_id and is_maintenance_report(c)), None)
+        if not case:
+            raise LookupError("Case not found.")
+        item = next((x for x in case.get("workspace_attachments", []) if x.get("id") == attachment_id), None)
+        if not item:
+            raise LookupError("Attachment not found.")
+        return dict(case), dict(item)

@@ -204,7 +204,7 @@ def serialize_case(c):
             "priority": c.get("priority") or "normal",
             "location": c.get("location") or "",
             "notes_count": int(bool(c.get("comments") or (c.get("notes") and c.get("notes") != "case reported"))) + len(c.get("workspace_notes") or []),
-            "attachment_count": len(c.get("media") or []),
+            "attachment_count": len(c.get("media") or []) + len(c.get("workspace_attachments") or []),
             "status":      c.get("status") or "open",
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
@@ -1954,11 +1954,17 @@ def api_workspace_write(case_id=None):
             payload.update({"id": str(uuid.uuid4()), "vehicle_type": data["vehicle_type"], "priority": data["priority"]})
         else:
             action = data.get("action")
-            if action not in ("close", "edit", "note"):
+            if action not in ("close", "edit", "note", "note_edit", "note_delete"):
                 raise ValueError("Choose a valid report action.")
             payload = {"action": action, "revision": text("revision", True, 64)}
-            if action == "note":
-                payload["text"] = text("text", True, 4000)
+            if action in ("note", "note_edit", "note_delete"):
+                if action != "note_delete":
+                    payload["text"] = text("text", True, 4000)
+                if action != "note":
+                    index = data.get("index")
+                    if type(index) is not int or index < 0:
+                        raise ValueError("Choose a valid note.")
+                    payload["index"] = index
             elif action == "edit":
                 fields = data.get("fields")
                 if not isinstance(fields, dict) or not fields or set(fields) - {"priority", "location", "description", "issue_text"}:
@@ -1983,6 +1989,72 @@ def api_workspace_write(case_id=None):
         logger.exception("Workspace report write failed")
         return jsonify({"error": "The report could not be saved. Retry with your entered values."}), 503
 
+
+
+@app.route("/api/workspace/cases/<case_id>/attachments", methods=["POST"])
+def api_workspace_attachment_upload(case_id):
+    actor, error = _workspace_actor()
+    if error: return error
+    from werkzeug.utils import secure_filename
+    from backend.storage.case_store import workspace_attachment_write
+    file = request.files.get("file")
+    if not file or not file.filename: return jsonify({"error":"Select a file."}), 400
+    name = secure_filename(file.filename)[:160]
+    extension = Path(name).suffix.lower()
+    allowed = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".mp4", ".mov"}
+    if extension not in allowed: return jsonify({"error":"Unsupported file type."}), 400
+    content = file.stream.read(15*1024*1024+1)
+    if len(content)>15*1024*1024: return jsonify({"error":"File exceeds 15 MB."}), 413
+    attachment_id = uuid.uuid4().hex
+    folder = DATA_DIR / "workspace_uploads" / case_id
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / (attachment_id + extension)
+    try:
+        path.write_bytes(content)
+        workspace_attachment_write(actor,case_id,attachment={"id":attachment_id,"name":name,"size":len(content),"extension":extension})
+        return jsonify({"ok":True,"id":attachment_id})
+    except (LookupError,PermissionError,ValueError) as exc:
+        path.unlink(missing_ok=True)
+        return jsonify({"error":str(exc)}), 403
+    except Exception:
+        path.unlink(missing_ok=True)
+        logger.exception("Attachment upload failed")
+        return jsonify({"error":"Unable to save attachment."}), 503
+
+@app.route("/api/workspace/cases/<case_id>/attachments/<attachment_id>", methods=["GET", "DELETE"])
+def api_workspace_attachment_file(case_id,attachment_id):
+    if request.method=="DELETE":
+        actor,error=_workspace_actor()
+        if error:return error
+    else:
+        actor,error=_workspace_actor_read()
+        if error:return error
+    from backend.storage.case_store import workspace_attachment_lookup, workspace_attachment_write
+    try:
+        case,item=workspace_attachment_lookup(case_id,attachment_id)
+        if actor["role"] not in ("developer","super_admin") and str(case.get("agent_id"))!=str(actor["id"]):
+            return jsonify({"error":"Access denied."}),403
+        path=DATA_DIR/"workspace_uploads"/case_id/(attachment_id+item["extension"])
+        if request.method=="DELETE":
+            workspace_attachment_write(actor,case_id,remove_id=attachment_id)
+            path.unlink(missing_ok=True)
+            return jsonify({"ok":True})
+        if not path.is_file():return jsonify({"error":"File unavailable."}),404
+        return send_file(path,as_attachment=True,download_name=item["name"],mimetype="application/octet-stream")
+    except (LookupError,PermissionError,ValueError) as exc:
+        return jsonify({"error":str(exc)}),404
+
+def _workspace_actor_read():
+    # Reads do not require a CSRF header; membership and case permissions still apply.
+    from backend.storage.user_store import get_user
+    user=session.get("user")
+    if not user:return None,(jsonify({"error":"Sign in required."}),401)
+    stored=get_user(user["id"])
+    if not stored:return None,(jsonify({"error":"Access denied."}),403)
+    role=_website_role(stored.get("role"))
+    if "cases" not in _load_role_permissions().get(role,[]):
+        return None,(jsonify({"error":"Access denied."}),403)
+    return {**stored,"id":user["id"],"role":role},None
 
 @app.route("/api/cases")
 def api_cases():
@@ -2106,6 +2178,7 @@ def api_case_detail():
                     "attachments": [{"name": m.get("name") or m.get("file_name") or "Attachment", "type": m.get("type") or ""} for m in (c.get("media") or []) if isinstance(m,dict)],
                     "updated": fmt_dt(c.get("updated_at") or c.get("closed_at") or c.get("reported_at") or c.get("assigned_at") or c.get("opened_at")),
                     "workspace_notes": c.get("workspace_notes") or [],
+                    "workspace_attachments": c.get("workspace_attachments") or [],
                     "workspace_history": c.get("workspace_history") or [],
                     "can_manage": _workspace_can_manage(c, session["user"]),
                 })

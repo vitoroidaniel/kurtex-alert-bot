@@ -14,7 +14,7 @@ function kxUpdateHome(data){
  }
 }
 function kxRenderCharts(){
- if(!window.Chart||!homeState.data||!document.getElementById('kx-cases-trend'))return;
+ if(!homeState.data||!document.getElementById('kx-cases-trend'))return; if(!window.Chart){document.querySelector('.kx-chart-wrap').innerHTML='<p class="kx-chart-error">Chart library unavailable. Refresh to retry.</p>';return;}
  var data=homeState.data,events=data.activity||[],cases=data.recent_cases||[],now=new Date(),n=Number(document.getElementById('kx-trend-range')?.value||7),labels=[],newCounts=[],doneCounts=[];
  for(var i=n-1;i>=0;i--){var d=new Date(now);d.setDate(d.getDate()-i);var day=d.toLocaleDateString('en-CA',{timeZone:'America/Chicago'});labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));newCounts.push(events.filter(function(e){return e.kind==='reported'&&String(e.at||'').slice(0,10)===day}).length);doneCounts.push(events.filter(function(e){return e.kind==='resolved'&&String(e.at||'').slice(0,10)===day}).length)}
  if(kxCharts.trend)kxCharts.trend.destroy();
