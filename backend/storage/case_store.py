@@ -33,7 +33,7 @@ _READ_CACHE = {}
 
 # ── Atomic write helpers ──────────────────────────────────────────────────────
 
-def _load(path: Path) -> list[dict]:
+def _load(path: Path, *, strict: bool = False) -> list[dict]:
     with _FILE_LOCK:
         if not path.exists():
             return []
@@ -49,10 +49,12 @@ def _load(path: Path) -> list[dict]:
             return [dict(row) for row in cached[1]] if cached[2] else copy.deepcopy(cached[1])
         except Exception as e:
             logger.error(f"Failed to load {path.name}: {e}")
+            if strict:
+                raise
             return []
 
 
-def _save(path: Path, data: list[dict] | dict) -> None:
+def _save(path: Path, data: list[dict] | dict, *, strict: bool = False) -> None:
     """Durable atomic write protected against overlapping handler callbacks."""
     with _FILE_LOCK:
         tmp = path.with_name(
@@ -68,6 +70,8 @@ def _save(path: Path, data: list[dict] | dict) -> None:
             _READ_CACHE.pop(path,None)
         except Exception as e:
             logger.error(f"Failed to save {path.name}: {e}")
+            if strict:
+                raise
         finally:
             try:
                 tmp.unlink(missing_ok=True)
@@ -162,10 +166,51 @@ def report_case(case_id: str, notes: Optional[str] = "case reported") -> Optiona
         cases = _load(CASES_FILE)
         for case in cases:
             if case["id"] == case_id:
+                if case.get("status") == "done" or case.get("closed_at"):
+                    return case
                 case.update({"status": "reported", "notes": notes})
+                case["reported_at"] = case["updated_at"] = now_iso()
                 _save(CASES_FILE, cases)
                 return case
     return None
+
+
+def save_maintenance_report(case_id: str, data: dict, report_text: str, media: list) -> Optional[dict]:
+    """Persist report fields atomically without reopening a concurrently closed case."""
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE, strict=True)
+        if not isinstance(cases, list):
+            raise ValueError("Case storage is unavailable.")
+        for case in cases:
+            if case.get("id") != case_id:
+                continue
+            for field in ("vehicle_type", "unit_number", "load_type", "location", "priority", "pickup",
+                          "delivery", "comments", "setpoint", "current_temp", "temp_recorder"):
+                case[field] = data.get("load" if field == "load_type" else field, "")
+            case.update({"report_driver": data.get("driver", ""), "issue_text": data.get("issue", ""),
+                         "report_text": report_text, "report_data": dict(data), "media": media,
+                         "reported_at": now_iso(), "updated_at": now_iso()})
+            if case.get("status") != "done" and not case.get("closed_at"):
+                case["status"] = "reported"
+                if not case.get("notes"):
+                    case["notes"] = "case reported"
+            _save(CASES_FILE, cases, strict=True)
+            return dict(case)
+    return None
+
+
+def _close_record(case: dict, notes: Optional[str] = None) -> dict:
+    """Shared Telegram/dashboard close transition. Repeated closes preserve history."""
+    if case.get("status") == "done":
+        return case
+    closed_at = now_iso()
+    assigned = parse_timestamp(case.get("assigned_at"))
+    closed = parse_timestamp(closed_at)
+    case.update({"closed_at": closed_at, "updated_at": closed_at, "status": "done",
+                 "resolution_secs": max(0, int((closed - assigned).total_seconds())) if assigned and closed else None})
+    if notes is not None:
+        case["notes"] = notes
+    return case
 
 
 def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
@@ -174,24 +219,77 @@ def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
         for case in cases:
             if case["id"] != case_id:
                 continue
-            closed_at       = now_iso()
-            resolution_secs = None
-            if case.get("assigned_at"):
-                closed_at_dt = parse_timestamp(closed_at)
-                assigned_at_dt = parse_timestamp(case.get("assigned_at"))
-                resolution_secs = int(
-                    (closed_at_dt - assigned_at_dt).total_seconds()
-                ) if closed_at_dt and assigned_at_dt else None
-            case.update({
-                "closed_at":       closed_at,
-                "status":          "done",
-                "notes":           notes,
-                "resolution_secs": resolution_secs,
-            })
+            _close_record(case, notes)
             _save(CASES_FILE, cases)
             logger.info(f"Case {case_id} closed")
             return case
     return None
+
+
+def is_maintenance_report(case: dict) -> bool:
+    return bool(case.get("status") == "reported" or case.get("report_data") or
+                (case.get("unit_number") and case.get("issue_text")))
+
+
+def workspace_revision(case: dict) -> str:
+    import hashlib
+    from backend.core.dashboard_data import normalize
+    return hashlib.sha256(json.dumps(normalize(case), sort_keys=True, default=str).encode()).hexdigest()
+
+
+def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -> dict:
+    """Authorized report writes under the same lock as Telegram handlers.
+
+    Reads and writes fail closed; stale edits never overwrite a newer bot update.
+    """
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE, strict=True)
+        if not isinstance(cases, list) or any(not isinstance(c, dict) for c in cases):
+            raise ValueError("Case storage is unavailable.")
+        now = now_iso()
+        if case_id is None:
+            for existing in cases:
+                if (existing.get("workspace_request_id") == payload["request_id"] and
+                        str(existing.get("created_by_id")) == str(actor["id"])):
+                    return existing
+            case = {"id": payload["id"], "driver_name": payload["driver"], "driver_username": "",
+                    "group_name": payload.get("group", ""), "description": payload["issue"],
+                    "opened_at": now, "reported_at": now, "updated_at": now, "assigned_at": now,
+                    "closed_at": None, "agent_id": actor["id"], "agent_name": actor["name"],
+                    "agent_username": actor.get("username", ""), "status": "reported",
+                    "vehicle_type": payload["vehicle_type"], "unit_number": payload["unit_number"],
+                    "report_driver": payload["driver"], "issue_text": payload["issue"],
+                    "location": payload.get("location", ""), "priority": payload["priority"],
+                    "comments": payload.get("comments", ""), "notes": None, "media": [],
+                    "source": "workspace", "created_by_id": actor["id"],
+                    "workspace_request_id": payload["request_id"], "report_data": dict(payload)}
+            cases.append(case)
+        else:
+            case = next((c for c in cases if c.get("id") == case_id), None)
+            if not case or not is_maintenance_report(case):
+                raise LookupError("Maintenance report not found.")
+            if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
+                raise PermissionError("Only the assigned agent or a manager can update this report.")
+            # Close is idempotent, including a retry after a lost response.
+            if payload["action"] == "close" and case.get("status") == "done":
+                return case
+            if payload.get("revision") != workspace_revision(case):
+                raise ValueError("This report changed. Refresh its details before saving again.")
+            if case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at"):
+                raise ValueError("This report is already closed.")
+            if payload["action"] == "close":
+                _close_record(case)
+                case.update({"closed_by_id": actor["id"], "closed_by_name": actor["name"]})
+            elif payload["action"] == "note":
+                case.setdefault("workspace_notes", []).append({"text": payload["text"],
+                    "author": actor["name"], "created_at": now})
+            elif payload["action"] == "edit":
+                case.update(payload["fields"])
+            case["updated_at"] = now
+            case.setdefault("workspace_history", []).append({"action": payload["action"],
+                "author": actor["name"], "created_at": now})
+        _save(CASES_FILE, cases, strict=True)
+        return dict(case)
 
 
 def mark_missed(case_id: str) -> None:

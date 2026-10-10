@@ -1,9 +1,19 @@
 # Kurtex Alert Bot - dashboard update
 
 This package continues from `kurtex-alert-bot-dashboard-refactor.zip`. Telegram
-commands, assignments, report submission, scheduled reports, configuration, and
-the bot's case/user stores are unchanged. The dashboard is read-only: alerts and
-case actions remain in Telegram. No AI case persistence was added.
+commands, assignments, scheduled reports and configuration continue to use the
+existing bot. Case Workspace now manages reported maintenance cases in the same
+case store: create a report, edit its description/location/priority, add notes,
+or confirm Close case. Workspace shows active reports only; closing marks Done
+and preserves the record in the separate Cases history. Workspace writes do not
+send Telegram messages. Bot report saves and dashboard writes share the store
+lock, and a report arriving during closure cannot reopen the case.
+
+Agents can update reports assigned to them; developers and super admins can
+update all reports. Writes recheck account membership and Cases permission,
+require a session CSRF token, and reject stale edits. Failed saves retain the
+form. This update was source-reviewed only; no local tests or app startup were
+run, as requested.
 
 ## Dashboard structure
 

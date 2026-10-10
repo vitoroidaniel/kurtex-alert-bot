@@ -490,7 +490,7 @@ function buildTimeline(c) {
   var steps = [
     { label: "Open", time: c.opened || "" },
     { label: "Assigned", time: c.assigned_at || "" },
-    { label: "Reported", time: "" },
+    { label: "Reported", time: c.reported || "" },
     { label: "Resolved", time: c.closed || "" },
   ];
   var order = ["open", "assigned", "reported", "done"];

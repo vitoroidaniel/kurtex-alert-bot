@@ -37,6 +37,7 @@ async function apiFetch(url, key, options) {
   }
   options = options || {};
   key = key || url.split("?")[0];
+  var problemKey = key;
   var mutation = !["GET","HEAD"].includes((options.method || "GET").toUpperCase());
   if (mutation) key += ":write:" + (++apiMutationId);
   if (activeRequests.has(key)) activeRequests.get(key).abort();
@@ -67,11 +68,11 @@ async function apiFetch(url, key, options) {
       );
     if (response.headers.get("X-Case-Data-Stale") === "true") {
       requestProblems.set(
-        key,
+        problemKey,
         "Case storage is unavailable. Showing the last valid snapshot; it may be out of date.",
       );
     } else {
-      requestProblems.delete(key);
+      requestProblems.delete(problemKey);
       lastSuccessfulRead = new Date();
     }
     connectionState();
@@ -89,7 +90,7 @@ async function apiFetch(url, key, options) {
       : e instanceof TypeError
         ? "Connection lost. Check your connection and retry."
         : e.message;
-    requestProblems.set(key, message);
+    requestProblems.set(problemKey, message);
     connectionState();
     throw new Error(message);
   } finally {

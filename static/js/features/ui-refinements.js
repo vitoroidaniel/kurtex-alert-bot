@@ -1,12 +1,17 @@
-﻿/* Shared shell and filter affordances. Filter queries remain in memory. */
+/* Shared shell and filter affordances. Filter queries remain in memory. */
 var uiCaseTotal=null;
 function uiSyncSelect(id){const el=document.getElementById(id);if(el&&typeof syncKurtexSelect==='function')syncKurtexSelect(el);}
 function uiUpdateShell(page){
  document.title=(titles[page]||'Kurtex')+' · Kurtex';
- const copy={cases:'Browse, search and filter your case history.',case_workspace:'Organize fleet cases and inspect details without leaving the board.',agents:'Choose a team member to review performance and case activity.',leaderboard:'Compare agent activity and see where cases stand.'};
- if(copy[page])document.getElementById('page-description').textContent=copy[page];
+ const exports=['overview','cases','missed','fleet','case_workspace'];
+ document.querySelectorAll('.topbar-print-action,.topbar-export-action').forEach(b=>b.hidden=!exports.includes(page));
+ document.getElementById('refresh-button').hidden=['agents','ai_assistant','ai_knowledge','users','developer'].includes(page);
+ document.querySelector('.topbar-report-action').hidden=page==='agents';
+ if(page==='agents')document.getElementById('page-title').textContent='Agents';
  document.querySelectorAll('.nav-item[data-page],[data-mobile-page]').forEach(el=>{if(el.dataset.page===page||el.dataset.mobilePage===page)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
 }
+function uiPrintCurrentPage(){if(currentPage==='case_workspace')cwPrint();else window.print();}
+function uiExportCurrentPage(){if(currentPage==='case_workspace')cwExport();else window.location.assign('/api/export');}
 function uiCaseSearch(){const el=document.getElementById('cases-search');document.getElementById('cases-search-clear').hidden=!el.value;uiRenderCaseFilters(null);onSearch('cases');}
 function uiClearCaseSearch(){document.getElementById('cases-search').value='';document.getElementById('cases-search-clear').hidden=true;clearTimeout(searchTimers.cases);loadCases();document.getElementById('cases-search').focus();}
 function uiRenderCaseFilters(total){
@@ -23,12 +28,13 @@ function uiResetCaseFilters(){
  document.querySelectorAll('#page-cases .filter-tabs .tab-btn').forEach(b=>{const active=b.textContent.trim()==='All';b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});uiRenderCaseFilters(null);loadCases();
 }
 function cwClearSearch(){document.getElementById('cw-search').value='';cwRender();document.getElementById('cw-search').focus();}
-function cwClearFilters(){document.getElementById('cw-search').value='';document.getElementById('cw-status').value='';uiSyncSelect('cw-status');cwRender();}
+function cwClearFilters(){document.getElementById('cw-search').value='';['cw-status','cw-priority-filter','cw-equipment-filter','cw-sort'].forEach(id=>{document.getElementById(id).value=id==='cw-sort'?'newest':'';uiSyncSelect(id);});cwRender();}
 function uiWorkspaceFilters(rows){
  const root=document.getElementById('cw-filter-summary');if(!root)return;
- const q=document.getElementById('cw-search').value.trim(),status=document.getElementById('cw-status').value;
- const chips=[];if(status)chips.push(status==='done'?'Resolved':status);if(q)chips.push('Search: '+q);
- root.innerHTML='<div class="ui-filter-chips">'+(chips.length?chips.map(x=>'<span class="ui-filter-chip">'+h(x)+'</span>').join(''):'<span class="ui-filter-neutral">All statuses</span>')+'</div><span class="ui-result-count">'+rows.length+' matches in '+cwState.rows.length+' loaded cases</span>'+(chips.length?'<button type="button" class="ui-clear-filters" onclick="cwClearFilters()">Clear filters</button>':'');
+ const q=document.getElementById('cw-search').value.trim(),status=document.getElementById('cw-status').value,priority=document.getElementById('cw-priority-filter').value,equipment=document.getElementById('cw-equipment-filter').value,sort=document.getElementById('cw-sort').value;
+ const chips=[];if(status)chips.push(cwLabel(status));if(priority)chips.push(cwLabel(priority)+' priority');if(equipment)chips.push(cwLabel(equipment));if(q)chips.push('Search: '+q);if(sort!=='newest')chips.push(sort==='oldest'?'Oldest first':'Highest priority');
+ root.innerHTML='<div class="ui-filter-chips"><span class="ui-filter-neutral">Active maintenance reports</span>'+chips.map(x=>'<span class="ui-filter-chip">'+h(x)+'</span>').join('')+'</div><span class="ui-result-count">'+rows.length+' matching · closed reports stay in Cases</span>'+(chips.length?'<button type="button" class="ui-clear-filters" onclick="cwClearFilters()">Clear filters</button>':'');
+ const count=document.getElementById('cw-filter-count'),n=[status,priority,equipment].filter(Boolean).length;count.hidden=!n;count.textContent=n;
  document.getElementById('cw-search-clear').hidden=!q;
  preferences.set('kurtex-workspace-group',document.getElementById('cw-group').value);
 }

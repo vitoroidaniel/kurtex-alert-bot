@@ -1,6 +1,6 @@
 """
 dashboard.py — Kurtex Alert Bot Web Dashboard
-Routes and read-only API. Presentation lives in templates/ and static/.
+Routes and dashboard API. Presentation lives in templates/ and static/.
 """
 import base64, csv, hashlib, hmac, io, json, logging, os, re, secrets, time, uuid, urllib.parse, urllib.request
 from collections import Counter, defaultdict
@@ -203,12 +203,13 @@ def serialize_case(c):
             "issue_text": c.get("issue_text") or "",
             "priority": c.get("priority") or "normal",
             "location": c.get("location") or "",
-            "notes_count": int(bool(c.get("comments") or c.get("notes"))),
+            "notes_count": int(bool(c.get("comments") or (c.get("notes") and c.get("notes") != "case reported"))) + len(c.get("workspace_notes") or []),
             "attachment_count": len(c.get("media") or []),
             "status":      c.get("status") or "open",
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
             "opened_raw":  case_local_date(c),
+            "reported": fmt_dt(c.get("reported_at") or c.get("opened_at")) if (c.get("reported_at") or c.get("status") == "reported" or c.get("report_data") or (c.get("unit_number") and c.get("issue_text"))) else "",
             "response":    fmt_secs(c.get("response_secs")),
             "description": (c.get("description") or "")[:200],
             "notes":       c.get("notes") or "",
@@ -1788,6 +1789,84 @@ def api_home_ai_summary():
         return jsonify({"error":"Intelligence is temporarily unavailable."}),500
 
 
+def _workspace_can_manage(case, user):
+    return (_website_role(user.get("role")) in ("developer", "super_admin") or
+            bool(user.get("id") and str(case.get("agent_id")) == str(user["id"])))
+
+
+def _workspace_actor():
+    """Recheck current membership for writes; the login cookie is not role authority."""
+    user = session.get("user")
+    if not user:
+        return None, (jsonify({"error": "Please sign in again."}), 401)
+    token = session.get("workspace_csrf", "")
+    if not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", "")):
+        return None, (jsonify({"error": "Reload the page before updating reports."}), 403)
+    from backend.storage.user_store import get_user
+    stored = get_user(user["id"])
+    if not stored:
+        return None, (jsonify({"error": "Your account no longer has access."}), 403)
+    role = _website_role(stored.get("role"))
+    if "cases" not in _load_role_permissions().get(role, []):
+        return None, (jsonify({"error": "You do not have access to cases."}), 403)
+    return {**stored, "id": user["id"], "role": role}, None
+
+
+@app.route("/api/workspace/cases", methods=["POST"])
+@app.route("/api/workspace/cases/<case_id>", methods=["PATCH"])
+def api_workspace_write(case_id=None):
+    actor, error = _workspace_actor()
+    if error:
+        return error
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "A report is required."}), 400
+    from backend.storage.case_store import workspace_write, workspace_revision
+    try:
+        def text(key, required=False, maximum=2000):
+            value = data.get(key, "")
+            if not isinstance(value, str) or len(value.strip()) > maximum or (required and not value.strip()):
+                raise ValueError("Check the " + key.replace("_", " ") + " field.")
+            return value.strip()
+        if case_id is None:
+            payload = {key: text(key, key in ("unit_number", "driver", "issue", "request_id"),
+                                120 if key in ("unit_number", "driver", "group", "request_id") else 4000)
+                       for key in ("unit_number", "driver", "issue", "group", "location", "comments", "request_id")}
+            if data.get("vehicle_type") not in ("truck", "trailer", "reefer") or data.get("priority") not in ("low", "medium", "high", "normal"):
+                raise ValueError("Choose equipment and priority.")
+            payload.update({"id": str(uuid.uuid4()), "vehicle_type": data["vehicle_type"], "priority": data["priority"]})
+        else:
+            action = data.get("action")
+            if action not in ("close", "edit", "note"):
+                raise ValueError("Choose a valid report action.")
+            payload = {"action": action, "revision": text("revision", True, 64)}
+            if action == "note":
+                payload["text"] = text("text", True, 4000)
+            elif action == "edit":
+                fields = data.get("fields")
+                if not isinstance(fields, dict) or not fields or set(fields) - {"priority", "location", "description", "issue_text"}:
+                    raise ValueError("Choose valid report fields.")
+                for key, value in fields.items():
+                    if not isinstance(value, str) or len(value.strip()) > 4000:
+                        raise ValueError("Check the report fields.")
+                    if key in ("description", "issue_text") and not value.strip():
+                        raise ValueError("The issue and description cannot be empty.")
+                if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "normal"):
+                    raise ValueError("Choose a valid priority.")
+                payload["fields"] = {k: v.strip() for k, v in fields.items()}
+        case = workspace_write(actor, payload, case_id)
+        return jsonify({"ok": True, "case": serialize_case(case), "revision": workspace_revision(case)})
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409 if case_id else 400
+    except Exception:
+        logger.exception("Workspace report write failed")
+        return jsonify({"error": "The report could not be saved. Retry with your entered values."}), 503
+
+
 @app.route("/api/cases")
 def api_cases():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
@@ -1805,6 +1884,12 @@ def api_cases():
         except (TypeError, ValueError):
             limit = 100
         cases = load_cases()
+        if f == "workspace":
+            if "cases" not in _current_allowed_pages():
+                return jsonify({"error": "You do not have access to cases."}), 403
+            from backend.storage.case_store import is_maintenance_report
+            cases = [c for c in cases if is_maintenance_report(c) and not c.get("closed_at")
+                     and c.get("status") in ("open", "assigned", "reported")]
         if f != "testing":
             cases = [c for c in cases if not is_testing(c)]
         if date_filter:
@@ -1824,7 +1909,7 @@ def api_cases():
                      search in (c.get("group_name") or "").lower() or
                      search in (c.get("agent_name") or "").lower() or
                      search in (c.get("description") or "").lower()]
-        cases = sorted(cases, key=lambda c: c.get("opened_at",""), reverse=True)
+        cases = sorted(cases, key=lambda c: (c.get("reported_at") or c.get("opened_at", "")) if f == "workspace" else c.get("opened_at", ""), reverse=True)
         total = len(cases)
         page = cases[offset:offset+limit]
         try:
@@ -1885,7 +1970,13 @@ def api_case_detail():
                     "current_temp":     c.get("current_temp",""),
                     "temp_recorder":    c.get("temp_recorder",""),
                     "attachments": [{"name": m.get("name") or m.get("file_name") or "Attachment", "type": m.get("type") or ""} for m in (c.get("media") or []) if isinstance(m,dict)],
+                    "updated": fmt_dt(c.get("updated_at") or c.get("closed_at") or c.get("reported_at") or c.get("assigned_at") or c.get("opened_at")),
+                    "workspace_notes": c.get("workspace_notes") or [],
+                    "workspace_history": c.get("workspace_history") or [],
+                    "can_manage": _workspace_can_manage(c, session["user"]),
                 })
+                from backend.storage.case_store import workspace_revision
+                data["revision"] = workspace_revision(c)
                 return jsonify(data)
         return jsonify({"error":"not found"}), 404
     except DataUnavailable:
@@ -2641,12 +2732,9 @@ def telegram_report_submit():
                 elif mime.startswith("video/"): await bot.send_video(dest,inp)
                 else: await bot.send_document(dest,inp)
         asyncio.run(send())
-        from backend.storage.case_store import report_case, _load, _save, CASES_FILE
-        report_case(case_id); fresh=_load(CASES_FILE)
-        for c in fresh:
-            if str(c.get("id"))==case_id:
-                c.update({"vehicle_type":data["vehicle_type"],"unit_number":data["unit_number"],"report_driver":data["driver"],"issue_text":data["issue"],"load_type":data["load"],"location":data["location"],"priority":data["priority"],"pickup":data["pickup"],"delivery":data["delivery"],"comments":data["comments"],"setpoint":data["setpoint"],"current_temp":data["current_temp"],"temp_recorder":data["temp_recorder"],"report_text":report_text,"report_data":data,"media":[{"name":f.filename,"type":f.mimetype} for f in uploads]}); break
-        _save(CASES_FILE,fresh)
+        from backend.storage.case_store import save_maintenance_report
+        if not save_maintenance_report(case_id, data, report_text, [{"name":f.filename,"type":f.mimetype} for f in uploads]):
+            raise RuntimeError("Case not found while saving maintenance report")
         return jsonify({"ok":True})
     except Exception as exc:
         logger.exception("Telegram mini report submit failed")
@@ -2661,6 +2749,8 @@ def login():
 def index():
     if not session.get("user"): return redirect("/login")
     user = session["user"]
+    if not session.get("workspace_csrf"):
+        session["workspace_csrf"] = secrets.token_urlsafe(32)
     is_manager = user.get("role","agent") in ("manager","admin","developer","super_admin")
     is_developer = user.get("role","agent") == "developer"
     allowed_pages = _load_role_permissions().get(_website_role(user.get("role","agent")), ROLE_PERMISSION_DEFAULTS["agent"])

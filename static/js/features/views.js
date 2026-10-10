@@ -180,17 +180,9 @@ function renderLeaderboardCharts(perf,trend){
  k23OutcomesChart=draw(document.getElementById('k23-outcomes-chart'),k23OutcomesChart,['Resolved','Active','Missed','Reassigned'],[perf.resolved||0,perf.active||0,perf.missed||0,perf.reassigned||0],[colors.green,colors.blue,colors.red,cs.getPropertyValue('--purple').trim()],'Case activity');
 }
 
-function toggleLeaderboardFilter(ev){
-  if(ev) ev.stopPropagation();
-  var m=document.getElementById("leaderboard-filter-menu"),trigger=document.getElementById("leaderboard-filter-btn");
-  if(m){m.hidden=!m.hidden;if(trigger)trigger.setAttribute("aria-expanded",String(!m.hidden));if(!m.hidden){var selected=m.querySelector('[data-filter="'+leaderboardRankFilter+'"]');if(selected)selected.focus();}}
-}
-function setLeaderboardRankFilter(filter, btn){
-  leaderboardRankFilter=filter||"overall"; leaderboardRankPage=0;
-  var labels={overall:"Overall",resolved:"Resolved",active:"Active",missed:"Missed",reassigned:"Reassigned"};
-  var l=document.getElementById("leaderboard-filter-label");if(l)l.textContent=labels[leaderboardRankFilter]||"Overall";
-  var m=document.getElementById("leaderboard-filter-menu");if(m)m.hidden=true;
-  var trigger=document.getElementById("leaderboard-filter-btn");if(trigger){trigger.setAttribute("aria-expanded","false");trigger.focus();}
+function setLeaderboardRankFilter(filter){
+  leaderboardRankFilter=['overall','resolved','active','missed','reassigned'].includes(filter)?filter:'overall';leaderboardRankPage=0;
+  const select=document.getElementById('leaderboard-sort');if(select){select.value=leaderboardRankFilter;if(typeof syncKurtexSelect==='function')syncKurtexSelect(select);}
   renderLeaderboard();
 }
 function changeLeaderboardRankPage(delta){ leaderboardRankPage=Math.max(0,leaderboardRankPage+delta); renderLeaderboard(); }
@@ -202,13 +194,11 @@ function renderLeaderboardRanking(agents){
   if(leaderboardRankPage>=totalPages)leaderboardRankPage=totalPages-1;
   var start=leaderboardRankPage*leaderboardRankPageSize, page=sorted.slice(start,start+leaderboardRankPageSize);
   var el=document.getElementById("leaderboard-full"), medals=["#1","#2","#3","#4","#5"];
-  if(el) updateHTML(el,page.length?page.map(function(a,i){return '<div class="agent-rank-row"><span class="agent-rank-pos">#'+(start+i+1)+'</span><div class="agent-rank-main"><strong>'+h(a.name)+'</strong><span>'+h(a.handled)+' handled · '+h(a.active)+' active</span></div><div class="agent-rank-stats"><b>'+h(a.resolved)+'</b><span>resolved</span></div><div class="agent-rank-mini '+(a.missed?'has-alert':'')+'">'+h(a.missed)+' missed</div></div>';}).join(""):'<div class="leaderboard-empty">No agent activity in this period.</div>');
+  const count=document.getElementById('leaderboard-agent-count');if(count)count.textContent=agents.length+' agents';
+  if(el) updateHTML(el,page.length?'<div class="leaderboard-table-scroll"><table class="leaderboard-table"><thead><tr><th scope="col">Rank</th><th scope="col">Agent</th><th scope="col">Handled</th><th scope="col">Resolved</th><th scope="col">Active</th><th scope="col">Missed</th><th scope="col">Reassigned</th></tr></thead><tbody>'+page.map(function(a,i){return '<tr><td><span class="leaderboard-place '+(start+i===0?'is-first':'')+'">'+(start+i+1)+'</span></td><th scope="row"><span class="leaderboard-agent-name"><span class="leaderboard-avatar" aria-hidden="true">'+h((a.name||'?').charAt(0).toUpperCase())+'</span><strong>'+h(a.name)+'</strong></span></th><td>'+Number(a.handled||0)+'</td><td class="leaderboard-resolved">'+Number(a.resolved||0)+'</td><td>'+Number(a.active||0)+'</td><td class="'+(a.missed?'leaderboard-alert':'')+'">'+Number(a.missed||0)+'</td><td>'+Number(a.reassigned||0)+'</td></tr>';}).join('')+'</tbody></table></div>':'<div class="leaderboard-empty">No agent activity in this period.</div>');
   var pg=document.getElementById("leaderboard-pagination");
   if(pg) pg.innerHTML=sorted.length>leaderboardRankPageSize?'<button type="button" '+(leaderboardRankPage===0?'disabled':'')+' onclick="changeLeaderboardRankPage(-1)"><i class="ph ph-caret-left"></i> Previous</button><span>'+(leaderboardRankPage+1)+' / '+totalPages+'</span><button type="button" '+(leaderboardRankPage>=totalPages-1?'disabled':'')+' onclick="changeLeaderboardRankPage(1)">Next <i class="ph ph-caret-right"></i></button>':'';
 }
-
-document.addEventListener("click",function(e){var m=document.getElementById("leaderboard-filter-menu");if(m&&!m.hidden&&!e.target.closest(".leaderboard-filter-wrap")){m.hidden=true;document.getElementById("leaderboard-filter-btn").setAttribute("aria-expanded","false");}});
-document.addEventListener("keydown",function(e){var m=document.getElementById("leaderboard-filter-menu");if(m&&!m.hidden&&e.key==="Escape"){m.hidden=true;var trigger=document.getElementById("leaderboard-filter-btn");trigger.setAttribute("aria-expanded","false");trigger.focus();}});
 
 function renderLeaderboard() {
   if (!stats.leaderboard_day) return;
@@ -224,7 +214,7 @@ function renderLeaderboard() {
     ["ph-hourglass","Active",perf.active||0],
     ["ph-phone-x","Missed",perf.missed||0],
     ["ph-arrows-clockwise","Reassigned",perf.reassigned||0]
-  ].map(function(m){return '<div class="leaderboard-metric"><span><i class="ph '+m[0]+'"></i>'+m[1]+'</span><strong>'+h(m[2])+'</strong></div>';}).join(""));
+  ].map(function(m,i){return '<div class="leaderboard-metric" data-metric="'+['handled','resolved','active','missed','reassigned'][i]+'"><span><i class="ph '+m[0]+'"></i>'+m[1]+'</span><strong>'+h(m[2])+'</strong></div>';}).join(""));
   var agents=(perf.agents||[]);
   renderLeaderboardRanking(agents);
   var insights=document.getElementById("leaderboard-insights"); if(insights) updateHTML(insights,leaderboardInsightHTML(perf));
@@ -648,7 +638,8 @@ async function openCase(el) {
         mobileCaseRow('Assigned to', c.agent||'—', 'ph-user-check')+
       '</section></div>'+
       (c.full_description?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-text-align-left"></i><span>Description</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_description)+'</section></div>':'')+
-      (c.full_notes?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-note"></i><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_notes)+'</section></div>':'')+'</div>';
+      ((c.full_notes||c.comments||(c.workspace_notes||[]).length)?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-note"></i><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+cwNotes(c)+'</section></div>':'')+
+      ((c.workspace_history||[]).length?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-pulse"></i><span>Activity timeline</span></div><section class="mobile-detail-card">'+cwHistory(c)+'</section></div>':'')+'</div>';
     updateHTML(document.getElementById("modal-body"), html);
   } catch (e) {
     if (e.name === "AbortError") return;

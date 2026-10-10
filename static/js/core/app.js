@@ -66,9 +66,9 @@ document.addEventListener("keydown", function (e) {
   }
   if (e.key === "Tab" && top) {
     var nodes = Array.from(
-      top.querySelectorAll("button,a[href],input,select"),
+      top.querySelectorAll("button,a[href],input,select,textarea,[tabindex]"),
     ).filter(function (el) {
-      return el.offsetParent !== null;
+      return el.offsetParent !== null && !el.disabled && el.tabIndex >= 0;
     });
     var first = nodes[0],
       last = nodes[nodes.length - 1];

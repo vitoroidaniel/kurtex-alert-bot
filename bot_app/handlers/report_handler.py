@@ -587,34 +587,9 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ctx.bot_data["busy_agents"].discard(update.effective_user.id)
         if case_id:
             try:
-                from backend.storage.case_store import report_case, _load, _save, CASES_FILE
-                report_case(case_id)
-                # Save all report fields to the case for dashboard analytics
-                logger.info(f"Saving report data for case {case_id}: vtype={report_data.get('vehicle_type')}, unit={report_data.get('unit_number')}, issue={report_data.get('issue')}")
-                cases = _load(CASES_FILE)
-                found = False
-                for c in cases:
-                    if c["id"] == case_id:
-                        c["vehicle_type"]   = report_data.get("vehicle_type", "")
-                        c["unit_number"]    = report_data.get("unit_number", "")
-                        c["report_driver"]  = report_data.get("driver", "")
-                        c["issue_text"]     = report_data.get("issue", "")
-                        c["load_type"]      = report_data.get("load", "")
-                        c["location"]       = report_data.get("location", "")
-                        c["priority"]       = report_data.get("priority", "")
-                        c["pickup"]         = report_data.get("pickup", "")
-                        c["delivery"]       = report_data.get("delivery", "")
-                        c["comments"]       = report_data.get("comments", "")
-                        c["setpoint"]       = report_data.get("setpoint", "")
-                        c["current_temp"]   = report_data.get("current_temp", "")
-                        c["temp_recorder"]  = report_data.get("temp_recorder", "")
-                        c["report_text"]    = report_text
-                        c["report_data"]    = report_data
-                        c["media"]          = report_data.get("media", [])
-                        found = True
-                        break
-                if found:
-                    _save(CASES_FILE, cases)
+                from backend.storage.case_store import save_maintenance_report
+                saved = save_maintenance_report(case_id, report_data, report_text, report_data.get("media", []))
+                if saved:
                     logger.info(f"Case {case_id} fleet data saved: vtype={report_data.get('vehicle_type')}")
                 else:
                     logger.warning(f"Case {case_id} not found in cases.json for fleet data save")

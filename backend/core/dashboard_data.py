@@ -1,4 +1,4 @@
-"""Read-only snapshots for the dashboard; the Telegram bot remains the writer."""
+"""Read-only snapshots shared by dashboard views; writes use the case store."""
 import json
 import logging
 import math

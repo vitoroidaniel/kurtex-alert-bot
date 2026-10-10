@@ -1,0 +1,113 @@
+/* Compact application shell. Top bars belong to document flow on every tab. */
+html body .main>.topbar{position:static!important;inset:auto!important;transform:none!important;min-height:60px!important;height:auto!important;margin:0 0 18px!important;padding:10px 0!important;background:var(--bg)!important;border-bottom:1px solid var(--border)!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;z-index:auto!important}
+html body .main>.topbar .breadcrumb{display:flex!important;align-items:center;gap:10px;min-width:0;flex:1;font-size:10px;color:var(--muted2)}
+.topbar .breadcrumb h1{margin:0;font-size:13px;font-weight:600;letter-spacing:0;line-height:1.5;color:var(--text);white-space:nowrap}
+.topbar .breadcrumb .topbar-brand{font-size:10px;letter-spacing:.08em;color:var(--muted2)}
+html body .main>.topbar .topbar-right{display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap;justify-content:flex-end;width:auto;min-width:0}
+html body .main>.topbar .badge-btn{min-height:34px!important;height:34px!important;padding:7px 10px!important;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:7px!important;font-size:11px!important;font-weight:500!important;background:var(--surface)!important;color:var(--text)!important;border:1px solid var(--border)!important;box-shadow:none!important;white-space:nowrap}
+html body .main>.topbar .badge-btn:hover{background:var(--surface2)!important;border-color:var(--muted2)!important}
+html body .main>.topbar [hidden]{display:none!important}
+html body .main>.topbar .topbar-clock{display:flex!important;align-items:center!important;gap:7px!important;padding:0 0 0 8px!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;color:var(--muted)!important;white-space:nowrap;min-width:0}
+html body .main>.topbar .topbar-clock>span{display:flex!important;flex-direction:row!important;align-items:center!important;gap:10px!important}
+html body .main>.topbar #chicago-time{display:block!important;font-size:11px!important;font-weight:500!important;line-height:1.5!important;letter-spacing:0!important;color:var(--text)!important;font-variant-numeric:tabular-nums}
+html body .main>.topbar #chicago-date{display:block!important;margin:0!important;font-size:11px!important;line-height:1.5!important;color:var(--muted)!important;border-left:1px solid var(--border);padding-left:10px}
+html body .main>.topbar .topbar-connection{display:inline-flex!important;gap:5px;align-items:center;font-size:10px;color:var(--muted);margin:0 3px}
+.topbar-connection .dot{width:5px;height:5px;box-shadow:none;background:var(--green)}
+html body .page-heading{display:none!important;position:static!important}
+html body .mobile-overview-controls{display:none!important}
+html body .page{scroll-margin-top:0}
+html body[data-current-page="agents"] .topbar-report-action,html body[data-current-page="agents"] .topbar-refresh-action{display:none!important}
+html body[data-current-page="agents"] #page-agents{padding-top:0!important}
+html body[data-current-page="agents"] .k23-agents-shell{margin-top:0!important}
+html body[data-current-page="agents"] .k23-agent-detail{padding-top:0!important}
+html body[data-current-page="agents"] .k23-agent-sidebar{padding-top:12px!important}
+#page-kurtex_intelligence .ki-toolbar{margin:0 0 14px;min-height:38px}
+#page-kurtex_intelligence .ki-summary{margin-top:0}
+.parts-count-strip{display:flex;justify-content:flex-end;margin:0 0 8px;font-size:11px;color:var(--muted)}
+html body #page-ai_knowledge .ai-training-page{padding-top:0!important}
+/* Leaderboard: metrics first, a single filter row, then comparable rankings. */
+html body #page-leaderboard .leaderboard-metrics{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:12px!important;margin:0 0 14px!important}
+html body #page-leaderboard .leaderboard-metric{position:relative;display:flex;flex-direction:column;justify-content:center;gap:10px;min-height:104px;padding:16px 18px!important;border:1px solid var(--border)!important;border-radius:9px!important;box-shadow:none!important;background:var(--surface)!important;overflow:hidden}
+html body #page-leaderboard .leaderboard-metric>span{display:flex;align-items:center;gap:7px;font-size:11px!important;font-weight:500;line-height:1.4;color:var(--muted)!important;text-transform:none!important;letter-spacing:0!important}
+html body #page-leaderboard .leaderboard-metric>span i{font-size:16px;color:var(--muted2)}
+html body #page-leaderboard .leaderboard-metric>strong{font-size:27px!important;line-height:1.1;font-weight:650!important;letter-spacing:-.5px;font-variant-numeric:tabular-nums;color:var(--text)!important}
+#page-leaderboard .leaderboard-metric[data-metric="resolved"]>span i{color:var(--green)!important}
+#page-leaderboard .leaderboard-metric[data-metric="missed"]>span i{color:var(--red)!important}
+html body #page-leaderboard .leaderboard-head{display:flex!important;justify-content:space-between!important;align-items:center!important;gap:16px!important;margin:0 0 16px!important;padding:10px 0!important;border-bottom:1px solid var(--border);min-height:52px}
+html body #page-leaderboard .leaderboard-period{width:auto!important;min-width:0!important;display:inline-flex!important;gap:3px!important;padding:3px!important;border:1px solid var(--border)!important;background:var(--surface2)!important;border-radius:8px!important}
+html body #page-leaderboard .leaderboard-period button{min-width:70px;min-height:32px!important;padding:7px 12px!important;border-radius:5px!important;font-size:12px!important}
+html body #page-leaderboard .leaderboard-period button.active{background:var(--surface)!important;color:var(--text)!important;border-color:var(--border)!important;box-shadow:0 1px 2px #00000006!important}
+.leaderboard-sort{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);white-space:nowrap}.leaderboard-sort .kurtex-select-shell{min-width:135px}.leaderboard-sort .kurtex-select-button{font-size:12px!important;min-height:36px!important;border-radius:7px!important}
+html body #page-leaderboard .leaderboard-grid{display:grid!important;grid-template-columns:minmax(0,1.9fr) minmax(260px,1fr)!important;gap:16px!important;margin:0!important;align-items:stretch}
+html body #page-leaderboard :is(.leaderboard-ranking-card,.leaderboard-insights-card){padding:0!important;background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:10px!important;min-height:0!important;overflow:hidden;box-shadow:none!important}
+html body #page-leaderboard .leaderboard-ranking-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px;padding:16px!important;border-bottom:1px solid var(--border);margin:0!important}
+html body #page-leaderboard .card-title{margin:0!important;font-size:13px!important;font-weight:600!important;text-transform:none!important;letter-spacing:0!important;gap:8px}
+html body #page-leaderboard .card-title>i{color:var(--muted);font-size:16px}
+.leaderboard-agent-count{font-size:11px;color:var(--muted);white-space:nowrap}
+html body #page-leaderboard .leaderboard-ranking-card #leaderboard-full{min-height:280px!important;flex:1}
+.leaderboard-table-scroll{overflow-x:auto;width:100%}
+.leaderboard-table{width:100%;min-width:610px;border-collapse:collapse;text-align:left;font-size:12px;font-variant-numeric:tabular-nums}
+html body #page-leaderboard .leaderboard-table thead th{padding:12px 14px;font-size:10px;font-weight:500;background:var(--surface2);color:var(--muted);border-bottom:1px solid var(--border);text-transform:none;letter-spacing:0;white-space:nowrap}
+.leaderboard-table tbody :is(td,th){height:56px;padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap;font-weight:500;color:var(--text)}
+.leaderboard-table tbody tr:last-child :is(td,th){border-bottom:0}.leaderboard-table tbody tr:hover{background:var(--surface2)}
+.leaderboard-table :is(th,td):nth-child(n+3){text-align:right}
+.leaderboard-agent-name{display:flex;align-items:center;gap:9px}.leaderboard-agent-name strong{font-weight:600;font-size:12px}
+.leaderboard-avatar{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:11px;background:var(--blue-bg);color:var(--blue)}
+.leaderboard-place{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;font-size:11px;color:var(--muted);border-radius:6px}.leaderboard-place.is-first{background:var(--yellow-bg);color:var(--yellow);font-weight:700}
+.leaderboard-table td.leaderboard-alert{color:var(--red);font-weight:600}.leaderboard-table td.leaderboard-resolved{font-weight:650}
+html body #page-leaderboard .leaderboard-pagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;min-height:48px;padding:10px 16px!important;border-top:1px solid var(--border);margin-top:auto;font-size:11px;color:var(--muted)}
+.leaderboard-pagination:empty{display:none!important}.leaderboard-pagination button{border:1px solid var(--border)!important;background:var(--surface)!important;color:var(--text)!important;border-radius:6px!important;padding:6px 9px!important;font-size:11px!important;min-height:30px}.leaderboard-pagination button:disabled{opacity:.4}
+html body #page-leaderboard .leaderboard-insights-card>.card-title{padding:18px 16px!important;border-bottom:1px solid var(--border);min-height:56px}
+#page-leaderboard #leaderboard-insights{padding:2px 16px 8px}
+html body #page-leaderboard .performance-insight{display:flex;align-items:flex-start;gap:10px;padding:16px 0!important;border:0!important;border-bottom:1px solid var(--border)!important;border-radius:0!important;margin:0!important;background:transparent!important}
+html body #page-leaderboard .performance-insight:last-child{border-bottom:0!important}
+html body #page-leaderboard .performance-insight-icon{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:7px;background:var(--surface2)!important;color:var(--muted)!important;font-size:16px}
+html body #page-leaderboard .performance-insight strong{font-size:12px!important;font-weight:600!important;line-height:1.5}
+html body #page-leaderboard .performance-insight p{font-size:11px!important;line-height:1.7!important;color:var(--muted)!important;margin:4px 0 0}
+html body #page-leaderboard .k23-charts{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;margin-top:16px}
+html body #page-leaderboard .k23-chart-card{padding:18px!important;border-radius:10px!important;border:1px solid var(--border)!important;background:var(--surface)!important;box-shadow:none!important}
+html body #page-leaderboard .k23-card-heading strong{font-size:13px;font-weight:600;gap:7px}.k23-card-heading small{font-size:11px!important;line-height:1.5}
+html body #page-leaderboard .k23-chart-body{height:245px}
+/* Notifications use one scrolling list with restrained unread and alert states. */
+html body .notification-center{position:relative;flex-shrink:0}
+html body .notification-panel{position:absolute!important;inset:calc(100% + 10px) 0 auto auto!important;width:390px!important;max-width:calc(100vw - 24px)!important;max-height:min(560px,75dvh)!important;display:flex;flex-direction:column;border:1px solid var(--border)!important;border-radius:11px!important;background:var(--surface)!important;box-shadow:0 12px 38px #0b17291f!important;overflow:hidden;z-index:700!important;text-align:left}
+html body .notification-panel[hidden]{display:none!important}
+html body .notification-panel .notification-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 16px 12px!important;background:var(--surface)!important;border-bottom:0!important;flex-shrink:0}
+html body .notification-panel .notification-title strong{display:block;font-size:14px!important;font-weight:600;line-height:1.4}
+html body .notification-panel .notification-title small{display:block;color:var(--muted)!important;font-size:11px!important;margin-top:3px!important}
+html body .notification-panel .notification-head-actions{display:flex;align-items:center;gap:4px}
+html body .notification-panel :is(.notification-mark-all,.notification-close){display:grid!important;place-items:center;width:30px!important;height:30px!important;border:0!important;border-radius:6px!important;padding:0!important;font-size:17px!important;background:transparent!important;color:var(--muted)!important;cursor:pointer}
+html body .notification-panel :is(.notification-mark-all,.notification-close):hover{background:var(--surface2)!important;color:var(--text)!important}
+html body .notification-panel .notification-tabs{display:flex;gap:16px!important;padding:0 16px!important;border:0!important;border-bottom:1px solid var(--border)!important;background:var(--surface)!important;flex-shrink:0;box-shadow:none!important;border-radius:0!important}
+html body .notification-panel .notification-tabs button{position:relative;border:0!important;box-shadow:none!important;background:transparent!important;color:var(--muted)!important;border-radius:0!important;padding:10px 0!important;min-height:38px;font-size:12px!important;font-weight:500!important}
+html body .notification-panel .notification-tabs button.active{color:var(--text)!important;font-weight:650!important}
+html body .notification-panel .notification-tabs button.active:after{content:"";position:absolute;inset:auto 0 -1px;height:2px;border-radius:2px;background:var(--accent)}
+html body .notification-panel .notification-list{flex:1;min-height:90px!important;max-height:390px!important;padding:0!important;overflow-y:auto;background:var(--surface)!important;scrollbar-width:thin}
+html body .notification-panel .notification-item{position:relative;display:grid!important;grid-template-columns:30px minmax(0,1fr) 25px!important;align-items:start;gap:10px!important;padding:14px 16px!important;margin:0!important;border:0!important;border-bottom:1px solid var(--border)!important;border-radius:0!important;background:var(--surface)!important;cursor:default!important}
+html body .notification-panel .notification-item:last-child{border-bottom:0!important}
+html body .notification-panel .notification-item[class*="case"]{cursor:default!important}
+html body .notification-panel .notification-item.unseen:before{content:"";position:absolute;left:5px;top:23px;width:4px;height:4px;border-radius:50%;background:var(--accent)!important}
+html body .notification-panel .notification-item .notification-icon{display:grid;place-items:center;width:30px!important;height:30px!important;border-radius:8px!important;font-size:16px!important;background:var(--surface2)!important;color:var(--muted)!important}
+html body .notification-panel .notification-item:is(.case_priority,.case_missed,.warning,.error) .notification-icon{background:var(--red-bg)!important;color:var(--red)!important}
+html body .notification-panel .notification-item.case_resolved .notification-icon{background:var(--green-bg)!important;color:var(--green)!important}
+html body .notification-panel .notification-copy{display:block;min-width:0;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;text-align:left;font:inherit;color:var(--text)!important;line-height:1.5;white-space:normal}
+html body .notification-panel .notification-copy strong{display:block;font-size:12px!important;line-height:1.5!important;font-weight:500!important}
+html body .notification-panel .unseen .notification-copy strong{font-weight:650!important}
+html body .notification-panel .notification-copy>span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:11px!important;line-height:1.6!important;color:var(--muted)!important;margin-top:2px}
+html body .notification-panel .notification-copy small{display:block;font-size:10px!important;line-height:1.5!important;color:var(--muted2)!important;margin-top:5px!important}
+html body .notification-panel .notification-open{cursor:pointer}.notification-open:hover strong{text-decoration:underline;text-underline-offset:3px}
+html body .notification-panel .notification-actions{display:flex;align-items:center;justify-content:center;padding:0!important}
+html body .notification-panel .notification-actions button,html body .notification-panel .notification-seen{display:grid;place-items:center;width:25px;min-width:25px;height:28px;padding:0!important;border:0!important;border-radius:5px;font-size:14px!important;color:var(--muted2)!important;background:transparent!important}
+html body .notification-panel .notification-actions button:hover{background:var(--surface2)!important;color:var(--text)!important}
+html body .notification-panel .notification-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);font-size:10px;color:var(--muted);flex-shrink:0}
+html body .notification-panel .notification-clear{border:0!important;border-radius:5px;background:transparent!important;color:var(--muted)!important;display:inline-flex;align-items:center;gap:5px;padding:5px 0!important;font:inherit;font-size:10px!important;cursor:pointer}
+html body .notification-panel button:disabled{opacity:.4;cursor:default}
+html body .notification-panel .notification-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px 20px!important;min-height:180px!important;text-align:center;background:var(--surface)!important;color:var(--muted)!important}
+html body .notification-panel .notification-empty-icon{width:36px;height:36px;font-size:24px;background:transparent!important;color:var(--muted2)!important;box-shadow:none!important}
+html body .notification-panel .notification-empty strong{font-size:13px!important;color:var(--text)!important}.notification-feedback{font-size:11px;color:var(--red);padding:10px 16px;margin:0;background:var(--red-bg)}
+html body .notification-panel [hidden]{display:none!important}
+@media(max-width:1200px){html body .main>.topbar{flex-wrap:wrap!important}html body .main>.topbar .breadcrumb{flex:0 1 auto}html body .main>.topbar .topbar-right{flex:1}html body #page-leaderboard .leaderboard-grid{grid-template-columns:minmax(0,1fr)!important}html body #page-leaderboard .leaderboard-insights-card #leaderboard-insights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}html body #page-leaderboard .performance-insight{border-bottom:0!important}}
+@media(max-width:900px){html body .main>.topbar .topbar-clock{order:2}html body .main>.topbar .topbar-connection{order:3}html body .main>.topbar .notification-center{order:4}html body #page-leaderboard .leaderboard-metrics{gap:8px!important}html body #page-leaderboard .leaderboard-metric{padding:13px!important;min-height:95px}}
+@media(max-width:760px){html body{padding-top:0!important}html body .mobile-header{position:relative!important;inset:auto!important;transform:none!important;width:100%!important;margin:0!important;border:0!important;border-bottom:1px solid var(--border)!important;border-radius:0!important;box-shadow:none!important;height:58px!important;background:var(--surface)!important;backdrop-filter:none!important}html body .layout{padding-top:0!important}html body .main{padding-top:0!important}html body .main>.topbar{margin-bottom:14px!important;padding:10px 0!important;min-height:0!important;gap:9px!important}html body .main>.topbar .breadcrumb{display:none!important}html body .main>.topbar .topbar-right{width:100%!important;justify-content:flex-start!important;gap:7px!important}html body .main>.topbar .topbar-clock{margin-left:auto!important;padding-left:0!important;order:2}html body .main>.topbar #chicago-date{display:none!important}html body .main>.topbar .topbar-connection{font-size:9px}html body .main>.topbar .badge-btn{min-height:32px!important;height:32px!important;padding:6px 8px!important;font-size:10px!important}html body[data-current-page="overview"] .main>.topbar .topbar-report-action{display:inline-flex!important}html body .main>.topbar .topbar-clock>i{display:none}html body .main>.topbar #chicago-time{font-size:10px!important}html body #page-leaderboard .leaderboard-metrics{grid-template-columns:repeat(3,minmax(0,1fr))!important}html body #page-leaderboard .leaderboard-metric:nth-last-child(-n+2){grid-column:span 1}html body #page-leaderboard .leaderboard-metric>strong{font-size:24px!important}html body #page-leaderboard .leaderboard-head{flex-wrap:wrap!important;gap:10px!important}html body #page-leaderboard .leaderboard-period{flex:1!important;justify-content:space-between}html body #page-leaderboard .leaderboard-period button{flex:1;min-width:60px;font-size:11px!important}html body #page-leaderboard .leaderboard-sort{width:100%;justify-content:space-between}html body #page-leaderboard .leaderboard-sort .kurtex-select-shell{flex:1;max-width:170px}html body #page-leaderboard .leaderboard-insights-card #leaderboard-insights{display:block}html body #page-leaderboard .performance-insight{border-bottom:1px solid var(--border)!important}html body #page-leaderboard .k23-charts{grid-template-columns:1fr}html body #page-leaderboard .k23-chart-body{height:230px}html body .notification-panel{width:min(390px,calc(100vw - 24px))!important;max-height:70dvh!important}html body .notification-panel .notification-list{max-height:45dvh!important}.notification-panel .notification-footer>span{display:none}html body .notification-panel .notification-footer{justify-content:flex-end}}
+@media(max-width:420px){html body .main>.topbar .topbar-right{gap:5px!important}html body .main>.topbar .topbar-print-action,html body .main>.topbar .topbar-export-action,html body .main>.topbar .topbar-refresh-action{width:30px!important;padding:0!important}html body .main>.topbar :is(.topbar-print-action,.topbar-export-action,.topbar-refresh-action)>span{display:none}html body #page-leaderboard .leaderboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}html body #page-leaderboard .leaderboard-metric:last-child{grid-column:1/-1;min-height:72px;flex-direction:row;align-items:center;justify-content:space-between}}
+@media print{html body .main>.topbar,html body .mobile-header,.notification-panel,#page-leaderboard .leaderboard-head{display:none!important}.leaderboard-table-scroll{overflow:visible}.leaderboard-table{min-width:0}.leaderboard-grid,.k23-charts{break-inside:avoid}}

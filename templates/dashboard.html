@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kurtex Dashboard</title>
 <meta name="theme-color" content="#f6f8fa">
+<meta name="workspace-csrf" content="{{ session.workspace_csrf }}">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('kurtex-theme')==='dark'?'dark':'light';}catch(e){}</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -11,13 +12,15 @@
 <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css', v='20261010b') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css', v='20261010b') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css', v='20261010b') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css', v='20261010b') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v23.css', v='20261010b') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/ui-refinements.css', v='20261010b') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/theme.css', v='20261010b') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v23.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/ui-refinements.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/theme.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/chrome.css', v='20261010d') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -98,31 +101,27 @@
 
 <main class="main">
   <div class="topbar">
-    <div class="breadcrumb">KURTEX <span>/</span> Operations workspace</div>
+    <div class="breadcrumb"><span class="topbar-brand">KURTEX</span><span aria-hidden="true">/</span><h1 id="page-title">Home</h1></div>
     <div class="topbar-right">
       <button class="badge-btn btn-outline topbar-report-action" onclick="openReport()"><i class="ph ph-file-text"></i> <span>Report</span></button>
-
-
+      <button type="button" class="badge-btn btn-outline topbar-print-action" aria-label="Print current page" onclick="uiPrintCurrentPage()"><i class="ph ph-printer"></i><span>Print</span></button>
+      <button type="button" class="badge-btn btn-outline topbar-export-action" aria-label="Export cases" onclick="uiExportCurrentPage()"><i class="ph ph-download-simple"></i><span>Export</span></button>
+      <button type="button" class="badge-btn btn-outline topbar-refresh-action" id="refresh-button" onclick="refresh(true)" aria-label="Refresh dashboard"><i class="ph ph-arrows-clockwise"></i><span>Refresh</span></button>
       <time id="today-label" class="topbar-clock" aria-label="Current Chicago date and time"><i class="ph ph-clock" aria-hidden="true"></i><span><strong id="chicago-time"></strong><small id="chicago-date"></small></span></time>
       <span class="topbar-connection" id="connection-status" role="status"><span class="dot"></span><span id="last-update">Live</span></span>
-      <div class="notification-center"><button id="notification-bell" class="badge-btn notification-bell" onclick="toggleNotifications()" aria-label="Notifications"><i class="ph ph-bell"></i><span id="notification-count" class="notification-count" hidden>0</span></button><div id="notification-panel" class="notification-panel" hidden><header class="notification-panel-head"><div class="notification-title"><span class="notification-title-icon"><i class="ph ph-bell"></i></span><div><strong>Notifications</strong><small id="notification-summary">All caught up</small></div></div><div class="notification-head-actions"><button class="notification-mark-all" type="button" onclick="markAllNotificationsSeen()"><i class="ph ph-checks"></i> Mark all seen</button><button class="notification-clear" type="button" onclick="clearNotifications()"><i class="ph ph-trash"></i> Clear</button></div></header><div class="notification-tabs"><button class="active" data-filter="all" onclick="filterNotifications('all',this)">All</button><button data-filter="unseen" onclick="filterNotifications('unseen',this)">Unseen</button><button data-filter="alerts" onclick="filterNotifications('alerts',this)">Alerts & issues</button></div><div id="notification-list" class="notification-list"></div></div></div>
+      <div class="notification-center">
+        <button id="notification-bell" class="badge-btn notification-bell" type="button" onclick="toggleNotifications()" aria-label="Notifications" aria-expanded="false" aria-controls="notification-panel"><i class="ph ph-bell"></i><span id="notification-count" class="notification-count" hidden>0</span></button>
+        <section id="notification-panel" class="notification-panel" aria-labelledby="notification-title" hidden>
+          <header class="notification-panel-head"><div class="notification-title"><div><strong id="notification-title">Notifications</strong><small id="notification-summary">All caught up</small></div></div><div class="notification-head-actions"><button class="notification-mark-all" type="button" onclick="markAllNotificationsSeen()" aria-label="Mark all notifications read" title="Mark all read"><i class="ph ph-checks"></i></button><button class="notification-close" type="button" onclick="closeNotifications(true)" aria-label="Close notifications"><i class="ph ph-x"></i></button></div></header>
+          <div class="notification-tabs" role="group" aria-label="Filter notifications"><button type="button" class="active" data-filter="all" aria-pressed="true" onclick="filterNotifications('all',this)">All</button><button type="button" data-filter="unseen" aria-pressed="false" onclick="filterNotifications('unseen',this)">Unread</button><button type="button" data-filter="alerts" aria-pressed="false" onclick="filterNotifications('alerts',this)">Alerts</button></div>
+          <p id="notification-feedback" class="notification-feedback" role="status" hidden></p><div id="notification-list" class="notification-list"></div>
+          <footer class="notification-footer"><span>Case updates & alerts</span><button class="notification-clear" type="button" onclick="clearNotifications()"><i class="ph ph-trash"></i> Clear notifications</button></footer>
+        </section>
+      </div>
       
     </div>
   </div>
 
-  <header class="page-heading">
-    <div class="page-heading-copy">
-      <div class="page-title-row"><span class="page-title-icon" aria-hidden="true"><i class="ph ph-house"></i></span><div><h1 id="page-title">Home</h1><p id="page-description">Your maintenance workspace for today.</p></div></div>
-    </div>
-    <div class="heading-actions">
-      <button type="button" class="badge-btn btn-outline header-workspace-action" onclick="cwPrint()"><i class="ph ph-printer"></i><span>Print</span></button>
-      <button type="button" class="badge-btn btn-outline header-workspace-action" onclick="cwExport()"><i class="ph ph-download-simple"></i><span>Export view</span></button>
-      <button type="button" class="badge-btn btn-outline header-case-action" onclick="window.print()"><i class="ph ph-printer"></i><span>Print</span></button>
-      <a class="badge-btn btn-outline header-case-action" href="/api/export"><i class="ph ph-download-simple"></i><span>Export</span></a>
-
-      <button class="badge-btn btn-outline header-refresh" id="refresh-button" onclick="refresh(true)" aria-label="Refresh dashboard"><i class="ph ph-arrows-clockwise"></i><span>Refresh</span></button>
-    </div>
-  </header>
   <div class="mobile-overview-controls" aria-label="Overview controls">
 
     <div class="mobile-action-row">
@@ -199,11 +198,32 @@
 <div class="page" id="page-case_workspace">
   <section class="cw-shell" id="cw-shell">
 
-    <div class="cw-toolbar"><div class="cw-views" role="group" aria-label="Workspace view"><button type="button" data-cw-view="board" onclick="cwSetView('board')"><i class="ph ph-kanban"></i> Board</button><button type="button" data-cw-view="grid" onclick="cwSetView('grid')"><i class="ph ph-squares-four"></i> Grid</button><button type="button" data-cw-view="table" onclick="cwSetView('table')"><i class="ph ph-table"></i> Table</button><button type="button" data-cw-view="card" onclick="cwSetView('card')"><i class="ph ph-cards"></i> Card</button></div><label class="cw-search"><i class="ph ph-magnifying-glass"></i><input id="cw-search" placeholder="Search unit, issue, driver, agent..." oninput="cwRender()" aria-label="Search workspace cases"><button type="button" class="ui-search-clear" id="cw-search-clear" onclick="cwClearSearch()" aria-label="Clear workspace search" hidden><i class="ph ph-x"></i></button></label><select id="cw-status" aria-label="Filter status" onchange="cwRender()"><option value="">All statuses</option><option value="open">Open</option><option value="assigned">Assigned</option><option value="reported">Reported</option><option value="done">Done</option><option value="missed">Missed</option></select><span class="cw-group-label">Group by</span><select id="cw-group" aria-label="Group cases" onchange="cwRender()"><option value="agent">Group by agent</option><option value="status">Group by status</option><option value="priority">Group by priority</option><option value="vehicle_type">Group by equipment</option></select></div>
+    <div class="cw-toolbar">
+      <div class="cw-views" role="group" aria-label="Workspace view"><button type="button" data-cw-view="board" onclick="cwSetView('board')"><i class="ph ph-kanban"></i> Board</button><button type="button" data-cw-view="grid" onclick="cwSetView('grid')"><i class="ph ph-squares-four"></i> Grid</button><button type="button" data-cw-view="table" onclick="cwSetView('table')"><i class="ph ph-table"></i> Table</button><button type="button" data-cw-view="card" onclick="cwSetView('card')"><i class="ph ph-cards"></i> Card</button></div>
+      <div class="cw-search" role="search"><i class="ph ph-magnifying-glass"></i><input id="cw-search" placeholder="Search unit, issue, driver, agent…" oninput="if(!event.isComposing)cwRender()" oncompositionend="cwRender()" aria-label="Search maintenance reports"><button type="button" class="ui-search-clear" id="cw-search-clear" onclick="cwClearSearch()" aria-label="Clear workspace search" hidden><i class="ph ph-x"></i></button></div>
+      <button type="button" class="cw-filter-button" id="cw-filter-toggle" aria-expanded="false" aria-controls="cw-filters" onclick="cwToggleFilters()"><i class="ph ph-funnel"></i> Filter <span id="cw-filter-count" hidden></span></button>
+      <span class="cw-group-label">Group by</span><select id="cw-group" aria-label="Group cases" onchange="cwRender()"><option value="agent">Assigned agent</option><option value="status">Status</option><option value="priority">Priority</option><option value="vehicle_type">Equipment</option></select>
+      <button type="button" class="cw-primary cw-new-case" onclick="cwOpenDialog('new')"><i class="ph ph-plus"></i> New case</button>
+    </div>
+    <div id="cw-filters" class="cw-filters" hidden>
+      <label>Status<select id="cw-status" aria-label="Report status" onchange="cwRender()"><option value="">All active</option><option value="open">Open</option><option value="assigned">Assigned</option><option value="reported">Reported</option></select></label>
+      <label>Priority<select id="cw-priority-filter" aria-label="Report priority" onchange="cwRender()"><option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="normal">Normal</option><option value="low">Low</option></select></label>
+      <label>Equipment<select id="cw-equipment-filter" aria-label="Equipment" onchange="cwRender()"><option value="">All equipment</option><option value="truck">Truck</option><option value="trailer">Trailer</option><option value="reefer">Reefer</option></select></label>
+      <label>Sort by<select id="cw-sort" aria-label="Sort reports" onchange="cwRender()"><option value="newest">Newest reports</option><option value="oldest">Oldest reports</option><option value="priority">Highest priority</option></select></label>
+      <button type="button" class="ui-clear-filters" onclick="cwClearFilters()">Reset filters</button>
+    </div>
+    <div id="cw-notice" class="cw-notice" role="status" hidden></div>
     <div class="ui-filter-summary" id="cw-filter-summary" aria-live="polite"></div>
     <div class="cw-work-area"><div id="cw-content" class="cw-content" aria-live="polite"><div class="loading">Loading cases...</div></div>
     <aside id="cw-detail" class="cw-detail" aria-label="Selected case details" hidden></aside></div>
     <div class="cw-footer"><span id="cw-count"></span><button type="button" class="btn secondary" onclick="cwLoadMore()">Load more cases</button></div>
+    <div id="cw-full" class="cw-full" hidden></div>
+  </section>
+</div>
+<div class="modal-overlay" id="cw-dialog-overlay" style="z-index:550" onclick="if(event.target===this)cwDismissDialog()">
+  <section class="modal cw-dialog" role="dialog" aria-modal="true" aria-labelledby="cw-dialog-title" tabindex="-1">
+    <button type="button" class="modal-close" onclick="cwDismissDialog()" aria-label="Close dialog"><i class="ph ph-x"></i></button>
+    <h2 id="cw-dialog-title"></h2><div id="cw-dialog-body"></div>
   </section>
 </div>
 <div class="page" id="page-cases">
@@ -243,7 +263,7 @@
   </div>
 
   <div class="page" id="page-leaderboard">
- 
+    <div class="leaderboard-metrics" id="leaderboard-metrics"></div>
     <div class="leaderboard-head">
       
       <div class="toggle-tabs leaderboard-period" role="group" aria-label="Performance period">
@@ -251,15 +271,15 @@
         <button type="button" class="toggle-btn" aria-pressed="false" onclick="setLbPeriod('week',this)">7 days</button>
         <button type="button" class="toggle-btn" aria-pressed="false" onclick="setLbPeriod('month',this)">30 days</button>
       </div>
+      <label class="leaderboard-sort">Rank by <select id="leaderboard-sort" aria-label="Rank agents by" onchange="setLeaderboardRankFilter(this.value)"><option value="overall">Overall</option><option value="resolved">Resolved</option><option value="active">Active</option><option value="missed">Missed</option><option value="reassigned">Reassigned</option></select></label>
     </div>
-    <div class="leaderboard-metrics" id="leaderboard-metrics"></div>
     <div class="leaderboard-grid">
       <div class="card leaderboard-ranking-card">
-        <div class="leaderboard-ranking-head"><div class="card-title"><i class="ph ph-trophy"></i>Agent ranking <span class="card-meta" id="leaderboard-period-label">Today</span></div><div class="leaderboard-filter-wrap"><button class="leaderboard-filter-btn" id="leaderboard-filter-btn" type="button" aria-expanded="false" aria-controls="leaderboard-filter-menu" onclick="toggleLeaderboardFilter(event)"><i class="ph ph-funnel"></i><span id="leaderboard-filter-label">Overall</span><i class="ph ph-caret-down"></i></button><div class="leaderboard-filter-menu" id="leaderboard-filter-menu" hidden><button type="button" data-filter="overall" onclick="setLeaderboardRankFilter('overall',this)"><i class="ph ph-list-numbers"></i>Overall</button><button type="button" data-filter="resolved" onclick="setLeaderboardRankFilter('resolved',this)"><i class="ph ph-check-circle"></i>Resolved</button><button type="button" data-filter="active" onclick="setLeaderboardRankFilter('active',this)"><i class="ph ph-hourglass"></i>Active</button><button type="button" data-filter="missed" onclick="setLeaderboardRankFilter('missed',this)"><i class="ph ph-phone-x"></i>Missed</button><button type="button" data-filter="reassigned" onclick="setLeaderboardRankFilter('reassigned',this)"><i class="ph ph-arrows-clockwise"></i>Reassigned</button></div></div></div>
+        <div class="leaderboard-ranking-head"><div class="card-title"><i class="ph ph-trophy"></i>Agent ranking <span class="card-meta" id="leaderboard-period-label">Today</span></div><span class="leaderboard-agent-count" id="leaderboard-agent-count"></span></div>
         <div id="leaderboard-full"></div><div class="leaderboard-pagination" id="leaderboard-pagination"></div>
       </div>
       <div class="card leaderboard-insights-card">
-        <div class="card-title"><i class="ph ph-sparkle"></i>Kurtex Performance Insights <span class="ki-live-dot">Live</span></div>
+        <div class="card-title"><i class="ph ph-sparkle"></i>Team insights</div>
         <div id="leaderboard-insights"></div>
       </div>
     </div>
@@ -313,7 +333,6 @@
 
   <!-- Kurtex Intelligence -->
   <div class="page" id="page-kurtex_intelligence">
-    <section class="ki-hero"><div><span class="eyebrow">KURTEX INTELLIGENCE</span><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div></section>
     <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><div class="ki-toolbar-actions"><div class="ki-live"><span></span> Live analysis</div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
     <div id="ki-summary" class="ki-summary"></div>
     <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
@@ -343,7 +362,7 @@
 
   <!-- Parts Manual -->
   <div class="page" id="page-parts_manual">
-    <header class="parts-manual-header"><div><span class="eyebrow">PARTS MANUAL</span><h2>Truck & trailer parts</h2><p>Find a component, symptom or OEM number, then open it for photos and troubleshooting.</p></div><span id="parts-total" class="parts-total-inline">0 parts</span></header>
+    <div class="parts-count-strip"><span id="parts-total" class="parts-total-inline">0 parts</span></div>
     <div class="parts-toolbar"><div class="parts-search-shell"><div class="parts-search"><i class="ph ph-magnifying-glass"></i><input id="parts-search" type="search" placeholder="Part, symptom, OEM number..." oninput="partsSearchInput(this.value)" onkeydown="partsSearchKey(event)"><button class="parts-search-clear" type="button" onclick="clearPartsSearch()" title="Clear"><i class="ph ph-x"></i></button></div><button class="parts-web-search-btn" id="parts-web-search-btn" type="button" onclick="searchPartsWeb()"><i class="ph ph-globe-hemisphere-west"></i><span>Search web</span></button></div><div class="parts-category-select"><i class="ph ph-funnel"></i><select id="parts-category-select" aria-label="Part category" onchange="setPartsCategory(this.value,null)"><option value="all">All categories</option><option value="air">Air & suspension</option><option value="brakes">Brakes</option><option value="engine">Engine</option><option value="electrical">Electrical</option><option value="aftertreatment">DEF / DPF</option><option value="reefer">Reefer</option><option value="trailer">Trailer</option></select></div></div>
     <div class="parts-layout"><aside class="parts-index"><div class="parts-index-head"><span class="eyebrow">MATCHING PARTS</span><strong id="parts-count">0 parts</strong></div><div id="parts-list"></div></aside><section class="part-detail" id="part-detail"></section></div>
     <div class="parts-disclaimer"><i class="ph ph-shield-warning"></i><span>This is an agent reference, not a substitute for the exact vehicle/OEM service procedure. Safety-critical brake, steering, pressurized-air, refrigerant and high-current electrical repairs require qualified service.</span></div>
@@ -353,7 +372,6 @@
 
 
 {% if is_developer %}<div class="page" id="page-ai_knowledge"><section class="ai-training-page">
-<section class="ai-training-hero"><div class="ai-hero-copy"><span class="eyebrow">AI KNOWLEDGE</span><h2>Train Kurtex with fleet knowledge</h2><p>Manage historical fleet experience and verified maintenance references in one place. Previous cases remain searchable evidence while approved sources stay trusted.</p></div><div class="ai-training-flow" aria-label="Knowledge workflow"><span><i class="ph ph-database"></i> Ingest</span><i class="ph ph-caret-right"></i><span><i class="ph ph-magnifying-glass"></i> Retrieve</span><i class="ph ph-caret-right"></i><span><i class="ph ph-shield-check"></i> Verify</span></div></section>
 <section class="ai-training-card ai-learning-card"><div class="ai-card-head ai-card-head-row"><div class="ai-heading-group"><span class="ai-card-icon"><i class="ph ph-truck"></i></span><div><h3>Fleet experience</h3><p>Historical cases are indexed automatically and used as searchable evidence.</p></div></div><div class="ai-learning-toolbar"><button class="btn secondary" type="button" onclick="loadFleetKnowledgeStats()"><i class="ph ph-arrows-clockwise"></i> Refresh</button><button class="btn" type="button" onclick="syncFleetKnowledge()"><i class="ph ph-database"></i> Sync cases</button></div></div><div class="ai-stat-row"><div><span class="ai-stat-icon"><i class="ph ph-files"></i></span><strong id="fleet-knowledge-total">—</strong><span>Indexed cases</span></div><div><span class="ai-stat-icon"><i class="ph ph-check-circle"></i></span><strong id="fleet-knowledge-resolved">—</strong><span>Resolved evidence</span></div><div><span class="ai-stat-icon"><i class="ph ph-warning-circle"></i></span><strong id="fleet-knowledge-review">—</strong><span>Incomplete evidence</span></div></div><div class="ai-import-strip"><div><strong>Import historical data</strong><span>Bulk-import an older case export into Fleet Knowledge.</span></div><label class="ai-compact-file" for="fleet-knowledge-csv"><i class="ph ph-file-csv"></i><span id="fleet-csv-file-name">Choose CSV</span></label><input id="fleet-knowledge-csv" class="ai-native-file" type="file" accept=".csv,text/csv" onchange="document.getElementById('fleet-csv-file-name').textContent=this.files[0]?this.files[0].name:'Choose CSV'"><button class="btn" type="button" onclick="importFleetKnowledgeCSV()"><i class="ph ph-upload-simple"></i> Import</button></div><div id="fleet-knowledge-status" class="ai-inline-status" role="status"></div></section>
 <div class="ai-training-grid ai-knowledge-workspace">
     <main class="ai-training-main">
@@ -425,24 +443,24 @@
 </div><small>Selected color applies to the tags in this entry.</small></div><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <div id="ai-preview-modal" class="ai-edit-modal ai-preview-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgePreview()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true"><header><div><span class="eyebrow">KNOWLEDGE PREVIEW</span><h3 id="ai-preview-title">Maintenance knowledge</h3><small id="ai-preview-meta"></small></div><button type="button" onclick="closeAIKnowledgePreview()"><i class="ph ph-x"></i></button></header><div id="ai-preview-content" class="ai-preview-content"></div></section></div>
 
-<script defer src="{{ url_for('static', filename='js/core/api.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/state.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/custom-select.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/views.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/case-workspace.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/details.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/reports.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/analytics.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/layout.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/agents-v23.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ui-refinements.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/app.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/platform/mobile.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ai.js', v='20261010b') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/notifications.js', v='20261010b') }}"></script>
-{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js', v='20261010b') }}"></script>{% endif %}
+<script defer src="{{ url_for('static', filename='js/core/api.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/state.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/custom-select.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/views.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/case-workspace.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/details.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/reports.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/analytics.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/layout.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/agents-v23.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ui-refinements.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/app.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/platform/mobile.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ai.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/notifications.js', v='20261010d') }}"></script>
+{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js', v='20261010d') }}"></script>{% endif %}
 <div id="ai-report-modal" class="ai-transcript-modal ai-report-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><header><div><span class="eyebrow">AI FEEDBACK</span><h3 id="ai-report-title">Report this answer</h3></div><button class="ai-report-close" type="button" onclick="closeAIReport()" aria-label="Close report" title="Close"><i class="ph ph-x"></i></button></header><p class="ai-report-intro">Tell us what looks wrong. Your report is saved as feedback and does not automatically teach the AI.</p><label><span>Reason</span><select id="ai-report-category"><option value="incorrect">Incorrect answer</option><option value="missing_context">Missing important context</option><option value="unclear">Unclear / confusing</option><option value="unsafe">Potentially unsafe guidance</option><option value="outdated">Possibly outdated</option><option value="other">Other</option></select></label><label><span>What should be reviewed?</span><textarea id="ai-report-reason" rows="5" maxlength="12000" placeholder="Example: The fault code points to a different circuit, and the manual says to test connector X first."></textarea></label><p id="ai-report-status" role="status"></p><footer><button type="button" class="ai-report-cancel" onclick="closeAIReport()">Cancel</button><button type="button" class="ai-primary-btn" onclick="submitAIReport()"><i class="ph ph-paper-plane-tilt"></i> Send report</button></footer></section></div>
 <div id="ai-transcript-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-transcript-title"><header><h3 id="ai-transcript-title">Driver explanation</h3><button type="button" onclick="document.getElementById('ai-transcript-modal').hidden=true" aria-label="Close transcript">Close</button></header><p>Check speech recognition, especially fault codes and model names. This explanation is driver-reported, not a confirmed diagnosis.</p><textarea id="ai-transcript-text" aria-label="Driver transcript" rows="10"></textarea><p id="ai-transcript-status" role="status"></p><footer><button type="button" onclick="saveAITranscript(true)">Retry transcription</button><button type="button" onclick="saveAITranscript(false)">Save correction</button></footer></section></div>
-<script defer src="{{ url_for('static', filename='js/features/ai-learning.js', v='20261010b') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ai-learning.js', v='20261010d') }}"></script>
 </body>
 </html>
