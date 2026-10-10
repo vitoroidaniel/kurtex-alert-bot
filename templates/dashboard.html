@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -187,6 +188,13 @@
 <div id="ai-chat-knowledge-modal" class="ai-chat-kb-modal" hidden><div class="ai-chat-kb-backdrop" onclick="closeAIChatKnowledge()"></div><section class="ai-chat-kb-dialog"><header><div><strong>Knowledge for this chat</strong><small>Select verified sources Kurtex AI should use in this conversation.</small></div><button type="button" onclick="closeAIChatKnowledge()"><i class="ph ph-x"></i></button></header><div class="ai-chat-kb-search"><i class="ph ph-magnifying-glass"></i><input id="ai-chat-kb-search" placeholder="Search knowledge..." oninput="renderAIChatKnowledgeOptions()"></div><div class="ai-chat-kb-toolbar"><span id="ai-chat-kb-selected-label">Selected sources</span><div><button type="button" onclick="selectAllAIChatKnowledge()">Select all</button><button type="button" onclick="clearAIChatKnowledge()">Clear all</button></div></div><div id="ai-chat-kb-list" class="ai-chat-kb-list"></div><footer><span id="ai-chat-kb-count">0 sources selected</span><button type="button" class="ai-chat-kb-apply" onclick="applyAIChatKnowledge()"><span>Apply sources</span><i class="ph ph-check"></i></button></footer></section></div>
 
 <div class="page" id="page-cases">
+  <section class="cw-shell" id="cw-shell">
+    <div class="cw-head"><div><h2>Case Workspace</h2><p>Live fleet cases, organized for faster resolution.</p></div><div class="cw-head-actions"><button class="btn secondary" type="button" onclick="cwRefresh()"><i class="ph ph-arrows-clockwise"></i> Refresh</button><button class="btn secondary" type="button" onclick="cwPrint()"><i class="ph ph-printer"></i> Print</button><button class="btn secondary" type="button" onclick="cwExport()"><i class="ph ph-download-simple"></i> Export</button></div></div>
+    <div class="cw-toolbar"><div class="cw-views" role="group" aria-label="Workspace view"><button type="button" data-cw-view="board" onclick="cwSetView('board')">Board</button><button type="button" data-cw-view="grid" onclick="cwSetView('grid')">Grid</button><button type="button" data-cw-view="table" onclick="cwSetView('table')">Table</button><button type="button" data-cw-view="card" onclick="cwSetView('card')">Card</button></div><label class="cw-search"><i class="ph ph-magnifying-glass"></i><input id="cw-search" placeholder="Search unit, issue, driver, agent..." oninput="cwRender()" aria-label="Search workspace cases"></label><select id="cw-status" aria-label="Filter status" onchange="cwRender()"><option value="">All statuses</option><option value="open">Open</option><option value="assigned">Assigned</option><option value="reported">Reported</option><option value="done">Done</option><option value="missed">Missed</option></select><select id="cw-group" aria-label="Group cases" onchange="cwRender()"><option value="agent">Group by agent</option><option value="status">Group by status</option><option value="priority">Group by priority</option><option value="vehicle_type">Group by equipment</option></select></div>
+    <div id="cw-content" class="cw-content" aria-live="polite"><div class="loading">Loading cases...</div></div>
+    <div class="cw-footer"><span id="cw-count"></span><button type="button" class="btn secondary" onclick="cwLoadMore()">Load more cases</button></div>
+  </section>
+  <div id="cw-original" style="display:none">
     <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search cases" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
     <div class="section">
       <div class="section-header">
@@ -214,6 +222,7 @@
     </div>
   </div>
 
+  </div>
   <div class="page" id="page-missed">
     <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search missed cases" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
     <div class="section">
@@ -418,6 +427,7 @@
 <script defer src="{{ url_for('static', filename='js/core/state.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/core/custom-select.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/views.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/case-workspace.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/details.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/reports.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/analytics.js') }}"></script>

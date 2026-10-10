@@ -3,7 +3,9 @@ handlers/report_handler.py
 """
 
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import os
+from urllib.parse import urlencode
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import (
     ContextTypes, ConversationHandler,
     CallbackQueryHandler, CommandHandler, MessageHandler, filters
@@ -177,6 +179,17 @@ def _build_report(d: dict) -> str:
 
 
 
+def _mini_app_url(case_id: str) -> str:
+    base = (os.getenv("KURTEX_PUBLIC_URL") or os.getenv("DASHBOARD_URL") or "").strip().rstrip("/")
+    if not base:
+        domain = (os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip()
+        if domain:
+            base = f"https://{domain}"
+    if not base:
+        return ""
+    return f"{base}/telegram/report?{urlencode({'case_id': case_id})}"
+
+
 async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Entry point from Report button (solve|case_id). Stores handler info and shows vehicle selector."""
     query   = update.callback_query
@@ -197,7 +210,19 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await query.answer("Finish your current report first.", show_alert=True)
             return ConversationHandler.END
 
-    # Store handler name and case_id
+    # Prefer the Kurtex Telegram Mini App report form when a public dashboard URL is available.
+    mini_url = _mini_app_url(case_id)
+    if mini_url:
+        await query.edit_message_text(
+            "📋 *Kurtex Report*\n\nOpen the report workspace below. Your case is linked automatically.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("Open report form", web_app=WebAppInfo(url=mini_url))
+            ]]),
+        )
+        return ConversationHandler.END
+
+    # Fallback to the classic Telegram conversation when no public URL is configured.
     user = update.effective_user
     handler_name = f"{user.first_name} {user.last_name or ''}".strip()
     ctx.user_data["report_case_id"] = case_id

@@ -116,3 +116,6 @@ Leaderboard upgraded into a team performance workspace with real case metrics, a
 - Agent ranking has a working metric filter and 5-agent pagination with Previous/Next controls.
 - Chicago time card is hidden on Developer and Agents workspaces.
 - Developer workspace cards were reorganized into compact service health, overview/runtime, connection tests, live activity, and health checks.
+
+### Telegram Mini App report form
+Report actions can open a Kurtex-styled Telegram Mini App instead of the long step-by-step chat form. Set `KURTEX_PUBLIC_URL` (recommended) to the HTTPS public dashboard origin, e.g. `https://your-service.up.railway.app`. If omitted, `RAILWAY_PUBLIC_DOMAIN` is used automatically when available. Mini App submissions verify Telegram `initData`, require an authorized Kurtex user, send the report/attachments to `REPORTS_GROUP_ID`, update the linked case, and clear the form after a successful send. The classic chat report flow remains as a fallback when no public URL is available.

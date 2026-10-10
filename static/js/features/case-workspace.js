@@ -1,20 +1,45 @@
-/* Case Workspace: uses the existing read-only cases API and case detail modal. */
-var ssState={rows:[],view:'board',busy:false,loaded:false,density:'compact'};
-function ssEsc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-function ssVal(c,k){if(k==='assigned')return c.assigned_to||c.assigned_agent||c.agent_name||c.agent||'Unassigned';if(k==='priority')return c.priority||'Normal';return c.status||'Unknown'}
-function ssId(c){return String(c.full_id||c.id||'')}
-function ssIssue(c){return c.full_description||c.description||c.issue_text||c.issue||'No description'}
-function ssUnit(c){return c.unit_number||c.unit||c.truck_number||c.driver||ssId(c)||'Unknown'}
-function ssSelected(){var q=(document.getElementById('ss-search').value||'').toLowerCase();return ssState.rows.filter(function(c){return String(c.status||'').trim().toLowerCase()==='reported'&&(!q||[ssUnit(c),ssIssue(c),ssVal(c,'assigned'),ssId(c)].join(' ').toLowerCase().includes(q))})}
-function ssBadge(v){var t=String(v||'Normal').toLowerCase();return '<span class="ss-badge ss-badge-'+(t==='critical'||t==='urgent'||t==='high'?'high':t==='done'||t==='resolved'?'done':t==='missed'?'missed':'neutral')+'">'+ssEsc(v||'Normal')+'</span>'}
-function ssCard(c,i){var issue=ssIssue(c),driver=c.driver||c.reported_by||'',priority=ssVal(c,'priority'),status=ssVal(c,'status');return '<button type="button" class="ss-card ss-priority-'+ssEsc(String(priority).toLowerCase())+'" onclick="ssOpenDetail('+i+')" title="Open case '+ssEsc(ssUnit(c))+'"><span class="ss-card-unit">'+ssEsc(ssUnit(c))+'</span><span class="ss-card-issue">'+ssEsc(issue)+'</span><span class="ss-card-driver">'+ssEsc(driver||ssVal(c,'assigned'))+' · '+ssEsc(status)+'</span><span class="ss-card-meta">'+ssBadge(priority)+'<span class="ss-card-indicators"><i class="ph ph-chat-circle-text"></i><i class="ph ph-paperclip"></i></span></span></button>'}
-function ssToggleViewMenu(){var m=document.getElementById('ss-view-menu'),b=document.getElementById('ss-view-button');m.hidden=!m.hidden;b.setAttribute('aria-expanded',String(!m.hidden))}
-function ssSetDensity(v){ssState.density=v;ssRender()}
-function ssExport(){var rows=ssSelected(),fields=['Unit','Issue','Driver','Assigned to','Priority','Status'];var lines=[fields].concat(rows.map(c=>[ssUnit(c),ssIssue(c),c.driver||'',ssVal(c,'assigned'),ssVal(c,'priority'),ssVal(c,'status')]));var csv=lines.map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');var url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='kurtex-cases.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),500)}
-function ssRender(){var root=document.getElementById('ss-content');if(!root)return;var rows=ssSelected(),group=document.getElementById('ss-group').value;document.getElementById('ss-count').textContent=rows.length+' reported cases';if(!rows.length){root.innerHTML='<div class="ss-empty">No reported cases match your search.</div>';return}if(ssState.view==='grid'){root.innerHTML='<div class="ss-grid-scroll"><table class="ss-grid"><thead><tr><th>#</th><th>Unit</th><th>Driver / Reporter</th><th>Issue</th><th>Assigned to</th><th>Priority</th><th>Status</th><th>Details</th></tr></thead><tbody>'+rows.map(function(c,i){var ix=ssState.rows.indexOf(c);return '<tr onclick="ssOpenDetail('+ix+')" tabindex="0" onkeydown="if(event.key===\'Enter\')ssOpenDetail('+ix+')"><td>'+(i+1)+'</td><td><strong>'+ssEsc(ssUnit(c))+'</strong></td><td>'+ssEsc(c.driver||c.reported_by||'—')+'</td><td class="ss-issue-cell">'+ssEsc(ssIssue(c))+'</td><td>'+ssEsc(ssVal(c,'assigned'))+'</td><td>'+ssBadge(ssVal(c,'priority'))+'</td><td>'+ssBadge(ssVal(c,'status'))+'</td><td><i class="ph ph-arrow-square-out"></i></td></tr>'}).join('')+'</tbody></table></div>';return}var groups={};rows.forEach(function(c){var name=String(ssVal(c,group));(groups[name]||(groups[name]=[])).push(c)});root.innerHTML='<div class="ss-board ss-density-'+ssState.density+'">'+Object.keys(groups).sort(function(a,b){return a==='Unassigned'?-1:b==='Unassigned'?1:a.localeCompare(b)}).map(function(name){return '<section class="ss-lane"><header><strong>'+ssEsc(name)+'</strong><span>'+groups[name].length+'</span></header><div class="ss-lane-list">'+groups[name].map(function(c){return ssCard(c,ssState.rows.indexOf(c))}).join('')+'</div></section>'}).join('')+'</div>'}
-function ssSetView(v){ssState.view=v;document.getElementById('ss-board-tab').classList.toggle('active',v==='board');document.getElementById('ss-grid-tab').classList.toggle('active',v==='grid');ssRender()}
-async function ssLoad(){if(ssState.busy)return;var root=document.getElementById('ss-content');if(!root)return;ssState.busy=true;root.innerHTML='<div class="loading">Loading cases...</div>';try{var all=[],offset=0,more=true;while(more&&offset<2000){var r=await apiFetch('/api/cases?filter=all&limit=200&offset='+offset,'case-workspace');if(!r.ok)throw Error('Could not load cases');var d=await r.json(),batch=d.cases||[];all=all.concat(batch);offset+=batch.length;more=!!d.has_more&&batch.length>0}ssState.rows=all.filter(function(c){return String(c.status||'').trim().toLowerCase()==='reported'});ssState.loaded=true;ssRender()}catch(e){root.innerHTML='<div class="ss-empty">Unable to load cases. <button onclick="ssLoad()">Try again</button></div>'}finally{ssState.busy=false}}
-function ssOpenDetail(index){var c=ssState.rows[index];if(!c)return;var panel=document.getElementById('ss-detail'),back=document.getElementById('ss-detail-backdrop');document.getElementById('ss-detail-title').textContent='Case '+ssUnit(c);document.getElementById('ss-detail-body').innerHTML='<div class="ss-detail-section"><h3>'+ssEsc(ssIssue(c))+'</h3><p>'+ssBadge(ssVal(c,'status'))+' '+ssBadge(ssVal(c,'priority'))+'</p></div><dl class="ss-detail-list"><dt>Unit</dt><dd>'+ssEsc(ssUnit(c))+'</dd><dt>Assigned to</dt><dd>'+ssEsc(ssVal(c,'assigned'))+'</dd><dt>Driver</dt><dd>'+ssEsc(c.driver||'—')+'</dd><dt>Reported by</dt><dd>'+ssEsc(c.reported_by||'—')+'</dd></dl><div class="ss-detail-section"><h4><i class="ph ph-chat-circle-text"></i> Notes & attachments</h4><p>Open the full case to view or update notes, attachments and case history.</p></div><button class="ss-open-case" type="button" onclick="ssOpenOriginal('+index+')">Open full case <i class="ph ph-arrow-square-out"></i></button>';panel.hidden=false;back.hidden=false;document.body.classList.add('ss-detail-open')}
-function ssCloseDetail(){document.getElementById('ss-detail').hidden=true;document.getElementById('ss-detail-backdrop').hidden=true;document.body.classList.remove('ss-detail-open')}
-function ssOpenOriginal(index){var c=ssState.rows[index];if(!c)return;ssCloseDetail();openCase(ssId(c))}
-document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!document.getElementById('ss-detail').hidden)ssCloseDetail()});
+/* Case Workspace: all views use the existing authenticated cases API and case modal. */
+var cwView = 'board';
+function cwSetView(view) {
+  if (!['board','grid','table','card'].includes(view)) return;
+  cwView=view;
+  cwRender();
+}
+function cwData() {
+  var rows=(typeof caseLists!=='undefined' && caseLists.cases ? caseLists.cases.rows : []) || [];
+  var q=(document.getElementById('cw-search')?.value||'').trim().toLowerCase();
+  var status=document.getElementById('cw-status')?.value||'';
+  return rows.filter(function(c){
+    if(status && String(c.status||'').toLowerCase()!==status)return false;
+    return !q || [c.unit_number,c.unit,c.issue_text,c.description,c.driver,c.report_driver,c.agent,c.group,c.status,c.vehicle_type].some(function(x){return String(x||'').toLowerCase().includes(q)});
+  });
+}
+function cwEscape(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]});}
+function cwId(c){return c.full_id||c.id||''}
+function cwField(c,name,other){return c[name]||c[other]||''}
+function cwCard(c){
+  var id=cwId(c),unit=cwField(c,'unit_number','unit')||'No unit',issue=cwField(c,'issue_text','description')||'Maintenance case';
+  var priority=String(c.priority||'normal').toLowerCase(), status=String(c.status||'open').toLowerCase();
+  return '<button type="button" class="cw-case" data-id="'+cwEscape(id)+'" onclick="openCase(this)" aria-label="Open case '+cwEscape(unit)+'"><div class="cw-case-top"><strong>'+cwEscape(unit)+'</strong><span class="cw-priority cw-'+cwEscape(priority)+'">'+cwEscape(priority)+'</span></div><div class="cw-issue">'+cwEscape(issue)+'</div><div class="cw-location">'+cwEscape(c.location||c.current_location||c.group||'')+'</div><div class="cw-case-bottom"><span>'+cwEscape(c.driver||c.report_driver||'')+'</span><span class="cw-status">'+cwEscape(status)+'</span></div></button>';
+}
+function cwRender(){
+  var root=document.getElementById('cw-content');if(!root)return;
+  document.querySelectorAll('[data-cw-view]').forEach(function(b){b.classList.toggle('active',b.dataset.cwView===cwView);b.setAttribute('aria-pressed',String(b.dataset.cwView===cwView))});
+  var rows=cwData();var count=document.getElementById('cw-count');if(count)count.textContent=rows.length+' loaded cases';
+  if(!rows.length){root.innerHTML='<div class="cw-empty">No cases match these filters.</div>';return}
+  if(cwView==='table'){
+    root.innerHTML='<div class="cw-table-scroll"><table class="cw-table"><thead><tr><th>Unit</th><th>Issue</th><th>Driver</th><th>Assigned to</th><th>Status</th><th>Priority</th></tr></thead><tbody>'+rows.map(function(c){return '<tr data-id="'+cwEscape(cwId(c))+'" tabindex="0" role="button" onclick="openCase(this)" onkeydown="if(event.key===\'Enter\')openCase(this)"><td>'+cwEscape(cwField(c,'unit_number','unit'))+'</td><td>'+cwEscape(cwField(c,'issue_text','description'))+'</td><td>'+cwEscape(c.driver||c.report_driver)+'</td><td>'+cwEscape(c.agent)+'</td><td>'+cwEscape(c.status)+'</td><td>'+cwEscape(c.priority)+'</td></tr>'}).join('')+'</tbody></table></div>';return;
+  }
+  if(cwView==='grid'||cwView==='card'){root.innerHTML='<div class="cw-'+cwView+'">'+rows.map(cwCard).join('')+'</div>';return}
+  var field=document.getElementById('cw-group')?.value||'agent';var groups=new Map();
+  rows.forEach(function(c){var name=String(c[field]|| (field==='agent'?'Unassigned':'Not specified'));if(!groups.has(name))groups.set(name,[]);groups.get(name).push(c)});
+  root.innerHTML='<div class="cw-board">'+Array.from(groups,function(entry){return '<section class="cw-column"><header><strong>'+cwEscape(entry[0])+'</strong><span>'+entry[1].length+'</span></header><div class="cw-stack">'+entry[1].map(cwCard).join('')+'</div></section>'}).join('')+'</div>';
+}
+function cwRefresh(){if(typeof loadCases==='function')return loadCases(false,true)}
+function cwLoadMore(){if(typeof loadCases==='function')return loadCases(true,true)}
+function cwExport(){
+ var rows=cwData();var fields=['unit_number','issue_text','driver','agent','status','priority','vehicle_type','group'];
+ var csv=[fields.join(',')].concat(rows.map(function(c){return fields.map(function(k){return '"'+String(c[k]||'').replace(/"/g,'""')+'"'}).join(',')})).join('\r\n');
+ var blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='kurtex-case-workspace.csv';a.click();setTimeout(function(){URL.revokeObjectURL(url)},1000);
+}
+function cwPrint(){window.print()}

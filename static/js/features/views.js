@@ -291,6 +291,7 @@ async function loadCaseList(kind, append, quiet) {
       incoming = incoming.concat(d.cases || []);
     } while (quiet && d.has_more && incoming.length < target);
     state.rows = append ? state.rows.concat(incoming) : incoming;
+    if(kind === "cases" && typeof cwRender === "function") cwRender();
     updateHTML(el, '<div class="table-count">Showing ' +
       state.rows.length +
       " of " +

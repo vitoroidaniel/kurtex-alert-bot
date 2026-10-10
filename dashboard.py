@@ -2538,6 +2538,103 @@ def api_fleet_intelligence():
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
 
+
+
+def _verify_webapp_init_data(raw: str):
+    """Verify Telegram Mini App initData and return the Telegram user payload."""
+    if not BOT_TOKEN or not raw:
+        return None
+    try:
+        pairs = dict(urllib.parse.parse_qsl(raw, keep_blank_values=True))
+        supplied = pairs.pop("hash", "")
+        auth_date = int(pairs.get("auth_date", "0"))
+        if not supplied or abs(time.time() - auth_date) > 86400:
+            return None
+        data_check = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
+        secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        expected = hmac.new(secret, data_check.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, supplied):
+            return None
+        user = json.loads(pairs.get("user", "{}"))
+        from backend.storage.user_store import is_authorized
+        return user if user.get("id") and is_authorized(int(user["id"])) else None
+    except Exception:
+        return None
+
+def _miniapp_user():
+    return _verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""))
+
+def _report_markdown(data):
+    labels={"truck":"Truck","trailer":"Trailer","reefer":"Reefer"}; icons={"low":"🟢","medium":"🟡","high":"🔴"}
+    def esc(v):
+        v=str(v or "—")
+        for ch in "_*`[": v=v.replace(ch,"\\"+ch)
+        return v
+    vt=data.get("vehicle_type","truck"); pr=data.get("priority","medium")
+    unit_label="Truck" if vt=="truck" else "Trailer"
+    lines=[f"{icons.get(pr,'🟡')} *Case Report — {labels.get(vt,vt.title())}*",f"Priority: *{pr.title()}*","",f"*{unit_label}:* {esc(data.get('unit_number'))}",f"*Driver:* {esc(data.get('driver'))}","",f"*Issue:* {esc(data.get('issue'))}","",f"*{esc(data.get('load'))}*",f"Pick up Location/Time: {esc(data.get('pickup'))}",f"Delivery Location/Time: {esc(data.get('delivery'))}",f"Current Location: {esc(data.get('location'))}"]
+    if vt=="reefer": lines += ["",f"*Setpoint:* {esc(data.get('setpoint'))}",f"*Current temp:* {esc(data.get('current_temp'))}",f"*Temp recorder:* {esc(data.get('temp_recorder'))}"]
+    if data.get("comments"): lines += ["",f"*Comments:* {esc(data.get('comments'))}"]
+    lines += ["",f"*Reported by:* {esc(data.get('handler'))}"]
+    return "\n".join(lines)
+
+@app.route("/telegram/report")
+def telegram_report_app():
+    return render_template("telegram_report.html")
+
+@app.route("/api/telegram-report/case")
+def telegram_report_case():
+    user=_miniapp_user()
+    if not user: return jsonify({"error":"Open this report from Kurtex in Telegram."}),401
+    case_id=request.args.get("case_id","")
+    case=next((c for c in load_cases() if str(c.get("id"))==case_id),None)
+    if not case or case.get("status") not in ("assigned","reported"):
+        return jsonify({"error":"This case is no longer active."}),404
+    return jsonify({"id":case_id,"driver_name":case.get("driver_name",""),"group_name":case.get("group_name",""),"description":case.get("description","")})
+
+@app.route("/api/telegram-report/submit",methods=["POST"])
+def telegram_report_submit():
+    user=_miniapp_user()
+    if not user: return jsonify({"error":"Telegram authorization expired. Reopen the report from the bot."}),401
+    case_id=(request.form.get("case_id") or "").strip()
+    cases=load_cases(); case=next((c for c in cases if str(c.get("id"))==case_id),None)
+    if not case or case.get("status") not in ("assigned","reported"):
+        return jsonify({"error":"This case is no longer active."}),409
+    from backend.storage.user_store import get_user
+    stored=get_user(int(user["id"])) or {}
+    data={k:(request.form.get(k) or "").strip() for k in ("vehicle_type","unit_number","driver","issue","load","pickup","delivery","location","setpoint","current_temp","temp_recorder","comments","priority")}
+    if data["vehicle_type"] not in ("truck","trailer","reefer") or not data["unit_number"] or not data["issue"]:
+        return jsonify({"error":"Equipment, unit number and issue are required."}),400
+    if data["priority"] not in ("low","medium","high"): data["priority"]="medium"
+    data["handler"]=stored.get("name") or user.get("first_name") or "Kurtex user"
+    report_text=_report_markdown(data)
+    uploads=request.files.getlist("attachments")[:10]
+    try:
+        import asyncio
+        from telegram import Bot, InputFile
+        async def send():
+            bot=Bot(BOT_TOKEN); dest=int(os.getenv("REPORTS_GROUP_ID","0") or 0)
+            if not dest: raise RuntimeError("No reports group configured")
+            await bot.send_message(dest,report_text,parse_mode="Markdown")
+            for f in uploads:
+                raw=f.read(); f.seek(0); inp=InputFile(io.BytesIO(raw),filename=f.filename or "attachment")
+                mime=(f.mimetype or "").lower()
+                if mime.startswith("image/"): await bot.send_photo(dest,inp)
+                elif mime.startswith("video/"): await bot.send_video(dest,inp)
+                else: await bot.send_document(dest,inp)
+        asyncio.run(send())
+        from backend.storage.case_store import report_case, _load, _save, CASES_FILE
+        report_case(case_id); fresh=_load(CASES_FILE)
+        for c in fresh:
+            if str(c.get("id"))==case_id:
+                c.update({"vehicle_type":data["vehicle_type"],"unit_number":data["unit_number"],"report_driver":data["driver"],"issue_text":data["issue"],"load_type":data["load"],"location":data["location"],"priority":data["priority"],"pickup":data["pickup"],"delivery":data["delivery"],"comments":data["comments"],"setpoint":data["setpoint"],"current_temp":data["current_temp"],"temp_recorder":data["temp_recorder"],"report_text":report_text,"report_data":data,"media":[{"name":f.filename,"type":f.mimetype} for f in uploads]}); break
+        _save(CASES_FILE,fresh)
+        return jsonify({"ok":True})
+    except Exception as exc:
+        logger.exception("Telegram mini report submit failed")
+        return jsonify({"error":"Report could not be sent. Please retry."}),500
+
+
 @app.route("/login")
 def login():
     return render_template("login.html", bot_username=get_bot_username(), error=request.args.get("error"))
