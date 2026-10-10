@@ -12,15 +12,16 @@
 <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <script defer src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v23.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/ui-refinements.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/theme.css', v='20261010d') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/core/chrome.css', v='20261010d') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/case-workspace.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v23.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/ui-refinements.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/theme.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/chrome.css', v='20261010g') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/home.css', v='20261010g') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -101,7 +102,7 @@
 
 <main class="main">
   <div class="topbar">
-    <div class="breadcrumb"><span class="topbar-brand">KURTEX</span><span aria-hidden="true">/</span><h1 id="page-title">Home</h1></div>
+    <div class="breadcrumb"><h1 id="page-title">Home</h1></div>
     <div class="topbar-right">
       <button class="badge-btn btn-outline topbar-report-action" onclick="openReport()"><i class="ph ph-file-text"></i> <span>Report</span></button>
       <button type="button" class="badge-btn btn-outline topbar-print-action" aria-label="Print current page" onclick="uiPrintCurrentPage()"><i class="ph ph-printer"></i><span>Print</span></button>
@@ -112,7 +113,7 @@
       <div class="notification-center">
         <button id="notification-bell" class="badge-btn notification-bell" type="button" onclick="toggleNotifications()" aria-label="Notifications" aria-expanded="false" aria-controls="notification-panel"><i class="ph ph-bell"></i><span id="notification-count" class="notification-count" hidden>0</span></button>
         <section id="notification-panel" class="notification-panel" aria-labelledby="notification-title" hidden>
-          <header class="notification-panel-head"><div class="notification-title"><div><strong id="notification-title">Notifications</strong><small id="notification-summary">All caught up</small></div></div><div class="notification-head-actions"><button class="notification-mark-all" type="button" onclick="markAllNotificationsSeen()" aria-label="Mark all notifications read" title="Mark all read"><i class="ph ph-checks"></i></button><button class="notification-close" type="button" onclick="closeNotifications(true)" aria-label="Close notifications"><i class="ph ph-x"></i></button></div></header>
+          <header class="notification-panel-head"><div class="notification-title"><div><strong id="notification-title">Notifications</strong><small id="notification-summary">Checking for updates…</small></div></div><div class="notification-head-actions"><button class="notification-mark-all" type="button" onclick="markAllNotificationsSeen()" hidden>Mark all read</button><button class="notification-close" type="button" onclick="closeNotifications(true)" aria-label="Close notifications"><i class="ph ph-x"></i></button></div></header>
           <div class="notification-tabs" role="group" aria-label="Filter notifications"><button type="button" class="active" data-filter="all" aria-pressed="true" onclick="filterNotifications('all',this)">All</button><button type="button" data-filter="unseen" aria-pressed="false" onclick="filterNotifications('unseen',this)">Unread</button><button type="button" data-filter="alerts" aria-pressed="false" onclick="filterNotifications('alerts',this)">Alerts</button></div>
           <p id="notification-feedback" class="notification-feedback" role="status" hidden></p><div id="notification-list" class="notification-list"></div>
           <footer class="notification-footer"><span>Case updates & alerts</span><button class="notification-clear" type="button" onclick="clearNotifications()"><i class="ph ph-trash"></i> Clear notifications</button></footer>
@@ -132,40 +133,26 @@
     <div class="mobile-update-row"><span class="dot"></span><span class="mobile-last-update">Updated just now</span></div>
   </div>
   <div id="connection-banner" class="connection-banner" role="alert" hidden></div>
-  <div class="page active" id="page-overview">
+  <div class="page active home-dashboard" id="page-overview">
   <section class="home-welcome" aria-label="Home welcome">
-    <div class="home-welcome-copy"><h2>Welcome back, {{ user.first_name or 'there' }}</h2><p>Here’s what’s happening with your cases today.</p></div>
-    <button class="home-customize-icon" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button>
+    <div class="home-welcome-copy"><span class="home-day-label" id="home-day-label">Your daily briefing</span><h2><span id="home-greeting">Welcome back</span>, {{ user.first_name or 'there' }}</h2><p id="home-welcome-detail">Let’s get your day moving.</p></div>
+    <div class="home-welcome-tools"><span class="home-refresh-status" id="home-refresh-status" role="status">Updating your briefing…</span><button class="home-customize-icon" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button></div>
   </section>
-  <section class="home-today-summary" aria-label="Today summary">
-    <div class="home-today-heading"><div><span>Today</span><small>Live case activity</small></div></div>
-    <div class="home-today-grid" id="home-today-grid">
-      <button type="button" onclick="showPage('cases')"><span class="home-today-icon"><i class="ph ph-clipboard-text"></i></span><span><small>Today's cases</small><strong id="home-today-total">—</strong></span><i class="ph ph-caret-right"></i></button>
-      <button type="button" onclick="showPage('cases')"><span class="home-today-icon"><i class="ph ph-user-check"></i></span><span><small>Assigned today</small><strong id="home-today-assigned">—</strong></span><i class="ph ph-caret-right"></i></button>
-      <button type="button" onclick="showPage('cases')"><span class="home-today-icon"><i class="ph ph-check-circle"></i></span><span><small>Resolved today</small><strong id="home-today-resolved">—</strong></span><i class="ph ph-caret-right"></i></button>
-      <button type="button" onclick="showPage('missed')"><span class="home-today-icon"><i class="ph ph-warning-circle"></i></span><span><small>Missed today</small><strong id="home-today-missed">—</strong></span><i class="ph ph-caret-right"></i></button>
-    </div>
-  </section>
-  <section class="mobile-app-home">
-    <div class="mobile-home-copy"><span>QUICK ACTIONS</span><h1>What do you need?</h1><p>Jump straight into the tools you use most.</p></div>
-    <button class="mobile-home-ai" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span><strong>Ask Kurtex AI</strong><small>Diagnose symptoms, fault codes and repairs</small></span><i class="ph ph-arrow-up-right"></i></button>
-    <div class="mobile-home-grid">
-      <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><strong>Parts</strong><small>Identify & troubleshoot</small></button>
-      <button onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><strong>Issue search</strong><small>Truck & trailer history</small></button>
-    </div>
-    <div class="mobile-home-tip"><i class="ph ph-camera"></i><span><strong>Got a photo?</strong><small>Open AI and attach it for visual diagnostics.</small></span><button onclick="mobileGo('ai_assistant')">Open AI</button></div><div class="mobile-home-shortcuts">
- <button onclick="mobileGo('ai_assistant');setTimeout(function(){var i=document.getElementById('ai-page-input');if(i){i.value='Help me identify this fault code: ';i.focus()}},120)"><i class="ph ph-warning-circle"></i><span><strong>Fault code</strong><small>Explain a code</small></span></button>
- <button onclick="mobileGo('fleet_intel')"><i class="ph ph-clock-counter-clockwise"></i><span><strong>Repair history</strong><small>Find past issues</small></span></button>
-</div>
-  </section><div class="overview-toolbar"><button class="home-customize-icon overview-customize-fallback" type="button" onclick="openHomeSettings()" title="Customize Home" aria-label="Customize Home"><i class="ph ph-sliders-horizontal"></i></button></div>
-    <div class="overview-label"><span>Key metrics</span><small>Your selected Home metrics</small></div>
+  <nav class="home-quick-actions" aria-label="Quick actions">
+    {% if "cases" in allowed_pages %}<button type="button" class="home-quick-action home-quick-primary" onclick="homeReportMaintenance()"><span class="home-quick-icon"><i class="ph ph-plus-circle"></i></span><span><strong>Report maintenance</strong><small>Log a new fleet issue</small></span><i class="ph ph-arrow-up-right"></i></button>
+    <button type="button" class="home-quick-action" onclick="showPage('case_workspace')"><span class="home-quick-icon"><i class="ph ph-kanban"></i></span><span><strong>Open Workspace</strong><small>Keep cases moving</small></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
+    {% if "fleet_intel" in allowed_pages %}<button type="button" class="home-quick-action" onclick="homeFindUnit()"><span class="home-quick-icon"><i class="ph ph-magnifying-glass"></i></span><span><strong>Find a unit</strong><small>Explore repair history</small></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
+    {% if "ai_assistant" in allowed_pages %}<button type="button" class="home-quick-action" onclick="showPage('ai_assistant')"><span class="home-quick-icon"><i class="ph ph-sparkle"></i></span><span><strong>Ask Kurtex</strong><small>Get maintenance help</small></span><i class="ph ph-arrow-up-right"></i></button>{% endif %}
+  </nav>
+    <div class="overview-label"><span>At a glance</span><small>Today & open work</small></div>
     <div class="stat-grid" id="stat-grid"><div class="loading">Loading...</div></div>
+    <section class="card home-attention-card"><div class="home-panel-heading"><div><h3>Needs your attention <span class="home-count" id="home-attention-count">—</span></h3><p>Priority issues, missed cases, and waiting work.</p></div><button type="button" class="home-text-action" onclick="showPage('case_workspace')">Workspace <i class="ph ph-arrow-right"></i></button></div><div id="home-attention-list"><div class="loading">Loading your queue…</div></div><p class="home-queue-note" id="home-queue-note"></p></section>
     <div class="two-col">
-      <div class="card"><div class="card-title"><i class="ph ph-trophy"></i>Top agents <select class="home-range" id="agents-home-range" onchange="setHomeRange('agents',this.value)" aria-label="Top agents time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></div><div id="lb-overview"></div></div>
-      <div class="card"><div class="card-title"><i class="ph ph-wrench"></i>Problem units <select class="home-range" id="units-home-range" onchange="setHomeRange('units',this.value)" aria-label="Problem units time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all" selected>All time</option></select></div><div id="units-overview"></div></div>
+      <div class="card home-team-card"><div class="card-title"><i class="ph ph-users-three"></i>Team progress <select class="home-range" id="agents-home-range" onchange="setHomeRange('agents',this.value)" aria-label="Team progress time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all">All time</option></select></div><div id="lb-overview"></div></div>
+      <div class="card home-units-card"><div class="card-title"><i class="ph ph-wrench"></i>Recurring unit reports <select class="home-range" id="units-home-range" onchange="setHomeRange('units',this.value)" aria-label="Recurring reports time range"><option value="day">Today</option><option value="week">7 days</option><option value="month">30 days</option><option value="all" selected>All time</option></select></div><div id="units-overview"></div></div>
     </div>
-    <div class="card home-ai-summary-card home-intelligence-card"><div class="card-title"><i class="ph ph-brain"></i>Kurtex Intelligence <span class="home-ai-badge">Live</span></div><div id="home-ai-summary" class="home-ai-summary home-intelligence"><span class="home-ai-loading">Checking fleet patterns...</span></div></div>
-    <div class="card home-activity-card"><div class="card-title"><i class="ph ph-activity"></i>Recent activity <span class="card-meta">Today</span></div><div id="home-recent-activity" class="home-recent-activity"><div class="loading">Loading...</div></div></div>
+    <section class="card home-ai-summary-card home-intelligence-card"><div class="home-panel-heading"><div><h3><i class="ph ph-sparkle"></i> Kurtex briefing</h3><p id="home-briefing-source">A quick read on your fleet’s day.</p></div><button type="button" class="home-icon-action" id="home-briefing-refresh" aria-label="Refresh Kurtex briefing" onclick="homeRefreshBriefing()"><i class="ph ph-arrow-clockwise"></i></button></div><div id="home-ai-summary" class="home-ai-summary home-intelligence"><span class="home-ai-loading">Preparing your briefing…</span></div></section>
+    <section class="card home-activity-card"><div class="home-panel-heading"><div><h3>Latest activity</h3><p>Reports, assignments, and case updates.</p></div><i class="ph ph-pulse home-panel-symbol" aria-hidden="true"></i></div><div id="home-recent-activity" class="home-recent-activity"><div class="loading">Loading...</div></div></section>
     <div class="section">
       <div class="section-header"><div class="section-title">Recent cases <small>Latest 10 from today</small></div><button class="text-button" onclick="showPage('cases')">View all cases →</button></div>
       <div class="table-wrap"><div class="table-scroll" id="recent-table"><div class="loading">Loading...</div></div></div>
@@ -216,7 +203,8 @@
     <div class="ui-filter-summary" id="cw-filter-summary" aria-live="polite"></div>
     <div class="cw-work-area"><div id="cw-content" class="cw-content" aria-live="polite"><div class="loading">Loading cases...</div></div>
     <aside id="cw-detail" class="cw-detail" aria-label="Selected case details" hidden></aside></div>
-    <div class="cw-footer"><span id="cw-count"></span><button type="button" class="btn secondary" onclick="cwLoadMore()">Load more cases</button></div>
+    <div class="cw-board-navigation" id="cw-board-navigation" hidden><span>Drag to pan · Shift + scroll</span><div role="group" aria-label="Move across board"><button type="button" id="cw-pan-left" class="cw-secondary" onclick="cwPan(-1)" aria-label="Scroll board left"><i class="ph ph-caret-left"></i></button><button type="button" id="cw-pan-right" class="cw-secondary" onclick="cwPan(1)" aria-label="Scroll board right"><i class="ph ph-caret-right"></i></button></div></div>
+    <div class="cw-footer"><span id="cw-count"></span><button type="button" id="cw-load-more" class="btn secondary" onclick="cwLoadMore()">Load more cases</button></div>
     <div id="cw-full" class="cw-full" hidden></div>
   </section>
 </div>
@@ -227,18 +215,17 @@
   </section>
 </div>
 <div class="page" id="page-cases">
-    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search cases" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="if(!event.isComposing)uiCaseSearch()" oncompositionend="uiCaseSearch()"><button type="button" class="ui-search-clear" id="cases-search-clear" onclick="uiClearCaseSearch()" aria-label="Clear case search" hidden><i class="ph ph-x"></i></button></div>
-    <div class="section">
-      <div class="section-header">
-        <div class="section-title">Case history</div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <div class="filter-tabs">
+    <div class="section case-history-panel">
+      <div class="case-history-toolbar">
+        <div class="search-wrap" role="search"><i class="ph ph-magnifying-glass"></i><input type="search" aria-label="Search cases" id="cases-search" placeholder="Search driver, group, agent or issue…" oninput="if(!event.isComposing)uiCaseSearch()" oncompositionend="uiCaseSearch()"><button type="button" class="ui-search-clear" id="cases-search-clear" onclick="uiClearCaseSearch()" aria-label="Clear case search" hidden><i class="ph ph-x"></i></button></div>
+        <div class="case-history-filters" role="group" aria-label="Case history filters">
+          <div class="filter-tabs" role="group" aria-label="Case period">
             <button class="tab-btn active" onclick="setCaseFilter('today',this)">Today</button>
             <button class="tab-btn" onclick="setCaseFilter('week',this)">This Week</button>
             <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
             <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
           </div>
-          <select aria-label="Case status" id="status-filter" onchange="loadCases()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
+          <select aria-label="Case status" id="status-filter" onchange="loadCases()">
             <option value="">All Statuses</option>
             <option value="open">🔵 Open</option>
             <option value="assigned">🟡 Assigned</option>
@@ -246,7 +233,7 @@
             <option value="done">🟢 Done</option>
             <option value="missed">🔴 Missed</option>
           </select>
-          <input type="date" aria-label="Case date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none" onchange="setCaseDateFilter(this.value)">
+          <input type="date" aria-label="Case date" id="cases-date-picker" onchange="setCaseDateFilter(this.value)">
           <button class="tab-btn" id="cases-date-clear" aria-label="Clear date filter" onclick="clearDateFilter()" style="display:none">✕</button>
         </div>
       </div>
@@ -255,23 +242,23 @@
     </div>
   </div>
   <div class="page" id="page-missed">
-    <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search missed cases" id="missed-search" placeholder="Search..." oninput="onSearch('missed')"></div>
-    <div class="section">
-      <div class="section-header"><div class="section-title">Missed Cases</div></div>
+    <section class="section missed-cases-panel" aria-label="Missed case results">
+      <div class="missed-cases-toolbar"><div class="search-wrap" role="search"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><input type="search" aria-label="Search missed cases" id="missed-search" placeholder="Search missed cases..." oninput="if(!event.isComposing)uiMissedSearch()" oncompositionend="uiMissedSearch()"><button type="button" class="ui-search-clear" id="missed-search-clear" onclick="uiClearMissedSearch()" aria-label="Clear missed case search" hidden><i class="ph ph-x"></i></button></div></div>
       <div class="table-wrap"><div class="table-scroll" id="missed-table"><div class="loading">Loading...</div></div></div>
-    </div>
+    </section>
   </div>
 
   <div class="page" id="page-leaderboard">
     <div class="leaderboard-metrics" id="leaderboard-metrics"></div>
+    <section class="leaderboard-analysis" aria-label="Team performance">
     <div class="leaderboard-head">
-      
+      <h2>Team performance</h2><div class="leaderboard-controls">
       <div class="toggle-tabs leaderboard-period" role="group" aria-label="Performance period">
         <button type="button" class="toggle-btn active" aria-pressed="true" onclick="setLbPeriod('day',this)">Today</button>
         <button type="button" class="toggle-btn" aria-pressed="false" onclick="setLbPeriod('week',this)">7 days</button>
         <button type="button" class="toggle-btn" aria-pressed="false" onclick="setLbPeriod('month',this)">30 days</button>
       </div>
-      <label class="leaderboard-sort">Rank by <select id="leaderboard-sort" aria-label="Rank agents by" onchange="setLeaderboardRankFilter(this.value)"><option value="overall">Overall</option><option value="resolved">Resolved</option><option value="active">Active</option><option value="missed">Missed</option><option value="reassigned">Reassigned</option></select></label>
+      <label class="leaderboard-sort">Rank by <select id="leaderboard-sort" aria-label="Rank agents by" onchange="setLeaderboardRankFilter(this.value)"><option value="overall">Overall</option><option value="resolved">Resolved</option><option value="active">Active</option><option value="missed">Missed</option><option value="reassigned">Reassigned</option></select></label></div>
     </div>
     <div class="leaderboard-grid">
       <div class="card leaderboard-ranking-card">
@@ -287,6 +274,7 @@
       <section class="card k23-chart-card"><div class="k23-card-heading"><div><strong><i class="ph ph-chart-bar"></i> Agent workload</strong><small>Top 8 agents by cases handled</small></div></div><div class="k23-chart-body"><canvas id="k23-workload-chart" role="img" aria-label="Cases handled by agent"></canvas><div class="k23-chart-empty" hidden>No agent activity in this period.</div></div></section>
       <section class="card k23-chart-card"><div class="k23-card-heading"><div><strong><i class="ph ph-chart-donut"></i> Case activity</strong><small>Reassignments are events and may overlap case statuses.</small></div></div><div class="k23-chart-body"><canvas id="k23-outcomes-chart" role="img" aria-label="Resolved, active, missed and reassigned case counts"></canvas><div class="k23-chart-empty" hidden>No case activity in this period.</div></div></section>
     </div>
+    </section>
   </div>
 
   <div class="page" id="page-analytics">
@@ -333,9 +321,12 @@
 
   <!-- Kurtex Intelligence -->
   <div class="page" id="page-kurtex_intelligence">
-    <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><div class="ki-toolbar-actions"><div class="ki-live"><span></span> Live analysis</div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
-    <div id="ki-summary" class="ki-summary"></div>
-    <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
+    <div id="ki-summary" class="ki-summary" aria-label="Fleet pattern summary"><div><span>Active findings</span><strong>&mdash;</strong></div><div><span>Critical</span><strong>&mdash;</strong></div><div><span>Units affected</span><strong>&mdash;</strong></div><div><span>Evidence</span><strong>&mdash;</strong></div></div>
+    <section class="ki-results" aria-label="Fleet findings">
+      <div class="ki-toolbar"><h2>Fleet findings</h2><div class="ki-controls"><div class="toggle-tabs" id="ki-state-tabs" role="group" aria-label="Finding status"><button type="button" class="toggle-btn active" aria-pressed="true" onclick="setKIFilter('active',this)">Active</button><button type="button" class="toggle-btn" aria-pressed="false" onclick="setKIFilter('watching',this)">Watching</button><button type="button" class="toggle-btn" aria-pressed="false" onclick="setKIFilter('resolved',this)">Resolved</button><button type="button" class="toggle-btn" aria-pressed="false" onclick="setKIFilter('dismissed',this)">Dismissed</button><button type="button" class="toggle-btn" aria-pressed="false" onclick="setKIFilter('all',this)">All</button></div><button type="button" class="btn secondary" id="ki-refresh" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
+      <p id="ki-load-error" class="page-inline-error" role="status" hidden></p>
+      <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
+    </section>
   </div>
 
   <!-- Fleet Intelligence -->
@@ -362,9 +353,11 @@
 
   <!-- Parts Manual -->
   <div class="page" id="page-parts_manual">
-    <div class="parts-count-strip"><span id="parts-total" class="parts-total-inline">0 parts</span></div>
-    <div class="parts-toolbar"><div class="parts-search-shell"><div class="parts-search"><i class="ph ph-magnifying-glass"></i><input id="parts-search" type="search" placeholder="Part, symptom, OEM number..." oninput="partsSearchInput(this.value)" onkeydown="partsSearchKey(event)"><button class="parts-search-clear" type="button" onclick="clearPartsSearch()" title="Clear"><i class="ph ph-x"></i></button></div><button class="parts-web-search-btn" id="parts-web-search-btn" type="button" onclick="searchPartsWeb()"><i class="ph ph-globe-hemisphere-west"></i><span>Search web</span></button></div><div class="parts-category-select"><i class="ph ph-funnel"></i><select id="parts-category-select" aria-label="Part category" onchange="setPartsCategory(this.value,null)"><option value="all">All categories</option><option value="air">Air & suspension</option><option value="brakes">Brakes</option><option value="engine">Engine</option><option value="electrical">Electrical</option><option value="aftertreatment">DEF / DPF</option><option value="reefer">Reefer</option><option value="trailer">Trailer</option></select></div></div>
-    <div class="parts-layout"><aside class="parts-index"><div class="parts-index-head"><span class="eyebrow">MATCHING PARTS</span><strong id="parts-count">0 parts</strong></div><div id="parts-list"></div></aside><section class="part-detail" id="part-detail"></section></div>
+    <section class="parts-controls" aria-label="Find parts">
+      <div class="parts-toolbar"><div class="parts-search-shell"><div class="parts-search" role="search"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><input id="parts-search" type="search" aria-label="Search parts" placeholder="Search part, symptom or OEM number..." oninput="if(!event.isComposing)partsSearchInput(this.value)" oncompositionend="partsSearchInput(this.value)" onkeydown="partsSearchKey(event)"><button class="parts-search-clear" type="button" onclick="clearPartsSearch()" aria-label="Clear part search" hidden><i class="ph ph-x"></i></button></div><button class="parts-web-search-btn" id="parts-web-search-btn" type="button" onclick="searchPartsWeb()"><i class="ph ph-globe-hemisphere-west"></i><span>Search web</span></button></div></div>
+      <div class="parts-cats toggle-tabs" id="parts-cats" role="group" aria-label="Part category"><button type="button" class="toggle-btn active" data-category="all" aria-pressed="true" onclick="setPartsCategory(this.dataset.category,this)">All parts</button><button type="button" class="toggle-btn" data-category="air" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">Air & suspension</button><button type="button" class="toggle-btn" data-category="brakes" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">Brakes</button><button type="button" class="toggle-btn" data-category="engine" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">Engine</button><button type="button" class="toggle-btn" data-category="electrical" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">Electrical</button><button type="button" class="toggle-btn" data-category="aftertreatment" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">DEF / DPF</button><button type="button" class="toggle-btn" data-category="reefer" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">Reefer</button><button type="button" class="toggle-btn" data-category="trailer" aria-pressed="false" onclick="setPartsCategory(this.dataset.category,this)">Trailer</button></div>
+    </section>
+    <div class="parts-layout"><aside class="parts-index"><div class="parts-index-head"><span class="eyebrow">Matching parts</span><strong id="parts-count" hidden></strong></div><div id="parts-list"></div></aside><section class="part-detail" id="part-detail"></section></div>
     <div class="parts-disclaimer"><i class="ph ph-shield-warning"></i><span>This is an agent reference, not a substitute for the exact vehicle/OEM service procedure. Safety-critical brake, steering, pressurized-air, refrigerant and high-current electrical repairs require qualified service.</span></div>
   </div>
 
@@ -443,24 +436,25 @@
 </div><small>Selected color applies to the tags in this entry.</small></div><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <div id="ai-preview-modal" class="ai-edit-modal ai-preview-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgePreview()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true"><header><div><span class="eyebrow">KNOWLEDGE PREVIEW</span><h3 id="ai-preview-title">Maintenance knowledge</h3><small id="ai-preview-meta"></small></div><button type="button" onclick="closeAIKnowledgePreview()"><i class="ph ph-x"></i></button></header><div id="ai-preview-content" class="ai-preview-content"></div></section></div>
 
-<script defer src="{{ url_for('static', filename='js/core/api.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/state.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/custom-select.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/views.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/case-workspace.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/details.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/reports.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/analytics.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/layout.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/agents-v23.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ui-refinements.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/core/app.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/platform/mobile.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/ai.js', v='20261010d') }}"></script>
-<script defer src="{{ url_for('static', filename='js/features/notifications.js', v='20261010d') }}"></script>
-{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js', v='20261010d') }}"></script>{% endif %}
+<script defer src="{{ url_for('static', filename='js/core/api.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/state.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/custom-select.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/views.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/case-workspace.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/details.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/reports.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/analytics.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/layout.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/agents-v23.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ui-refinements.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/home.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/core/app.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/platform/mobile.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ai.js', v='20261010g') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/notifications.js', v='20261010g') }}"></script>
+{% if is_developer %}<script defer src="{{ url_for('static', filename='js/features/developer.js', v='20261010g') }}"></script>{% endif %}
 <div id="ai-report-modal" class="ai-transcript-modal ai-report-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><header><div><span class="eyebrow">AI FEEDBACK</span><h3 id="ai-report-title">Report this answer</h3></div><button class="ai-report-close" type="button" onclick="closeAIReport()" aria-label="Close report" title="Close"><i class="ph ph-x"></i></button></header><p class="ai-report-intro">Tell us what looks wrong. Your report is saved as feedback and does not automatically teach the AI.</p><label><span>Reason</span><select id="ai-report-category"><option value="incorrect">Incorrect answer</option><option value="missing_context">Missing important context</option><option value="unclear">Unclear / confusing</option><option value="unsafe">Potentially unsafe guidance</option><option value="outdated">Possibly outdated</option><option value="other">Other</option></select></label><label><span>What should be reviewed?</span><textarea id="ai-report-reason" rows="5" maxlength="12000" placeholder="Example: The fault code points to a different circuit, and the manual says to test connector X first."></textarea></label><p id="ai-report-status" role="status"></p><footer><button type="button" class="ai-report-cancel" onclick="closeAIReport()">Cancel</button><button type="button" class="ai-primary-btn" onclick="submitAIReport()"><i class="ph ph-paper-plane-tilt"></i> Send report</button></footer></section></div>
 <div id="ai-transcript-modal" class="ai-transcript-modal" hidden><section role="dialog" aria-modal="true" aria-labelledby="ai-transcript-title"><header><h3 id="ai-transcript-title">Driver explanation</h3><button type="button" onclick="document.getElementById('ai-transcript-modal').hidden=true" aria-label="Close transcript">Close</button></header><p>Check speech recognition, especially fault codes and model names. This explanation is driver-reported, not a confirmed diagnosis.</p><textarea id="ai-transcript-text" aria-label="Driver transcript" rows="10"></textarea><p id="ai-transcript-status" role="status"></p><footer><button type="button" onclick="saveAITranscript(true)">Retry transcription</button><button type="button" onclick="saveAITranscript(false)">Save correction</button></footer></section></div>
-<script defer src="{{ url_for('static', filename='js/features/ai-learning.js', v='20261010d') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/ai-learning.js', v='20261010g') }}"></script>
 </body>
 </html>

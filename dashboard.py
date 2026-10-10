@@ -1102,14 +1102,14 @@ def api_overview_preferences():
     overview = payload.get("overview")
     if not isinstance(overview, dict):
         return jsonify({"error": "Invalid overview preferences."}), 400
-    allowed_widgets = {"metrics", "agents", "units", "ai_summary", "activity", "cases"}
+    allowed_widgets = {"metrics", "agents", "units", "ai_summary", "attention", "activity", "cases"}
     clean = {}
     for device in ("desktop", "mobile"):
         src = overview.get(device, {})
         if not isinstance(src, dict):
             src = {}
         order = [x for x in src.get("order", []) if x in allowed_widgets]
-        order += [x for x in ("metrics", "agents", "units", "ai_summary", "activity", "cases") if x not in order]
+        order += [x for x in ("metrics", "ai_summary", "attention", "activity", "agents", "units", "cases") if x not in order]
         hidden = [x for x in src.get("hidden", []) if x in allowed_widgets]
         metrics = [x for x in src.get("metrics", []) if isinstance(x, int) and 0 <= x <= 20]
         clean[device] = {"order": order, "hidden": hidden, "metrics": metrics}
@@ -1697,6 +1697,123 @@ def api_kurtex_intelligence_state():
     state=_load_ki_state(); state[fid]={"state":value,"updated_at":chicago_now().isoformat(),"updated_by":(session.get("user") or {}).get("first_name","")}; _save_ki_state(state)
     return jsonify({"ok":True,"state":value})
 
+def _home_timestamp(value):
+    try:
+        return chicago_timestamp(value) if value else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _home_case_active(case):
+    return not case.get("closed_at") and str(case.get("status") or "open").lower() in {"open", "assigned", "reported", "missed"}
+
+
+def _home_case_attention(case, now):
+    from backend.storage.case_store import is_maintenance_report
+    if not _home_case_active(case):
+        return None
+    urgent = str(case.get("priority") or "normal").lower() in {"critical", "urgent", "high", "high priority"}
+    missed = str(case.get("status") or "").lower() == "missed"
+    waiting = not case.get("agent_id") and str(case.get("agent_name") or "").strip().lower() in {"", "—", "unassigned"}
+    started = _home_timestamp(case.get("reported_at") or case.get("opened_at"))
+    age = max(0, (now - started).total_seconds() / 3600) if started else None
+    aging = is_maintenance_report(case) and age is not None and age >= 24
+    if not (urgent or missed or waiting or aging):
+        return None
+    return {"attention_reason": "High priority" if urgent else "Missed case" if missed else "Awaiting assignment" if waiting else "Open over 24 hours",
+            "age_hours": round(age, 1) if age is not None else None,
+            "attention_tone": "urgent" if urgent or missed else "waiting",
+            "attention_rank": 0 if urgent else 1 if missed else 2 if waiting else 3}
+
+
+@app.route("/api/home/briefing")
+def api_home_briefing():
+    """Read-only daily briefing, with bounded queues and recorded case events."""
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    if "cases" not in _current_allowed_pages():
+        return jsonify({"error": "You do not have access to cases."}), 403
+    from backend.storage.case_store import is_maintenance_report
+    cases = [c for c in load_cases() if not is_testing(c)]
+    now = chicago_now()
+    today = now.date()
+    yesterday = today - timedelta(days=1)
+
+    def on_date(value, day):
+        dt = _home_timestamp(value)
+        return bool(dt and dt.date() == day)
+
+    reports = [c for c in cases if is_maintenance_report(c)]
+    reported_today = sum(on_date(c.get("reported_at") or c.get("opened_at"), today) for c in reports)
+    reported_yesterday = sum(on_date(c.get("reported_at") or c.get("opened_at"), yesterday) for c in reports)
+    resolved_today = sum(str(c.get("status") or "").lower() in {"done", "resolved", "closed"}
+                         and on_date(c.get("closed_at"), today) for c in cases)
+    attention = []
+    unassigned = 0
+    high_priority = 0
+    for c in cases:
+        if not _home_case_active(c):
+            continue
+        priority = str(c.get("priority") or "normal").lower()
+        urgent = priority in {"critical", "urgent", "high", "high priority"}
+        waiting = not c.get("agent_id") and str(c.get("agent_name") or "").strip().lower() in {"", "—", "unassigned"}
+        high_priority += int(urgent)
+        unassigned += int(waiting)
+        state = _home_case_attention(c, now)
+        if not state:
+            continue
+        row = serialize_case(c)
+        row.update(state)
+        attention.append(((state["attention_rank"], -(state["age_hours"] or 0)), row))
+    attention.sort(key=lambda item: item[0])
+
+    events = []
+    for c in cases:
+        cid = str(c.get("id") or "")
+        if not cid:
+            continue
+        seen = set()
+
+        def add_event(kind, value, actor="", detail=""):
+            dt = _home_timestamp(value)
+            if not dt or dt > now or (kind, dt.isoformat()) in seen:
+                return
+            seen.add((kind, dt.isoformat()))
+            events.append({"id": cid + ":" + kind + ":" + dt.isoformat(), "case_id": cid,
+                           "kind": kind, "at": dt.isoformat(), "actor": str(actor or ""),
+                           "unit": str(c.get("unit_number") or ""),
+                           "issue": str(c.get("issue_text") or c.get("description") or "Maintenance case")[:160],
+                           "detail": str(detail or "")[:160]})
+
+        history = [x for x in (c.get("workspace_history") or []) if isinstance(x, dict)]
+        action_kinds = {"create": "reported", "edit": "updated", "close": "resolved"}
+        recorded = set()
+        for entry in history:
+            kind = action_kinds.get(entry.get("action"))
+            if kind and _home_timestamp(entry.get("created_at")):
+                recorded.add(kind)
+                add_event(kind, entry.get("created_at"), entry.get("author"))
+        for entry in (c.get("workspace_notes") or []):
+            if isinstance(entry, dict):
+                add_event("note", entry.get("created_at"), entry.get("author"), entry.get("text"))
+        if is_maintenance_report(c):
+            if "reported" not in recorded:
+                add_event("reported", c.get("reported_at") or c.get("opened_at"))
+        else:
+            add_event("opened", c.get("opened_at"))
+        add_event("assigned", c.get("assigned_at"), detail=c.get("agent_name"))
+        if "resolved" not in recorded and str(c.get("status") or "").lower() in {"done", "resolved", "closed"}:
+            add_event("resolved", c.get("closed_at"), c.get("closed_by_name") or c.get("resolved_by"))
+    events.sort(key=lambda entry: _home_timestamp(entry["at"]).timestamp(), reverse=True)
+    recent = sorted((c for c in cases if case_local_date(c) == today), key=lambda c: c.get("opened_at") or "", reverse=True)[:10]
+    return jsonify({"generated_at": now.isoformat(), "day": today.isoformat(),
+                    "metrics": {"reported": reported_today, "reported_previous": reported_yesterday,
+                                "active": sum(_home_case_active(c) and c.get("status") != "missed" for c in reports), "attention": len(attention),
+                                "resolved": resolved_today, "high_priority": high_priority, "unassigned": unassigned},
+                    "attention": [row for _, row in attention[:6]], "activity": events[:8],
+                    "recent_cases": [serialize_case(c) for c in recent]})
+
+
 @app.route("/api/home/ai-summary")
 def api_home_ai_summary():
     """Surface actionable fleet intelligence; never repeat Home KPI totals."""
@@ -1892,6 +2009,19 @@ def api_cases():
                      and c.get("status") in ("open", "assigned", "reported")]
         if f != "testing":
             cases = [c for c in cases if not is_testing(c)]
+        if f in {"home_reported", "home_resolved", "home_attention"}:
+            if "cases" not in _current_allowed_pages():
+                return jsonify({"error": "You do not have access to cases."}), 403
+            from backend.storage.case_store import is_maintenance_report
+            now = chicago_now()
+            if f == "home_attention":
+                cases = [c for c in cases if _home_case_attention(c, now)]
+            elif f == "home_reported":
+                cases = [c for c in cases if is_maintenance_report(c) and
+                         chicago_date_str(c.get("reported_at") or c.get("opened_at")) == now.date().isoformat()]
+            else:
+                cases = [c for c in cases if str(c.get("status") or "").lower() in {"done", "resolved", "closed"}
+                         and chicago_date_str(c.get("closed_at")) == now.date().isoformat()]
         if date_filter:
             cases = [c for c in cases if case_local_date(c) == date_filter]
         elif f == "today":    cases = [c for c in cases if case_local_date(c) == today_str()]
@@ -1909,7 +2039,11 @@ def api_cases():
                      search in (c.get("group_name") or "").lower() or
                      search in (c.get("agent_name") or "").lower() or
                      search in (c.get("description") or "").lower()]
-        cases = sorted(cases, key=lambda c: (c.get("reported_at") or c.get("opened_at", "")) if f == "workspace" else c.get("opened_at", ""), reverse=True)
+        if f == "home_attention":
+            cases = sorted(cases, key=lambda c: ((_home_case_attention(c, now) or {}).get("attention_rank", 4),
+                                                -((_home_case_attention(c, now) or {}).get("age_hours") or 0)))
+        else:
+            cases = sorted(cases, key=lambda c: (c.get("reported_at") or c.get("opened_at", "")) if f == "workspace" else c.get("opened_at", ""), reverse=True)
         total = len(cases)
         page = cases[offset:offset+limit]
         try:

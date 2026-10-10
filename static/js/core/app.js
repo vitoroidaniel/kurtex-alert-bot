@@ -9,7 +9,7 @@ async function refresh(force) {
   button.disabled = true;
   try {
     var tasks = [loadStats()];
-    if (currentPage === "overview") tasks.push(loadRecent());
+    if (currentPage === "overview") { tasks.push(loadRecent()); tasks.push(loadHomeAISummary(false)); }
     else if (currentPage === "case_workspace") tasks.push(cwRefresh());
     else if (currentPage === "cases") tasks.push(loadCases(false, true));
     else if (currentPage === "missed") tasks.push(loadMissed(false, true));
@@ -29,16 +29,7 @@ async function refresh(force) {
   }
 }
 async function loadRecent() {
-  var el = document.getElementById("recent-table");
-  try {
-    var r = await apiFetch("/api/cases?filter=today&limit=10", "recent");
-    var d = await r.json();
-    updateHTML(el, caseTable(d.cases));
-    renderHomeActivity(d.cases || []);
-  } catch (e) {
-    if (e.name !== "AbortError" && !el.querySelector("table"))
-      if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
-  }
+  return loadHomeBriefing();
 }
 function autoRefresh() {
   return refresh(false);
@@ -98,7 +89,6 @@ function updateChicagoClock() {
 
 updateChicagoClock();
 setInterval(updateChicagoClock, 1000);
-loadHomeAISummary();
 showPage((typeof overviewLayout!=="undefined" && !overviewLayout.rememberPage ? overviewLayout.landingPage : preferences.get("kurtex-page")) || "overview");
 setInterval(autoRefresh, 15000);
 document.addEventListener("visibilitychange", function () {

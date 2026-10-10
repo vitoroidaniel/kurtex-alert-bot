@@ -3,10 +3,10 @@ var uiCaseTotal=null;
 function uiSyncSelect(id){const el=document.getElementById(id);if(el&&typeof syncKurtexSelect==='function')syncKurtexSelect(el);}
 function uiUpdateShell(page){
  document.title=(titles[page]||'Kurtex')+' · Kurtex';
- const exports=['overview','cases','missed','fleet','case_workspace'];
- document.querySelectorAll('.topbar-print-action,.topbar-export-action').forEach(b=>b.hidden=!exports.includes(page));
- document.getElementById('refresh-button').hidden=['agents','ai_assistant','ai_knowledge','users','developer'].includes(page);
- document.querySelector('.topbar-report-action').hidden=page==='agents';
+ document.querySelectorAll('.topbar-report-action,.topbar-print-action,.topbar-export-action,.topbar-refresh-action').forEach(b=>b.hidden=page!=='overview');
+ document.querySelector('.topbar-right').hidden=page==='case_workspace';
+ if(page==='case_workspace'&&typeof closeNotifications==='function')closeNotifications(false);
+ if(page==='cases')document.getElementById('page-title').textContent='Case history';
  if(page==='agents')document.getElementById('page-title').textContent='Agents';
  document.querySelectorAll('.nav-item[data-page],[data-mobile-page]').forEach(el=>{if(el.dataset.page===page||el.dataset.mobilePage===page)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
 }
@@ -14,10 +14,12 @@ function uiPrintCurrentPage(){if(currentPage==='case_workspace')cwPrint();else w
 function uiExportCurrentPage(){if(currentPage==='case_workspace')cwExport();else window.location.assign('/api/export');}
 function uiCaseSearch(){const el=document.getElementById('cases-search');document.getElementById('cases-search-clear').hidden=!el.value;uiRenderCaseFilters(null);onSearch('cases');}
 function uiClearCaseSearch(){document.getElementById('cases-search').value='';document.getElementById('cases-search-clear').hidden=true;clearTimeout(searchTimers.cases);loadCases();document.getElementById('cases-search').focus();}
+function uiMissedSearch(){document.getElementById('missed-search-clear').hidden=!document.getElementById('missed-search').value;onSearch('missed');}
+function uiClearMissedSearch(){const input=document.getElementById('missed-search');input.value='';document.getElementById('missed-search-clear').hidden=true;clearTimeout(searchTimers.missed);loadMissed();input.focus();}
 function uiRenderCaseFilters(total){
  if(total!==undefined)uiCaseTotal=total;
  const root=document.getElementById('cases-filter-summary');if(!root)return;
- const query=document.getElementById('cases-search').value.trim(),status=document.getElementById('status-filter').value,period={today:'Today',week:'This week',active:'Active cases',all:'All time'}[currentFilter];
+ const query=document.getElementById('cases-search').value.trim(),status=document.getElementById('status-filter').value,period={today:'Today',week:'This week',active:'Active cases',all:'All time',home_reported:'Maintenance reported today',home_resolved:'Resolved today',home_attention:'Needs attention'}[currentFilter];
  const chips=[currentDateFilter||period||'All time'];if(status)chips.push(status==='done'?'Resolved':status);if(query)chips.push('Search: '+query);
  root.innerHTML='<div class="ui-filter-chips">'+chips.map(label=>'<span class="ui-filter-chip">'+h(label)+'</span>').join('')+'</div><span class="ui-result-count">'+(uiCaseTotal===null?'Updating results…':Number(uiCaseTotal).toLocaleString()+' matching cases')+'</span><button type="button" class="ui-clear-filters" onclick="uiResetCaseFilters()">Clear filters</button>';
  document.getElementById('cases-search-clear').hidden=!query;

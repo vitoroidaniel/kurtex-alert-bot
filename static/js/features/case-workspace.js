@@ -25,13 +25,14 @@ function cwCard(c){
  const id=cwId(c),unit=c.unit_number||'No unit',p=cwPriority(c),date=(c.reported||c.opened||'').split(' ').slice(0,2).join(' ');
  return `<button type="button" class="cw-case ${cwState.selected===id?'selected':''}" data-priority="${p}" data-id="${cwEscape(id)}" onclick="cwSelect(this.dataset.id)" aria-label="View ${cwEscape(unit)}, ${cwEscape(c.issue_text||c.description)}, ${p} priority" aria-pressed="${cwState.selected===id}"><strong class="cw-unit">${cwEscape(unit)}</strong><span class="cw-issue" title="${cwEscape(c.issue_text||c.description)}">${cwEscape(c.issue_text||c.description||'Maintenance report')}</span><span class="cw-location" title="${cwEscape(c.location||'Location not provided')}">${cwEscape(c.location||'Location not provided')}</span><span class="cw-case-bottom"><span class="cw-priority cw-${p}">${cwLabel(p)}</span><span class="cw-card-counts"><span aria-label="${Number(c.notes_count||0)} notes"><i class="ph ph-chat-circle" aria-hidden="true"></i>${Number(c.notes_count||0)}</span><span aria-label="${Number(c.attachment_count||0)} attachments"><i class="ph ph-paperclip" aria-hidden="true"></i>${Number(c.attachment_count||0)}</span></span><time>${cwEscape(date)}</time></span></button>`;
 }
-function cwUpdateContent(root,html){const left=root.querySelector('.cw-board')?.scrollLeft||0,tops=Array.from(root.querySelectorAll('.cw-stack'),el=>el.scrollTop);updateHTML(root,html);const board=root.querySelector('.cw-board');if(board)board.scrollLeft=left;root.querySelectorAll('.cw-stack').forEach((el,i)=>el.scrollTop=tops[i]||0);}
+function cwUpdateContent(root,html){const left=root.querySelector('.cw-board')?.scrollLeft||0,tops=Array.from(root.querySelectorAll('.cw-stack'),el=>el.scrollTop);updateHTML(root,html);const board=root.querySelector('.cw-board');if(board)board.scrollLeft=left;root.querySelectorAll('.cw-stack').forEach((el,i)=>el.scrollTop=tops[i]||0);cwUpdatePanControls();}
 function cwRender(){
+ if(cwState.panning){cwState.panRenderPending=true;return;}
  const root=document.getElementById('cw-content');if(!root)return;
  document.querySelectorAll('[data-cw-view]').forEach(b=>{b.classList.toggle('active',b.dataset.cwView===cwView);b.setAttribute('aria-pressed',String(b.dataset.cwView===cwView));});
  const rows=cwData();if(typeof uiWorkspaceFilters==='function')uiWorkspaceFilters(rows);
  document.getElementById('cw-count').textContent=`${rows.length} matching · ${cwState.rows.length} of ${cwState.total} active reports loaded`;
- const more=document.querySelector('.cw-footer button');more.hidden=!cwState.hasMore;more.disabled=cwState.busy;more.textContent=cwState.busy?'Loading…':'Load more reports';
+ const more=document.getElementById('cw-load-more');more.hidden=!cwState.hasMore;more.disabled=cwState.busy;more.textContent=cwState.busy?'Loading…':'Load more reports';
  if(!rows.length){const filtered=cwState.rows.length>0;cwUpdateContent(root,`<div class="cw-empty"><i class="ph ${filtered?'ph-magnifying-glass':'ph-check-circle'}" aria-hidden="true"></i><h3>${cwState.busy?'Loading maintenance reports…':filtered?'No reports match these filters':'No active maintenance reports'}</h3><p>${cwState.busy?'':filtered?'Try another search or reset your filters.':'New reports appear here automatically. Closed reports stay in Cases.'}</p>${!cwState.busy?`<button type="button" class="cw-secondary" onclick="${filtered?'cwClearFilters()':'cwOpenDialog(\'new\')'}">${filtered?'Reset filters':'New case'}</button>`:''}</div>`);return;}
  if(cwView==='table'){
   cwUpdateContent(root,`<div class="cw-table-scroll"><table class="cw-table"><thead><tr><th>Unit / Issue</th><th>Driver</th><th>Assigned agent</th><th>Status</th><th>Priority</th><th>Reported</th><th>Actions</th></tr></thead><tbody>${rows.map(c=>`<tr class="${cwState.selected===cwId(c)?'selected':''}"><td><strong>${cwEscape(c.unit_number)}</strong><small>${cwEscape(c.issue_text||c.description)}</small></td><td>${cwEscape(c.report_driver||c.driver)}</td><td>${cwEscape(c.agent)}</td><td>${cwStatus(c)}</td><td><span class="cw-priority cw-${cwPriority(c)}">${cwLabel(cwPriority(c))}</span></td><td>${cwEscape(c.reported||c.opened)}</td><td><button type="button" class="cw-secondary" data-id="${cwEscape(cwId(c))}" onclick="cwSelect(this.dataset.id)">View case</button></td></tr>`).join('')}</tbody></table></div>`);return;
@@ -39,8 +40,57 @@ function cwRender(){
  if(cwView!=='board'){cwUpdateContent(root,`<div class="cw-${cwView}">${rows.map(cwCard).join('')}</div>`);return;}
  const field=document.getElementById('cw-group').value,groups=new Map();
  rows.forEach(c=>{const v=c[field],name=String(!v||v==='—'?(field==='agent'?'Unassigned':'Not specified'):v);if(!groups.has(name))groups.set(name,[]);groups.get(name).push(c);});
- cwUpdateContent(root,`<div class="cw-board">${Array.from(groups,([name,cases])=>`<section class="cw-column" data-tone="${cwTone(name)}"><header><strong title="${cwEscape(name)}">${cwEscape(field==='agent'?name:cwLabel(name))}</strong><span>${cases.length}</span></header><div class="cw-stack">${cases.map(cwCard).join('')}</div><footer><button type="button" onclick="cwOpenDialog('new')"><i class="ph ph-plus"></i> Add case</button></footer></section>`).join('')}</div>`);
+ cwUpdateContent(root,`<div class="cw-board" tabindex="0" role="region" aria-label="Maintenance board. Drag or use left and right arrow keys to move across groups.">${Array.from(groups,([name,cases])=>`<section class="cw-column" data-tone="${cwTone(name)}"><header><strong title="${cwEscape(name)}">${cwEscape(field==='agent'?name:cwLabel(name))}</strong><span>${cases.length}</span></header><div class="cw-stack">${cases.map(cwCard).join('')}</div><footer><button type="button" onclick="cwOpenDialog('new')"><i class="ph ph-plus"></i> Add case</button></footer></section>`).join('')}</div>`);
 }
+function cwUpdatePanControls(){
+ const board=document.querySelector('#cw-content .cw-board'),nav=document.getElementById('cw-board-navigation');
+ nav.hidden=!board||cwView!=='board'||cwState.full||(window.matchMedia('(max-width:760px)').matches&&!!cwState.selected);
+ if(!board)return;
+ document.getElementById('cw-pan-left').disabled=board.scrollLeft<=1;
+ document.getElementById('cw-pan-right').disabled=board.scrollLeft>=board.scrollWidth-board.clientWidth-1;
+}
+function cwPan(direction){
+ const board=document.querySelector('#cw-content .cw-board');if(!board)return;
+ const reduce=document.documentElement.classList.contains('reduce-motion')||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+ board.scrollBy({left:direction*Math.max(240,board.clientWidth*.75),behavior:reduce?'auto':'smooth'});
+}
+// Horizontal panning is navigation only. Reports keep their assignee and status.
+(function(){
+ const root=document.getElementById('cw-content');let drag=null,suppressClickUntil=0;
+ root.addEventListener('pointerdown',event=>{
+  const board=event.target.closest('.cw-board');
+  if(!board||event.pointerType!=='mouse'||event.button!==0||event.target.closest('input,textarea,select,a,[contenteditable],.cw-column>footer'))return;
+  drag={board,id:event.pointerId,x:event.clientX,y:event.clientY,left:board.scrollLeft,active:false};
+ });
+ root.addEventListener('pointermove',event=>{
+  if(!drag||event.pointerId!==drag.id)return;
+  const dx=event.clientX-drag.x,dy=event.clientY-drag.y;
+  if(!drag.active&&Math.abs(dx)>6&&Math.abs(dx)>Math.abs(dy)){
+   drag.active=true;cwState.panning=true;drag.board.classList.add('is-panning');drag.board.setPointerCapture(event.pointerId);
+  }
+  if(!drag.active)return;
+  event.preventDefault();drag.board.scrollLeft=drag.left-dx;
+ });
+ function finish(event){if(!drag||event.pointerId!==drag.id)return;const current=drag;drag=null;cwState.panning=false;current.board.classList.remove('is-panning');if(current.active){suppressClickUntil=Date.now()+250;if(current.board.hasPointerCapture(event.pointerId))current.board.releasePointerCapture(event.pointerId);}if(cwState.panRenderPending){cwState.panRenderPending=false;setTimeout(cwRender,0);}}
+ root.addEventListener('pointerup',finish);root.addEventListener('pointercancel',finish);root.addEventListener('lostpointercapture',finish);
+ root.addEventListener('pointerleave',event=>{if(drag&&!drag.active)finish(event);});
+ root.addEventListener('click',event=>{if(Date.now()<suppressClickUntil&&event.target.closest('.cw-board')){event.preventDefault();event.stopImmediatePropagation();suppressClickUntil=0;}},true);
+ root.addEventListener('scroll',cwUpdatePanControls,true);
+ root.addEventListener('keydown',event=>{
+  if(!event.target.matches('.cw-board')||event.altKey||event.ctrlKey||event.metaKey)return;
+  if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();cwPan(event.key==='ArrowLeft'?-1:1);}
+  else if(event.key==='Home'||event.key==='End'){event.preventDefault();event.target.scrollLeft=event.key==='Home'?0:event.target.scrollWidth;}
+ });
+ root.addEventListener('wheel',event=>{
+  const board=event.target.closest('.cw-board');if(!board||event.ctrlKey||Math.abs(event.deltaX)>Math.abs(event.deltaY))return;
+  const stack=event.target.closest('.cw-stack');
+  if(!event.shiftKey&&stack&&((event.deltaY>0&&stack.scrollTop<stack.scrollHeight-stack.clientHeight-1)||(event.deltaY<0&&stack.scrollTop>0)))return;
+  const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?board.clientWidth:1),left=board.scrollLeft;
+  if((delta<0&&left<=0)||(delta>0&&left>=board.scrollWidth-board.clientWidth-1))return;
+  event.preventDefault();board.scrollLeft+=delta;
+ },{passive:false});
+ if(typeof ResizeObserver!=='undefined')new ResizeObserver(cwUpdatePanControls).observe(root);else window.addEventListener('resize',cwUpdatePanControls);
+})();
 async function cwLoad(append){
  if(cwState.busy||cwState.writeBusy||cwState.dialog)return;const serial=++cwState.serial;let completed=false;cwState.busy=true;if(!cwState.rows.length)cwRender();
  try{

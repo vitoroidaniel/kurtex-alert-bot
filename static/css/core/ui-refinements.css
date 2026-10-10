@@ -109,7 +109,5 @@ body[data-current-page="case_workspace"] .page-heading h1{font-size:23px!importa
 @media(min-width:1500px){#page-case_workspace .cw-work-area.has-detail{grid-template-columns:minmax(0,1fr) 315px}}
 @media(max-width:1100px){#page-case_workspace .cw-toolbar{flex-wrap:wrap}#page-case_workspace .cw-work-area.has-detail{grid-template-columns:minmax(0,1fr) 285px}#page-agents .k23-agent-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){#page-agents .k23-case-filters{grid-template-columns:1fr 1fr}#page-agents .k23-case-search{grid-column:1/-1}#page-agents .k23-agent-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#page-agents .k23-agent-metric:last-child{grid-column:1/-1}#page-case_workspace .cw-work-area.has-detail{display:block}#page-case_workspace .cw-toolbar .cw-views{width:100%}#page-case_workspace .cw-toolbar .cw-search{flex-basis:100%}#page-case_workspace .cw-stack{max-height:none}#page-case_workspace .cw-column{flex-basis:195px;min-width:195px}#page-case_workspace .cw-detail{height:calc(100dvh - 190px);max-height:none;min-height:360px}#page-case_workspace .cw-info-row{font-size:12px}}
-html body[data-current-page="case_workspace"] .sidebar .nav-item.active{background:var(--blue-bg)!important;box-shadow:inset 3px 0 var(--blue)!important}
-html body[data-current-page="case_workspace"] .sidebar .nav-item.active i{color:var(--blue)!important}
 #page-case_workspace .cw-work-area{background:var(--surface2);padding:10px 0 0;border-top:1px solid var(--border)}
 #page-case_workspace .cw-detail{background:var(--surface)}

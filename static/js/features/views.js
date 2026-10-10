@@ -8,33 +8,6 @@ async function loadStats() {
     if (!r.ok) return;
     stats = await r.json();
     var t = stats.today || {};
-    var homeToday={
-      "home-today-total":t.total||0,
-      "home-today-assigned":t.assigned||0,
-      "home-today-resolved":t.done||0,
-      "home-today-missed":t.missed||0
-    };
-    Object.keys(homeToday).forEach(function(id){var el=document.getElementById(id);if(el)el.textContent=homeToday[id]});
-    var sg = document.getElementById("stat-grid");
-    if (sg)
-      updateHTML(sg, '<div class="stat-card c-accent"><div class="stat-icon"><i class="ph ph-chart-bar"></i></div><div class="stat-label">Today Total</div><div class="stat-value v-accent">' +
-        (t.total || 0) +
-        "</div></div>" +
-        '<div class="stat-card c-blue"><div class="stat-icon"><i class="ph ph-user-check"></i></div><div class="stat-label">Assigned</div><div class="stat-value v-blue">' +
-        (t.assigned || 0) +
-        "</div></div>" +
-        '<div class="stat-card c-green"><div class="stat-icon"><i class="ph ph-check-circle"></i></div><div class="stat-label">Resolved</div><div class="stat-value v-green">' +
-        (t.done || 0) +
-        "</div></div>" +
-        '<div class="stat-card c-red"><div class="stat-icon"><i class="ph ph-warning-circle"></i></div><div class="stat-label">Missed</div><div class="stat-value v-red">' +
-        (t.missed || 0) +
-        "</div></div>" +
-        '<div class="stat-card c-purple"><div class="stat-icon"><i class="ph ph-arrows-clockwise"></i></div><div class="stat-label">Reassigned · all time</div><div class="stat-value v-purple">' +
-        (stats.reassigned_count || 0) +
-        "</div></div>" +
-        '<div class="stat-card c-yellow"><div class="stat-icon"><i class="ph ph-timer"></i></div><div class="stat-label">Avg response · all time</div><div class="stat-value v-sm v-yellow">' +
-        ((stats.all_time || {}).avg_resp || "—") +
-        "</div></div>");
 
     var badge = document.getElementById("missed-badge");
     if (badge) {
@@ -44,14 +17,7 @@ async function loadStats() {
       } else badge.style.display = "none";
     }
 
-    var lb = (stats.leaderboard_day || []).slice(0, 5);
-    var lbo = document.getElementById("lb-overview");
-    if (lbo) updateHTML(lbo, listRows(lb, lb[0] ? lb[0].count : 1));
-
-    var grps = stats.top_groups || [];
     var units = stats.top_problem_units || [];
-    var uo = document.getElementById("units-overview");
-    if (uo) updateHTML(uo, unitProblemRows(units));
 
     renderLeaderboard();
     renderAnalytics();
@@ -75,14 +41,12 @@ async function loadStats() {
         : '<div style="color:var(--muted);font-size:13px">No hashtag keywords yet</div>');
 
     renderHomeRangeWidgets();
-    var missedHome=document.getElementById("home-today-missed");if(missedHome)missedHome.classList.toggle("home-zero-good",Number(t.missed||0)===0);
 
     var ulb = document.getElementById("units-lb");
     if (ulb) updateHTML(ulb, unitProblemRows(units));
   } catch (e) {
     if (e.name === "AbortError") return;
-    if (!document.querySelector("#stat-grid .stat-card"))
-      updateHTML(document.getElementById("stat-grid"), errorContent(e));
+    // Home owns its briefing states; a failed global stats read must not replace them.
   }
 }
 
@@ -512,67 +476,72 @@ function renderFleetStatusContent() {
     "</div>");
 }
 
-async function loadMyProfile() {
-  var el = document.getElementById("my-profile-content");
-  if (!el) return;
-  if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading...</div>');
-  try {
-    var r = await apiFetch("/api/my_profile");
-    if (!r.ok) {
-      updateHTML(el, '<div class="loading">Error loading profile.</div>');
-      return;
+var myProfileState={data:null,query:'',status:''};
+async function loadMyProfile(){
+  const el=document.getElementById('my-profile-content');if(!el)return;
+  try{
+    const response=await apiFetch('/api/my_profile','my-profile'),profile=await response.json();
+    myProfileState.data=profile;
+    if(!el.querySelector('.my-profile-layout')){
+      updateHTML(el,`<p id="profile-load-error" class="page-inline-error" role="status" hidden></p>
+        <div class="my-profile-layout">
+          <aside class="my-profile-rail"><section id="profile-account" class="profile-panel profile-account" aria-label="Your account"></section>
+            <section class="profile-panel profile-preferences"><h2>Your workspace</h2>
+              <button type="button" onclick="openLayoutSettings('appearance')"><i class="ph ph-palette" aria-hidden="true"></i><span><strong>Appearance</strong><small>Theme and display preferences</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>
+              <button type="button" onclick="openLayoutSettings('notifications')"><i class="ph ph-bell" aria-hidden="true"></i><span><strong>Notifications</strong><small>Choose the updates you receive</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>
+              <button type="button" onclick="openLayoutSettings('interface')"><i class="ph ph-sidebar" aria-hidden="true"></i><span><strong>Interface</strong><small>Navigation and workspace density</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>
+            </section>
+          </aside>
+          <div class="my-profile-main"><div id="profile-metrics" class="profile-metrics" aria-label="All-time case statistics"></div>
+            <section class="profile-panel profile-activity"><div class="profile-section-head"><h2>Your activity</h2><span>Cases opened in each period</span></div><div id="profile-periods" class="profile-periods"></div></section>
+            <section class="profile-panel profile-recent"><div class="profile-section-head"><h2>Recent case activity</h2><span>10 most recent cases</span></div>
+              <div class="profile-case-toolbar"><div class="profile-search" role="search"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><input id="profile-case-search" type="search" aria-label="Search your recent cases" placeholder="Search unit, driver or issue" oninput="if(!event.isComposing)filterMyProfileCases(this.value)" oncompositionend="filterMyProfileCases(this.value)"><button type="button" id="profile-search-clear" onclick="clearMyProfileSearch()" aria-label="Clear recent case search" hidden><i class="ph ph-x"></i></button></div>
+                <select id="profile-case-status" aria-label="Recent case status" onchange="myProfileState.status=this.value;renderMyProfileCases()"><option value="">All statuses</option><option value="active">Active</option><option value="done">Resolved</option><option value="missed">Missed</option></select></div>
+              <p id="profile-case-count" class="profile-case-count" aria-live="polite"></p><div id="profile-case-results" class="profile-case-results"></div>
+            </section>
+          </div>
+        </div>`);
+      document.getElementById('profile-case-search').value=myProfileState.query;
+      document.getElementById('profile-case-status').value=myProfileState.status;
+      if(typeof syncKurtexSelect==='function')syncKurtexSelect(document.getElementById('profile-case-status'));
     }
-    var p = await r.json();
-    updateHTML(el, '<div class="two-col profile-grid" style="margin-bottom:16px">' +
-      '<div class="card profile-identity">' +
-      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">' +
-      '<div style="width:52px;height:52px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--accent);flex-shrink:0">' +
-      h((p.name || "?")[0]) +
-      "</div>" +
-      '<div><div style="font-size:17px;font-weight:700">' +
-      h(p.name) +
-      '</div><div style="font-size:12px;color:var(--muted)">' +
-      (p.username ? "@" + h(p.username) + " · " : "") +
-      h(p.role) +
-      "</div></div>" +
-      "</div>" +
-      '<div class="mini-stat-grid">' +
-      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--text)">' +
-      p.done +
-      '</div><div class="agent-stat-label">Resolved</div></div>' +
-      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--text)">' +
-      p.missed +
-      '</div><div class="agent-stat-label">Missed</div></div>' +
-      '<div class="agent-stat"><div class="agent-stat-val" style="color:var(--text)">' +
-      p.rate +
-      '%</div><div class="agent-stat-label">Resolution rate</div></div>' +
-      "</div></div>" +
-      '<div class="card"><div class="card-title">Activity breakdown</div><div class="stats-list">' +
-      '<div class="row"><span>Today assigned</span><span class="val">' +
-      p.today_total +
-      "</span></div>" +
-      '<div class="row"><span>Today resolved</span><span class="val" style="color:var(--text)">' +
-      p.today_done +
-      "</span></div>" +
-      '<div class="row"><span>This week assigned</span><span class="val">' +
-      p.week_total +
-      "</span></div>" +
-      '<div class="row"><span>This week resolved</span><span class="val" style="color:var(--text)">' +
-      p.week_done +
-      "</span></div>" +
-      '<div class="row"><span>Avg response</span><span class="val">' +
-      p.avg_resp +
-      "</span></div>" +
-      "</div></div></div>" +
-      '<div class="section-title" style="margin-bottom:10px">Recent case activity</div>' +
-      '<div class="table-wrap"><div class="table-scroll">' +
-      caseTable(p.recent) +
-      "</div></div>");
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    console.error(e);
-    if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, errorContent(e));
+    document.getElementById('profile-load-error').hidden=true;
+    renderMyProfileAccount(profile);renderMyProfileMetrics(profile);renderMyProfileCases(true);
+  }catch(error){
+    if(error.name==='AbortError')return;
+    if(myProfileState.data&&el.querySelector('.my-profile-layout')){
+      const feedback=document.getElementById('profile-load-error');feedback.textContent='Your profile could not refresh. Previous activity is still shown.';feedback.hidden=false;
+    }else updateHTML(el,'<div class="profile-empty"><i class="ph ph-cloud-slash" aria-hidden="true"></i><h2>Profile unavailable</h2><p>Your activity could not load. Try again.</p><button type="button" class="btn secondary" onclick="loadMyProfile()">Try again</button></div>');
   }
+}
+function profileCount(value){return Math.max(0,Number(value)||0).toLocaleString('en-US');}
+function renderMyProfileAccount(profile){
+  const role=({developer:'Developer',super_admin:'Manager',manager:'Manager',admin:'Manager',agent:'Agent'})[profile.role]||profile.role||'Team member';
+  const photo=document.querySelector('.sidebar .user-chip img.user-avatar');
+  const avatar=photo?`<img src="${attr(photo.getAttribute('src')||'')}" alt="">`:`<span>${h((profile.name||'?').charAt(0).toUpperCase())}</span>`;
+  updateHTML(document.getElementById('profile-account'),`<div class="profile-avatar">${avatar}</div><h2>${h(profile.name||'Your account')}</h2><p class="profile-handle">${profile.username?'@'+h(profile.username):'Kurtex team member'}</p><span class="profile-role">${h(role)}</span><dl class="profile-account-details"><div><dt>Workspace</dt><dd>Kurtex Fleet Operations</dd></div></dl>`);
+}
+function renderMyProfileMetrics(profile){
+  const rate=Math.max(0,Math.min(100,Number(profile.rate)||0));
+  const metrics=[['ph-clipboard-text','Total cases',profileCount(profile.total),'all'],['ph-check-circle','Resolved',profileCount(profile.done),'resolved'],['ph-warning-circle','Missed',profileCount(profile.missed),'missed'],['ph-chart-pie','Resolution rate',profile.total?rate+'%':'\u2014','rate']];
+  updateHTML(document.getElementById('profile-metrics'),metrics.map(([icon,label,value,tone])=>`<div class="profile-metric" data-tone="${tone}"><span><i class="ph ${icon}" aria-hidden="true"></i>${label}</span><strong>${value}</strong><small>All time</small></div>`).join(''));
+  const periods=[['Today',profile.today_total,profile.today_done],['This week',profile.week_total,profile.week_done]];
+  updateHTML(document.getElementById('profile-periods'),periods.map(([label,total,done])=>{
+    const value=Math.max(0,Math.min(100,total?Math.round(done/total*100):0));
+    return `<div class="profile-period"><h3>${label}</h3><div class="profile-period-values"><span><strong>${profileCount(total)}</strong> cases</span><span><strong>${profileCount(done)}</strong> resolved</span></div><div class="profile-progress" role="meter" aria-label="${label}: resolved share of cases opened" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}" aria-valuetext="${profileCount(done)} of ${profileCount(total)} cases resolved"><span style="width:${value}%"></span></div></div>`;
+  }).join(''));
+}
+function filterMyProfileCases(query){myProfileState.query=query;renderMyProfileCases();}
+function clearMyProfileSearch(){const input=document.getElementById('profile-case-search');input.value='';myProfileState.query='';renderMyProfileCases();input.focus();}
+function renderMyProfileCases(quiet){
+  const profile=myProfileState.data,root=document.getElementById('profile-case-results');if(!profile||!root)return;
+  if(quiet&&root.contains(document.activeElement))return;
+  const all=Array.isArray(profile.recent)?profile.recent:[],query=myProfileState.query.trim().toLowerCase(),status=myProfileState.status;
+  const rows=all.filter(c=>(!status||(status==='active'?['open','assigned','reported'].includes(c.status):c.status===status))&&(!query||[c.unit_number,c.driver,c.report_driver,c.group,c.description,c.issue_text,c.full_id].some(v=>String(v||'').toLowerCase().includes(query))));
+  document.getElementById('profile-search-clear').hidden=!myProfileState.query;
+  document.getElementById('profile-case-count').textContent=rows.length+' of '+all.length+' recent cases';
+  if(!rows.length){updateHTML(root,'<div class="profile-empty"><i class="ph '+(all.length?'ph-magnifying-glass':'ph-clipboard-text')+'" aria-hidden="true"></i><h3>'+(all.length?'No recent cases match':'No case activity yet')+'</h3><p>'+(all.length?'Try another search or status.':'Your assigned cases will appear here.')+'</p></div>');return;}
+  updateHTML(root,`<table class="profile-case-table"><thead><tr><th scope="col">Driver</th><th scope="col">Group</th><th scope="col">Case / Unit</th><th scope="col">Reported</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody>${rows.map(c=>`<tr data-id="${attr(c.full_id||c.id||'')}"><td>${h(c.report_driver||c.driver||'\u2014')}</td><td>${h(c.group||'\u2014')}</td><td><strong>${h(c.unit_number||'No unit')}</strong><small>${h(c.issue_text||c.description||'No description')}</small></td><td>${h(c.reported||c.opened||'\u2014')}</td><td>${statusBadge(c.status)}</td><td><button type="button" class="profile-open-case" data-id="${attr(c.full_id||c.id||'')}" onclick="openCase(this.dataset.id)" aria-label="Open case for ${attr(c.unit_number||'unit')}">Open <i class="ph ph-arrow-up-right" aria-hidden="true"></i></button></td></tr>`).join('')}</tbody></table>`);
 }
 
 var agentsWorkspace={agents:[]};
@@ -811,8 +780,8 @@ function loadLivePartPhoto(p){
 var partsWebSearchRequest=0;
 function looksLikePartNumber(q){q=(q||'').trim();return q.length>=5&&/[a-z]/i.test(q)&&/\d/.test(q)&&/^[a-z0-9._\-/]+$/i.test(q);}
 function partsSearchInput(value){renderPartsManual(value);var b=document.getElementById('parts-web-search-btn');if(b)b.classList.toggle('suggested',looksLikePartNumber(value));}
-function partsSearchKey(e){if(e.key==='Enter'){e.preventDefault();searchPartsWeb();}}
-function clearPartsSearch(){var i=document.getElementById('parts-search');if(i){i.value='';i.focus();}var b=document.getElementById('parts-web-search-btn');if(b)b.classList.remove('suggested');var d=document.getElementById('part-detail');if(d)d.dataset.ready='';renderPartsManual('');}
+function partsSearchKey(e){if(e.isComposing)return;if(e.key==='Enter'){e.preventDefault();searchPartsWeb();}}
+function clearPartsSearch(){partsWebSearchRequest++;var i=document.getElementById('parts-search');if(i){i.value='';i.focus();}var b=document.getElementById('parts-web-search-btn');if(b){b.classList.remove('suggested');b.disabled=false;b.innerHTML='<i class="ph ph-globe-hemisphere-west"></i><span>Search web</span>';}var d=document.getElementById('part-detail');if(d)d.dataset.ready='';renderPartsManual('');}
 function searchPartsWeb(){
   var input=document.getElementById('parts-search'),q=(input&&input.value||'').trim(),d=document.getElementById('part-detail'),btn=document.getElementById('parts-web-search-btn');
   if(!q||!d)return;
@@ -824,7 +793,7 @@ function searchPartsWeb(){
     var exact=data&&data.part_number_like?'<span class="web-search-badge"><i class="ph ph-barcode"></i> Part number search</span>':'';
     d.innerHTML='<div class="part-hero web-result-hero"><div class="part-hero-copy"><div class="part-meta"><span>LIVE WEB RESULT</span>'+exact+'</div><h2>'+h(q)+'</h2><p>Real-time heavy-duty part references from Serper. Verify the exact application/OEM number before ordering or repair.</p></div></div><div class="part-section part-photo-section"><div class="part-section-head"><div><span class="part-label">REAL PART PHOTOS</span><h3>Web matches</h3></div><small>'+items.length+' result'+(items.length===1?'':'s')+'</small></div><section class="part-live-photos"><div class="part-photo-grid">'+(items.length?items.map(function(x,i){return '<figure class="part-live-photo"><a href="'+h(x.source_url)+'" target="_blank" rel="noopener"><img src="'+h(x.image_url)+'" alt="'+h(q)+' reference photo '+(i+1)+'" loading="lazy" referrerpolicy="no-referrer"></a><figcaption><span>'+h(x.title||q)+'</span><small>'+h(x.source||'Web source')+'</small><a href="'+h(x.source_url)+'" target="_blank" rel="noopener">Open source <i class="ph ph-arrow-square-out"></i></a></figcaption></figure>';}).join(''):'<div class="web-no-results"><i class="ph ph-image-broken"></i><strong>No confident heavy-duty image matches found</strong><span>Try the exact OEM number, manufacturer + number, or component name.</span></div>')+'</div></section></div>';
     var caseSection=document.createElement('section');caseSection.className='part-section web-case-section';caseSection.innerHTML='<div class="part-section-head"><div><span class="part-label">KURTEX HISTORY</span><h3>Matching cases</h3></div><small>AI matched</small></div><div id="web-part-case-history" class="intel-mini-list"><div class="loading">Checking historical cases for '+h(q)+'...</div></div>';d.appendChild(caseSection);loadWebSearchCases(q);
-  }).catch(function(err){if(requestId!==partsWebSearchRequest)return;d.innerHTML='<div class="web-no-results"><i class="ph ph-warning-circle"></i><strong>Live search unavailable</strong><span>'+h(err.message||'Please try again.')+'</span></div>';}).finally(function(){if(btn){btn.disabled=false;btn.innerHTML='<i class="ph ph-globe-hemisphere-west"></i><span>Search web</span>';}});
+  }).catch(function(err){if(requestId!==partsWebSearchRequest)return;d.innerHTML='<div class="web-no-results"><i class="ph ph-warning-circle"></i><strong>Live search unavailable</strong><span>'+h(err.message||'Please try again.')+'</span></div>';}).finally(function(){if(requestId===partsWebSearchRequest&&btn){btn.disabled=false;btn.innerHTML='<i class="ph ph-globe-hemisphere-west"></i><span>Search web</span>';}});
 }
 async function loadWebSearchCases(q){
  var el=document.getElementById('web-part-case-history');if(!el)return;
@@ -835,10 +804,10 @@ async function loadWebSearchCases(q){
  }catch(e){el.innerHTML='<div class="intel-empty ai-empty"><i class="ph ph-warning-circle"></i><strong>Case matching unavailable</strong><span>Web results are still available above.</span></div>'}
 }
 var mobilePartsVisible=7;
-function renderPartsManual(q){q=(q||document.getElementById('parts-search')&&document.getElementById('parts-search').value||'').trim().toLowerCase();var list=document.getElementById('parts-list');if(!list)return;var rows=partsDB.filter(function(p){return(partsCategory==='all'||p.cat===partsCategory)&&(!q||(p.name+' '+p.keywords+' '+p.what+' '+p.issues.join(' ')).toLowerCase().indexOf(q)>=0)});document.getElementById('parts-count').textContent=rows.length+' part'+(rows.length===1?'':'s');var isMobile=window.matchMedia&&window.matchMedia('(max-width:760px)').matches;var count=isMobile?Math.min(mobilePartsVisible,rows.length):rows.length;var visible=rows.slice(0,count);list.innerHTML=visible.map(function(p){return '<button class="part-row '+(p.id===selectedPart?'active':'')+'" onclick="selectPart(\''+p.id+'\')"><i class="ph '+p.icon+'"></i><span><strong>'+h(p.name)+'</strong><small>'+h(p.loc)+'</small></span><i class="ph ph-caret-right"></i></button>'}).join('')||'<div class="parts-empty">No matching parts.</div>';if(isMobile&&rows.length>7){var more=count<rows.length;list.innerHTML+='<div class="mobile-parts-actions">'+(more?'<button class="mobile-parts-more" type="button" onclick="showMoreMobileParts()"><span>Show 7 more</span><i class="ph ph-caret-down"></i></button>':'')+(count>7?'<button class="mobile-parts-less" type="button" onclick="showLessMobileParts()"><span>Show less</span><i class="ph ph-caret-up"></i></button>':'')+'</div>';}if(!partsDB.some(function(p){return p.id===selectedPart})&&rows[0])selectedPart=rows[0].id;if(!document.getElementById('part-detail').dataset.ready)selectPart(selectedPart);}
+function renderPartsManual(q){q=(q||document.getElementById('parts-search')&&document.getElementById('parts-search').value||'').trim().toLowerCase();var list=document.getElementById('parts-list');if(!list)return;var rows=partsDB.filter(function(p){return(partsCategory==='all'||p.cat===partsCategory)&&(!q||(p.name+' '+p.keywords+' '+p.what+' '+p.issues.join(' ')).toLowerCase().indexOf(q)>=0)});var countLabel=document.getElementById('parts-count');countLabel.textContent=rows.length+' match'+(rows.length===1?'':'es');countLabel.hidden=!rows.length;var clear=document.querySelector('.parts-search-clear');if(clear)clear.hidden=!document.getElementById('parts-search').value;var isMobile=window.matchMedia&&window.matchMedia('(max-width:760px)').matches;var count=isMobile?Math.min(mobilePartsVisible,rows.length):rows.length;var visible=rows.slice(0,count);list.innerHTML=visible.map(function(p){return '<button class="part-row '+(p.id===selectedPart?'active':'')+'" onclick="selectPart(\''+p.id+'\')"><i class="ph '+p.icon+'"></i><span><strong>'+h(p.name)+'</strong><small>'+h(p.loc)+'</small></span><i class="ph ph-caret-right"></i></button>'}).join('')||'<div class="parts-empty">No matching parts.</div>';if(isMobile&&rows.length>7){var more=count<rows.length;list.innerHTML+='<div class="mobile-parts-actions">'+(more?'<button class="mobile-parts-more" type="button" onclick="showMoreMobileParts()"><span>Show 7 more</span><i class="ph ph-caret-down"></i></button>':'')+(count>7?'<button class="mobile-parts-less" type="button" onclick="showLessMobileParts()"><span>Show less</span><i class="ph ph-caret-up"></i></button>':'')+'</div>';}if(!partsDB.some(function(p){return p.id===selectedPart})&&rows[0])selectedPart=rows[0].id;if(!document.getElementById('part-detail').dataset.ready)selectPart(selectedPart);}
 function showMoreMobileParts(){mobilePartsVisible+=7;renderPartsManual();}
 function showLessMobileParts(){mobilePartsVisible=7;renderPartsManual();var el=document.querySelector('#page-parts_manual .parts-index');if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
-function setPartsCategory(cat,btn){mobilePartsVisible=7;partsCategory=cat;document.querySelectorAll('#parts-cats button').forEach(function(b){b.classList.toggle('active',b===btn)});renderPartsManual();}
+function setPartsCategory(cat,btn){if(!['all','air','brakes','engine','electrical','aftertreatment','reefer','trailer'].includes(cat))return;mobilePartsVisible=7;partsCategory=cat;document.querySelectorAll('#parts-cats button').forEach(function(b){const active=b.dataset.category===cat;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active));});renderPartsManual();}
 function selectPart(id){var p=partsDB.find(function(x){return x.id===id});if(!p)return;selectedPart=id;var d=document.getElementById('part-detail');if(!d)return;d.dataset.ready='1';d.innerHTML='<div class="part-hero"><div class="part-hero-copy"><div class="part-meta"><span>'+h(p.cat)+'</span><span><i class="ph ph-map-pin"></i> '+h(p.loc)+'</span></div><h2>'+h(p.name)+'</h2><p>'+h(p.what)+'</p></div></div><div class="part-section part-photo-section"><div class="part-section-head"><div><span class="part-label">REAL PART PHOTOS</span><h3>What it looks like</h3></div><small>Live web references · actual installed model may vary</small></div>'+partPhoto(p)+'</div><div class="part-section"><div class="part-section-head"><div><span class="part-label">TROUBLESHOOTING</span><h3>Understand the part</h3></div></div><div class="part-info-grid"><article class="part-how"><div class="part-card-icon"><i class="ph ph-gear-six"></i></div><span class="part-label">HOW IT WORKS</span><p>'+h(p.works)+'</p></article><article><div class="part-card-icon"><i class="ph ph-warning"></i></div><span class="part-label">COMMON ISSUES</span><ul>'+p.issues.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ul></article><article><div class="part-card-icon"><i class="ph ph-magnifying-glass"></i></div><span class="part-label">QUICK CHECKS</span><ol>'+p.checks.map(function(x){return '<li>'+h(x)+'</li>'}).join('')+'</ol></article><article class="part-fix"><div class="part-card-icon"><i class="ph ph-wrench"></i></div><span class="part-label">FIX / NEXT ACTION</span><p>'+h(p.fix)+'</p></article></div></div><a class="part-source" href="'+p.url+'" target="_blank" rel="noopener"><i class="ph ph-book-open-text"></i><span><strong>OEM / technical reference</strong><small>'+h(p.source)+'</small></span><i class="ph ph-arrow-square-out part-source-arrow"></i></a><div class="part-intel-grid"><section class="part-intel-card"><div class="part-section-head"><div><span class="part-label">KURTEX AI</span><h3>AI related cases</h3><small class="ai-double-check"><i class="ph ph-warning-circle"></i> AI-selected history - double-check before use</small></div></div><div id="part-case-history" class="intel-mini-list"><div class="loading">Finding related cases...</div></div></section><section class="part-intel-card"><div class="part-section-head"><div><span class="part-label">KNOWLEDGE NOTES</span><h3>Team knowledge</h3></div></div><div id="part-knowledge-list" class="intel-mini-list"></div><div class="knowledge-add"><textarea id="knowledge-note-input" placeholder="Add a useful troubleshooting note..."></textarea><button class="btn secondary" onclick="saveKnowledgeNote()">Save note</button></div></section></div>';loadLivePartPhoto(p);loadPartCases(p);loadKnowledgeNotes(p);renderPartsManual(document.getElementById('parts-search')?document.getElementById('parts-search').value:'');}
 setTimeout(function(){renderCommonParts();renderPartsManual('');updateTruckIssuePins();},0);
 
@@ -939,17 +908,14 @@ var homeRanges={agents:(preferences.get('kurtex-home-agents-range')||'day'),unit
 function homeEmpty(icon,title,detail){return '<div class="home-empty"><i class="ph '+icon+'"></i><span><strong>'+h(title)+'</strong>'+(detail?'<br><small>'+h(detail)+'</small>':'')+'</span></div>'}
 function renderHomeRangeWidgets(){
   if(!stats||!stats.today)return;
+  if(!homeAllowed('cases')){
+    ['lb-overview','units-overview'].forEach(id=>updateHTML(document.getElementById(id),homeEmpty('ph-lock-key','Case access is unavailable','Your available tools are in the shortcuts above.')));return;
+  }
   var ar=homeRanges.agents,ur=homeRanges.units;
   var lb=stats['leaderboard_'+ar]||[]; var lbo=document.getElementById('lb-overview');
-  if(lbo) updateHTML(lbo,lb.length?listRows(lb.slice(0,5),lb[0]?lb[0].count:1):homeEmpty('ph-check-circle','No agent activity in this period','Nothing needs attention here.'));
+  if(lbo) updateHTML(lbo,homeTeamRows(ar,lb));
   var units=stats['top_problem_units_'+ur]||[]; var uo=document.getElementById('units-overview');
   if(uo) updateHTML(uo,units.length?unitProblemRows(units):homeEmpty('ph-check-circle','No problem units in this period','No unit reports found.'));
   var as=document.getElementById('agents-home-range'),us=document.getElementById('units-home-range'); if(as)as.value=ar;if(us)us.value=ur;
 }
 function setHomeRange(kind,value){if(!['day','week','month','all'].includes(value))return;homeRanges[kind]=value;preferences.set('kurtex-home-'+kind+'-range',value);renderHomeRangeWidgets()}
-function renderHomeActivity(cases){
-  var el=document.getElementById('home-recent-activity');if(!el)return;
-  if(!cases||!cases.length){updateHTML(el,homeEmpty('ph-check-circle','No activity yet today','New case activity will appear here automatically.'));return}
-  updateHTML(el,cases.slice(0,5).map(function(c){var status=(c.status||'open').toLowerCase(),icon=status==='done'?'ph-check-circle':status==='missed'?'ph-warning-circle':status==='assigned'||status==='reported'?'ph-user-check':'ph-clipboard-text';var label=status==='done'?'Case resolved':status==='missed'?'Case missed':status==='assigned'||status==='reported'?'Case assigned':'Case opened';var detail=[c.unit_number||'',c.vehicle_type||'',c.agent_name||''].filter(Boolean).join(' · ');return '<div class="home-activity-row"><span class="home-activity-icon"><i class="ph '+icon+'"></i></span><span class="home-activity-copy"><strong>'+h(label)+'</strong><small>'+h(detail||c.description||'Maintenance case')+'</small></span></div>'}).join(''));
-}
-async function loadHomeAISummary(){var el=document.getElementById('home-ai-summary');if(!el)return;try{var r=await apiFetch('/api/home/ai-summary','home-ai-summary');if(!r.ok)throw new Error('intelligence');var d=await r.json();var items=d.insights||[];if(!items.length){updateHTML(el,homeEmpty('ph-check-circle','No unusual patterns detected','Kurtex will surface emerging problems or repeat repairs when there is enough evidence.'));return}updateHTML(el,items.map(function(x){var icon=x.type==='repair_followup'?'ph-arrow-counter-clockwise':'ph-trend-up';return '<button type="button" class="home-intel-item home-intel-link" onclick="showPage(\'kurtex_intelligence\')"><span class="home-intel-icon"><i class="ph '+icon+'"></i></span><div><div class="home-intel-label">'+h(x.title)+'</div><p>'+h(x.text)+'</p><div class="home-intel-meta">'+(x.meta?'<small>'+h(x.meta)+'</small>':'<small>Open intelligence</small>')+'<i class="ph ph-arrow-right home-intel-arrow"></i></div></div></button>'}).join(''))}catch(e){if(e.name!=='AbortError')updateHTML(el,homeEmpty('ph-info','Intelligence temporarily unavailable','Your dashboard and live case data are still available.'))}}
