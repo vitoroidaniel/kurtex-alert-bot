@@ -25,6 +25,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v12.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/case-workspace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v14.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v15.css') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -37,6 +38,7 @@
 <div id="mobile-more-sheet" class="mobile-more-sheet" hidden role="dialog" aria-label="More workspace tools">
  <div class="v5-more-title"><strong>Workspace</strong><button type="button" onclick="toggleMobileMore(false)" aria-label="Close menu"><i class="ph ph-x"></i></button></div>
  <button onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Dashboard</span></button>
+ <button onclick="mobileGo('case_workspace')"><i class="ph ph-kanban"></i><span>Case Workspace</span></button>
  <button onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts manual</span></button>
  <button onclick="mobileGo('leaderboard')"><i class="ph ph-trophy"></i><span>Leaderboard</span></button>
  <button onclick="mobileGo('agents')"><i class="ph ph-users-three"></i><span>Agent profiles</span></button>
@@ -55,7 +57,6 @@
 <div class="layout">
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-logo">
-    <button type="button" class="k6-sidebar-toggle" id="k6-sidebar-toggle" onclick="kurtexToggleCompactSidebar()" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar"><i class="ph ph-sidebar-simple"></i></button>
     <img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
     <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
   </div>
@@ -63,7 +64,7 @@
     <div class="v3-nav-label">Workspace</div>
     <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
-    <div class="nav-item" data-page="case_workspace" role="button" tabindex="0" onclick="showPage('case_workspace')"><i class="ph ph-kanban"></i> Case Workspace</div>
+    <div class="nav-item nav-case-workspace" data-page="case_workspace" role="button" tabindex="0" onclick="showPage('case_workspace')"><i class="ph ph-kanban"></i> Case Workspace</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
     <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
@@ -443,7 +444,7 @@
 </div><small>Selected color applies to the tags in this entry.</small></div><footer><button type="button" class="btn-outline" onclick="closeAIKnowledgeEdit()">Cancel</button><button type="submit" class="ai-primary-btn"><i class="ph ph-check"></i> Save changes</button></footer></form></section></div>
 <div id="ai-preview-modal" class="ai-edit-modal ai-preview-modal" hidden><div class="ai-edit-backdrop" onclick="closeAIKnowledgePreview()"></div><section class="ai-edit-dialog" role="dialog" aria-modal="true"><header><div><span class="eyebrow">KNOWLEDGE PREVIEW</span><h3 id="ai-preview-title">Maintenance knowledge</h3><small id="ai-preview-meta"></small></div><button type="button" onclick="closeAIKnowledgePreview()"><i class="ph ph-x"></i></button></header><div id="ai-preview-content" class="ai-preview-content"></div></section></div>
 
-<script defer src="{{ url_for('static', filename='js/platform/sidebar-v6.js') }}"></script>
+
 <script defer src="{{ url_for('static', filename='js/core/api.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/core/state.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/core/custom-select.js') }}"></script>

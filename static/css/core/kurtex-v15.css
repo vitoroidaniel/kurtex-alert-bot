@@ -1,0 +1,23 @@
+/* V15: permanent desktop sidebar; no collapsing and no persisted compact state. */
+@media (min-width:761px){
+ html body .layout{display:flex!important;min-width:0!important;width:100%!important}
+ html body .layout>.sidebar{width:258px!important;min-width:258px!important;max-width:258px!important;flex:0 0 258px!important;padding:16px 13px 12px!important;overflow-x:hidden!important}
+ html body .layout>.main{flex:1 1 auto!important;min-width:0!important;width:auto!important;max-width:calc(100% - 258px)!important;overflow-x:clip!important}
+ html body .sidebar-logo{padding:7px 6px 13px!important;justify-content:flex-start!important;min-height:64px!important}
+ html body .sidebar .logo-text,html body .sidebar .v3-nav-label,html body .sidebar .nav-caret,html body .sidebar .user-chip>div:not(.user-avatar-init){display:block!important}
+ html body .sidebar .nav-caret{display:inline-block!important}
+ html body .sidebar .nav-item,html body .sidebar .nav-group-header{font-size:14px!important;width:auto!important;min-height:43px!important;height:auto!important;padding:10px 12px!important;justify-content:flex-start!important;gap:12px!important;margin:0!important;overflow:visible!important}
+ html body .sidebar .nav-item i,html body .sidebar .nav-group-header i{font-size:19px!important;flex:0 0 21px!important}
+ html body .sidebar .nav-group-header>span{font-size:14px!important;justify-content:flex-start!important}
+ html body .sidebar .nav-group-items{margin:3px 0 7px 21px!important;padding-left:9px!important;border-left:1px solid #dfe5ec!important}
+ html body .sidebar .sidebar-account-actions{flex-direction:row!important}
+ html body .sidebar .user-chip{justify-content:flex-start!important}
+}
+.k6-sidebar-toggle{display:none!important}
+.sidebar .nav-case-workspace{font-weight:650!important}
+.sidebar .nav-case-workspace.active{background:#e6efff!important;color:#1354ae!important;box-shadow:none!important}
+/* Protect workspace width on desktop and give its board independent horizontal scrolling. */
+#page-case_workspace{width:100%!important;max-width:100%!important;min-width:0!important;overflow:visible!important}
+#page-case_workspace .ss-workspace{width:100%;max-width:100%;min-width:0}
+#page-case_workspace .ss-board,#page-case_workspace .ss-grid-scroll{width:100%;max-width:100%;overflow-x:auto!important}
+@media(max-width:760px){.layout>.main{width:100%!important;max-width:100%!important;min-width:0!important}.layout>.sidebar{width:min(86vw,320px)!important;max-width:min(86vw,320px)!important}}

@@ -1,0 +1,1 @@
+V15 - restored fixed-width desktop sidebar. Removed collapse toggle and its script from dashboard. Case Workspace is in main sidebar under Cases, and mobile More. Preserved existing Case Workspace Board/Grid API implementation. Clear cached assets / hard refresh after deployment. Browser testing not performed.
