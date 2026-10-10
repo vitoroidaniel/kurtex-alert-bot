@@ -156,26 +156,17 @@ function updateLeaderboardChart(chart, labels, datasets) {
   chart.update("none");
 }
 
-function renderLeaderboardCharts(perf, trend) {
-  if (typeof Chart === "undefined") return;
-  var c = leaderboardChartColors();
-  var trendLabels=(trend||[]).map(function(x){return x.date;});
-  var trendData=[(trend||[]).map(function(x){return x.total;}),(trend||[]).map(function(x){return x.resolved;})];
-  var trendCanvas = document.getElementById("leaderboard-trend-chart");
-  if (trendCanvas) {
-    if (!leaderboardTrendChart) {
-      leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:trendLabels,datasets:[{label:"Cases",data:trendData[0],borderColor:c.accent,backgroundColor:"rgba(239,68,68,.07)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5},{label:"Resolved",data:trendData[1],borderColor:c.green,backgroundColor:"rgba(34,197,94,.05)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
-    } else updateLeaderboardChart(leaderboardTrendChart, trendLabels, trendData);
-  }
-  var outCanvas = document.getElementById("leaderboard-outcome-chart");
-  var agents=((perf&&perf.agents)||[]).slice(0,7);
-  var outLabels=agents.map(function(a){return a.name;});
-  var outData=[agents.map(function(a){return a.resolved;}),agents.map(function(a){return a.active;}),agents.map(function(a){return a.reassigned;})];
-  if (outCanvas) {
-    if (!leaderboardOutcomeChart) {
-      leaderboardOutcomeChart = new Chart(outCanvas,{type:"bar",data:{labels:outLabels,datasets:[{label:"Resolved",data:outData[0],backgroundColor:c.green},{label:"Active",data:outData[1],backgroundColor:c.blue},{label:"Reassigned",data:outData[2],backgroundColor:"#8b5cf6"}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},scales:{x:{stacked:true,ticks:{color:c.text,maxRotation:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{stacked:true,beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
-    } else updateLeaderboardChart(leaderboardOutcomeChart, outLabels, outData);
-  }
+var k23WorkloadChart=null,k23OutcomesChart=null;
+function renderLeaderboardCharts(perf,trend){
+ if(typeof Chart==='undefined')return;
+ var agents=(perf.agents||[]).slice().sort(function(a,b){return (b.handled||0)-(a.handled||0)}).slice(0,8);
+ var canvas=document.getElementById('k23-workload-chart');
+ if(canvas){var labels=agents.map(function(a){return a.name||'Agent'}),values=agents.map(function(a){return Number(a.handled||0)});
+ if(!k23WorkloadChart)k23WorkloadChart=new Chart(canvas,{type:'bar',data:{labels:labels,datasets:[{label:'Cases handled',data:values,backgroundColor:'#4079d9',borderRadius:7,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0},grid:{color:'rgba(125,135,150,.10)'}},y:{grid:{display:false}}}}});
+ else {k23WorkloadChart.data.labels=labels;k23WorkloadChart.data.datasets[0].data=values;k23WorkloadChart.update('none');}}
+ var donut=document.getElementById('k23-outcomes-chart');if(donut){var values=[perf.resolved||0,perf.active||0,perf.missed||0,perf.reassigned||0];
+ if(!k23OutcomesChart)k23OutcomesChart=new Chart(donut,{type:'doughnut',data:{labels:['Resolved','Active','Missed','Reassigned'],datasets:[{data:values,backgroundColor:['#27a586','#5086df','#e5a44c','#9178d8'],borderWidth:0,hoverOffset:6}]},options:{cutout:'73%',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:9,padding:17}}}}});
+ else {k23OutcomesChart.data.datasets[0].data=values;k23OutcomesChart.update('none');}}
 }
 
 function toggleLeaderboardFilter(ev){
