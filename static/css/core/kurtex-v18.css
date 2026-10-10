@@ -1,0 +1,18 @@
+/* V18: visible Case Workspace and stable account controls. */
+.sidebar .nav-case-workspace,.sidebar .nav-case-workspace[hidden]{display:flex!important;visibility:visible!important}
+@media(min-width:761px){
+ .sidebar .sidebar-footer{padding:12px 7px 8px!important}
+ .sidebar .v18-account-top{display:flex!important;align-items:center!important;gap:8px!important;justify-content:space-between!important;width:100%!important}
+ .sidebar .v18-account-top .user-chip{display:flex!important;align-items:center!important;gap:9px!important;flex:1 1 auto!important;min-width:0!important;margin:0!important;padding:0!important;background:transparent!important;border:0!important}
+ .sidebar .v18-account-top .user-avatar,.sidebar .v18-account-top .user-avatar-init{width:46px!important;height:46px!important;min-width:46px!important;flex:0 0 46px!important}
+ .sidebar .v18-account-top .user-name{font-size:14px!important}
+ .sidebar .v18-account-top .user-role{font-size:11px!important}
+ .sidebar .v18-theme-toggle{width:34px!important;height:34px!important;flex:0 0 34px!important;display:grid!important;place-items:center!important;border:1px solid #d8e0ea!important;border-radius:9px!important;background:#fff!important;color:#53677f!important;cursor:pointer!important}
+ .sidebar .v18-theme-toggle i{font-size:17px!important}
+ .sidebar .sidebar-account-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;width:100%!important;margin:8px 0 0!important}
+ .sidebar .sidebar-account-actions .sidebar-settings-btn,.sidebar .sidebar-account-actions .sidebar-signout-btn{display:grid!important;place-items:center!important;flex:0 0 35px!important;width:35px!important;max-width:35px!important;height:34px!important;min-height:34px!important;padding:0!important;margin:0!important;border-radius:9px!important}
+ .sidebar .sidebar-account-actions button span,.sidebar .sidebar-account-actions .sidebar-settings-btn>i:last-child{display:none!important}
+ .sidebar .sidebar-account-actions button>i:first-child{font-size:17px!important;margin:0!important}
+}
+[data-theme=dark] .sidebar .v18-theme-toggle{background:#1c2634!important;color:#d6e2f2!important;border-color:#354256!important}
+@media(max-width:760px){.sidebar .v18-account-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.sidebar .v18-theme-toggle{width:36px;height:36px;border:1px solid #d8e0ea;border-radius:9px;background:transparent}.sidebar .sidebar-account-actions{display:flex;gap:8px}}

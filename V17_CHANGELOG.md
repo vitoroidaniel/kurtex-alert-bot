@@ -1,0 +1,1 @@
+V17: Removed the redundant Kurtex Intelligence introductory hero text. Changed evidence to explicit Show evidence / Hide evidence toggle with aria-expanded, cached loaded content, parallel fetching, and a compact responsive grid of supporting case cards. All other project files retained.

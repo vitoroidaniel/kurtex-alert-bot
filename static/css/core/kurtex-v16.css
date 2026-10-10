@@ -1,0 +1,11 @@
+/* V16: slightly narrower permanent sidebar and tighter brand-to-workspace rhythm. */
+@media (min-width:761px){
+ html body .layout>.sidebar{width:242px!important;min-width:242px!important;max-width:242px!important;flex:0 0 242px!important;padding:12px 11px 10px!important}
+ html body .layout>.main{max-width:calc(100% - 242px)!important}
+ html body .sidebar-logo{min-height:49px!important;height:auto!important;padding:2px 5px 5px!important;margin:0 0 1px!important;gap:9px!important;align-items:center!important}
+ html body .sidebar-logo img{width:40px!important;height:40px!important}
+ html body .sidebar .v3-navigation{padding-top:0!important;gap:1px!important}
+ html body .sidebar .v3-navigation>.v3-nav-label:first-child{padding-top:5px!important;padding-bottom:5px!important;margin-top:0!important}
+ html body .sidebar .nav-item,html body .sidebar .nav-group-header{min-height:41px!important;padding:9px 10px!important;gap:10px!important}
+ html body .sidebar .v3-nav-label-spaced{margin-top:3px!important}
+}

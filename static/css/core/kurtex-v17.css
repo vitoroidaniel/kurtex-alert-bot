@@ -1,0 +1,22 @@
+/* V17 - Kurtex Intelligence compact evidence drawer */
+#page-kurtex_intelligence .ki-toolbar{margin-top:0}
+#page-kurtex_intelligence .ki-finding{min-width:0;align-self:start;overflow:hidden}
+#page-kurtex_intelligence .ki-actions{gap:9px}
+#page-kurtex_intelligence .ki-actions button[data-finding]{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #c7d7ef;background:#f3f7fe;color:#2056a0;font-weight:700;border-radius:9px;min-height:36px;padding:7px 13px;box-shadow:none;outline-offset:3px}
+#page-kurtex_intelligence .ki-actions button[data-finding]:hover{background:#e8f1ff;border-color:#94b8f1}
+#page-kurtex_intelligence .ki-actions button[data-finding][aria-expanded="true"]{background:#e8f1ff;border-color:#80aaf0}
+#page-kurtex_intelligence .ki-evidence-list[hidden]{display:none!important}
+#page-kurtex_intelligence .ki-evidence-list{margin-top:14px;padding-top:13px;border-top:1px solid var(--border)}
+#page-kurtex_intelligence .ki-evidence-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;font-size:12px}
+#page-kurtex_intelligence .ki-evidence-header span{color:var(--muted);font-size:11px}
+#page-kurtex_intelligence .ki-evidence-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+#page-kurtex_intelligence .ki-evidence-case{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"id arrow" "desc arrow" "status status";gap:3px 8px;align-items:center;min-width:0;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--card);text-align:left;transition:background .15s,border-color .15s}
+#page-kurtex_intelligence .ki-evidence-case:hover{background:var(--soft);border-color:#b5c9e9}
+#page-kurtex_intelligence .ki-evidence-case .ki-case-id{grid-area:id;font-size:12px;font-weight:750;min-width:0}
+#page-kurtex_intelligence .ki-evidence-case .ki-case-description{grid-area:desc;display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:var(--muted)}
+#page-kurtex_intelligence .ki-evidence-case .ki-case-status{grid-area:status;justify-self:start;font-size:10px}
+#page-kurtex_intelligence .ki-evidence-case>i{grid-area:arrow;color:var(--muted);font-size:16px}
+#page-kurtex_intelligence .ki-evidence-loading{padding:14px;color:var(--muted);font-size:12px}
+@media(max-width:1100px){#page-kurtex_intelligence .ki-evidence-grid{grid-template-columns:1fr}}
+@media(max-width:700px){#page-kurtex_intelligence .ki-actions button[data-finding]{flex:1}}
+[data-theme="dark"] #page-kurtex_intelligence .ki-actions button[data-finding]{background:#20344e;color:#b9d6ff;border-color:#42648e}

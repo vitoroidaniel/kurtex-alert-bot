@@ -60,6 +60,7 @@ function applyTheme() {
   var label = document.getElementById("theme-label");
   if (icon) icon.className = isDark ? "ph ph-moon" : "ph ph-sun";
   if (label) label.textContent = isDark ? "Dark Mode" : "Light Mode";
+  var v18icon=document.getElementById('v18-theme-icon'); if(v18icon)v18icon.className=isDark?'ph ph-sun':'ph ph-moon';
 }
 function toggleTheme() {
   isDark = !isDark;
@@ -518,6 +519,6 @@ function buildTimeline(c) {
 
 // v98 — apply configured website role permissions to navigation.
 (function(){
- function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile')return;n.hidden=allowed.indexOf(p)<0});document.querySelectorAll('.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
+ function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile'||p==='case_workspace')return;n.hidden=allowed.indexOf(p)<0});document.querySelectorAll('.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyRoleNavigation);else applyRoleNavigation();
 })();

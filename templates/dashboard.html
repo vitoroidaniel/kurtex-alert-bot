@@ -26,6 +26,9 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/case-workspace.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v14.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v15.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v16.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v17.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v18.css') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -96,10 +99,13 @@
     </div>
   </nav>
   <div class="sidebar-footer">
+    <div class="v18-account-top">
     <div class="user-chip user-chip-profile" role="button" tabindex="0" onclick="showPage('my_profile')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('my_profile')}" aria-label="Open my profile">
       {% if user.photo_url %}<img class="user-avatar" src="{{ user.photo_url }}" alt="">
       {% else %}<div class="user-avatar-init">{{ (user.first_name or "U")[0] }}</div>{% endif %}
       <div><div class="user-name">{{ user.first_name }}</div><div class="user-role">{{ "Manager" if user.role in ["super_admin","manager","admin"] else ("Developer" if user.role == "developer" else "Agent") }}</div></div>
+    </div>
+    <button type="button" class="v18-theme-toggle" onclick="toggleTheme()" aria-label="Toggle dark theme" title="Toggle light/dark theme"><i class="ph ph-moon" id="v18-theme-icon"></i></button>
     </div>
     <div class="sidebar-account-actions">
       <button class="sidebar-settings-btn" title="Settings" aria-label="Settings" onclick="openLayoutSettings('appearance')"><i class="ph ph-gear-six"></i><span>Settings</span><i class="ph ph-caret-right"></i></button>
@@ -331,7 +337,7 @@
 
   <!-- Kurtex Intelligence -->
   <div class="page" id="page-kurtex_intelligence">
-    <section class="ki-hero"><div><span class="eyebrow">KURTEX INTELLIGENCE</span><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div></section>
+    
     <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><div class="ki-toolbar-actions"><div class="ki-live"><span></span> Live analysis</div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
     <div id="ki-summary" class="ki-summary"></div>
     <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
