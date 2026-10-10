@@ -1,0 +1,14 @@
+
+/* Compact bottom controls, preserving existing profile */
+.sidebar-footer .v18-account-top{display:block!important}
+.sidebar-footer .k23-theme-switch{margin:0!important;flex:0 0 auto}
+.sidebar-footer .k112-actions{display:flex!important;align-items:center!important;gap:6px!important;flex:1!important;margin:0!important}
+.sidebar-footer .k112-actions button{width:34px!important;height:34px!important;min-width:34px!important;min-height:34px!important;padding:0!important;display:flex!important;justify-content:center!important;align-items:center!important;border-radius:10px!important}
+.sidebar-footer .k112-actions button span,.sidebar-footer .k112-actions button .ph-caret-right{display:none!important}
+.sidebar-footer .k112-actions button i{font-size:17px!important}
+.sidebar-footer .k112-controls{display:flex;align-items:center;gap:7px;margin-top:9px}
+.sidebar-footer .k112-controls .k23-theme-switch{height:34px!important}
+#page-agents .k23-agents-shell{display:grid;grid-template-columns:minmax(220px,280px) minmax(0,1fr);gap:16px;align-items:start}
+#page-agents .k23-agent-sidebar{min-width:0}
+#page-agents .k23-agent-detail{min-width:0}
+@media(max-width:800px){#page-agents .k23-agents-shell{grid-template-columns:1fr}}
