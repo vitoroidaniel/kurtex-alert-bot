@@ -24,6 +24,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v11.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v12.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/case-workspace.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v19.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v20.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v14.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v15.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v16.css') }}">
@@ -63,15 +65,13 @@
     <img src="{{ url_for('static', filename='images/kurtex-logo.png') }}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
     <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
   </div>
-  <nav aria-label="Main navigation" class="v3-navigation">
-    <div class="v3-nav-label">Workspace</div>
+  <nav aria-label="Main navigation" class="v20-navigation">
     <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
     <div class="nav-item nav-case-workspace" data-page="case_workspace" role="button" tabindex="0" onclick="showPage('case_workspace')"><i class="ph ph-kanban"></i> Case Workspace</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
     <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
-    <div class="v3-nav-label v3-nav-label-spaced">Insights & tools</div>
     <div class="nav-group">
       <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')"><span><i class="ph ph-chart-bar"></i> Analytics</span><i class="ph ph-caret-down nav-caret" id="caret-group-analytics"></i></div>
       <div class="nav-group-items" id="group-analytics">
@@ -87,12 +87,12 @@
         <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
       </div>
     </div>
-    <div class="v3-nav-label v3-nav-label-spaced">Intelligence</div>
+    <div class="nav-section-divider" aria-hidden="true"></div>
     <div class="nav-ai-cluster">
       <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
       {% if is_developer %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
     </div>
-    <div class="v3-nav-label v3-nav-label-spaced">Team & administration</div>
+    <div class="nav-section-divider" aria-hidden="true"></div>
     <div class="nav-bottom-cluster">
       {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
       {% if is_developer %}<div class="nav-item" data-page="users" role="button" tabindex="0" onclick="showPage('users')"><i class="ph ph-users-four"></i> Users</div><div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
@@ -216,8 +216,8 @@
 
 <div class="page" id="page-case_workspace">
   <section class="ss-workspace" aria-label="Case Workspace">
-   <div class="ss-toolbar"><div class="ss-heading"><strong>Case Workspace</strong><small>Live fleet cases · Smartsheet-inspired workspace</small></div><div class="ss-actions"><button type="button" id="ss-reload" onclick="ssLoad()"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
-   <div class="ss-tools"><div class="ss-view-toggle"><button class="ss-view active" data-view="board" onclick="ssSetView('board')"><i class="ph ph-kanban"></i> Board</button><button class="ss-view" data-view="grid" onclick="ssSetView('grid')"><i class="ph ph-table"></i> Grid</button></div><label class="ss-search"><i class="ph ph-magnifying-glass"></i><input id="ss-search" placeholder="Search unit, issue, agent..." oninput="ssRender()" aria-label="Search workspace"></label><label class="ss-select">Group by <select id="ss-group" onchange="ssRender()"><option value="assigned">Assigned agent</option><option value="status">Status</option><option value="priority">Priority</option></select></label><label class="ss-select">Status <select id="ss-status" onchange="ssRender()"><option value="">All</option><option value="reported">Reported</option><option value="assigned">Assigned</option><option value="open">Open</option><option value="done">Done</option><option value="missed">Missed</option></select></label><span id="ss-count" class="ss-count">Loading...</span></div>
+   <div class="ss-toolbar"><div class="ss-heading"><strong>Case Workspace</strong><small>Maintenance cases · Board and Grid</small></div><div class="ss-actions"><button type="button" id="ss-reload" onclick="ssLoad()"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
+   <div class="ss-tools"><div class="ss-view-picker"><button type="button" id="ss-view-button" class="ss-view-button" onclick="ssToggleViewMenu()" aria-expanded="false"><i class="ph ph-kanban"></i><span id="ss-view-label">Card</span><i class="ph ph-caret-down"></i></button><div id="ss-view-menu" class="ss-view-menu" hidden><button type="button" data-view="grid" onclick="ssSetView('grid')"><i class="ph ph-table"></i> Grid</button><button type="button" data-view="board" onclick="ssSetView('board')"><i class="ph ph-kanban"></i> Card</button></div></div><label class="ss-search"><i class="ph ph-magnifying-glass"></i><input id="ss-search" placeholder="Search unit, issue, agent..." oninput="ssRender()" aria-label="Search workspace"></label><label class="ss-select">Group by <select id="ss-group" onchange="ssRender()"><option value="assigned">Assigned agent</option><option value="status">Status</option><option value="priority">Priority</option></select></label><label class="ss-select">Status <select id="ss-status" onchange="ssRender()"><option value="">All</option><option value="reported">Reported</option><option value="assigned">Assigned</option><option value="open">Open</option><option value="done">Done</option><option value="missed">Missed</option></select></label><label class="ss-select ss-density-control">Cards <select id="ss-density" onchange="ssSetDensity(this.value)"><option value="compact">Compact</option><option value="comfortable">Comfortable</option></select></label><span id="ss-count" class="ss-count">Loading...</span></div>
    <div id="ss-content" class="ss-content" aria-live="polite"><div class="loading">Loading cases...</div></div>
    <div class="ss-footer"><span>Live data from Kurtex Cases</span><span>Case changes remain managed through existing workflows</span></div>
   </section>

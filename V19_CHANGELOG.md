@@ -1,0 +1,1 @@
+V19: classic Smartsheet-style compact card lanes, view picker, density selection, sidebar/main desktop geometry correction and desktop Parts Manual, AI Assistant and AI Knowledge width protections. Notes and attachments still use original case view; no new write API. Browser testing pending.

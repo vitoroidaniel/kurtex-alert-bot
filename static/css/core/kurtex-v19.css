@@ -1,0 +1,34 @@
+/* V19: restore normal desktop content geometry; remove the earlier zero-width regression. */
+@media(min-width:761px){html body .layout{display:flex!important;width:100%!important;min-width:0!important}html body .layout>.sidebar{flex:0 0 242px!important;width:242px!important;min-width:242px!important;max-width:242px!important}html body .layout>.main{display:block!important;flex:1 1 calc(100% - 242px)!important;width:calc(100% - 242px)!important;min-width:0!important;max-width:calc(100% - 242px)!important;overflow-x:hidden!important}html body .main>.page{width:100%!important;max-width:100%!important;min-width:0!important}#page-parts_manual .parts-layout{display:grid!important;grid-template-columns:minmax(260px,34%) minmax(0,1fr)!important;width:100%!important;min-width:0!important}#page-parts_manual .parts-index,#page-parts_manual .part-detail{min-width:0!important;max-width:100%!important}#page-ai_assistant .ai-assistant-workspace,#page-ai_assistant .ai-page-layout,#page-ai_assistant .ai-page-chat-column,#page-ai_knowledge .ai-training-page{width:100%!important;min-width:0!important;max-width:100%!important}#page-ai_assistant .ai-page-layout{display:flex!important;overflow:hidden!important}#page-ai_assistant .ai-page-sidebar{flex:0 0 240px!important;width:240px!important;min-width:0!important}#page-ai_assistant .ai-page-chat-column{flex:1 1 0!important;width:auto!important;min-width:0!important}#page-ai_knowledge .ai-training-grid{min-width:0!important;max-width:100%!important}}
+/* Smartsheet classic card view visual language */
+#page-case_workspace .ss-workspace{border:1px solid #d2d6dc!important;border-radius:3px!important;background:#fff!important;box-shadow:none!important}
+#page-case_workspace .ss-toolbar{background:#fff!important;padding:11px 14px!important;border-bottom:1px solid #d8dce1!important}
+#page-case_workspace .ss-heading strong{font-size:16px!important;color:#333a43!important}
+#page-case_workspace .ss-heading small{font-size:11px!important;color:#77818c!important}
+#page-case_workspace .ss-tools{background:#f9fafb!important;padding:8px 10px!important;gap:9px!important;position:relative!important;z-index:3!important}
+#page-case_workspace .ss-view-picker{position:relative;flex:0 0 auto}
+#page-case_workspace .ss-view-button{display:flex;align-items:center;gap:8px;background:#f1f2f4;border:1px solid #cbd1d8;border-radius:4px;padding:8px 11px;font-size:12px;font-weight:700;color:#343b43;cursor:pointer}
+#page-case_workspace .ss-view-button i:last-child{font-size:11px;margin-left:8px}
+#page-case_workspace .ss-view-menu{position:absolute;top:calc(100% + 4px);left:0;min-width:155px;background:#fff;border:1px solid #cfd5dd;box-shadow:0 10px 28px #1e2c3e22;border-radius:4px;padding:5px;z-index:30}
+#page-case_workspace .ss-view-menu[hidden]{display:none!important}
+#page-case_workspace .ss-view-menu button{display:flex;gap:10px;align-items:center;width:100%;border:0;background:transparent;padding:10px 11px;text-align:left;cursor:pointer;font-size:12px;color:#343b43}
+#page-case_workspace .ss-view-menu button:hover{background:#edf2f7}
+#page-case_workspace .ss-search{max-width:300px!important;height:34px!important}
+#page-case_workspace .ss-board{background:#e8e8e8!important;min-height:520px!important;max-height:calc(100dvh - 225px)!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-color:#a7abb1 #e8e8e8}
+#page-case_workspace .ss-lane{flex:0 0 210px!important;width:210px!important;min-width:210px!important;background:#ececec!important;border-right:1px solid #c8cbd0!important}
+#page-case_workspace .ss-lane>header{padding:9px 10px!important;background:#e5e5e5!important;border-bottom:1px solid #cbd0d5!important;min-height:36px!important}
+#page-case_workspace .ss-lane>header strong{font-size:12px!important;font-weight:700!important;color:#41464c!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#page-case_workspace .ss-lane>header span{font-size:11px!important;color:#535a64!important}
+#page-case_workspace .ss-lane-list{padding:7px!important;gap:6px!important;min-height:0!important;flex:1 1 auto!important;overflow-y:auto!important;scrollbar-width:thin}
+#page-case_workspace .ss-card{width:100%!important;min-height:94px!important;display:flex!important;flex-direction:column!important;gap:3px!important;padding:7px 9px!important;border:1px solid #d1d4d8!important;border-left:5px solid #b3dff0!important;border-radius:1px!important;background:#fff!important;box-shadow:0 1px 2px #0000000c!important;text-align:left!important;overflow:hidden!important}
+#page-case_workspace .ss-card:hover{background:#f7fbff!important;border-color:#82b3dc!important;border-left-color:#3186c6!important}
+#page-case_workspace .ss-card-unit{font-size:12px!important;line-height:1.25!important;color:#323941!important}
+#page-case_workspace .ss-card-driver{font-size:11px!important;line-height:1.25!important;color:#606873!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+#page-case_workspace .ss-card-issue{font-size:11px!important;line-height:1.28!important;color:#3f464e!important;-webkit-line-clamp:2!important;min-height:27px!important}
+#page-case_workspace .ss-card-meta{border-top:1px solid #eef0f2!important;padding-top:4px!important;margin-top:3px!important;font-size:10px!important}
+#page-case_workspace .ss-card-indicators{display:flex;gap:5px;color:#438ac4;font-size:12px}
+#page-case_workspace .ss-card-status{font-size:10px;color:#68727e;text-transform:capitalize}
+#page-case_workspace .ss-card.ss-priority-critical{border-left-color:#e34242!important}#page-case_workspace .ss-card.ss-priority-high{border-left-color:#f38c42!important}#page-case_workspace .ss-card.ss-priority-medium{border-left-color:#f0c95b!important}
+#page-case_workspace .ss-density-comfortable .ss-card{min-height:130px!important;padding:11px!important}#page-case_workspace .ss-density-comfortable .ss-card-issue{-webkit-line-clamp:4!important}
+#page-case_workspace .ss-detail{z-index:10010!important}#page-case_workspace .ss-detail-backdrop{z-index:10009!important}
+@media(max-width:760px){#page-case_workspace .ss-lane{width:225px!important;flex-basis:225px!important}#page-case_workspace .ss-board{max-height:calc(100dvh - 290px)!important}#page-case_workspace .ss-density-control{display:none!important}}

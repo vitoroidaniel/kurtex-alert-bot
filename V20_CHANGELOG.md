@@ -1,0 +1,1 @@
+V20: restored classic sidebar menu without section labels, reduced width to 218px, compacted nested items, refreshed blue active/hover colors, retained Case Workspace and all V19 changes. No sidebar collapse control.
