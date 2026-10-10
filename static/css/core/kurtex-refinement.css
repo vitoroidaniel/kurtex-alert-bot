@@ -1,0 +1,108 @@
+/* Kurtex visual refinement v1: intentionally scoped to existing shared surfaces. */
+:root { --bg:#f3f6fa; --surface:#ffffff; --surface2:#f7f9fc; --surface3:#e9eff6; --border:#dce4ed; --text:#182b42; --muted:#596d83; --muted2:#71839a; --accent:#3575c5; --accent-bg:#eaf2fc; --shadow:0 5px 22px rgba(24,43,66,.045); --radius:14px; }
+[data-theme="dark"] { --bg:#101925; --surface:#192636; --surface2:#202f41; --surface3:#2b3d52; --border:#34485e; --text:#edf4fc; --muted:#b7c6d6; --muted2:#9caec1; --accent:#86baff; --accent-bg:#203a58; --shadow:0 8px 24px rgba(0,0,0,.12); color-scheme:dark; }
+body { -webkit-font-smoothing:antialiased; }
+.sidebar { background:#182b42; width:246px; padding:24px 14px 18px; }
+.sidebar-logo { padding-bottom:22px; margin-bottom:10px; }
+.sidebar .nav-item,.sidebar .nav-group-header { border-radius:10px; min-height:41px; transition:background-color .16s ease,color .16s ease; }
+.sidebar .nav-item:hover,.sidebar .nav-group-header:hover { background:rgba(255,255,255,.09); color:#fff; }
+.sidebar .nav-item.active { background:#34547a; color:#fff; }
+.sidebar .nav-item.active:before { background:#93c4ff; }
+.main { min-width:0; }
+.topbar { border-bottom-color:var(--border); }
+.page-heading { gap:14px; }
+.page-heading h1,#page-title { letter-spacing:-.035em; }
+.card,.table-wrap,.home-today-grid>button,.stat-card { border-radius:var(--radius); border-color:var(--border); box-shadow:var(--shadow); }
+.home-today-grid>button { transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease; }
+@media (hover:hover) { .home-today-grid>button:hover { transform:translateY(-2px); box-shadow:0 9px 22px rgba(24,43,66,.09); border-color:var(--accent); } }
+button,a,[role="button"] { -webkit-tap-highlight-color:transparent; }
+:where(button,a,input,select,textarea,[role="button"]):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+button:disabled { cursor:not-allowed; }
+.notification-panel { max-width:calc(100vw - 24px); }
+:where(.card,.table-wrap,.notification-panel) { min-width:0; }
+@media (max-width:767px) { .sidebar { width: min(290px, 85vw); } .mobile-header { background:var(--surface); } .mobile-tabbar { background:var(--surface); } .home-today-grid>button { box-shadow:none; } .notification-panel { width:min(420px,calc(100vw - 20px)); } }
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }
+
+/* V2: one shared compact filter language across operational screens */
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period){display:inline-flex!important;align-items:center!important;gap:4px!important;padding:4px!important;border:1px solid var(--border)!important;background:var(--surface2)!important;border-radius:12px!important;box-shadow:none!important;max-width:100%}
+:where(.filter-tabs .tab-btn,.toggle-tabs .toggle-btn){min-height:34px!important;padding:7px 13px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:var(--muted)!important;font-size:12px!important;font-weight:600!important;white-space:nowrap!important;box-shadow:none!important;text-decoration:none!important}
+:where(.filter-tabs .tab-btn,.toggle-tabs .toggle-btn).active{background:var(--surface)!important;color:var(--text)!important;box-shadow:0 1px 5px rgba(20,35,50,.09)!important}
+:where(.filter-tabs .tab-btn,.toggle-tabs .toggle-btn)::after{display:none!important}
+#page-cases .section-header{gap:12px;flex-wrap:wrap}#page-cases .section-header>div:last-child{gap:10px!important}
+#page-cases #status-filter,#page-cases #cases-date-picker{min-height:42px!important;padding:0 13px!important;border:1px solid var(--border)!important;border-radius:11px!important;background:var(--surface)!important;color:var(--text)!important;font:inherit!important;font-size:12px!important;max-width:100%}
+#page-cases .search-wrap{border-radius:11px!important}
+/* Leaderboard: one page heading, content-first cards and no forced empty columns */
+#page-leaderboard .leaderboard-head>div:first-child{display:none!important}
+#page-leaderboard .leaderboard-head{justify-content:flex-end!important;margin-bottom:15px!important}
+#page-leaderboard .leaderboard-period{width:auto!important;flex:0 1 auto!important}
+#page-leaderboard .leaderboard-ranking-card,#page-leaderboard .leaderboard-insights-card{min-height:0!important;height:auto!important}
+#page-leaderboard .leaderboard-ranking-card #leaderboard-full{min-height:0!important;flex:initial!important}
+#page-leaderboard .leaderboard-empty{min-height:90px!important}
+#page-leaderboard .leaderboard-grid:not(.leaderboard-chart-grid){align-items:start!important}
+#page-leaderboard .leaderboard-metric{border-radius:13px!important;padding:15px 17px!important}
+#page-leaderboard .leaderboard-chart-grid .card{border-radius:14px!important}
+#page-leaderboard .leaderboard-chart-wrap{height:235px!important}
+#page-leaderboard .chart-key-item{border-radius:9px!important;min-height:31px!important;font-size:11px!important}
+/* Agent directory: compact profile layout instead of nested statistic cards */
+#page-agents .agent-card{padding:17px!important;border:1px solid var(--border)!important;border-radius:15px!important;background:var(--surface)!important;box-shadow:none!important}
+#page-agents .agent-card:hover{border-color:var(--accent)!important;box-shadow:0 6px 20px rgba(20,40,65,.07)!important}
+#page-agents .agent-card-statbox{border:0!important;border-radius:0!important;background:transparent!important;padding:8px 6px!important}
+#page-agents .agent-card-statbox+.agent-card-statbox{border-left:1px solid var(--border)!important}
+#page-agents .agent-card-statval{font-size:20px!important;font-weight:750!important;color:var(--text)!important}
+#page-agents .agent-card-statlabel{font-size:10px!important;color:var(--muted)!important}
+#page-agents .agent-card-avatar{background:var(--surface2)!important;border:1px solid var(--border)!important;color:var(--text)!important}
+#page-agents .agent-card-footer{margin-top:12px!important;padding-top:11px!important}
+/* The Chicago clock is persistent but discreet: status belongs in the top bar. */
+@media(min-width:761px){.topbar-right{gap:10px!important}.topbar .chicago-calendar{min-width:0!important;width:auto!important;min-height:32px!important;padding:3px 9px!important;gap:6px!important;border-radius:9px!important;box-shadow:none!important;background:transparent!important;border-color:var(--border)!important}.topbar .calendar-clock-icon{display:none!important}.topbar .calendar-date-copy>strong{display:none!important}.topbar .calendar-time-line{gap:7px!important}.topbar .calendar-update.live-pill{font-size:10px!important}}
+@media(max-width:760px){#page-leaderboard .leaderboard-head{justify-content:stretch!important}#page-leaderboard .leaderboard-period{width:100%!important}#page-cases .section-header>div:last-child{width:100%}#page-cases .filter-tabs{overflow-x:auto;max-width:100%;width:100%;justify-content:space-between}#page-cases .filter-tabs .tab-btn{padding:7px 9px!important}#page-agents .agent-card{padding:13px!important}.topbar .chicago-calendar{display:none!important}}
+
+
+/* Kurtex V3: workspace navigation inspired by the supplied reference, not a clone. */
+@media(min-width:761px){
+.sidebar{width:264px!important;padding:19px 13px 16px!important;background:#f9fafb!important;color:#263343!important;border-right:1px solid #e6e9ee!important;box-shadow:none!important}
+.sidebar-logo{padding:7px 11px 19px!important;margin-bottom:5px!important;border-bottom:0!important}
+.sidebar .logo-text h2{color:#192b3c!important;font-size:19px!important}
+.sidebar .logo-text small{color:#82909e!important;letter-spacing:.1em!important}
+.sidebar nav{padding:0 2px!important}
+.sidebar .nav-item,.sidebar .nav-group-header{color:#52606e!important;border-radius:11px!important;min-height:39px!important;margin:2px 0!important;padding:9px 12px!important;font-size:13px!important;font-weight:500!important;box-shadow:none!important}
+.sidebar .nav-item i,.sidebar .nav-group-header i{color:#74808d!important;font-size:19px!important}
+.sidebar .nav-item:hover,.sidebar .nav-group-header:hover{background:#eef1f4!important;color:#1f4e87!important}
+.sidebar .nav-item.active{background:#e9eef3!important;color:#1762b4!important;font-weight:650!important}
+.sidebar .nav-item.active i{color:#1762b4!important}
+.sidebar .nav-item.active:before{display:none!important}
+.sidebar .nav-group-items{padding-left:9px!important;border-left:1px solid #e1e6ec!important;margin-left:18px!important}
+.sidebar .nav-item.nav-sub{font-size:12.5px!important}
+.sidebar .nav-section-divider{display:none!important}
+.sidebar-footer{border-top:1px solid #e6e9ee!important;padding-top:12px!important;background:transparent!important}
+.sidebar .user-chip,.sidebar .user-name{color:#273547!important}
+.sidebar .user-role{color:#84909d!important}
+.sidebar .sidebar-account-actions button{color:#52606e!important}
+.sidebar .sidebar-account-actions button:hover{background:#eef1f4!important;color:#1762b4!important}
+}
+.v3-nav-label{font-size:11px!important;font-weight:700!important;color:#8793a0!important;padding:11px 13px 6px!important;letter-spacing:.025em!important;text-transform:none!important}
+.v3-nav-label-spaced{margin-top:12px!important}
+/* Shared filters: preserve existing event handlers and active classes. */
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs){background:#f3f5f7!important;border:1px solid #e6e9ed!important;border-radius:11px!important;padding:4px!important;gap:3px!important;box-shadow:none!important}
+:where(.filter-tabs .tab-btn,.toggle-tabs .toggle-btn,.leaderboard-period .toggle-btn,.notification-tabs button){border-radius:8px!important;min-height:32px!important;padding:7px 13px!important;font-weight:550!important;box-shadow:none!important;transition:background .15s,color .15s!important}
+:where(.filter-tabs .tab-btn.active,.toggle-tabs .toggle-btn.active,.leaderboard-period .toggle-btn.active,.notification-tabs button.active){background:#fff!important;color:#1762b4!important;box-shadow:0 1px 4px #192b3c12!important;text-decoration:none!important}
+:where(.filter-tabs .tab-btn.active,.toggle-tabs .toggle-btn.active):after{display:none!important}
+/* Compact ranking and balanced insights. */
+#page-leaderboard .leaderboard-head{justify-content:flex-end!important;margin-bottom:12px!important}
+#page-leaderboard .leaderboard-grid:not(.leaderboard-chart-grid){align-items:stretch!important}
+#page-leaderboard .leaderboard-ranking-card,#page-leaderboard .leaderboard-insights-card{min-height:0!important;height:auto!important;padding:18px!important}
+#page-leaderboard .leaderboard-ranking-card #leaderboard-full{min-height:0!important}
+#page-leaderboard .leaderboard-chart-wrap{height:250px!important}
+#page-leaderboard .leaderboard-chart-grid .card{padding:17px!important}
+/* Agent cards: quieter metric hierarchy, stronger identity, fewer nested boxes. */
+#page-agents .agent-card{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:17px!important;padding:19px!important;box-shadow:0 2px 8px #26334308!important;transition:border-color .16s,box-shadow .16s,transform .16s!important}
+#page-agents .agent-card:hover{border-color:#b6cce1!important;box-shadow:0 8px 25px #26334313!important;transform:translateY(-1px)!important}
+#page-agents .agent-card-avatar{border-radius:12px!important;background:#edf3f9!important;color:#275c92!important;border:1px solid #dbe7f2!important}
+#page-agents .agent-card-statbox{background:transparent!important;border:0!important;padding:10px 8px!important}
+#page-agents .agent-card-statbox+.agent-card-statbox{border-left:1px solid var(--border)!important}
+#page-agents .agent-card-statval{font-size:21px!important;letter-spacing:-.035em!important}
+#page-agents .agent-card-statlabel{font-size:11px!important}
+#page-agents .agent-card-footer{margin-top:12px!important;padding-top:12px!important}
+/* Compact Chicago clock; live status remains visible. */
+@media(min-width:761px){.topbar .chicago-calendar{border:0!important;background:transparent!important;box-shadow:none!important;padding:2px 7px!important}.topbar .calendar-date-copy>strong{display:none!important}.topbar .calendar-clock-icon{display:none!important}}
+@media(max-width:760px){.sidebar{background:#f9fafb!important;color:#263343!important}.sidebar .nav-item,.sidebar .nav-group-header{color:#52606e!important}.sidebar .nav-item.active{background:#e9eef3!important;color:#1762b4!important}.v3-nav-label{padding-left:17px!important}#page-agents .agent-card{padding:15px!important}#page-leaderboard .leaderboard-chart-wrap{height:215px!important}}
+@media(prefers-reduced-motion:reduce){#page-agents .agent-card{transition:none!important;transform:none!important}}

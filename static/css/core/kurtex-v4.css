@@ -1,0 +1,49 @@
+
+/* Kurtex V4: shared component layer and mobile-first operational layouts. */
+:root{--k4-radius:12px;--k4-focus:#2776cb;--k4-border:#dce4ed;--k4-control-height:40px}
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs){display:flex;align-items:center;gap:4px;padding:4px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);max-width:100%;box-sizing:border-box}
+:where(.filter-tabs .tab-btn,.toggle-tabs .toggle-btn,.leaderboard-period .toggle-btn,.notification-tabs button){flex:0 0 auto;min-height:34px;border-radius:9px;white-space:nowrap}
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs) :is(button,[role=button]):focus-visible{outline:2px solid var(--k4-focus);outline-offset:2px}
+.sidebar .nav-item:focus-visible,.sidebar .nav-group-header:focus-visible{outline:2px solid var(--k4-focus);outline-offset:-2px}
+#page-agents .agent-card{overflow:hidden;min-width:0}
+#page-agents .agent-card-statval{font-variant-numeric:tabular-nums}
+#page-agents .agent-card-footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+#page-leaderboard .leaderboard-grid{align-items:start!important}
+#page-leaderboard .leaderboard-ranking-card,#page-leaderboard .leaderboard-insights-card{height:auto!important;min-height:0!important}
+#page-leaderboard .leaderboard-ranking-card #leaderboard-full{min-height:0!important;flex:0 1 auto!important}
+#page-leaderboard .leaderboard-chart-wrap{height:240px!important}
+#page-leaderboard .leaderboard-metric strong{font-variant-numeric:tabular-nums}
+@media(max-width:760px){
+ html,body{max-width:100%;overflow-x:clip}
+ .main,.page,.page-content,.content,.dashboard-content{min-width:0;max-width:100%}
+ .mobile-header{padding-left:14px!important;padding-right:14px!important}
+ .mobile-tabbar{padding-bottom:max(8px,env(safe-area-inset-bottom))!important}
+ .mobile-tabbar button{min-width:0;touch-action:manipulation}
+ .mobile-more-sheet{max-height:min(72dvh,650px);overflow-y:auto;overscroll-behavior:contain}
+ .sidebar{max-width:min(310px,88vw)!important;overflow-y:auto;overscroll-behavior:contain}
+ .sidebar nav{padding-bottom:18px!important}
+ .sidebar .nav-item,.sidebar .nav-group-header{min-height:44px!important}
+ :where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs){width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;justify-content:flex-start!important}
+ :where(.filter-tabs .tab-btn,.toggle-tabs .toggle-btn,.leaderboard-period .toggle-btn,.notification-tabs button){min-height:40px!important;padding:8px 13px!important}
+ #page-leaderboard .leaderboard-metrics{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+ #page-leaderboard .leaderboard-metric{min-width:0!important;padding:12px!important}
+ #page-leaderboard .leaderboard-metric>span{font-size:10px!important;white-space:normal!important}
+ #page-leaderboard .leaderboard-metric>strong{font-size:23px!important}
+ #page-leaderboard .leaderboard-grid{display:grid!important;grid-template-columns:minmax(0,1fr)!important}
+ #page-leaderboard .leaderboard-ranking-card,#page-leaderboard .leaderboard-insights-card{padding:13px!important;min-width:0}
+ #page-leaderboard .leaderboard-chart-wrap{height:205px!important;min-width:0}
+ #page-leaderboard .leaderboard-chart-head{gap:8px}
+ #page-agents .agent-grid,#page-agents .agents-grid{grid-template-columns:minmax(0,1fr)!important}
+ #page-agents .agent-card{padding:14px!important;border-radius:14px!important}
+ #page-agents .agent-card-statval{font-size:19px!important}
+ #page-agents .agent-card-statbox{padding:8px 4px!important;min-width:0}
+ #page-agents .agent-card-footer{font-size:11px}
+ #page-my_profile .card,#page-agents .card{min-width:0}
+ .notification-panel{max-width:calc(100vw - 20px)!important;max-height:75dvh!important;overflow:auto}
+}
+@media(max-width:380px){
+ #page-leaderboard .leaderboard-metric>strong{font-size:21px!important}
+ #page-agents .agent-card-statval{font-size:17px!important}
+ .mobile-tabbar button{font-size:10px!important}
+}
+@media(prefers-reduced-motion:reduce){.sidebar .nav-item,#page-agents .agent-card{transition:none!important;transform:none!important}}
