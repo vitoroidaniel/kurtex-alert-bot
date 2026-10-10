@@ -29,3 +29,33 @@ body[data-current-page="case_workspace"] .page-heading{display:none!important}
 @media(max-width:760px){.cw-work-area.has-detail{grid-template-columns:minmax(0,1fr)}.cw-detail{position:static;grid-row:1;max-height:70vh}.cw-stack{max-height:none}.cw-column{flex-basis:210px}.cw-head{gap:14px}.cw-head-actions{width:auto}.cw-search{flex-basis:100%}.cw-toolbar>.kurtex-select-shell{flex:1}.cw-views{width:auto}.cw-footer{gap:12px;align-items:flex-start}.cw-footer span{line-height:1.6}}
 @media(prefers-reduced-motion:reduce){.cw-case{transition:none}}
 @media print{.cw-detail{display:none!important}.cw-work-area.has-detail{display:block}.cw-stack{max-height:none;overflow:visible}.cw-case{break-inside:avoid}}
+
+/* v113: full case workspace - compact, left-aligned and responsive */
+.cw-shell.full-case .cw-head{display:none!important}
+.cw-full-nav{display:flex!important;align-items:center;justify-content:space-between;gap:14px;padding:10px 0 17px!important;margin:0 0 16px!important;border-bottom:1px solid var(--border)}
+.cw-full-identity{display:flex!important;align-items:center;flex-wrap:wrap;gap:9px!important;margin:0!important;text-align:left!important}
+.cw-full-identity strong{font-size:16px!important;letter-spacing:-.3px}
+.cw-full-nav #cw-back{padding:8px 12px!important;min-height:34px!important;border-radius:9px!important}
+.cw-full-grid{display:grid!important;grid-template-columns:minmax(0,1fr) 315px!important;gap:16px!important;align-items:start}
+.cw-full-main{display:grid;gap:14px;min-width:0}
+.cw-full-sidebar{display:grid;gap:14px;min-width:0;position:sticky;top:12px}
+.cw-full-grid .cw-panel{border:1px solid var(--border)!important;border-radius:12px!important;background:var(--surface)!important;padding:18px 20px!important;margin:0!important;box-shadow:0 2px 10px rgba(17,24,39,.025)}
+.cw-full-grid .cw-panel h2{font-size:18px!important;line-height:1.4!important;letter-spacing:-.3px;margin:0 0 9px!important}
+.cw-full-grid .cw-panel h3{font-size:13px!important;font-weight:700!important;margin:0 0 13px!important;display:flex;align-items:center;gap:8px}
+.cw-full-grid .cw-panel p{font-size:12px!important;line-height:1.65!important;margin:5px 0!important;overflow-wrap:anywhere}
+.cw-full-grid .cw-overview{border-left:3px solid var(--blue)!important}
+.cw-full-grid .cw-timeline{margin:0!important;padding:0 0 0 16px!important}
+.cw-full-grid .cw-timeline li{padding:8px 0 9px 13px!important;min-height:0!important;line-height:1.5!important;font-size:12px!important}
+.cw-full-grid .cw-timeline li time{font-size:11px!important;color:var(--muted)}
+.cw-full-grid .cw-note{padding:12px 0!important;border-bottom:1px solid var(--border)}
+.cw-full-grid .cw-note:last-child{border-bottom:0;padding-bottom:0!important}
+.cw-full-grid .cw-case-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin:0 0 18px!important;padding:0 0 16px!important;border-bottom:1px solid var(--border)}
+.cw-full-grid .cw-case-actions button{min-width:0!important;width:100%!important;min-height:36px!important;padding:8px!important;font-size:11px!important;justify-content:center}
+.cw-full-grid .cw-case-actions #cw-full-close{grid-column:1/-1}
+.cw-full-grid .cw-action-help{grid-column:1/-1;color:var(--muted);font-size:10px!important}
+.cw-full-grid .cw-info-row{grid-template-columns:90px minmax(0,1fr)!important;gap:10px!important;padding:9px 0!important;margin:0!important;border-bottom:1px solid var(--border);font-size:12px!important}
+.cw-full-grid .cw-info-row:last-child{border-bottom:0}
+.cw-full-grid .cw-files-panel h3 span{margin-left:auto;font-size:11px;padding:2px 7px;background:var(--surface2);border-radius:6px}
+.cw-full-grid .cw-attachment{align-items:center;border-bottom:1px solid var(--border)}
+@media(max-width:950px){.cw-full-grid{grid-template-columns:minmax(0,1fr) 270px!important}}
+@media(max-width:700px){.cw-full-grid{grid-template-columns:minmax(0,1fr)!important}.cw-full-sidebar{position:static}.cw-full-nav{align-items:flex-start;flex-direction:column}.cw-full-grid .cw-panel{padding:15px!important}}

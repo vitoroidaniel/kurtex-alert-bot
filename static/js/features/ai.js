@@ -85,10 +85,12 @@ function toggleAIPageSidebar(force){
 }
 async function loadAIPageSidebar(){
  var list=document.getElementById('ai-page-sidebar-list');if(!list)return;
+ list.innerHTML='<div class="ai-history-empty">Loading conversations...</div>';
+ var timeout=setTimeout(function(){if(list.textContent.trim()==='Loading conversations...')list.innerHTML='<div class="ai-history-empty">Chat history is taking longer than expected. <button type="button" onclick="loadAIPageSidebar()">Retry</button></div>'},8000);
  try{
   var r=await apiFetch('/api/ai/chats'),x=await r.json(),items=Array.isArray(x)?x:(x.items||x.chats||[]);
   list.innerHTML=items.length?items.map(function(c){return '<div class="ai-side-chat '+(String(c.id)===String(kurtexAIChatId)?'active':'')+'" data-chat-id="'+escapeAI(c.id)+'"><button type="button" class="ai-side-chat-open" onclick="openAIPageSavedChat(\''+aiAttr(c.id)+'\',this.closest(\'.ai-side-chat\'))"><span>'+escapeAI(c.title||'Maintenance conversation')+'</span><small>'+escapeAI(formatAIChatDate(c.updated_at||c.created_at))+'</small></button><button type="button" class="ai-side-chat-delete" onclick="deleteAIPageSavedChat(event,\''+aiAttr(c.id)+'\')" title="Delete chat" aria-label="Delete chat"><i class="ph ph-trash"></i></button></div>'}).join(''):'<div class="ai-history-empty ai-history-empty-rich"><span class="ai-empty-icon"><i class="ph ph-chats-circle"></i></span><strong>No conversations yet</strong><small>Start a maintenance chat and it will appear here automatically for quick access later.</small><button type="button" onclick="newKurtexAIPageChat()"><i class="ph ph-plus"></i> Start a chat</button></div>'
- }catch(e){list.innerHTML='<div class="ai-history-empty">Unable to load chats.</div>'}
+ }catch(e){list.innerHTML='<div class="ai-history-empty">Unable to load chats. <button type="button" onclick="loadAIPageSidebar()">Retry</button></div>'}finally{clearTimeout(timeout)}
 }
 
 async function deleteAIPageSavedChat(event,id){

@@ -90,3 +90,20 @@ body[data-current-page="ai_assistant"] .ai-page-msg:last-child{margin-bottom:18p
 /* v15: optional similar-case evidence */
 #page-ai_assistant .ai-similar-option{max-width:150px}
 @media(max-width:620px){#page-ai_assistant .ai-similar-option>span:last-child{display:none}}
+
+/* v116: AI workspace composer alignment and compact inline evidence controls */
+@media(min-width:901px){
+ body[data-current-page="ai_assistant"] .ai-assistant-page-shell{position:relative!important;display:flex!important;flex-direction:column!important;min-width:0!important}
+ body[data-current-page="ai_assistant"] .ai-page-compose{left:50%!important;right:auto!important;transform:translateX(-50%)!important;width:min(760px,calc(100% - 48px))!important;max-width:760px!important;margin:0!important;bottom:16px!important;z-index:12!important}
+ body[data-current-page="ai_assistant"] .ai-compose-input{width:100%!important;box-sizing:border-box!important}
+ body[data-current-page="ai_assistant"] .ai-page-messages{width:100%!important;box-sizing:border-box!important}
+ body[data-current-page="ai_assistant"] .ai-page-welcome{margin-left:auto!important;margin-right:auto!important;max-width:640px!important}
+}
+#page-ai_assistant .ai-compose-left{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+#page-ai_assistant .ai-compose-toggle{display:inline-flex;align-items:center;gap:5px;padding:7px 9px;border:1px solid #e2e5ea;border-radius:9px;cursor:pointer;color:#626c7b;background:#fff;font-size:11px;font-weight:600;white-space:nowrap}
+#page-ai_assistant .ai-compose-toggle input{appearance:none;width:8px;height:8px;border-radius:50%;background:#c4cbd5;margin:0;flex:none}
+#page-ai_assistant .ai-compose-toggle:has(input:checked){color:#1767d1;border-color:#b9d6ff;background:#edf5ff}
+#page-ai_assistant .ai-compose-toggle input:checked{background:#2683f6;box-shadow:0 0 0 2px #cce3ff}
+#page-ai_assistant .ai-compose-knowledge{display:inline-flex;align-items:center;gap:5px!important;white-space:nowrap}
+#page-ai_assistant .ai-history-empty button{border:1px solid #dce1e8;background:white;border-radius:7px;padding:5px 8px;cursor:pointer}
+@media(max-width:900px){#page-ai_assistant .ai-compose-toggle{padding:6px;font-size:10px}#page-ai_assistant .ai-compose-toggle span{display:none}#page-ai_assistant .ai-compose-knowledge span{display:none}}

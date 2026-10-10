@@ -1,0 +1,73 @@
+/* v114 screenshot-aligned, role-specific Home. Scoped to overview. */
+#page-overview.home-dashboard{--kx-ink:#101a34;--kx-muted:#63718d;--kx-line:#e7ebf3;--kx-blue:#317df6;--kx-red:#ff4a55;--kx-green:#29c58a;--kx-orange:#ff9b27;--kx-violet:#9864fa;color:var(--kx-ink);padding:12px 16px 24px!important;background:#f8fafc!important}
+#page-overview .card,#page-overview .stat-card{border:1px solid var(--kx-line)!important;border-radius:15px!important;background:#fff!important;box-shadow:0 6px 20px rgba(30,50,90,.035)!important}
+#page-overview h3{font-size:16px;font-weight:750;color:var(--kx-ink);margin:0}
+#page-overview .kx-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 8px 21px}
+#page-overview .kx-hero h2{font-size:32px;letter-spacing:-1px;font-weight:760;line-height:1.25;margin:0;color:var(--kx-ink)}
+#page-overview .kx-hero p,#page-overview .kx-panel>p{font-size:13px;color:var(--kx-muted);margin:6px 0 0}
+#page-overview .kx-hero-actions,.kx-panel-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#page-overview .kx-period{display:flex;border:1px solid var(--kx-line);border-radius:12px;overflow:hidden;background:#fff}
+#page-overview .kx-period button{padding:10px 13px;border:0;border-right:1px solid var(--kx-line);background:transparent;color:var(--kx-ink);cursor:pointer;font-size:12px}
+#page-overview .kx-period button.active{background:#fff0f1;color:#ed283a}
+#page-overview .kx-icon-btn{border:1px solid var(--kx-line);border-radius:9px;padding:8px 12px;background:#fff;color:var(--kx-ink);font-size:12px;cursor:pointer;white-space:nowrap}
+#page-overview .stat-grid{display:grid!important;gap:12px!important;margin:0 0 14px!important}
+#page-overview .kx-manager-stats{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+#page-overview .stat-card.home-metric{display:flex!important;flex-direction:column;align-items:flex-start;text-align:left;min-height:160px;padding:16px!important;position:relative;overflow:hidden;transition:transform .18s,box-shadow .18s}
+#page-overview .stat-card.home-metric:hover,#page-overview .kx-quick-grid button:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(40,70,120,.12)!important}
+#page-overview .home-metric-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#e6f0ff;color:var(--kx-blue);font-size:23px}
+#page-overview .home-metric-content{display:flex;flex-direction:column;margin-top:12px}
+#page-overview .home-metric .stat-value{font-size:27px;line-height:1.15;color:var(--kx-ink);font-weight:800}
+#page-overview .home-metric .stat-label{font-size:12px;color:var(--kx-muted);margin-top:2px}
+#page-overview .home-metric-footer{font-size:11px;color:var(--kx-green);margin-top:7px}
+#page-overview .home-metric-arrow{display:none}
+#page-overview .home-metric:after{content:'';position:absolute;right:14px;bottom:16px;width:50px;height:40px;background:linear-gradient(90deg,transparent 0 7%,var(--kx-blue) 7% 15%,transparent 15% 22%,var(--kx-blue) 22% 32%,transparent 32% 39%,var(--kx-blue) 39% 50%,transparent 50% 57%,var(--kx-blue) 57% 69%,transparent 69% 76%,var(--kx-blue) 76% 88%,transparent 88%);opacity:.55;clip-path:polygon(0 75%,15% 75%,15% 57%,35% 57%,35% 38%,55% 38%,55% 50%,75% 50%,75% 12%,100% 12%,100% 100%,0 100%)}
+#page-overview [data-tone=attention] .home-metric-icon{background:#ffe8ea;color:var(--kx-red)}
+#page-overview [data-tone=attention]:after{background-color:var(--kx-red)}
+#page-overview [data-tone=resolved] .home-metric-icon{background:#def9ed;color:var(--kx-green)}
+#page-overview [data-tone=active] .home-metric-icon{background:#fff1dc;color:var(--kx-orange)}
+#page-overview .kx-manager-charts{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-bottom:14px}
+#page-overview .kx-manager-bottom{display:grid;grid-template-columns:1.65fr 1fr;gap:14px}
+#page-overview .kx-panel{padding:20px!important;min-width:0}
+#page-overview .kx-panel-title{margin-bottom:13px}
+#page-overview .kx-panel-title select{background:#fff;border:1px solid var(--kx-line);border-radius:9px;padding:8px;font-size:12px;color:var(--kx-ink)}
+#page-overview .kx-chart-wrap{height:205px;margin-top:20px;position:relative}
+#page-overview .kx-donut-area{display:flex;align-items:center;gap:12px;min-height:235px}
+#page-overview .kx-donut-wrap{width:53%;aspect-ratio:1;position:relative}
+#page-overview .kx-donut-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:23px;font-weight:800}
+#page-overview .kx-legend{flex:1;display:grid;gap:12px;font-size:12px}
+#page-overview .kx-legend-row{display:flex;justify-content:space-between;gap:7px;align-items:center}
+#page-overview .kx-legend-row i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
+#page-overview .kx-extra-widgets{display:none}
+#page-overview .kx-agent-grid{display:grid;grid-template-columns:minmax(0,2.18fr) minmax(295px,1fr);gap:16px}
+#page-overview .kx-agent-main,#page-overview .kx-agent-side{min-width:0;display:flex;flex-direction:column;gap:15px}
+#page-overview .kx-agent-banner{min-height:183px;border-radius:14px;overflow:hidden;position:relative;background:linear-gradient(90deg,rgba(255,247,250,.96),rgba(255,246,230,.70) 49%,rgba(255,255,255,0) 80%),url('/static/img/kurtex-fleet-banner.png') center/cover,linear-gradient(115deg,#fce9ee,#f6dcb9);padding:23px}
+#page-overview .kx-banner-copy{max-width:65%;position:relative;z-index:1}
+#page-overview .kx-agent-banner h2{font-size:29px;line-height:1.15;font-weight:800;color:var(--kx-ink);margin:0}
+#page-overview .kx-agent-banner p{color:#61708c;font-size:13px;line-height:1.5;margin:12px 0 15px}
+#page-overview .kx-agent-banner button{border:0;border-radius:8px;padding:10px 17px;background:#e71f2d;color:white;font-weight:700;cursor:pointer}
+#page-overview .kx-agent-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important;margin:0!important}
+#page-overview .kx-agent-stats .home-metric{min-height:144px;padding:15px!important}
+#page-overview .kx-agent-bottom{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#page-overview .kx-online{font-size:11px;color:#0da96b;background:#e0f9ed;padding:5px 10px;border-radius:20px}
+#page-overview .kx-ai-panel>button{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:8px;padding:12px;border:1px solid var(--kx-line);border-radius:10px;background:#f8fafc;color:var(--kx-ink);font-size:12px;text-align:left;cursor:pointer}
+#page-overview .kx-ai-panel form{display:flex;gap:6px;margin-top:16px}
+#page-overview .kx-ai-panel input{width:100%;min-width:0;border:1px solid var(--kx-line);border-radius:10px;padding:12px}
+#page-overview .kx-ai-panel form button{border:0;border-radius:9px;background:#e8edf6;padding:0 12px}
+#page-overview .kx-quick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:15px}
+#page-overview .kx-quick-grid button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:77px;border:1px solid #edf0f6;border-radius:12px;background:#f8fafc;color:var(--kx-ink);font-size:11px;cursor:pointer;transition:transform .18s}
+#page-overview .kx-quick-grid i{font-size:25px;color:var(--kx-blue)}
+#page-overview .kx-quick-grid button:nth-child(2) i{color:var(--kx-violet)}
+#page-overview .kx-quick-grid button:nth-child(4) i{color:var(--kx-green)}
+#page-overview .kx-quick-grid button:nth-child(5) i{color:var(--kx-orange)}
+#page-overview .kx-my-cases #home-attention-list{max-height:280px;overflow:auto}
+#page-overview .kx-agent-bottom #home-ai-summary{font-size:12px}
+#page-overview .kx-refresh-status{display:block;text-align:right;font-size:10px;color:var(--kx-muted);margin-top:6px}
+#page-overview .kx-reminder-row{display:flex;align-items:center;gap:7px;padding:10px 0;border-bottom:1px solid var(--kx-line);font-size:12px}
+#page-overview .kx-reminder-row span{flex:1;overflow-wrap:anywhere}
+#page-overview .kx-reminder-row button{background:none;border:0;color:#8b97aa;cursor:pointer}
+/* Shared card language beyond Home: restrained color and responsive interactions. */
+#page-case_workspace .card,#page-agents .card,#page-cases .card{border-radius:13px;transition:box-shadow .18s,border-color .18s}
+#page-case_workspace .card:hover,#page-agents .card:hover,#page-cases .card:hover{box-shadow:0 6px 24px rgba(35,62,103,.065)}
+@media(max-width:1300px){#page-overview .kx-manager-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important}#page-overview .kx-manager-charts{grid-template-columns:1fr 1fr}#page-overview .kx-manager-charts>.kx-panel:last-child{grid-column:span 2}#page-overview .kx-agent-grid{grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr)}}
+@media(max-width:900px){#page-overview .kx-agent-grid,#page-overview .kx-manager-bottom{grid-template-columns:1fr}#page-overview .kx-manager-charts{grid-template-columns:1fr}#page-overview .kx-manager-charts>.kx-panel:last-child{grid-column:auto}#page-overview .kx-agent-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:580px){#page-overview .kx-hero{align-items:flex-start;flex-direction:column}#page-overview .kx-hero h2{font-size:25px}#page-overview .kx-manager-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}#page-overview .kx-agent-bottom{grid-template-columns:1fr}#page-overview .kx-banner-copy{max-width:100%}#page-overview .kx-agent-banner{background-position:70% center}#page-overview .kx-agent-banner h2{font-size:24px}}

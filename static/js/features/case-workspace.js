@@ -165,7 +165,7 @@ function cwRenderFull(){
    <div class="cw-full-main">
     <section class="cw-panel cw-overview" aria-labelledby="cw-case-heading"><h2 id="cw-case-heading">${cwEscape(c.issue_text||c.description||'Maintenance report')}</h2><p>${cwDescription(c)}</p></section>
     <section class="cw-panel" aria-labelledby="cw-timeline-heading"><h3 id="cw-timeline-heading"><i class="ph ph-pulse" aria-hidden="true"></i> Activity timeline</h3>${cwHistory(c)}</section>
-    <section class="cw-panel" aria-labelledby="cw-notes-heading"><h3 id="cw-notes-heading"><i class="ph ph-chat-circle" aria-hidden="true"></i> Notes & comments</h3>${cwNotes(c)}</section>
+    <section class="cw-panel" aria-labelledby="cw-notes-heading"><h3 id="cw-notes-heading"><i class="ph ph-chat-circle" aria-hidden="true"></i> Notes & comments ${editable?cwEditButton(c,'note','Add note'):""}</h3>${cwNotes(c)}</section>
     <section class="cw-panel cw-files-panel" aria-labelledby="cw-files-heading"><h3 id="cw-files-heading"><i class="ph ph-paperclip" aria-hidden="true"></i> Attachments <span>${(c.attachments||[]).length}</span></h3>${cwAttachments(c)}</section>
    </div>
    <aside class="cw-full-sidebar" aria-label="Case information and actions">

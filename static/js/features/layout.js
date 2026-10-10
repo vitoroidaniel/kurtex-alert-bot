@@ -1,9 +1,10 @@
 // Workspace preferences: desktop and mobile Overview layouts are independent and account-backed.
 var overviewDevice=window.matchMedia('(max-width:760px)').matches?'mobile':'desktop';
 var layoutKeyBase='kurtex-overview-v3-'+document.body.dataset.userId;
+var kurtexIsManager=['admin','manager','developer','superadmin','super_admin'].includes((document.body.dataset.userRole||'').toLowerCase()) || document.body.dataset.isDeveloper==='true';
 var widgetCatalog=[['metrics','At a glance'],['attention','Needs attention'],['ai_summary','Fleet briefing'],['activity','Recent updates'],['agents','Team progress'],['units','Recurring unit reports'],['cases','Recent cases']];
 var metricLabels=['Reported today','Active maintenance','Needs attention','Resolved today'];
-function defaultOverviewWorkspace(){return {order:widgetCatalog.map(w=>w[0]),hidden:['cases'],metrics:[]}}
+function defaultOverviewWorkspace(){return {order:kurtexIsManager?['metrics','attention','agents','units','ai_summary','activity','cases']:['ai_summary','attention','activity','metrics','cases','agents','units'],hidden:kurtexIsManager?['cases']:['agents','units','cases'],metrics:[]}}
 function normalizeOverviewWorkspace(saved){
  var d=defaultOverviewWorkspace();saved=saved&&typeof saved==='object'?saved:{};
  if(Array.isArray(saved.order)){
@@ -38,8 +39,8 @@ var emptyLayout=document.createElement('div');emptyLayout.className='empty-state
 var overviewSaveTimer=null;
 function persistOverviewAccount(){clearTimeout(overviewSaveTimer);overviewSaveTimer=setTimeout(function(){apiFetch('/api/preferences/overview','overview-preferences-write',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({overview:{desktop:{order:overviewLayouts.desktop.order,hidden:overviewLayouts.desktop.hidden,metrics:overviewLayouts.desktop.metrics},mobile:{order:overviewLayouts.mobile.order,hidden:overviewLayouts.mobile.hidden,metrics:overviewLayouts.mobile.metrics}}})}).catch(function(){})},220)}
 function saveOverviewLayout(){preferences.set(layoutKeyBase+'-'+overviewDevice,JSON.stringify({order:overviewLayout.order,hidden:overviewLayout.hidden,metrics:overviewLayout.metrics}));preferences.set(interfaceKey,JSON.stringify(interfacePrefs));applyOverviewLayout();persistOverviewAccount()}
-function applyOverviewLayout(){overviewLayout.order.forEach(function(id,index){var node=widgetNodes[id];if(node){if(overviewGrid.children[index]!==node)overviewGrid.insertBefore(node,overviewGrid.children[index]||null);node.hidden=overviewLayout.hidden.includes(id)}});document.querySelectorAll('#stat-grid .stat-card').forEach((c,i)=>c.hidden=overviewLayout.metrics.includes(i));overviewPage.classList.toggle('compact-layout',overviewLayout.density==='compact');document.documentElement.classList.toggle('reduce-motion',overviewLayout.reduceMotion);document.documentElement.classList.toggle('sidebar-fixed',overviewLayout.fixedSidebar);document.documentElement.classList.toggle('sidebar-not-fixed',!overviewLayout.fixedSidebar);document.documentElement.classList.toggle('sidebar-compact',!!interfacePrefs.compactSidebar);emptyLayout.hidden=overviewLayout.hidden.length<widgetCatalog.length}
-function toggleOverviewWidget(id,visible){overviewLayout.hidden=overviewLayout.hidden.filter(x=>x!==id);if(!visible)overviewLayout.hidden.push(id);saveOverviewLayout();renderSettingsPanel()}
+function applyOverviewLayout(){overviewLayout.order.forEach(function(id,index){var node=widgetNodes[id];if(node){if(overviewGrid.children[index]!==node)overviewGrid.insertBefore(node,overviewGrid.children[index]||null);node.hidden=overviewLayout.hidden.includes(id)||(!kurtexIsManager&&(id==='agents'||id==='units'))}});document.querySelectorAll('#stat-grid .stat-card').forEach((c,i)=>c.hidden=overviewLayout.metrics.includes(i));overviewPage.classList.toggle('compact-layout',overviewLayout.density==='compact');document.documentElement.classList.toggle('reduce-motion',overviewLayout.reduceMotion);document.documentElement.classList.toggle('sidebar-fixed',overviewLayout.fixedSidebar);document.documentElement.classList.toggle('sidebar-not-fixed',!overviewLayout.fixedSidebar);document.documentElement.classList.toggle('sidebar-compact',!!interfacePrefs.compactSidebar);emptyLayout.hidden=overviewLayout.hidden.length<widgetCatalog.length}
+function toggleOverviewWidget(id,visible){if(!kurtexIsManager&&(id==='agents'||id==='units'))return;overviewLayout.hidden=overviewLayout.hidden.filter(x=>x!==id);if(!visible)overviewLayout.hidden.push(id);saveOverviewLayout();renderSettingsPanel()}
 function moveOverviewWidget(id,d){var i=overviewLayout.order.indexOf(id),n=i+d;if(n<0||n>=overviewLayout.order.length)return;overviewLayout.order.splice(i,1);overviewLayout.order.splice(n,0,id);saveOverviewLayout();renderSettingsPanel()}
 // Pull the account copy after first paint. This survives logout, browsers, devices and deployments.
 apiFetch('/api/preferences/overview','overview-preferences').then(function(data){var remote=data&&data.overview;if(!remote||typeof remote!=='object')return;var hasRemote=false;['desktop','mobile'].forEach(function(device){if(remote[device]&&typeof remote[device]==='object'){hasRemote=true;overviewLayouts[device]=normalizeOverviewWorkspace(remote[device]);bindSharedOverviewProps(overviewLayouts[device]);preferences.set(layoutKeyBase+'-'+device,JSON.stringify(remote[device]))}});overviewLayout=overviewLayouts[overviewDevice];applyOverviewLayout();if(!hasRemote)persistOverviewAccount();if(typeof renderSettingsPanel==='function'&&document.getElementById('layout-settings-body'))renderSettingsPanel()}).catch(function(){});
@@ -101,3 +102,6 @@ applyOverviewLayout();
   var nav=document.querySelector('.sidebar>nav');
   if(nav)nav.setAttribute('tabindex','0');
 })();
+
+// Keep management-only widgets out of the agent customization controls.
+if(!kurtexIsManager){['agents','units'].forEach(function(id){var node=widgetNodes[id];if(node)node.hidden=true;});}
