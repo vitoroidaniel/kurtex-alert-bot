@@ -588,6 +588,8 @@ async function openCase(el) {
   caseOverlay.dataset.caseId = caseId;
   lockBodyScroll();
   updateHTML(document.getElementById("modal-body"), '<div class="loading">Loading...</div>');
+  caseOverlay.returnFocus=document.activeElement;
+  caseOverlay.querySelector('.modal-close').focus({preventScroll:true});
   document.getElementById("modal-title").textContent = "Case View";
   try {
     var r = await apiFetch("/api/case?id=" + encodeURIComponent(caseId), "case-detail");
@@ -608,6 +610,7 @@ async function openCase(el) {
       '</section></div>'+
       (c.full_description?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-text-align-left"></i><span>Description</span></div><section class="mobile-detail-card mobile-copy-card">'+h(c.full_description)+'</section></div>':'')+
       ((c.full_notes||c.comments||(c.workspace_notes||[]).length)?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-note"></i><span>Report / notes</span></div><section class="mobile-detail-card mobile-copy-card">'+cwNotes(c)+'</section></div>':'')+
+      '<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-paperclip"></i><span>Attachments</span></div><section class="mobile-detail-card">'+cwAttachments(c)+'</section></div>'+
       ((c.workspace_history||[]).length?'<div class="mobile-detail-section"><div class="mobile-detail-section-head"><i class="ph ph-pulse"></i><span>Activity timeline</span></div><section class="mobile-detail-card">'+cwHistory(c)+'</section></div>':'')+'</div>';
     updateHTML(document.getElementById("modal-body"), html);
   } catch (e) {
@@ -625,6 +628,7 @@ function closeModal() {
   if (overlay.classList.contains("open")) {
     overlay.classList.remove("open");
     unlockBodyScroll();
+    if(overlay.returnFocus?.isConnected)overlay.returnFocus.focus({preventScroll:true});
   }
 }
 

@@ -2,11 +2,12 @@ async function viewFullReport(caseIdOrEl) {
   var caseId = typeof caseIdOrEl === "string" ? caseIdOrEl : caseIdOrEl.dataset.id;
   var caseOverlay = document.getElementById("modal-overlay");
   var unitOverlay = document.getElementById("unit-modal-overlay");
-  if (caseOverlay) caseOverlay.classList.remove("open");
-  if (unitOverlay) unitOverlay.classList.remove("open");
   var reportOverlay = document.getElementById("report-view-overlay");
+  reportOverlay.returnFocus=document.activeElement;
+  document.getElementById('report-view-back').textContent=caseOverlay?.classList.contains('open')?'Back to case':unitOverlay?.classList.contains('open')?'Back to unit':'Close report';
   reportOverlay.style.zIndex = "540"; reportOverlay.classList.add("open"); reportOverlay.dataset.caseId=caseId; lockBodyScroll();
   document.getElementById("report-view-body").innerHTML = '<div class="loading">Loading report...</div>';
+  reportOverlay.querySelector('.modal-close').focus({preventScroll:true});
   try {
     var r = await apiFetch("/api/case?id=" + encodeURIComponent(caseId), "case-report");
     if (!r.ok) { document.getElementById("report-view-body").innerHTML='<div class="loading">Error loading report.</div>'; return; }
@@ -21,7 +22,8 @@ async function viewFullReport(caseIdOrEl) {
     report+=section('ph-map-pin','Load & location',field('Load type',c.load_type,'ph-package')+field('Current location',c.location,'ph-map-pin')+field('Pickup',c.pickup,'ph-arrow-circle-up')+field('Delivery',c.delivery,'ph-arrow-circle-down'));
     var hasTemperature=c.vehicle_type==='reefer';
     if(hasTemperature) report+=section('ph-thermometer','Temperature',field('Setpoint',c.setpoint,'ph-thermometer')+field('Current temperature',c.current_temp,'ph-thermometer-hot')+field('Recorder',c.temp_recorder,'ph-device-mobile'));
-    report+=section('ph-note','Report notes',field('Comments',c.comments||(c.full_notes!=='case reported'?c.full_notes:''),'ph-note'),!hasTemperature);
+    report+=section('ph-note','Notes & comments',cwNotes(c),true);
+    report+=section('ph-paperclip','Attachments',cwAttachments(c),true);
     report+='</div></div>';
     document.getElementById('report-view-body').innerHTML=report;
   } catch(e){ if(e.name==='AbortError')return; document.getElementById('report-view-body').innerHTML='<div class="loading">Error loading report.</div>'; }
@@ -32,6 +34,7 @@ function closeReportView() {
   if (overlay.classList.contains("open")) {
     overlay.classList.remove("open");
     unlockBodyScroll();
+    if(overlay.returnFocus?.isConnected)overlay.returnFocus.focus({preventScroll:true});
   }
 }
 

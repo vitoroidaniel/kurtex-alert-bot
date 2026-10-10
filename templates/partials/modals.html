@@ -1,3 +1,22 @@
+<!-- AI tools reuse the shared dialog, focus and scroll-lock owner. -->
+<div id="ai-options-overlay" class="modal-overlay" style="z-index:560" onclick="if(event.target===this)closeAIOptions()">
+  <section class="modal ai-options-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-options-title" tabindex="-1">
+    <button type="button" class="modal-close" onclick="closeAIOptions()" aria-label="Close chat options"><i class="ph ph-x" aria-hidden="true"></i></button>
+    <h2 id="ai-options-title">Chat options</h2>
+    <label class="ai-option-row"><span><strong>Web research</strong><small>Look for current information and sources.</small></span><input id="ai-web-search" type="checkbox" checked></label>
+    <label class="ai-option-row"><span><strong>Similar fleet cases</strong><small>Include relevant cases from fleet history.</small></span><input id="ai-similar-cases" type="checkbox"></label>
+    <button type="button" class="ai-option-knowledge" onclick="closeAIOptions();openAIChatKnowledge()"><i class="ph ph-book-open-text" aria-hidden="true"></i><span><strong>Knowledge for this chat</strong><small>Choose approved reference material.</small></span><i class="ph ph-caret-right" aria-hidden="true"></i></button>
+    <button type="button" class="ai-options-done" onclick="closeAIOptions()">Done</button>
+  </section>
+</div>
+<div id="ai-history-overlay" class="modal-overlay" style="z-index:560" onclick="if(event.target===this)closeAIPageHistory()">
+  <section class="modal ai-history-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-history-title" tabindex="-1">
+    <button type="button" class="modal-close" onclick="closeAIPageHistory()" aria-label="Close chat history"><i class="ph ph-x" aria-hidden="true"></i></button>
+    <h2 id="ai-history-title">Conversations</h2>
+    <div class="ai-history-search"><i class="ph ph-magnifying-glass" aria-hidden="true"></i><input type="search" id="ai-history-search" aria-label="Search conversations" placeholder="Search conversations" oninput="renderAIPageHistory()"><button type="button" id="ai-history-clear" hidden onclick="clearAIPageHistorySearch()" aria-label="Clear conversation search"><i class="ph ph-x" aria-hidden="true"></i></button></div>
+    <div id="ai-history-results" class="ai-page-history-list"></div>
+  </section>
+</div>
 <!-- Case Modal -->
 <div class="modal-overlay" id="modal-overlay" style="z-index:400" onclick="if(event.target===this)closeModal()">
 <div class="modal detail-surface" role="dialog" aria-modal="true" tabindex="-1">
@@ -13,7 +32,8 @@
   <button class="modal-close" aria-label="Close dialog" onclick="closeReportView()"><i class="ph ph-x"></i></button>
   <h2 id="report-view-title">Case Report</h2>
   <div id="report-view-body"><div class="loading">Loading...</div></div>
-  <div style="margin-top:16px;text-align:right">
+  <div class="report-view-actions" style="margin-top:16px;text-align:right">
+    <button type="button" id="report-view-back" class="cw-secondary" onclick="closeReportView()">Close report</button>
     <button onclick="printReportView()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px"><i class="ph ph-printer"></i> Print</button>
   </div>
 </div>
@@ -69,6 +89,7 @@
   <div class="report-footer">
     <div class="report-footer-note"><i class="ph ph-shield-check"></i><span>Generated from live Kurtex case data</span></div>
     <div class="report-footer-actions"><button class="report-share-btn" type="button" onclick="shareReportPDF()"><i class="ph ph-share-network"></i> Share</button><button class="report-download-btn" type="button" onclick="downloadReportPDF()"><i class="ph ph-download-simple"></i> Download PDF</button></div>
+    <p id="report-action-status" role="status" hidden></p>
   </div>
 </div>
 </div>
