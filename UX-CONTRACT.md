@@ -16,3 +16,6 @@ Do not remove or rename existing page identifiers, filter handlers, or Telegram/
 
 ## V5 workflow contract
 Mobile case filters retain setCaseFilter, loadCases and setCaseDateFilter. More-menu destinations are hidden when not allowed. The Alerts button uses the existing notification renderer. AI retains its existing chat and composer logic. No API or database migration is needed.
+
+## V7 component rebuild
+Agent card HTML is replaced by a centered employee grid with avatar, status, metrics and progress. Leaderboard charts use refined series colors, rounded bars, and unstacked comparisons. Mobile uses two columns when possible and one on narrow phones. Existing click handlers and data fields are retained.

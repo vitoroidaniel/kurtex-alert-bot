@@ -164,7 +164,7 @@ function renderLeaderboardCharts(perf, trend) {
   var trendCanvas = document.getElementById("leaderboard-trend-chart");
   if (trendCanvas) {
     if (!leaderboardTrendChart) {
-      leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:trendLabels,datasets:[{label:"Cases",data:trendData[0],borderColor:c.accent,backgroundColor:"rgba(239,68,68,.07)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5},{label:"Resolved",data:trendData[1],borderColor:c.green,backgroundColor:"rgba(34,197,94,.05)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+      leaderboardTrendChart = new Chart(trendCanvas, {type:"line",data:{labels:trendLabels,datasets:[{label:"Cases",data:trendData[0],borderColor:"#3478df",backgroundColor:"rgba(52,120,223,.08)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5},{label:"Resolved",data:trendData[1],borderColor:"#20a68c",backgroundColor:"rgba(32,166,140,.05)",fill:true,tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2.5}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},interaction:{intersect:false,mode:"index"},scales:{x:{ticks:{color:c.text,maxRotation:0,autoSkip:true,maxTicksLimit:8,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
     } else updateLeaderboardChart(leaderboardTrendChart, trendLabels, trendData);
   }
   var outCanvas = document.getElementById("leaderboard-outcome-chart");
@@ -173,7 +173,7 @@ function renderLeaderboardCharts(perf, trend) {
   var outData=[agents.map(function(a){return a.resolved;}),agents.map(function(a){return a.active;}),agents.map(function(a){return a.reassigned;})];
   if (outCanvas) {
     if (!leaderboardOutcomeChart) {
-      leaderboardOutcomeChart = new Chart(outCanvas,{type:"bar",data:{labels:outLabels,datasets:[{label:"Resolved",data:outData[0],backgroundColor:c.green},{label:"Active",data:outData[1],backgroundColor:c.blue},{label:"Reassigned",data:outData[2],backgroundColor:"#8b5cf6"}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},scales:{x:{stacked:true,ticks:{color:c.text,maxRotation:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}},y:{stacked:true,beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
+      leaderboardOutcomeChart = new Chart(outCanvas,{type:"bar",data:{labels:outLabels,datasets:[{label:"Resolved",data:outData[0],backgroundColor:"#22a58c",borderRadius:7,maxBarThickness:34},{label:"Active",data:outData[1],backgroundColor:"#8aa6c9",borderRadius:7,maxBarThickness:34},{label:"Reassigned",data:outData[2],backgroundColor:"#9077e8",borderRadius:7,maxBarThickness:34}]},options:{animation:{duration:0},responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{intersect:false,mode:"index"}},scales:{x:{stacked:false,ticks:{color:c.text,maxRotation:0,padding:8},grid:{display:false}},y:{stacked:false,beginAtZero:true,ticks:{color:c.text,precision:0,padding:8},grid:{display:true,color:c.grid,lineWidth:1,drawBorder:false}}}}});
     } else updateLeaderboardChart(leaderboardOutcomeChart, outLabels, outData);
   }
 }
@@ -602,11 +602,16 @@ function renderAgentCards(rows){
  var el=document.getElementById('agents-card-grid');if(!el)return;
  el.innerHTML=rows.map(function(a){
    var rate=Math.max(0,Math.min(100,Number(a.rate||0)));
-   return '<button type="button" class="agent-overview-card" data-agent="'+attr(a.name||'')+'" data-username="'+attr(a.username||'')+'" data-agent-id="'+attr(a.id||'')+'" onclick="openAgentModal(this.dataset.agent,this.dataset.username,this.dataset.agentId)">'+
-     '<div class="agent-overview-top"><span class="agent-overview-avatar">'+h((a.name||'?')[0].toUpperCase())+'</span><span class="agent-overview-id"><strong>'+h(a.name||'')+'</strong><small>'+(a.username?'@'+h(a.username):'Team member')+'</small></span><i class="ph ph-arrow-up-right"></i></div>'+ 
-     '<div class="agent-overview-metrics"><span><b>'+Number(a.total||0)+'</b><small>Cases</small></span><span><b>'+Number(a.done||0)+'</b><small>Resolved</small></span><span><b>'+Number(a.missed||0)+'</b><small>Missed</small></span></div>'+ 
-     '<div class="agent-overview-rate"><span><small>Resolution</small><b>'+rate+'%</b></span><div class="agent-overview-track"><i style="width:'+rate+'%"></i></div></div>'+ 
-     '<div class="agent-overview-foot"><span><i class="ph ph-timer"></i> Avg response '+h(a.avg_resp||'—')+'</span><span>View activity <i class="ph ph-caret-right"></i></span></div></button>';
+   var name=a.name||'Unknown agent';
+   var total=Number(a.total||0),done=Number(a.done||0),missed=Number(a.missed||0);
+   return '<button type="button" class="agent-overview-card k7-agent" data-agent="'+attr(name)+'" data-username="'+attr(a.username||'')+'" data-agent-id="'+attr(a.id||'')+'" onclick="openAgentModal(this.dataset.agent,this.dataset.username,this.dataset.agentId)">'+
+     '<div class="k7-agent-avatar">'+h(name.slice(0,1).toUpperCase())+'</div>'+
+     '<div class="k7-agent-name">'+h(name)+'</div><div class="k7-agent-role">'+(a.username?'@'+h(a.username):'Team member')+'</div>'+
+     '<span class="k7-agent-status"><i></i> Team member</span>'+
+     '<div class="k7-agent-divider"></div>'+
+     '<div class="k7-agent-stats"><span><b>'+total+'</b><small>Cases</small></span><span><b>'+done+'</b><small>Resolved</small></span><span><b>'+missed+'</b><small>Missed</small></span></div>'+
+     '<div class="k7-agent-progress"><span>Resolution rate</span><strong>'+rate+'%</strong></div><div class="k7-agent-track"><i style="width:'+rate+'%"></i></div>'+
+     '<div class="k7-agent-open">View profile <i class="ph ph-arrow-up-right"></i></div></button>';
  }).join('')||'<div class="empty-state">No matching agents.</div>';
 }
 

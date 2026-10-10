@@ -1,0 +1,30 @@
+/* V7: actual agent component redesign and analytics cards */
+#page-agents .agents-toolbar-top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 22px!important}
+#page-agents .agents-search{max-width:380px;width:100%;border-radius:13px!important;background:var(--surface)!important}
+#page-agents .agents-card-grid{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(190px,1fr))!important;gap:16px!important}
+#page-agents .k7-agent{display:flex!important;flex-direction:column;align-items:center;text-align:center!important;padding:24px 16px 16px!important;min-height:295px;border-radius:18px!important;background:var(--surface)!important;border:1px solid var(--border)!important;box-shadow:0 4px 16px rgba(15,23,42,.025)!important;transition:transform .16s,box-shadow .16s,border-color .16s}
+#page-agents .k7-agent:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(15,23,42,.085)!important;border-color:#b7c9e5!important}
+.k7-agent-avatar{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;font-size:23px;font-weight:750;background:linear-gradient(145deg,#e3edff,#d6e9e7);color:#2c5b8e;border:3px solid var(--surface);box-shadow:0 0 0 1px var(--border);margin-bottom:12px}
+.k7-agent-name{font-size:14px;font-weight:750;color:var(--text);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.k7-agent-role{font-size:11px;color:var(--muted);margin-top:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.k7-agent-status{font-size:10px;color:#178a72;background:rgba(26,171,131,.075);border-radius:100px;padding:5px 10px;margin-top:10px;display:flex;align-items:center;gap:6px}
+.k7-agent-status i{width:6px;height:6px;background:#25af83;border-radius:50%}
+.k7-agent-divider{width:100%;height:1px;background:var(--border);margin:17px 0 12px}
+.k7-agent-stats{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.k7-agent-stats span{display:flex;flex-direction:column;gap:3px;min-width:0}.k7-agent-stats b{font-size:17px;color:var(--text);font-variant-numeric:tabular-nums}.k7-agent-stats small{font-size:10px;color:var(--muted)}
+.k7-agent-progress{display:flex;justify-content:space-between;width:100%;margin-top:14px;font-size:10px;color:var(--muted)}.k7-agent-progress strong{color:var(--text)}
+.k7-agent-track{width:100%;height:5px;border-radius:8px;background:var(--surface2);margin-top:7px;overflow:hidden}.k7-agent-track i{display:block;height:100%;border-radius:8px;background:#3576e5}
+.k7-agent-open{margin-top:13px;font-size:11px;font-weight:650;color:#3576e5}
+#page-leaderboard .leaderboard-metrics{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important}
+#page-leaderboard .leaderboard-metric{border:1px solid var(--border)!important;background:var(--surface)!important;border-radius:16px!important;min-height:106px!important;padding:18px!important;box-shadow:none!important}
+#page-leaderboard .leaderboard-metric strong{font-size:29px!important;letter-spacing:-.035em}
+#page-leaderboard .leaderboard-grid{gap:14px!important}
+#page-leaderboard .leaderboard-grid>.card{background:var(--surface)!important;border:1px solid var(--border)!important;border-radius:17px!important;box-shadow:none!important;padding:20px!important;min-width:0}
+#page-leaderboard .leaderboard-chart-grid .leaderboard-chart-wrap{height:275px!important}
+#page-leaderboard .leaderboard-chart-head{flex-wrap:wrap;gap:12px;margin-bottom:15px}
+#page-leaderboard .chart-key{flex-wrap:wrap;gap:6px}
+#page-leaderboard .chart-key-item{border-radius:9px!important}
+@media(max-width:1100px){#page-leaderboard .leaderboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:760px){#page-agents .agents-toolbar-top{align-items:stretch;gap:10px}#page-agents .agents-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}#page-agents .k7-agent{min-height:270px;padding:16px 10px 12px!important} .k7-agent-avatar{width:49px;height:49px;font-size:18px}.k7-agent-stats b{font-size:15px}.k7-agent-stats small{font-size:9px}#page-leaderboard .leaderboard-grid>.card{padding:14px!important}#page-leaderboard .leaderboard-chart-grid .leaderboard-chart-wrap{height:215px!important}}
+@media(max-width:390px){#page-agents .agents-card-grid{grid-template-columns:minmax(0,1fr)!important}#page-agents .k7-agent{min-height:0}#page-leaderboard .leaderboard-metric{padding:12px!important;min-height:90px!important}#page-leaderboard .leaderboard-metric strong{font-size:22px!important}}
+@media(prefers-reduced-motion:reduce){#page-agents .k7-agent{transition:none!important}}

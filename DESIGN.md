@@ -26,3 +26,6 @@ The primary bottom bar is Cases / Search / AI / Alerts / More. Secondary tools l
 
 ## V6 corrections
 The navigation is a fixed-height shell with an independently scrolling nav list and fixed footer. Desktop supports persisted icon-only compact mode. Mobile uses a separate drawer with its own scrolling. Page content respects the available width; narrow parts and knowledge screens stack.
+
+## V7 component rebuild
+Agent card HTML is replaced by a centered employee grid with avatar, status, metrics and progress. Leaderboard charts use refined series colors, rounded bars, and unstacked comparisons. Mobile uses two columns when possible and one on narrow phones. Existing click handlers and data fields are retained.
