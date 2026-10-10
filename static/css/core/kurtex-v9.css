@@ -1,0 +1,54 @@
+/* V9: page surface, agent card hierarchy, sidebar consistency and outcome chart */
+:root{--k9-edge:#e4e9f0;--k9-blue:#3675d4}
+/* Remove full-width blue/gray bands, including older page header implementations. */
+.main :is(.page-heading,.page-header,.page-title-bar,.page-hero){background:transparent!important;background-color:transparent!important;box-shadow:none!important;border:0!important;border-bottom:1px solid var(--k9-edge)!important;border-radius:0!important;padding:13px 0 16px!important;margin:0 0 18px!important;min-height:0!important}
+.main :is(.page-heading,.page-header,.page-title-bar,.page-hero) :is(h1,h2){font-size:clamp(22px,2vw,27px)!important;letter-spacing:-.65px!important;line-height:1.2!important}
+.main :is(.page-heading,.page-header,.page-title-bar,.page-hero) p{font-size:12px!important;line-height:1.5!important;color:var(--muted)!important}
+.main :is(.page-heading,.page-header,.page-title-bar,.page-hero) :is(.page-heading-icon,.page-header-icon){background:#fff!important;border:1px solid var(--k9-edge)!important;box-shadow:0 2px 5px #12233b08!important}
+/* Sidebar: a single quiet selected state and aligned nested navigation. */
+.sidebar :is(.nav-item,.nav-group-header,.nav-sub){background:transparent!important;box-shadow:none!important}
+.sidebar :is(.nav-item.active,.nav-sub.active,.nav-group-header.active){background:#fff!important;color:#2764bc!important;box-shadow:0 1px 5px rgba(23,44,72,.055)!important}
+.sidebar .nav-group-items{border-left:1px solid #e3e8ef!important;margin:2px 0 4px 18px!important;padding:0 0 0 6px!important}
+.sidebar .nav-sub{padding-left:12px!important;min-height:34px!important;border-radius:8px!important}
+.sidebar .nav-group-header:has(+ .nav-group-items .nav-sub.active){color:#22344d!important;background:transparent!important}
+.sidebar .v3-nav-label{margin:0!important;padding:9px 10px 5px!important}
+.sidebar .v3-nav-label-spaced{margin-top:2px!important}
+.sidebar .v3-navigation,.sidebar{scrollbar-width:none!important}
+.sidebar .v3-navigation::-webkit-scrollbar,.sidebar::-webkit-scrollbar{display:none!important}
+/* Cards: larger expressive header, tighter supporting information, no repeated cyan circular avatars. */
+#page-agents .agents-card-grid{grid-template-columns:repeat(auto-fill,minmax(245px,1fr))!important;gap:14px!important}
+#page-agents .k7-agent{position:relative;min-height:0!important;align-items:stretch!important;text-align:left!important;padding:0 17px 16px!important;border:1px solid var(--k9-edge)!important;border-radius:16px!important;overflow:hidden!important;box-shadow:0 2px 12px #1d35540a!important}
+#page-agents .k7-agent:before{content:"";height:5px;background:linear-gradient(90deg,#316dc8,#76a8e9,#e2effe);display:block;margin:0 -17px 17px}
+#page-agents .k7-agent-avatar{width:47px!important;height:47px!important;border-radius:14px!important;background:linear-gradient(140deg,#e7edfa,#c9e0ef)!important;margin:0 0 12px!important;font-size:19px!important;box-shadow:none!important}
+#page-agents .k7-agent-name{font-size:16px!important;font-weight:760!important;letter-spacing:-.35px!important}
+#page-agents .k7-agent-role{font-size:11px!important;margin-top:3px!important}
+#page-agents .k7-agent-status{align-self:flex-start!important;margin-top:10px!important;padding:5px 9px!important}
+#page-agents .k7-agent-divider{margin:14px 0 11px!important}
+#page-agents .k7-agent-stats{gap:7px!important}
+#page-agents .k7-agent-stats span{background:var(--surface2)!important;border:1px solid var(--k9-edge)!important;border-radius:10px!important;padding:10px 7px!important;text-align:center!important}
+#page-agents .k7-agent-stats b{font-size:19px!important;letter-spacing:-.5px!important}
+#page-agents .k7-agent-stats small{font-size:10px!important}
+#page-agents .k7-agent-progress{margin-top:15px!important;font-size:11px!important}
+#page-agents .k7-agent-track{height:6px!important;margin-top:8px!important}
+#page-agents .k7-agent-open{display:flex!important;align-items:center;justify-content:center;width:100%;min-height:34px!important;margin-top:14px!important;border-radius:9px!important;background:#f0f5ff!important;color:#2d67c5!important;font-size:12px!important}
+#page-agents .k7-agent:hover .k7-agent-open{background:#e5efff!important}
+/* Metrics: fifth metric no longer sits alone in an oversized 4-column layout. */
+#page-leaderboard .leaderboard-metrics{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+#page-leaderboard .leaderboard-metric{min-height:104px!important;padding:16px!important}
+#page-leaderboard .leaderboard-chart-grid .leaderboard-chart-wrap{height:310px!important}
+#page-leaderboard .leaderboard-chart-head{align-items:center!important}
+#page-leaderboard .chart-key-item{min-height:32px!important}
+[data-theme="dark"] #page-agents .k7-agent-open{background:#182c48!important;color:#a5caff!important}
+@media(max-width:1200px){#page-leaderboard .leaderboard-metrics{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:760px){
+ .main :is(.page-heading,.page-header,.page-title-bar,.page-hero){padding:10px 0 13px!important;margin-bottom:13px!important}
+ #page-agents .agents-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+ #page-agents .k7-agent{padding:0 11px 12px!important}
+ #page-agents .k7-agent:before{margin:0 -11px 13px!important}
+ #page-agents .k7-agent-stats span{padding:8px 2px!important}
+ #page-agents .k7-agent-stats b{font-size:15px!important}
+ #page-agents .k7-agent-stats small{font-size:9px!important}
+ #page-leaderboard .leaderboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #page-leaderboard .leaderboard-chart-grid .leaderboard-chart-wrap{height:260px!important}
+}
+@media(max-width:440px){#page-agents .agents-card-grid{grid-template-columns:minmax(0,1fr)!important}}

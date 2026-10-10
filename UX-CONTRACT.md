@@ -19,3 +19,5 @@ Mobile case filters retain setCaseFilter, loadCases and setCaseDateFilter. More-
 
 ## V7 component rebuild
 Agent card HTML is replaced by a centered employee grid with avatar, status, metrics and progress. Leaderboard charts use refined series colors, rounded bars, and unstacked comparisons. Mobile uses two columns when possible and one on narrow phones. Existing click handlers and data fields are retained.
+
+V11: Selected filter states use a solid blue surface and white text; inactive options remain neutral. Sidebar account buttons are compact while the avatar and role have increased prominence.

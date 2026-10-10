@@ -32,3 +32,8 @@ Agent card HTML is replaced by a centered employee grid with avatar, status, met
 
 ## V8 sidebar and headers
 Navigation sections are tightly grouped, the sidebar scroll indicator is hidden, collapsed group items are not rendered in compact mode, and page heading banners use a clean surface rather than oversized gray backgrounds.
+
+## V9 corrections
+Neutral page headers across tabs, quieter sidebar active states, more expressive left-aligned agent cards, five-column leaderboard metric layout, horizontal per-agent outcome chart.
+
+V11: Selected filter states use a solid blue surface and white text; inactive options remain neutral. Sidebar account buttons are compact while the avatar and role have increased prominence.
