@@ -1,42 +1,47 @@
-# Kurtex Design System
+---
+version: alpha
+name: Kurtex Fleet Operations
+description: A compact operations dashboard for case activity and agent performance.
+colors:
+  primary: "#d62828"
+  background: "#f3f5fa"
+  nightSurface: "#171e29"
+typography:
+  sans:
+    fontFamily: "Inter, Arial, sans-serif"
+rounded:
+  DEFAULT: "12px"
+spacing:
+  panel-gap: "18px"
+components:
+  filter: {}
+  chart: {}
+---
 
-## Direction
-Operational clarity with restrained industrial polish. Preserve existing product behavior and established feature layouts.
+# Kurtex design system
 
-## Canonical runtime tokens
-The original tokens live in `static/css/core/dashboard.css`; the incremental visual refinement lives in `static/css/core/kurtex-refinement.css`, loaded after existing styles. Consolidate tokens only after regression testing.
+## Overview
+Product interface for fleet operators comparing maintenance cases and agent activity. English UI, with responsive desktop and phone layouts. Preserve the existing restrained red identity and compact Inter typography; no marketing decoration.
 
-- Background `#f3f6fa`, surface `#ffffff`, text `#182b42`, accent `#3575c5`, border `#dce4ed`.
-- Sidebar `#182b42`, selected `#34547a`.
-- Body typography: existing Inter. Compact data-first density, rounded 14px cards, restrained shadow.
-- Dark mode uses independent surface and text tokens; never use status color as decorative background.
-- Respect reduced motion and keyboard focus.
+## Colors
+Runtime tokens in `static/css/core/dashboard.css` are canonical. The final shared theme adapters in `static/css/core/kurtex-v23.css` map legacy `--card`, `--soft`, `--surface-2`, and text aliases onto those tokens. Night surfaces use navy charcoal with light text; every panel must inherit theme tokens rather than a white fallback.
 
-## Scope of first pass
-Shared dashboard surfaces, sidebar navigation, visual tokens, keyboard navigation, mobile overflow guard. No API or domain logic changes.
+## Typography
+Use Inter with Arial fallback. Page context uses 21px headings, panel titles 15px, readable supporting copy 12px, and prominent numerical metrics. Chart labels inherit the theme and use tabular integer scales.
 
-## V3 navigation and components
-Light neutral workspace sidebar with blue active indicators, sectional navigation labels, compact status-first cards and consistent segmented filter controls. Keep existing route permissions and event handlers. Reference is inspiration, not a pixel clone.
+## Layout
+The leaderboard presents context and period selection, five metrics, ranking with insights, then workload and case activity charts. Panels use 18px gaps and collapse to one column at narrow widths. Allow document scrolling and internal horizontal overflow for filter groups.
 
-## V4 shared UI
-Shared filter controls use a unified 40px minimum mobile touch area, focus-visible rings, scrollable segmented controls, and consistent spacing. Agent cards and leaderboard prioritize data legibility at 320px-760px. The established blue active navigation and light workspace identity are preserved.
+Agents uses a muted directory on the left, a selected agent header and six all-time statistics on the right, followed by searchable case history. Keep case history at 20 rows per page with Previous and Next controls. Roles come from the user store.
 
-## V5 mobile navigation and surfaces
-The primary bottom bar is Cases / Search / AI / Alerts / More. Secondary tools live in a role-aware More sheet. Cases filter controls use a bottom sheet, while existing filter callbacks and backend APIs remain canonical. Notification center is moved to a body-level portal on phones so it is not hidden by the desktop header.
+Case Workspace is an additional navigation destination beside Cases. Its compact board uses agent-colored column markers and dense unit cards, with a right-side read-only inspector for details, notes, attachments and history. Blue from the existing `--blue` token marks workspace selection. Alternate Grid, Table and Card views share its independent data and filters. On phones, the inspector appears above the board.
 
-## V6 corrections
-The navigation is a fixed-height shell with an independently scrolling nav list and fixed footer. Desktop supports persisted icon-only compact mode. Mobile uses a separate drawer with its own scrolling. Page content respects the available width; narrow parts and knowledge screens stack.
+The Chicago clock belongs in the global top bar beside notifications. Use compact time and date text with no calendar tile or large clock card in the page heading.
 
-## V7 component rebuild
-Agent card HTML is replaced by a centered employee grid with avatar, status, metrics and progress. Leaderboard charts use refined series colors, rounded bars, and unstacked comparisons. Mobile uses two columns when possible and one on narrow phones. Existing click handlers and data fields are retained.
+## Components
+Shared `.toggle-tabs`, `.filter-tabs`, `.notification-tabs`, and `.report-tabs` use inset segmented buttons: selected surface, visible border, bold text, hover and keyboard focus. No extra selected underline. Keep explicit sidebar dividers and remove duplicate group borders.
 
-## V8 sidebar and headers
-Navigation sections are tightly grouped, the sidebar scroll indicator is hidden, collapsed group items are not rendered in compact mode, and page heading banners use a clean surface rather than oversized gray backgrounds.
+Charts use horizontal bars so names and counts remain comparable. Reassignment events may overlap case statuses, so do not present those counts as mutually exclusive donut slices. Theme changes update live chart colors. Zero activity has an explicit empty state.
 
-## V9 corrections
-Neutral page headers across tabs, quieter sidebar active states, more expressive left-aligned agent cards, five-column leaderboard metric layout, horizontal per-agent outcome chart.
-
-V11: Selected filter states use a solid blue surface and white text; inactive options remain neutral. Sidebar account buttons are compact while the avatar and role have increased prominence.
-
-## V12 corrections
-Global header is not sticky or translucent. Selected filter segments use saturated blue and white text. Fleet and intelligence summary cards do not float beneath the header. Parts and AI panels constrain to available viewport width.
+## Accessibility
+Use native buttons, visible focus, selected period `aria-pressed`, named charts with numerical text alternatives, reduced motion, and inherited operable scrollbars.

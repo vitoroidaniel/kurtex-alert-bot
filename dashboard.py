@@ -200,6 +200,9 @@ def serialize_case(c):
             "report_driver": c.get("report_driver") or c.get("driver_name") or "",
             "unit_number": c.get("unit_number") or "",
             "vehicle_type": (c.get("vehicle_type") or "").lower(),
+            "issue_text": c.get("issue_text") or "",
+            "priority": c.get("priority") or "normal",
+            "location": c.get("location") or "",
             "status":      c.get("status") or "open",
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
@@ -1879,6 +1882,7 @@ def api_case_detail():
                     "setpoint":         c.get("setpoint",""),
                     "current_temp":     c.get("current_temp",""),
                     "temp_recorder":    c.get("temp_recorder",""),
+                    "attachments": [{"name": m.get("name") or m.get("file_name") or "Attachment", "type": m.get("type") or ""} for m in (c.get("media") or []) if isinstance(m,dict)],
                 })
                 return jsonify(data)
         return jsonify({"error":"not found"}), 404
@@ -1925,15 +1929,26 @@ def api_agent():
             period = "all"
             period_cases = cases
 
-        period_cases.sort(key=lambda c: c.get("opened_at",""), reverse=True)
         period_total  = len(period_cases)
         period_done   = sum(1 for c in period_cases if c.get("status") == "done")
         period_missed = sum(1 for c in period_cases if c.get("status") == "missed")
+        status_filter = request.args.get("status", "").strip().lower()
+        query = request.args.get("search", "").strip().lower()
+        if status_filter == "active":
+            period_cases = [c for c in period_cases if c.get("status") in ("open", "assigned", "reported")]
+        elif status_filter:
+            period_cases = [c for c in period_cases if c.get("status") == status_filter]
+        if query:
+            period_cases = [c for c in period_cases if query in " ".join(str(c.get(k) or "") for k in ("unit_number", "issue_text", "description", "report_driver", "driver_name", "location")).lower()]
+        period_cases.sort(key=lambda c: c.get("opened_at", ""), reverse=request.args.get("sort") != "oldest")
+        filtered_total = len(period_cases)
         page = period_cases[offset:offset+limit]
 
         return jsonify({
             "name": agent_name, "total": total, "done": done, "missed": missed,
             "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
+            "active": sum(1 for c in cases if c.get("status") in ("open", "assigned", "reported")),
+            "filtered_total": filtered_total,
             "period": period,
             "period_stats": {
                 "total": period_total, "done": period_done, "missed": period_missed,
@@ -1941,7 +1956,7 @@ def api_agent():
             },
             "cases": [serialize_case(c) for c in page],
             "offset": offset, "limit": limit,
-            "has_more": offset + limit < period_total,
+            "has_more": offset + limit < filtered_total,
         })
     except DataUnavailable:
         raise
@@ -1985,6 +2000,7 @@ def api_agents():
                 "id":       u.get("id", ""),
                 "name":     name,
                 "username": u.get("username",""),
+                "role": u.get("role") or "agent",
                 "total":    total, "done": done, "missed": missed,
                 "avg_resp": fmt_secs(avg),
                 "rate":     round(done/total*100) if total else 0,

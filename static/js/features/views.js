@@ -159,25 +159,38 @@ function updateLeaderboardChart(chart, labels, datasets) {
 var k23WorkloadChart=null,k23OutcomesChart=null;
 function renderLeaderboardCharts(perf,trend){
  if(typeof Chart==='undefined')return;
+ var colors=leaderboardChartColors(),cs=getComputedStyle(document.documentElement);
+ var ink=cs.getPropertyValue('--text').trim(),surface=cs.getPropertyValue('--surface').trim();
  var agents=(perf.agents||[]).slice().sort(function(a,b){return (b.handled||0)-(a.handled||0)}).slice(0,8);
- var canvas=document.getElementById('k23-workload-chart');
- if(canvas){var labels=agents.map(function(a){return a.name||'Agent'}),values=agents.map(function(a){return Number(a.handled||0)});
- if(!k23WorkloadChart)k23WorkloadChart=new Chart(canvas,{type:'bar',data:{labels:labels,datasets:[{label:'Cases handled',data:values,backgroundColor:'#4079d9',borderRadius:7,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0},grid:{color:'rgba(125,135,150,.10)'}},y:{grid:{display:false}}}}});
- else {k23WorkloadChart.data.labels=labels;k23WorkloadChart.data.datasets[0].data=values;k23WorkloadChart.update('none');}}
- var donut=document.getElementById('k23-outcomes-chart');if(donut){var values=[perf.resolved||0,perf.active||0,perf.missed||0,perf.reassigned||0];
- if(!k23OutcomesChart)k23OutcomesChart=new Chart(donut,{type:'doughnut',data:{labels:['Resolved','Active','Missed','Reassigned'],datasets:[{data:values,backgroundColor:['#27a586','#5086df','#e5a44c','#9178d8'],borderWidth:0,hoverOffset:6}]},options:{cutout:'73%',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:9,padding:17}}}}});
- else {k23OutcomesChart.data.datasets[0].data=values;k23OutcomesChart.update('none');}}
+ function draw(canvas,chart,labels,values,palette,label){
+  if(!canvas)return chart;
+  var hasData=values.some(function(v){return v>0;});
+  canvas.hidden=!hasData;
+  canvas.nextElementSibling.hidden=hasData;
+  canvas.setAttribute('aria-label',label+': '+labels.map(function(name,i){return name+' '+values[i];}).join(', '));
+  var data={labels:labels,datasets:[{label:label,data:values,backgroundColor:palette,borderRadius:5,maxBarThickness:24}]};
+  var options={indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,
+   plugins:{legend:{display:false},tooltip:{backgroundColor:surface,titleColor:ink,bodyColor:ink,borderColor:colors.grid,borderWidth:1,padding:12,displayColors:false}},
+   scales:{x:{beginAtZero:true,border:{display:false},ticks:{precision:0,color:colors.text,font:{size:11}},grid:{color:colors.grid}},y:{border:{display:false},ticks:{color:colors.text,font:{size:12}},grid:{display:false}}}};
+  if(!chart)chart=new Chart(canvas,{type:'bar',data:data,options:options});
+  else{chart.data=data;chart.options=options;chart.update('none');}
+  return chart;
+ }
+ k23WorkloadChart=draw(document.getElementById('k23-workload-chart'),k23WorkloadChart,agents.map(function(a){return a.name||'Agent'}),agents.map(function(a){return Number(a.handled||0)}),colors.blue,'Cases handled');
+ k23OutcomesChart=draw(document.getElementById('k23-outcomes-chart'),k23OutcomesChart,['Resolved','Active','Missed','Reassigned'],[perf.resolved||0,perf.active||0,perf.missed||0,perf.reassigned||0],[colors.green,colors.blue,colors.red,cs.getPropertyValue('--purple').trim()],'Case activity');
 }
 
 function toggleLeaderboardFilter(ev){
   if(ev) ev.stopPropagation();
-  var m=document.getElementById("leaderboard-filter-menu"); if(m)m.hidden=!m.hidden;
+  var m=document.getElementById("leaderboard-filter-menu"),trigger=document.getElementById("leaderboard-filter-btn");
+  if(m){m.hidden=!m.hidden;if(trigger)trigger.setAttribute("aria-expanded",String(!m.hidden));if(!m.hidden){var selected=m.querySelector('[data-filter="'+leaderboardRankFilter+'"]');if(selected)selected.focus();}}
 }
 function setLeaderboardRankFilter(filter, btn){
   leaderboardRankFilter=filter||"overall"; leaderboardRankPage=0;
   var labels={overall:"Overall",resolved:"Resolved",active:"Active",missed:"Missed",reassigned:"Reassigned"};
   var l=document.getElementById("leaderboard-filter-label");if(l)l.textContent=labels[leaderboardRankFilter]||"Overall";
   var m=document.getElementById("leaderboard-filter-menu");if(m)m.hidden=true;
+  var trigger=document.getElementById("leaderboard-filter-btn");if(trigger){trigger.setAttribute("aria-expanded","false");trigger.focus();}
   renderLeaderboard();
 }
 function changeLeaderboardRankPage(delta){ leaderboardRankPage=Math.max(0,leaderboardRankPage+delta); renderLeaderboard(); }
@@ -194,7 +207,8 @@ function renderLeaderboardRanking(agents){
   if(pg) pg.innerHTML=sorted.length>leaderboardRankPageSize?'<button type="button" '+(leaderboardRankPage===0?'disabled':'')+' onclick="changeLeaderboardRankPage(-1)"><i class="ph ph-caret-left"></i> Previous</button><span>'+(leaderboardRankPage+1)+' / '+totalPages+'</span><button type="button" '+(leaderboardRankPage>=totalPages-1?'disabled':'')+' onclick="changeLeaderboardRankPage(1)">Next <i class="ph ph-caret-right"></i></button>':'';
 }
 
-document.addEventListener("click",function(e){var m=document.getElementById("leaderboard-filter-menu");if(m&&!m.hidden&&!e.target.closest(".leaderboard-filter-wrap"))m.hidden=true;});
+document.addEventListener("click",function(e){var m=document.getElementById("leaderboard-filter-menu");if(m&&!m.hidden&&!e.target.closest(".leaderboard-filter-wrap")){m.hidden=true;document.getElementById("leaderboard-filter-btn").setAttribute("aria-expanded","false");}});
+document.addEventListener("keydown",function(e){var m=document.getElementById("leaderboard-filter-menu");if(m&&!m.hidden&&e.key==="Escape"){m.hidden=true;var trigger=document.getElementById("leaderboard-filter-btn");trigger.setAttribute("aria-expanded","false");trigger.focus();}});
 
 function renderLeaderboard() {
   if (!stats.leaderboard_day) return;
@@ -282,7 +296,7 @@ async function loadCaseList(kind, append, quiet) {
       incoming = incoming.concat(d.cases || []);
     } while (quiet && d.has_more && incoming.length < target);
     state.rows = append ? state.rows.concat(incoming) : incoming;
-    if(kind === "cases" && typeof cwRender === "function") cwRender();
+
     updateHTML(el, '<div class="table-count">Showing ' +
       state.rows.length +
       " of " +

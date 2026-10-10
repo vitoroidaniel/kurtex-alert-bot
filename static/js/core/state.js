@@ -65,6 +65,7 @@ function toggleTheme() {
   isDark = !isDark;
   preferences.set("kurtex-theme", isDark ? "dark" : "light");
   applyTheme();
+  if (typeof renderLeaderboard === "function") renderLeaderboard();
   if (currentPage === "trends") loadTrends();
 }
 applyTheme();
@@ -168,9 +169,9 @@ function showPage(page) {
     page === "overview"
       ? "Your maintenance workspace for today."
       : page === "cases"
-        ? "Review and manage maintenance cases."
+        ? "Browse, search and filter your case history."
         : page === "case_workspace"
-          ? "Live cases in Board, Grid, Table, and Card views."
+          ? "Live fleet cases, organized for faster resolution."
         : page === "parts_manual"
           ? "Look up truck and reefer parts, how they work, common symptoms, checks, and source material."
         : page === "kurtex_intelligence"
@@ -247,12 +248,15 @@ function clearDateFilter() {
 
 function setLbPeriod(p, btn) {
   lbPeriod = p;
+  leaderboardRankPage = 0;
   document
     .querySelectorAll("#page-leaderboard .toggle-btn")
     .forEach(function (b) {
       b.classList.remove("active");
+      b.setAttribute("aria-pressed", "false");
     });
   btn.classList.add("active");
+  btn.setAttribute("aria-pressed", "true");
   renderLeaderboard();
 }
 
@@ -519,6 +523,6 @@ function buildTimeline(c) {
 
 // v98 — apply configured website role permissions to navigation.
 (function(){
- function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile')return;n.hidden=allowed.indexOf(p)<0});document.querySelectorAll('.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
+ function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile')return;n.hidden=allowed.indexOf(p)<0 && !(p==='case_workspace' && allowed.includes('cases'))});document.querySelectorAll('.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyRoleNavigation);else applyRoleNavigation();
 })();

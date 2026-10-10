@@ -10,6 +10,7 @@ async function refresh(force) {
   try {
     var tasks = [loadStats()];
     if (currentPage === "overview") tasks.push(loadRecent());
+    else if (currentPage === "case_workspace") tasks.push(cwRefresh());
     else if (currentPage === "cases") tasks.push(loadCases(false, true));
     else if (currentPage === "missed") tasks.push(loadMissed(false, true));
     else if (currentPage === "fleet") tasks.push(loadFleet());
@@ -90,7 +91,7 @@ function updateChicagoClock() {
     var el = document.getElementById(id);
     if (el.textContent !== value) el.textContent = value;
   }
-  setClockText("chicago-date", now.toLocaleDateString("en-US", {...options, weekday:"long", month:"short", day:"numeric"}));
+  setClockText("chicago-date", now.toLocaleDateString("en-US", {...options, weekday:"short", month:"short", day:"numeric"}));
   setClockText("chicago-time", now.toLocaleTimeString("en-US", {...options, hour:"numeric", minute:"2-digit", timeZoneName:"short"}));
   document.getElementById("today-label").dateTime = now.toISOString();
 }

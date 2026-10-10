@@ -1,23 +1,17 @@
-# Kurtex UX Contract (initial)
+# UI ownership
 
-- Existing dashboard routes, bot actions, case status transitions, exports and AI endpoints are authoritative and unchanged.
-- Desktop sidebar navigation remains single-page; keyboard Enter and Space activate role-button navigation.
-- Mobile navigation retains existing tab layout and more-menu.
-- Report, case, and notification flows retain their existing owning JavaScript handlers.
-- Loading, empty, error, and destructive action patterns require dedicated end-to-end validation before any redesign.
-- Accessibility target WCAG 2.2 AA; keyboard focus visible; reduced motion supported.
-- Shared color and spacing rules are centralized in `static/css/core/kurtex-refinement.css` for this incremental phase.
+Scope: shared filter presentation, navigation dividers, leaderboard rendering and theme consistency. Domain rules remain owned by Flask API routes in `dashboard.py`; this change does not alter them. Product context: `README.md` and existing templates.
 
-## V3 navigation behavior
-Preserve all existing role-based nav visibility, showPage handlers, group expansion, account controls and filter selection semantics. New sidebar labels are noninteractive. Mobile uses existing drawer behavior.
+| Capability | Canonical owner | Contract |
+| --- | --- | --- |
+| Period filters | `static/js/core/state.js` | Existing period handlers retain API semantics; leaderboard period changes reset ranking pagination and expose pressed state. |
+| Filter presentation | `static/css/core/kurtex-v23.css` | One shared segmented style across existing filter groups. |
+| Select/Listbox | `static/js/core/custom-select.js` | Preserve existing shared select enhancement; no replacement introduced. |
+| Scrollbar | `static/css/core/kurtex-v23.css` | Global inherited theme styling, with system forced colors. |
+| Leaderboard | `static/js/features/views.js` | Preserve ranking/filter calculations, show empty charts honestly, redraw colors on theme changes. |
+| Theme | `static/js/core/state.js`, dashboard CSS tokens | Stored preference controls document theme; legacy aliases resolve to canonical surfaces. |
+| Agent directory | `static/js/features/agents-v23.js`, `/api/agents`, `/api/agent` | Server-owned identity, role, statistics, status/search filters and chronological sort; 20 cases per page. Ignore stale responses when selecting another agent. |
+| Case Workspace | `static/js/features/case-workspace.js` | Additional Cases-authorized destination with independent list state and filters. Inline inspector uses the authenticated case detail API. No case mutations introduced. |
+| Global clock | `static/js/core/app.js` | Preserve America/Chicago time, date, and connection status in the main top bar. |
 
-## V4 mobile contract
-Do not remove or rename existing page identifiers, filter handlers, or Telegram/backend APIs. Mobile filter groups scroll horizontally without clipping actions. Sidebar remains scrollable and keyboard focus visible. Charts shrink in height on mobile and never force horizontal page scrolling. Reduced-motion settings are respected.
-
-## V5 workflow contract
-Mobile case filters retain setCaseFilter, loadCases and setCaseDateFilter. More-menu destinations are hidden when not allowed. The Alerts button uses the existing notification renderer. AI retains its existing chat and composer logic. No API or database migration is needed.
-
-## V7 component rebuild
-Agent card HTML is replaced by a centered employee grid with avatar, status, metrics and progress. Leaderboard charts use refined series colors, rounded bars, and unstacked comparisons. Mobile uses two columns when possible and one on narrow phones. Existing click handlers and data fields are retained.
-
-V11: Selected filter states use a solid blue surface and white text; inactive options remain neutral. Sidebar account buttons are compact while the avatar and role have increased prominence.
+Existing forms, CRUD, permissions, notifications and lifecycle behavior remain outside this visual change. Verify leaderboard period switching, rank paging, empty charts, night/light switching, keyboard focus and phone overflow.
