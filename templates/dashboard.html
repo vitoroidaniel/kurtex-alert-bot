@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v10.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v11.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v12.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/case-workspace.css') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -61,6 +62,7 @@
     <div class="v3-nav-label">Workspace</div>
     <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
     <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
+    <div class="nav-item" data-page="case_workspace" role="button" tabindex="0" onclick="showPage('case_workspace')"><i class="ph ph-kanban"></i> Case Workspace</div>
     <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
     <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
@@ -204,6 +206,15 @@
 <div id="ai-image-preview-modal" class="ai-image-preview-modal" hidden><div class="ai-image-preview-backdrop" onclick="closeAIImagePreview()"></div><section class="ai-image-preview-dialog" role="dialog" aria-modal="true" aria-label="Image preview"><header><div><strong id="ai-image-preview-name">Image preview</strong><small>Attachment preview</small></div><button type="button" onclick="closeAIImagePreview()" aria-label="Close preview"><i class="ph ph-x"></i></button></header><div class="ai-image-preview-stage"><img id="ai-image-preview-img" alt="Attachment preview"></div></section></div>
 <div id="ai-chat-knowledge-modal" class="ai-chat-kb-modal" hidden><div class="ai-chat-kb-backdrop" onclick="closeAIChatKnowledge()"></div><section class="ai-chat-kb-dialog"><header><div><strong>Knowledge for this chat</strong><small>Select verified sources Kurtex AI should use in this conversation.</small></div><button type="button" onclick="closeAIChatKnowledge()"><i class="ph ph-x"></i></button></header><div class="ai-chat-kb-search"><i class="ph ph-magnifying-glass"></i><input id="ai-chat-kb-search" placeholder="Search knowledge..." oninput="renderAIChatKnowledgeOptions()"></div><div class="ai-chat-kb-toolbar"><span id="ai-chat-kb-selected-label">Selected sources</span><div><button type="button" onclick="selectAllAIChatKnowledge()">Select all</button><button type="button" onclick="clearAIChatKnowledge()">Clear all</button></div></div><div id="ai-chat-kb-list" class="ai-chat-kb-list"></div><footer><span id="ai-chat-kb-count">0 sources selected</span><button type="button" class="ai-chat-kb-apply" onclick="applyAIChatKnowledge()"><span>Apply sources</span><i class="ph ph-check"></i></button></footer></section></div>
 
+<div class="page" id="page-case_workspace">
+  <section class="ss-workspace" aria-label="Case Workspace">
+   <div class="ss-toolbar"><div class="ss-heading"><strong>Case Workspace</strong><small>Live fleet cases · Smartsheet-inspired workspace</small></div><div class="ss-actions"><button type="button" id="ss-reload" onclick="ssLoad()"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
+   <div class="ss-tools"><div class="ss-view-toggle"><button class="ss-view active" data-view="board" onclick="ssSetView('board')"><i class="ph ph-kanban"></i> Board</button><button class="ss-view" data-view="grid" onclick="ssSetView('grid')"><i class="ph ph-table"></i> Grid</button></div><label class="ss-search"><i class="ph ph-magnifying-glass"></i><input id="ss-search" placeholder="Search unit, issue, agent..." oninput="ssRender()" aria-label="Search workspace"></label><label class="ss-select">Group by <select id="ss-group" onchange="ssRender()"><option value="assigned">Assigned agent</option><option value="status">Status</option><option value="priority">Priority</option></select></label><label class="ss-select">Status <select id="ss-status" onchange="ssRender()"><option value="">All</option><option value="reported">Reported</option><option value="assigned">Assigned</option><option value="open">Open</option><option value="done">Done</option><option value="missed">Missed</option></select></label><span id="ss-count" class="ss-count">Loading...</span></div>
+   <div id="ss-content" class="ss-content" aria-live="polite"><div class="loading">Loading cases...</div></div>
+   <div class="ss-footer"><span>Live data from Kurtex Cases</span><span>Case changes remain managed through existing workflows</span></div>
+  </section>
+  <div id="ss-detail-backdrop" class="ss-detail-backdrop" hidden onclick="ssCloseDetail()"></div><aside id="ss-detail" class="ss-detail" role="dialog" aria-modal="true" aria-label="Case details" hidden><div class="ss-detail-top"><strong id="ss-detail-title">Case details</strong><button type="button" onclick="ssCloseDetail()" aria-label="Close details"><i class="ph ph-x"></i></button></div><div id="ss-detail-body"></div></aside>
+ </div>
 <div class="page" id="page-cases">
  <button type="button" class="v5-case-filter-trigger" onclick="mobileV5Filters(true)"><i class="ph ph-sliders-horizontal"></i> Filters <span id="v5-filter-count"></span></button>
     <div class="search-wrap"><i class="ph ph-magnifying-glass"></i><input type="text" aria-label="Search cases" id="cases-search" placeholder="Search reported by, group, assigned to..." oninput="onSearch('cases')"></div>
@@ -441,6 +452,7 @@
 <script defer src="{{ url_for('static', filename='js/features/analytics.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/layout.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/core/app.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/features/case-workspace.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/platform/mobile.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/platform/mobile-v5.js') }}"></script>
 <script defer src="{{ url_for('static', filename='js/features/ai.js') }}"></script>
