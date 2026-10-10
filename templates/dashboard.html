@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/dashboard.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/platform/mobile.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/maintenance.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/refinement.css') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -22,16 +23,23 @@
   <div class="mobile-brand"><strong>Kurtex</strong><small>Maintenance</small></div>
   <button class="mobile-more" type="button" onclick="toggleMobileMore()" aria-label="More"><i class="ph ph-dots-three"></i></button>
 </div>
-<div id="mobile-more-sheet" class="mobile-more-sheet" hidden>
- <button onclick="mobileGo('fleet_intel')"><i class="ph ph-truck"></i><span>Fleet lookup</span></button>
- <button onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>Profile</span></button>
+<div id="mobile-more-sheet" class="mobile-more-sheet" role="menu" hidden>
+ <button data-mobile-page="missed" onclick="mobileGo('missed')"><i class="ph ph-warning"></i><span>Missed cases</span></button>
+ {% if "leaderboard" in allowed_pages %}<button data-mobile-page="leaderboard" onclick="mobileGo('leaderboard')"><i class="ph ph-trophy"></i><span>Leaderboard</span></button>{% endif %}
+ <button data-mobile-page="parts_manual" onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts manual</span></button>
+ <button data-mobile-page="kurtex_intelligence" onclick="mobileGo('kurtex_intelligence')"><i class="ph ph-brain"></i><span>Intelligence</span></button>
+ <button data-mobile-page="fleet" onclick="mobileGo('fleet')"><i class="ph ph-truck"></i><span>Fleet stats</span></button>
+ <button data-mobile-page="trends" onclick="mobileGo('trends')"><i class="ph ph-chart-donut"></i><span>Analytics</span></button>
+ {% if is_manager %}<button data-mobile-page="agents" onclick="mobileGo('agents')"><i class="ph ph-users"></i><span>Agents</span></button>{% endif %}
+ <button data-mobile-page="my_profile" onclick="mobileGo('my_profile')"><i class="ph ph-user"></i><span>Profile</span></button>
  <button onclick="openLayoutSettings();toggleMobileMore(false)"><i class="ph ph-gear"></i><span>Settings</span></button>
 </div>
 <nav class="mobile-tabbar" aria-label="Mobile navigation">
  <button data-mobile-page="overview" onclick="mobileGo('overview')"><i class="ph ph-house"></i><span>Home</span></button>
- <button data-mobile-page="parts_manual" onclick="mobileGo('parts_manual')"><i class="ph ph-book-open-text"></i><span>Parts</span></button>
+ <button data-mobile-page="cases" onclick="mobileGo('cases')"><i class="ph ph-clipboard-text"></i><span>Cases</span></button>
  <button class="mobile-ai-tab" data-mobile-page="ai_assistant" onclick="mobileGo('ai_assistant')"><i class="ph ph-sparkle"></i><span>AI</span></button>
  <button data-mobile-page="fleet_intel" onclick="mobileGo('fleet_intel')"><i class="ph ph-magnifying-glass"></i><span>Search</span></button>
+ <button class="mobile-more-tab" aria-haspopup="true" onclick="toggleMobileMore()"><i class="ph ph-dots-three-outline"></i><span>More</span></button>
 </nav>
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
@@ -42,36 +50,33 @@
     <div class="logo-text"><h2>Kurtex</h2><small>FLEET OPERATIONS</small></div>
   </div>
   <nav aria-label="Main navigation">
-    <div class="nav-item active" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
-    <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
-    <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
-    {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
-    <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
-    <div class="nav-group">
-      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-analytics')"><span><i class="ph ph-chart-bar"></i> Analytics</span><i class="ph ph-caret-down nav-caret" id="caret-group-analytics"></i></div>
-      <div class="nav-group-items" id="group-analytics">
-        <div class="nav-item nav-sub" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-chart-donut"></i> Fleet Analytics</div>
-        <div class="nav-item nav-sub" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-scales"></i> Management Compare</div>
-      </div>
+    <div class="nav-section" role="group" aria-label="Workspace"><div class="nav-section-label">Workspace</div>
+      <div class="nav-item" data-page="overview" role="button" tabindex="0" onclick="showPage('overview')"><i class="ph ph-house"></i> Home</div>
+      <div class="nav-item" data-page="cases" role="button" tabindex="0" onclick="showPage('cases')"><i class="ph ph-clipboard-text"></i> Cases</div>
+      <div class="nav-item" data-page="missed" role="button" tabindex="0" onclick="showPage('missed')"><i class="ph ph-warning"></i> Missed <span class="nav-badge" id="missed-badge" style="display:none"></span></div>
     </div>
-    <div class="nav-group">
-      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')"><span><i class="ph ph-truck"></i> Fleet</span><i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i></div>
-      <div class="nav-group-items open" id="group-fleet">
-        <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
-        <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Fleet Search</div>
-        <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
-      </div>
+    <div class="nav-section" role="group" aria-label="Insights"><div class="nav-section-label">Insights</div>
+      {% if "leaderboard" in allowed_pages %}<div class="nav-item" data-page="leaderboard" role="button" tabindex="0" onclick="showPage('leaderboard')"><i class="ph ph-trophy"></i> Leaderboard</div>{% endif %}
+      <div class="nav-item" data-page="kurtex_intelligence" role="button" tabindex="0" onclick="showPage('kurtex_intelligence')"><i class="ph ph-brain"></i> Kurtex Intelligence</div>
+      <div class="nav-item" data-page="trends" role="button" tabindex="0" onclick="showPage('trends')"><i class="ph ph-chart-donut"></i> Fleet Analytics</div>
+      <div class="nav-item" data-page="comparison" role="button" tabindex="0" onclick="showPage('comparison')"><i class="ph ph-scales"></i> Management Compare</div>
     </div>
-    <div class="nav-section-divider" aria-hidden="true"></div>
-    <div class="nav-ai-cluster">
+    <div class="nav-section" role="group" aria-label="Fleet"><div class="nav-section-label">Fleet</div>
+      <div class="nav-item" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-truck"></i> Fleet Stats</div>
+      <div class="nav-item" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Fleet Search</div>
+      <div class="nav-item" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
+    </div>
+    <div class="nav-section" role="group" aria-label="Assistant"><div class="nav-section-label">Assistant</div>
       <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
       {% if is_developer %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
     </div>
-    {% if is_manager or is_developer %}<div class="nav-section-divider" aria-hidden="true"></div>{% endif %}
-    <div class="nav-bottom-cluster">
+{% if is_manager or is_developer %}
+    <div class="nav-section" role="group" aria-label="Administration"><div class="nav-section-label">Administration</div>
       {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}
-      {% if is_developer %}<div class="nav-item" data-page="users" role="button" tabindex="0" onclick="showPage('users')"><i class="ph ph-users-four"></i> Users</div><div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
+      {% if is_developer %}<div class="nav-item" data-page="users" role="button" tabindex="0" onclick="showPage('users')"><i class="ph ph-users-four"></i> Users</div>{% endif %}
+      {% if is_developer %}<div class="nav-item" data-page="developer" role="button" tabindex="0" onclick="showPage('developer')"><i class="ph ph-code"></i> Developer</div>{% endif %}
     </div>
+{% endif %}
   </nav>
   <div class="sidebar-footer">
     <div class="user-chip user-chip-profile" role="button" tabindex="0" onclick="showPage('my_profile')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showPage('my_profile')}" aria-label="Open my profile">
@@ -198,7 +203,7 @@
             <button class="tab-btn" onclick="setCaseFilter('active',this)">Active</button>
             <button class="tab-btn" onclick="setCaseFilter('all',this)">All</button>
           </div>
-          <select aria-label="Case status" id="status-filter" onchange="loadCases()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
+          <select aria-label="Case status" id="status-filter" onchange="loadCases()" style="padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:13px;color:var(--text);font-family:inherit;outline:none;cursor:pointer">
             <option value="">All Statuses</option>
             <option value="open">🔵 Open</option>
             <option value="assigned">🟡 Assigned</option>
@@ -206,7 +211,7 @@
             <option value="done">🟢 Done</option>
             <option value="missed">🔴 Missed</option>
           </select>
-          <input type="date" aria-label="Case date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:12px;color:var(--text);font-family:inherit;outline:none" onchange="setCaseDateFilter(this.value)">
+          <input type="date" aria-label="Case date" id="cases-date-picker" style="padding:5px 10px;background:var(--surface);border:1px solid var(--border);border-radius:7px;font-size:13px;color:var(--text);font-family:inherit;outline:none" onchange="setCaseDateFilter(this.value)">
           <button class="tab-btn" id="cases-date-clear" onclick="clearDateFilter()" style="display:none">✕</button>
         </div>
       </div>
@@ -224,11 +229,6 @@
 
   <div class="page" id="page-leaderboard">
     <div class="leaderboard-head">
-      <div>
-        <div class="leaderboard-kicker">TEAM PERFORMANCE</div>
-        <h2>Leaderboard</h2>
-        <p>Workload, case outcomes and team trends from real case activity.</p>
-      </div>
       <div class="toggle-tabs leaderboard-period">
         <button class="toggle-btn active" onclick="setLbPeriod('day',this)">Today</button>
         <button class="toggle-btn" onclick="setLbPeriod('week',this)">7 days</button>
@@ -302,7 +302,7 @@
 
   <!-- Kurtex Intelligence -->
   <div class="page" id="page-kurtex_intelligence">
-    <section class="ki-hero"><div><span class="eyebrow">KURTEX INTELLIGENCE</span><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div></section>
+    <section class="ki-hero"><div><h2>Fleet patterns that need attention</h2><p>Automatically detected from real case history. Kurtex tags supporting cases and keeps each finding connected to its evidence.</p></div></section>
     <div class="ki-toolbar"><div class="toggle-tabs" id="ki-state-tabs"><button class="toggle-btn active" onclick="setKIFilter('active',this)">Active</button><button class="toggle-btn" onclick="setKIFilter('watching',this)">Watching</button><button class="toggle-btn" onclick="setKIFilter('resolved',this)">Resolved</button><button class="toggle-btn" onclick="setKIFilter('dismissed',this)">Dismissed</button><button class="toggle-btn" onclick="setKIFilter('all',this)">All</button></div><div class="ki-toolbar-actions"><div class="ki-live"><span></span> Live analysis</div><button class="btn secondary" onclick="loadKurtexIntelligence(true)"><i class="ph ph-arrows-clockwise"></i> Refresh</button></div></div>
     <div id="ki-summary" class="ki-summary"></div>
     <div id="ki-findings" class="ki-findings"><div class="loading">Analyzing fleet patterns...</div></div>
@@ -332,7 +332,7 @@
 
   <!-- Parts Manual -->
   <div class="page" id="page-parts_manual">
-    <header class="parts-manual-header"><div><span class="eyebrow">PARTS MANUAL</span><h2>Truck & trailer parts</h2><p>Find a component, symptom or OEM number, then open it for photos and troubleshooting.</p></div><span id="parts-total" class="parts-total-inline">0 parts</span></header>
+    <header class="parts-manual-header"><div><h2>Truck & trailer parts</h2><p>Find a component, symptom or OEM number, then open it for photos and troubleshooting.</p></div><span id="parts-total" class="parts-total-inline">0 parts</span></header>
     <div class="parts-toolbar"><div class="parts-search-shell"><div class="parts-search"><i class="ph ph-magnifying-glass"></i><input id="parts-search" type="search" placeholder="Part, symptom, OEM number..." oninput="partsSearchInput(this.value)" onkeydown="partsSearchKey(event)"><button class="parts-search-clear" type="button" onclick="clearPartsSearch()" title="Clear"><i class="ph ph-x"></i></button></div><button class="parts-web-search-btn" id="parts-web-search-btn" type="button" onclick="searchPartsWeb()"><i class="ph ph-globe-hemisphere-west"></i><span>Search web</span></button></div><div class="parts-category-select"><i class="ph ph-funnel"></i><select id="parts-category-select" aria-label="Part category" onchange="setPartsCategory(this.value,null)"><option value="all">All categories</option><option value="air">Air & suspension</option><option value="brakes">Brakes</option><option value="engine">Engine</option><option value="electrical">Electrical</option><option value="aftertreatment">DEF / DPF</option><option value="reefer">Reefer</option><option value="trailer">Trailer</option></select></div></div>
     <div class="parts-layout"><aside class="parts-index"><div class="parts-index-head"><span class="eyebrow">MATCHING PARTS</span><strong id="parts-count">0 parts</strong></div><div id="parts-list"></div></aside><section class="part-detail" id="part-detail"></section></div>
     <div class="parts-disclaimer"><i class="ph ph-shield-warning"></i><span>This is an agent reference, not a substitute for the exact vehicle/OEM service procedure. Safety-critical brake, steering, pressurized-air, refrigerant and high-current electrical repairs require qualified service.</span></div>
@@ -342,7 +342,7 @@
 
 
 {% if is_developer %}<div class="page" id="page-ai_knowledge"><section class="ai-training-page">
-<section class="ai-training-hero"><div class="ai-hero-copy"><span class="eyebrow">AI KNOWLEDGE</span><h2>Train Kurtex with fleet knowledge</h2><p>Manage historical fleet experience and verified maintenance references in one place. Previous cases remain searchable evidence while approved sources stay trusted.</p></div><div class="ai-training-flow" aria-label="Knowledge workflow"><span><i class="ph ph-database"></i> Ingest</span><i class="ph ph-caret-right"></i><span><i class="ph ph-magnifying-glass"></i> Retrieve</span><i class="ph ph-caret-right"></i><span><i class="ph ph-shield-check"></i> Verify</span></div></section>
+<section class="ai-training-hero"><div class="ai-hero-copy"><h2>Train Kurtex with fleet knowledge</h2><p>Manage historical fleet experience and verified maintenance references in one place. Previous cases remain searchable evidence while approved sources stay trusted.</p></div><div class="ai-training-flow" aria-label="Knowledge workflow"><span><i class="ph ph-database"></i> Ingest</span><i class="ph ph-caret-right"></i><span><i class="ph ph-magnifying-glass"></i> Retrieve</span><i class="ph ph-caret-right"></i><span><i class="ph ph-shield-check"></i> Verify</span></div></section>
 <section class="ai-training-card ai-learning-card"><div class="ai-card-head ai-card-head-row"><div class="ai-heading-group"><span class="ai-card-icon"><i class="ph ph-truck"></i></span><div><h3>Fleet experience</h3><p>Historical cases are indexed automatically and used as searchable evidence.</p></div></div><div class="ai-learning-toolbar"><button class="btn secondary" type="button" onclick="loadFleetKnowledgeStats()"><i class="ph ph-arrows-clockwise"></i> Refresh</button><button class="btn" type="button" onclick="syncFleetKnowledge()"><i class="ph ph-database"></i> Sync cases</button></div></div><div class="ai-stat-row"><div><span class="ai-stat-icon"><i class="ph ph-files"></i></span><strong id="fleet-knowledge-total">—</strong><span>Indexed cases</span></div><div><span class="ai-stat-icon"><i class="ph ph-check-circle"></i></span><strong id="fleet-knowledge-resolved">—</strong><span>Resolved evidence</span></div><div><span class="ai-stat-icon"><i class="ph ph-warning-circle"></i></span><strong id="fleet-knowledge-review">—</strong><span>Incomplete evidence</span></div></div><div class="ai-import-strip"><div><strong>Import historical data</strong><span>Bulk-import an older case export into Fleet Knowledge.</span></div><label class="ai-compact-file" for="fleet-knowledge-csv"><i class="ph ph-file-csv"></i><span id="fleet-csv-file-name">Choose CSV</span></label><input id="fleet-knowledge-csv" class="ai-native-file" type="file" accept=".csv,text/csv" onchange="document.getElementById('fleet-csv-file-name').textContent=this.files[0]?this.files[0].name:'Choose CSV'"><button class="btn" type="button" onclick="importFleetKnowledgeCSV()"><i class="ph ph-upload-simple"></i> Import</button></div><div id="fleet-knowledge-status" class="ai-inline-status" role="status"></div></section>
 <div class="ai-training-grid ai-knowledge-workspace">
     <main class="ai-training-main">

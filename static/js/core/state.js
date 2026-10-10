@@ -143,12 +143,14 @@ function showPage(page) {
   });
   document.querySelectorAll(".nav-item").forEach(function (a) {
     a.classList.remove("active");
+    a.removeAttribute("aria-current");
   });
   var pg = document.getElementById("page-" + page);
   if (pg) pg.classList.add("active");
   var nav = document.querySelector('.nav-item[data-page="' + page + '"]');
   if (nav) {
     nav.classList.add("active");
+    nav.setAttribute("aria-current", "page");
     var group = nav.closest(".nav-group-items");
     if (group && !group.classList.contains("open")) toggleGroup(group.id);
   }
@@ -337,10 +339,10 @@ function caseTable(cases) {
         (c.reassigned ? '<span class="reassign-badge">reassigned</span>' : "") +
         ((c.ki_tags||[]).slice(0,2).map(function(t){return '<button type="button" class="ki-case-tag ki-'+attr(t.kind||'pattern')+'" onclick="event.stopPropagation();openKIFinding(\''+attr(t.finding_id||'')+'\')"><i class="ph ph-brain"></i> KI: '+h(t.label)+'</button>'}).join('')) +
         "</td>" +
-        '<td style="color:var(--muted);font-size:11px">' +
+        '<td style="color:var(--muted);font-size:12.5px">' +
         h(c.opened || "—") +
         "</td>" +
-        '<td style="font-size:11px">' +
+        '<td style="font-size:12.5px">' +
         h(c.response || "—") +
         "</td>" +
         '<td class="desc-cell">' +
@@ -376,15 +378,15 @@ function groupRateRows(groups) {
         '<span class="medal">' +
         (medals[i] || i + 1 + ".") +
         "</span>" +
-        '<span class="list-name" style="font-size:12px;font-weight:600">' +
+        '<span class="list-name" style="font-size:13px;font-weight:600">' +
         h(g.name) +
         "</span>" +
-        '<span style="margin-left:auto;font-size:11px;font-weight:700;color:' +
+        '<span style="margin-left:auto;font-size:12.5px;font-weight:700;color:' +
         rateColor +
         '">' +
         g.rate +
         "% ✓</span>" +
-        '<span style="font-size:11px;color:var(--muted)">' +
+        '<span style="font-size:12.5px;color:var(--muted)">' +
         g.total +
         " cases</span>" +
         "</div>" +
@@ -426,17 +428,17 @@ function unitProblemRows(units) {
         '<span class="medal">' +
         (medals[i] || i + 1 + ".") +
         "</span>" +
-        '<span class="list-name" style="font-size:12px;font-weight:600">' +
+        '<span class="list-name" style="font-size:13px;font-weight:600">' +
         h(u.unit) +
         "</span>" +
         (u.vtype
-          ? '<span style="font-size:10px;font-weight:700;' +
+          ? '<span style="font-size:12px;font-weight:700;' +
             vs +
             ';padding:2px 7px;border-radius:20px;text-transform:capitalize">' +
             h(u.vtype) +
             "</span>"
           : "") +
-        '<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--red)">' +
+        '<span style="margin-left:auto;font-size:12.5px;font-weight:700;color:var(--red)">' +
         u.count +
         " cases</span>" +
         "</div>" +
@@ -515,6 +517,6 @@ function buildTimeline(c) {
 
 // v98 — apply configured website role permissions to navigation.
 (function(){
- function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile')return;n.hidden=allowed.indexOf(p)<0});document.querySelectorAll('.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
+ function applyRoleNavigation(){var allowed=(document.body.dataset.allowedPages||'').split(',').filter(Boolean);if(!allowed.length)return;document.querySelectorAll('.nav-item[data-page]').forEach(function(n){var p=n.dataset.page;if(p==='developer'||p==='users'||p==='my_profile')return;n.hidden=allowed.indexOf(p)<0});document.querySelectorAll('.nav-section,.nav-group').forEach(function(g){var visible=Array.from(g.querySelectorAll('.nav-item[data-page]')).some(function(n){return !n.hidden});if(!visible)g.hidden=true})}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',applyRoleNavigation);else applyRoleNavigation();
 })();

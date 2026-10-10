@@ -198,7 +198,7 @@ function renderLeaderboardRanking(agents){
   if(leaderboardRankPage>=totalPages)leaderboardRankPage=totalPages-1;
   var start=leaderboardRankPage*leaderboardRankPageSize, page=sorted.slice(start,start+leaderboardRankPageSize);
   var el=document.getElementById("leaderboard-full"), medals=["#1","#2","#3","#4","#5"];
-  if(el) updateHTML(el,page.length?page.map(function(a,i){return '<div class="agent-rank-row"><span class="agent-rank-pos">#'+(start+i+1)+'</span><div class="agent-rank-main"><strong>'+h(a.name)+'</strong><span>'+h(a.handled)+' handled · '+h(a.active)+' active</span></div><div class="agent-rank-stats"><b>'+h(a.resolved)+'</b><span>resolved</span></div><div class="agent-rank-mini '+(a.missed?'has-alert':'')+'">'+h(a.missed)+' missed</div></div>';}).join(""):'<div class="leaderboard-empty">No agent activity in this period.</div>');
+  if(el) updateHTML(el,page.length?page.map(function(a,i){return '<div class="agent-rank-row"><span class="agent-rank-pos">#'+(start+i+1)+'</span><div class="agent-rank-main"><strong>'+h(String(a.name==null?'':a.name).normalize('NFKC'))+'</strong><span>'+h(a.handled)+' handled · '+h(a.active)+' active</span></div><div class="agent-rank-stats"><b>'+h(a.resolved)+'</b><span>resolved</span></div><div class="agent-rank-mini '+(a.missed?'has-alert':'')+'">'+h(a.missed)+' missed</div></div>';}).join(""):'<div class="leaderboard-empty">No agent activity in this period.</div>');
   var pg=document.getElementById("leaderboard-pagination");
   if(pg) pg.innerHTML=sorted.length>leaderboardRankPageSize?'<button type="button" '+(leaderboardRankPage===0?'disabled':'')+' onclick="changeLeaderboardRankPage(-1)"><i class="ph ph-caret-left"></i> Previous</button><span>'+(leaderboardRankPage+1)+' / '+totalPages+'</span><button type="button" '+(leaderboardRankPage>=totalPages-1?'disabled':'')+' onclick="changeLeaderboardRankPage(1)">Next <i class="ph ph-caret-right"></i></button>':'';
 }
@@ -343,7 +343,7 @@ async function loadFleet() {
               '<span class="list-name">' +
               h(item.unit) +
               (item.vtype
-                ? ' <span style="font-size:10px;color:var(--muted)">' +
+                ? ' <span style="font-size:12px;color:var(--muted)">' +
                   h(item.vtype) +
                   "</span>"
                 : "") +
@@ -469,7 +469,7 @@ function renderFleetStatusContent() {
         '">' +
         "<td><b>" +
         h(item.unit) +
-        '</b><div style="font-size:10px;color:var(--muted);text-transform:uppercase">' +
+        '</b><div style="font-size:12px;color:var(--muted);text-transform:uppercase">' +
         h(item.vtype) +
         "</div></td>" +
         "<td>" +
@@ -489,7 +489,7 @@ function renderFleetStatusContent() {
     })
     .join("");
   updateHTML(wrap, '<div class="card" style="margin-bottom:16px">' +
-    '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>' +
+    '<div class="card-title"><i class="ph ph-activity"></i> Fleet Status <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:4px">— click a unit to view history</span></div>' +
     '<div class="toggle-tabs" style="margin-bottom:10px">' +
     vbtn("all", "All") +
     vbtn("truck", "Truck") +
@@ -533,7 +533,7 @@ async function loadMyProfile() {
       "</div>" +
       '<div><div style="font-size:17px;font-weight:700">' +
       h(p.name) +
-      '</div><div style="font-size:12px;color:var(--muted)">' +
+      '</div><div style="font-size:13px;color:var(--muted)">' +
       (p.username ? "@" + h(p.username) + " · " : "") +
       h(p.role) +
       "</div></div>" +

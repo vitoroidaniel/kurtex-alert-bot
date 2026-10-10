@@ -76,7 +76,7 @@ async function searchIssue() {
       return;
     }
     var mobileCards='<div class="mobile-search-result-count">'+d.total_matches+' matching case(s) across '+d.results.length+' unit(s)</div><div class="mobile-issue-list">'+d.results.map(function(u){return issueUnitCard(u,'count','sample_issue')}).join('')+'</div>';
-    updateHTML(el, mobileCards + '<div class="desktop-issue-results"><div style="font-size:11px;color:var(--muted);margin-bottom:8px">' +
+    updateHTML(el, mobileCards + '<div class="desktop-issue-results"><div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">' +
       d.total_matches +
       " matching case(s) across " +
       d.results.length +
@@ -96,7 +96,7 @@ async function searchIssue() {
             "<td><b>" +
             h(u.unit) +
             "</b></td>" +
-            '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">' +
+            '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:12.5px;font-weight:600">' +
             h(u.vtype) +
             "</span></td>" +
             '<td><b style="color:var(--accent)">' +
@@ -105,7 +105,7 @@ async function searchIssue() {
             '<td style="color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
             h(u.sample_issue) +
             "</td>" +
-            '<td style="color:var(--muted);font-size:11px">' +
+            '<td style="color:var(--muted);font-size:12.5px">' +
             h(u.last_seen) +
             "</td>" +
             "</tr>"
@@ -292,7 +292,7 @@ function renderIntelUnitsContent(vtype, search) {
         "<td><b>" +
         h(u.unit) +
         "</b></td>" +
-        '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600">' +
+        '<td><span style="background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:12.5px;font-weight:600">' +
         h(u.vtype) +
         "</span></td>" +
         '<td><b style="color:var(--accent)">' +
@@ -301,7 +301,7 @@ function renderIntelUnitsContent(vtype, search) {
         '<td style="color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
         h(u.top_issue) +
         "</td>" +
-        '<td style="color:var(--muted);font-size:11px">' +
+        '<td style="color:var(--muted);font-size:12.5px">' +
         h(u.last_seen) +
         "</td>" +
         "</tr>"

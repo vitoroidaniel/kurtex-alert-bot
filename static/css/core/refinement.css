@@ -1,0 +1,169 @@
+/* Kurtex refinement layer. Loaded last; keeps the brand, tightens consistency.
+   Tokens map to a 4px scale; one radius family (8 / 12 / 16). */
+:root{--kx-r-sm:8px;--kx-r-md:12px;--kx-r-lg:16px;--kx-focus:0 0 0 3px rgba(220,38,38,.28)}
+
+/* Sidebar: grouped sections replace collapsible groups so every destination stays visible */
+.sidebar nav .nav-section{display:flex;flex-direction:column;gap:2px;padding:0 0 12px;margin:0}
+.sidebar nav .nav-section+.nav-section{padding-top:12px;border-top:1px solid var(--kx-border,rgba(128,128,128,.16))}
+.sidebar nav .nav-section[hidden]{display:none}
+.nav-section-label{padding:0 14px 4px;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:var(--kx-muted,#747b84)}
+html.sidebar-compact .nav-section-label,.sidebar.compact .nav-section-label{display:none}
+.nav-item{border-radius:var(--kx-r-sm);transition:background-color .15s ease,color .15s ease}
+.nav-item[aria-current="page"]{font-weight:600}
+.nav-badge{font-variant-numeric:tabular-nums}
+
+/* Keyboard focus that is always visible */
+.nav-item:focus-visible,.mobile-tabbar button:focus-visible,.mobile-more-sheet button:focus-visible,
+.badge-btn:focus-visible,button:focus-visible,[role="button"]:focus-visible,a:focus-visible{outline:none;box-shadow:var(--kx-focus)}
+
+/* Numbers line up in tables, stats and charts */
+table,.stat-value,.kpi,[class*="stat"] strong{font-variant-numeric:tabular-nums}
+
+/* Topbar: actions wrap instead of overflowing on mid-width screens */
+.topbar{flex-wrap:wrap;row-gap:8px}
+.topbar-right{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
+.main{min-width:0}
+.main img,.main canvas,.main svg{max-width:100%}
+.table-wrap,.table-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Mobile: five-tab bar, More sheet holds every other destination */
+@media(max-width:760px){
+  .mobile-tabbar{grid-template-columns:repeat(5,1fr)!important;left:8px!important;right:8px!important}
+  .mobile-tabbar button span{font-size:10px!important;font-weight:600!important}
+  .mobile-more-sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-height:60vh;overflow-y:auto;padding:12px;
+    bottom:calc(84px + env(safe-area-inset-bottom))!important;border-radius:var(--kx-r-lg)}
+  .mobile-more-sheet[hidden]{display:none!important}
+  .mobile-more-sheet button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:72px;
+    padding:10px 6px;text-align:center;border-radius:var(--kx-r-md);font-size:12px;line-height:1.2}
+  .mobile-more-sheet button.active{font-weight:600}
+  .main{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .topbar-report-action span{display:none}
+  button,.nav-item,.badge-btn{min-height:44px}
+}
+
+/* Login: keep the form reachable on short or narrow screens */
+
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* ── Segmented filters (Today / This Week / Active / All, 7 days / 30 days …) ──
+   One quiet control: filled "thumb" on the active option, no underline. */
+.toggle-tabs{display:inline-flex;gap:2px;padding:3px;margin-bottom:14px;border:1px solid var(--border)!important;border-radius:var(--kx-r-md)!important;background:var(--surface2)!important;max-width:100%}
+.toggle-tabs .toggle-btn{flex:0 1 auto;min-height:32px;padding:0 14px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:var(--muted)!important;font-size:12.5px!important;font-weight:600!important;white-space:nowrap;box-shadow:none!important;transition:background-color .15s ease,color .15s ease}
+.toggle-tabs .toggle-btn:hover{color:var(--text)!important;background:color-mix(in srgb,var(--surface) 55%,transparent)!important}
+.toggle-tabs .toggle-btn.active{background:var(--surface)!important;color:var(--text)!important;font-weight:700!important;box-shadow:0 1px 2px rgba(15,23,42,.12),0 0 0 1px var(--border)!important}
+.toggle-tabs .toggle-btn.active:after,#page-fleet_intel .toggle-btn.active:after,#page-fleet .toggle-btn.active:after{content:none!important;display:none!important}
+#page-fleet_intel .toggle-tabs,#page-fleet_intel #intel-units-wrap .toggle-tabs{background:var(--surface2)!important;border:1px solid var(--border)!important;border-radius:var(--kx-r-md)!important}
+#page-fleet_intel .toggle-btn.active{background:var(--surface)!important;color:var(--text)!important}
+
+/* Dropdown filters share the same height, radius and type size */
+.leaderboard-filter-btn,.kurtex-select-button{min-height:36px;height:36px!important;border-radius:var(--kx-r-md)!important;font-size:12.5px!important;font-weight:600!important;padding:0 12px!important;border:1px solid var(--border)!important;background:var(--surface)!important;color:var(--text)!important}
+.leaderboard-filter-btn{min-width:140px!important;gap:8px!important}
+.leaderboard-filter-btn:hover,.kurtex-select-button:hover{border-color:color-mix(in srgb,var(--text) 28%,var(--border))!important}
+.leaderboard-filter-menu{top:42px!important;width:188px!important;padding:6px!important;border-radius:var(--kx-r-md)!important;box-shadow:0 12px 32px rgba(15,23,42,.14)!important}
+.leaderboard-filter-menu button{height:36px!important;font-size:12.5px!important;border-radius:var(--kx-r-sm)!important}
+
+/* Leaderboard: header holds only the period control; ranking card hugs its rows */
+#page-leaderboard .leaderboard-head{display:flex;justify-content:flex-end;align-items:center;margin-bottom:12px}
+#page-leaderboard .leaderboard-head .toggle-tabs{margin-bottom:0}
+.leaderboard-grid:not(.leaderboard-chart-grid){align-items:start!important}
+.leaderboard-ranking-card,.leaderboard-insights-card{min-height:0!important}
+.leaderboard-ranking-card #leaderboard-full{min-height:0!important;flex:none!important}
+.leaderboard-ranking-card .leaderboard-pagination{min-height:0!important}
+.leaderboard-ranking-card .leaderboard-pagination:empty{display:none!important}
+.leaderboard-empty{min-height:120px!important}
+.agent-rank-row{padding:12px 4px}
+.agent-rank-main strong{font-size:14px!important;font-weight:650}
+.agent-rank-main span{font-size:12px}
+.agent-rank-mini{font-size:11.5px}
+
+@media(max-width:640px){
+  .toggle-tabs{display:flex;overflow-x:auto;scrollbar-width:none}.toggle-tabs::-webkit-scrollbar{display:none}
+  .toggle-tabs .toggle-btn{flex:1 0 auto;min-height:38px!important}
+  #page-leaderboard .leaderboard-head{justify-content:stretch}
+  #page-leaderboard .leaderboard-head .toggle-tabs{width:100%}
+  .leaderboard-ranking-head{flex-wrap:wrap;gap:8px}
+  .leaderboard-filter-wrap,.leaderboard-filter-btn{width:100%}
+  .agent-rank-row{grid-template-columns:32px minmax(0,1fr) auto!important;row-gap:6px}
+  .agent-rank-mini{grid-column:2/4;justify-self:start}
+}
+
+/* ═══ Design system: one rhythm for every page ═══════════════════════════
+   Spacing 4/8/12/16/20/24 · control height 40 · radii 8/12/16 · body 14px */
+:root{--kx-ctl:40px;--kx-gap:16px}
+body{font-size:14px;line-height:1.5}
+.page-heading{padding:8px 0 20px;margin-bottom:20px;gap:16px}
+.page-heading h1,#page-title{font-size:28px;line-height:1.2;font-weight:700;letter-spacing:-.015em}
+#page-description,.page-heading p{font-size:14.5px;color:var(--muted)}
+.card{border-radius:var(--kx-r-lg);border:1px solid var(--border);box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card-title{font-size:15px;font-weight:650}
+.section-header{margin-bottom:14px;gap:12px}
+.section-title{font-size:16px;font-weight:700}
+.section-title small{font-size:13px;font-weight:500;color:var(--muted)}
+.stat-grid,.two-col,.leaderboard-grid,.agents-card-grid{gap:var(--kx-gap)}
+.text-button{font-size:13.5px;font-weight:600}
+
+/* Tables */
+table th{font-size:12.5px!important;font-weight:600!important;letter-spacing:0!important;text-transform:none!important;color:var(--muted)}
+table th,table td{padding:12px 14px}
+table td{font-size:13.5px}
+table tbody tr{transition:background-color .12s ease}
+table tbody tr:hover{background:color-mix(in srgb,var(--surface2) 70%,transparent)}
+
+/* Every filter control: same height, radius, type */
+.filter-tabs{display:inline-flex;flex-wrap:nowrap;gap:2px;padding:3px;max-width:100%;overflow-x:auto;scrollbar-width:none;border:1px solid var(--border);border-radius:var(--kx-r-md);background:var(--surface2)}
+.filter-tabs::-webkit-scrollbar{display:none}
+.filter-tabs .tab-btn{min-height:34px;padding:0 14px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:var(--muted)!important;font-size:13px!important;font-weight:600!important;white-space:nowrap;box-shadow:none!important}
+.filter-tabs .tab-btn:hover{color:var(--text)!important}
+.filter-tabs .tab-btn.active{background:var(--surface)!important;color:var(--text)!important;font-weight:700!important;box-shadow:0 1px 2px rgba(15,23,42,.12),0 0 0 1px var(--border)!important}
+.filter-tabs .tab-btn.active:after{content:none!important;display:none!important}
+.toggle-tabs .toggle-btn{min-height:34px;font-size:13px!important}
+select.home-range,select.analytics-select,#status-filter,#parts-category-select,.search-wrap input,.agents-search input,
+.leaderboard-filter-btn,.kurtex-select-button{height:var(--kx-ctl)!important;min-height:var(--kx-ctl)!important;border-radius:var(--kx-r-md)!important;font-size:14px!important;font-weight:600;border:1px solid var(--border)!important;background-color:var(--surface)!important;color:var(--text)!important;padding-top:0!important;padding-bottom:0!important}
+.search-wrap input,.agents-search input{font-weight:500}
+.leaderboard-filter-menu button,.kurtex-select-option{font-size:13.5px!important;min-height:38px}
+.badge-btn{min-height:var(--kx-ctl);border-radius:var(--kx-r-md);font-size:13.5px;font-weight:600}
+
+/* Date & time widget */
+.heading-actions{display:flex;align-items:stretch;gap:12px}
+.chicago-calendar{min-width:0!important;padding:10px 20px 10px 10px!important;gap:14px!important;border-radius:var(--kx-r-lg)!important;border:1px solid var(--border)!important;background:var(--surface)!important;box-shadow:0 1px 2px rgba(15,23,42,.05)!important}
+.calendar-clock-icon{width:44px!important;height:44px!important;flex:0 0 44px!important;border:0!important;border-radius:var(--kx-r-md)!important;font-size:22px!important;background:color-mix(in srgb,var(--red,#d92d20) 10%,var(--surface))!important;color:var(--red,#d92d20)!important}
+.calendar-date-copy{gap:2px!important}
+.calendar-date-copy>strong{font-size:16px!important;font-weight:700!important;letter-spacing:-.01em}
+.calendar-time-line{font-size:14px!important;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+.calendar-update.live-pill{padding:2px 10px!important;border-radius:999px!important;font-size:12.5px!important;font-weight:650!important;background:color-mix(in srgb,currentColor 11%,transparent)!important}
+.calendar-update .dot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:kx-live 2.4s ease-out infinite}
+@keyframes kx-live{0%{box-shadow:0 0 0 0 color-mix(in srgb,currentColor 45%,transparent)}70%,100%{box-shadow:0 0 0 6px transparent}}
+.header-refresh{align-self:stretch;padding:0 20px!important;border-radius:var(--kx-r-lg)!important;font-size:14px!important;font-weight:600}
+
+/* Agent profile cards */
+.agents-toolbar{display:flex;align-items:center;justify-content:space-between;gap:var(--kx-gap);margin-bottom:var(--kx-gap)}
+.agents-search{flex:1;max-width:520px}
+.agents-summary{display:flex;align-items:baseline;gap:6px;padding:8px 16px;border:1px solid var(--border);border-radius:var(--kx-r-md);background:var(--surface)}
+.agents-summary strong{font-size:20px;font-variant-numeric:tabular-nums}.agents-summary span{font-size:13.5px;color:var(--muted)}
+.agents-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.agent-overview-card{display:flex;flex-direction:column;gap:18px;padding:20px;text-align:left;border:1px solid var(--border);border-radius:var(--kx-r-lg);background:var(--surface);box-shadow:0 1px 2px rgba(15,23,42,.04);cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+.agent-overview-card:hover{border-color:color-mix(in srgb,var(--red,#d92d20) 35%,var(--border));box-shadow:0 8px 24px rgba(15,23,42,.08);transform:translateY(-1px)}
+.agent-overview-top{display:flex;align-items:center;gap:14px}
+.agent-overview-avatar{width:48px!important;height:48px!important;flex:0 0 48px;display:grid;place-items:center;border:0!important;border-radius:50%!important;font-size:18px!important;font-weight:700;background:color-mix(in srgb,var(--red,#d92d20) 11%,var(--surface))!important;color:var(--red,#d92d20)!important}
+.agent-overview-id{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.agent-overview-id strong{font-size:17px!important;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-overview-id small{font-size:13.5px!important;color:var(--muted)}
+.agent-overview-top>i{font-size:18px;color:var(--muted)}
+.agent-overview-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.agent-overview-metrics span{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:0!important;border-radius:var(--kx-r-md);background:var(--surface2)!important}
+.agent-overview-metrics b{font-size:24px!important;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums}
+.agent-overview-metrics small{font-size:13px!important;color:var(--muted)}
+.agent-overview-rate>span{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.agent-overview-rate small{font-size:13.5px!important;color:var(--muted)}
+.agent-overview-rate b{font-size:15px!important;font-variant-numeric:tabular-nums}
+.agent-overview-track{height:8px!important;border-radius:999px!important;overflow:hidden;background:var(--surface2)!important}
+.agent-overview-track i{display:block;height:100%;border-radius:999px}
+.agent-overview-foot{display:flex;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid var(--border);font-size:13px!important;color:var(--muted)}
+.agent-overview-foot span:last-child{color:var(--text);font-weight:600}
+@media(max-width:760px){
+  :root{--kx-ctl:44px}
+  .page-heading h1,#page-title{font-size:24px}
+  .agents-toolbar{flex-direction:column;align-items:stretch}.agents-search{max-width:none}
+  .agents-card-grid{grid-template-columns:1fr}
+  .heading-actions{width:100%}
+}
