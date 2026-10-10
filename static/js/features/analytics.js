@@ -350,7 +350,7 @@ function renderKurtexIntelligence(){
   kiWorkspace.expanded.forEach(function(id){if(!kiWorkspace.evidenceCache[id]&&!kiWorkspace.evidenceLoading.has(id))kiLoadEvidence(id)});
 
 }
-async function setKIState(id,state){try{var r=await apiFetch('/api/kurtex_intelligence/state',null,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,state:state})});if(!r.ok)throw new Error('state');var f=kiWorkspace.findings.find(function(x){return x.id===id});if(f)f.state=state;renderKurtexIntelligence()}catch(e){console.error(e)}}
+async function setKIState(id,state){try{var r=await apiFetch('/api/kurtex_intelligence/state',null,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,state:state})});if(!r.ok)throw new Error('state');var f=kiWorkspace.findings.find(function(x){return String(x.id)===String(id)});if(f)f.state=state;renderKurtexIntelligence()}catch(e){console.error(e)}}
 function openKIFinding(id){showPage('kurtex_intelligence');setTimeout(function(){var el=document.getElementById('ki-'+CSS.escape(id));if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('ki-highlight');setTimeout(function(){el.classList.remove('ki-highlight')},1800)}},250)}
 function kiOpenUnit(unit){showPage('fleet_intel');setTimeout(function(){var input=document.getElementById('issue-search-input');if(input){input.value=unit;intelUniversalSearch(unit);searchIssue()}},180)}
 function kiToggleUnits(id){if(kiWorkspace.allUnits.has(id))kiWorkspace.allUnits.delete(id);else kiWorkspace.allUnits.add(id);renderKurtexIntelligence()}

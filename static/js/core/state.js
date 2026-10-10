@@ -13,6 +13,7 @@ var bodyScrollY = 0;
 var pages = [
   "overview",
   "cases",
+  "case_workspace",
   "missed",
   "leaderboard",
   "trends",
@@ -31,6 +32,7 @@ var pages = [
 var titles = {
   overview: "Home",
   cases: "Cases",
+  case_workspace: "Case Workspace",
   missed: "Missed Cases",
   leaderboard: "Leaderboard",
   trends: "Fleet Analytics",
@@ -122,7 +124,7 @@ function anyModalOpen() {
 // ── Navigation ─────────────────────────────────────────────────────────────
 function showPage(page) {
   var allowed=(document.body.dataset.allowedPages||"").split(",").filter(Boolean);
-  if(page!=="my_profile" && allowed.length && allowed.indexOf(page)<0) page="overview";
+  if(page!=="my_profile" && allowed.length && allowed.indexOf(page)<0 && !(page==="case_workspace" && allowed.includes("cases"))) page="overview";
   // Some pages (for example My Profile) are intentionally opened from
   // controls outside the navigation menu. They must not require a matching
   // .nav-item in order to be routable.
@@ -156,7 +158,7 @@ function showPage(page) {
   if (titleEl) titleEl.textContent = titles[page] || page;
   var headerIcon = document.querySelector(".page-title-icon i");
   if (headerIcon) {
-    var iconMap = {overview:"ph-house",leaderboard:"ph-trophy",cases:"ph-clipboard-text",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",kurtex_intelligence:"ph-brain",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",users:"ph-users-four",developer:"ph-code"};
+    var iconMap = {overview:"ph-house",leaderboard:"ph-trophy",cases:"ph-clipboard-text",case_workspace:"ph-kanban",missed:"ph-phone-x",fleet:"ph-truck",fleet_intel:"ph-chart-line-up",kurtex_intelligence:"ph-brain",intelligence:"ph-chart-line-up",agents:"ph-users-three",parts_manual:"ph-wrench",ai_assistant:"ph-sparkle",ai_knowledge:"ph-database",reports:"ph-file-text",trends:"ph-chart-bar",comparison:"ph-scales",users:"ph-users-four",developer:"ph-code"};
     headerIcon.className = "ph " + (iconMap[page] || "ph-squares-four");
   }
   var headerRefresh = document.getElementById("refresh-button");
@@ -166,7 +168,7 @@ function showPage(page) {
     page === "overview"
       ? "Your maintenance workspace for today."
       : page === "cases"
-        ? "Find cases and review progress. Assign and resolve cases in Telegram."
+        ? "Explore live cases in Board, Grid, Table, and Card views."
         : page === "parts_manual"
           ? "Look up truck and reefer parts, how they work, common symptoms, checks, and source material."
         : page === "kurtex_intelligence"
