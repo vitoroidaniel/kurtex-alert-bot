@@ -37,3 +37,6 @@ Navigation sections are tightly grouped, the sidebar scroll indicator is hidden,
 Neutral page headers across tabs, quieter sidebar active states, more expressive left-aligned agent cards, five-column leaderboard metric layout, horizontal per-agent outcome chart.
 
 V11: Selected filter states use a solid blue surface and white text; inactive options remain neutral. Sidebar account buttons are compact while the avatar and role have increased prominence.
+
+## V12 corrections
+Global header is not sticky or translucent. Selected filter segments use saturated blue and white text. Fleet and intelligence summary cards do not float beneath the header. Parts and AI panels constrain to available viewport width.

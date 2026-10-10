@@ -1,0 +1,44 @@
+/* V12 - scroll, layout and selected-state corrections */
+/* The global heading is part of the document flow, never a floating overlay. */
+.main>.topbar,.main>.page-heading{position:relative!important;top:auto!important;inset-block-start:auto!important;z-index:3!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;opacity:1!important;transform:none!important}
+.main>.topbar{background:var(--surface,#fff)!important;border-bottom:1px solid var(--border,#e1e6ef)!important}
+.main>.page-heading{background:var(--surface,#fff)!important;border-bottom:1px solid var(--border,#e1e6ef)!important;box-shadow:none!important}
+/* Fleet summary must not slide underneath the global page heading. */
+#page-fleet>.card:first-child,#page-fleet_intel>.card:first-child{position:relative!important;top:auto!important;z-index:auto!important;box-shadow:none!important}
+#page-fleet_intel .intelligence-search-shell{position:relative!important;top:auto!important;z-index:2!important}
+body[data-current-page="parts_manual"] .parts-toolbar{position:relative!important;top:auto!important}
+/* High contrast, explicit selected state for segmented controls and any custom filters. */
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.report-period-bar,.case-filter-tabs,.segmented-control){background:#f0f3f8!important;border:1px solid #d9e2ef!important;padding:4px!important;border-radius:12px!important;gap:3px!important}
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.report-period-bar,.case-filter-tabs,.segmented-control) :is(button,[role="tab"]){color:#40516c!important;background:transparent!important;border-color:transparent!important;box-shadow:none!important;font-weight:600!important}
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.report-period-bar,.case-filter-tabs,.segmented-control) :is(button,[role="tab"]).active,
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.report-period-bar,.case-filter-tabs,.segmented-control) :is(button,[role="tab"])[aria-selected="true"],
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.report-period-bar,.case-filter-tabs,.segmented-control) :is(button,[role="tab"])[aria-pressed="true"],
+:where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.report-period-bar,.case-filter-tabs,.segmented-control) :is(button,[role="tab"])[data-active="true"]{background:#1769d2!important;color:#fff!important;border-color:#1769d2!important;box-shadow:0 2px 6px rgba(23,105,210,.22)!important}
+/* Intelligence evidence should not be a massive uninterrupted list. */
+#page-fleet_intel .intelligence-card,#page-fleet_intel .intel-insight-card{overflow:hidden}
+#page-fleet_intel .intelligence-card :is(.intel-evidence-list,.intel-cases-list,.insight-case-list){max-height:320px;overflow:auto;overscroll-behavior:contain}
+/* Make AI workspaces and parts manual shrink instead of clipping under the left rail. */
+.main,.main>.page,.ai-page-layout,.ai-page-chat,.ai-page-sidebar,.ai-training-page,.parts-layout,.parts-workspace,.parts-detail,.parts-index{min-width:0!important;box-sizing:border-box}
+#page-ai_assistant,#page-ai_knowledge,#page-parts_manual{max-width:100%!important;min-width:0!important;overflow-x:clip!important}
+#page-ai_assistant .ai-page-layout{width:100%!important;max-width:100%!important}
+#page-ai_assistant .ai-page-sidebar{flex-shrink:0}
+#page-ai_knowledge .ai-training-page{width:100%!important;max-width:100%!important}
+/* Preserve independent scrolling of the application navigation. */
+.sidebar,.sidebar .v3-navigation{scrollbar-width:none!important}
+.sidebar::-webkit-scrollbar,.sidebar .v3-navigation::-webkit-scrollbar{display:none!important}
+@media(max-width:1000px){#page-ai_knowledge .ai-training-page>*,#page-parts_manual .parts-workspace>*{min-width:0;max-width:100%}}
+@media(max-width:760px){
+ .main>.topbar,.main>.page-heading{position:relative!important;top:auto!important}
+ .main>.page-heading{padding:12px 14px!important}
+ .main>.page-heading h1{font-size:21px!important}
+ .main>.page-heading p{font-size:11px!important}
+ .page,.main{min-width:0!important;max-width:100%!important}
+ #page-ai_assistant .ai-page-layout{display:flex!important;min-width:0!important}
+ #page-ai_assistant .ai-page-sidebar{max-width:min(80vw,290px)!important}
+ #page-parts_manual .parts-layout,#page-parts_manual .parts-workspace{display:flex!important;flex-direction:column!important;min-width:0!important}
+ #page-parts_manual .parts-index{position:relative!important;top:auto!important;width:100%!important;max-height:240px!important;overflow:auto!important}
+ #page-parts_manual .parts-detail{width:100%!important;min-width:0!important}
+ #page-ai_knowledge .ai-training-page{overflow-wrap:anywhere}
+ :where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.case-filter-tabs,.segmented-control){overflow-x:auto!important;max-width:100%!important;scrollbar-width:none!important}
+}
+[data-theme="dark"] :where(.filter-tabs,.toggle-tabs,.leaderboard-period,.notification-tabs,.report-tabs,.case-filter-tabs,.segmented-control) :is(button,[role="tab"]).active{background:#277fe4!important;color:#fff!important}
