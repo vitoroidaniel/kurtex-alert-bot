@@ -52,6 +52,7 @@ var medals = ["01", "02", "03"];
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 function applyTheme() {
+  document.body.classList.toggle("dark-theme",isDark);
   document.documentElement.setAttribute(
     "data-theme",
     isDark ? "dark" : "light",
@@ -198,6 +199,7 @@ function showPage(page) {
   var mainScroll=document.querySelector(".main");
   if(mainScroll && typeof mainScroll.scrollTo==="function") mainScroll.scrollTo({top:0,left:0,behavior:"auto"});
   window.scrollTo(0,0);
+  if(typeof uiUpdateShell==='function')uiUpdateShell(page);
   preferences.set("kurtex-page", page);
   // AI workspaces manage their own data. Do not trigger the global dashboard
   // refresh when switching between AI Assistant / AI Knowledge: it causes
@@ -331,9 +333,9 @@ function caseTable(cases) {
         '<tr onclick="openCase(this.dataset.id)" data-id="' +
         attr(cid) +
         '">' +
-        "<td><b>" +
+        '<td><button type="button" class="ui-case-open" data-id="'+attr(cid)+'" onclick="event.stopPropagation();openCase(this.dataset.id)" aria-label="View case for '+attr(c.driver||'unknown reporter')+'">' +
         h(c.driver || "—") +
-        "</b></td>" +
+        '</button></td>' +
         '<td style="color:var(--muted)">' +
         h(c.group || "—") +
         "</td>" +

@@ -270,6 +270,7 @@ async function loadCaseList(kind, append, quiet) {
   if (append && state.busy) return;
   var serial = ++state.serial;
   state.busy = true;
+  if(kind==='cases' && !quiet && typeof uiRenderCaseFilters==='function')uiRenderCaseFilters(null);
   if (!append && !quiet) {
     state.rows = [];
     if (!el.children.length || el.querySelector(":scope > .loading")) updateHTML(el, '<div class="loading">Loading cases…</div>');
@@ -296,6 +297,7 @@ async function loadCaseList(kind, append, quiet) {
       incoming = incoming.concat(d.cases || []);
     } while (quiet && d.has_more && incoming.length < target);
     state.rows = append ? state.rows.concat(incoming) : incoming;
+    if(kind==='cases' && typeof uiRenderCaseFilters==='function')uiRenderCaseFilters(d.total);
 
     updateHTML(el, '<div class="table-count">Showing ' +
       state.rows.length +

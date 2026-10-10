@@ -32,7 +32,11 @@
     const sheet=document.getElementById('mobile-more-sheet');if(!sheet)return;
     const show=typeof force==='boolean'?force:sheet.hasAttribute('hidden');
     if(show)sheet.removeAttribute('hidden');else sheet.setAttribute('hidden','');
+    document.querySelectorAll('[aria-controls="mobile-more-sheet"]').forEach(b=>b.setAttribute('aria-expanded',String(show)));
+    if(show)sheet.querySelector('button')?.focus();
   };
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.getElementById('mobile-more-sheet').hidden){window.toggleMobileMore(false);document.querySelector('.mobile-more').focus();}});
+  document.addEventListener('click',e=>{if(!e.target.closest('#mobile-more-sheet,[aria-controls="mobile-more-sheet"]'))window.toggleMobileMore(false);});
   window.mobileGo=function(page){
     window.toggleMobileMore(false);
     if(typeof window.showPage==='function')window.showPage(page);

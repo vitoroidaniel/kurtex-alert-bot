@@ -10,8 +10,10 @@
     if(!select._kurtexSelect)return;
     var opt=select.options[select.selectedIndex];
     select._kurtexSelect.label.textContent=opt?opt.textContent:'';
+    const label=select.getAttribute('aria-label');if(label)select._kurtexSelect.button.setAttribute('aria-label',label+': '+(opt?opt.textContent:''));
     select._kurtexSelect.button.disabled=!!select.disabled;
   }
+  window.syncKurtexSelect=sync;
   function openMenu(select){
     if(select.disabled)return;
     if(openState&&openState.select===select){closeMenu();return;}

@@ -203,6 +203,8 @@ def serialize_case(c):
             "issue_text": c.get("issue_text") or "",
             "priority": c.get("priority") or "normal",
             "location": c.get("location") or "",
+            "notes_count": int(bool(c.get("comments") or c.get("notes"))),
+            "attachment_count": len(c.get("media") or []),
             "status":      c.get("status") or "open",
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
