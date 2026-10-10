@@ -1,0 +1,57 @@
+/* V14 - regression repairs. Scoped overrides; do not alter backend. */
+/* Sidebar compact mode was applied to BODY, while V10 targeted HTML. Fix in V10 too. */
+@media(min-width:761px){
+ .layout{display:flex!important;width:100%!important;min-width:0!important;align-items:stretch!important}
+ .layout>.sidebar{flex-shrink:0!important}
+ .layout>.main{flex:1 1 0!important;width:0!important;min-width:0!important;overflow-x:visible!important}
+ body.k6-sidebar-compact .layout>.sidebar{width:68px!important;min-width:68px!important;max-width:68px!important;flex-basis:68px!important}
+ body:not(.k6-sidebar-compact) .layout>.sidebar{width:258px!important;min-width:258px!important;max-width:258px!important;flex-basis:258px!important}
+}
+/* Avoid content being visually truncated by ancestor clipping. Horizontal scrolling belongs to the component. */
+#page-parts_manual,#page-ai_assistant,#page-ai_knowledge{overflow-x:visible!important;max-width:100%!important;min-width:0!important}
+#page-parts_manual .parts-layout{display:grid!important;grid-template-columns:minmax(225px,.38fr) minmax(0,1.7fr)!important;gap:14px!important;min-width:0!important;width:100%!important}
+#page-parts_manual .parts-index,#page-parts_manual .part-detail{min-width:0!important;max-width:100%!important}
+#page-parts_manual .part-detail{overflow-wrap:break-word}
+#page-ai_assistant .ai-page-layout,#page-ai_knowledge .ai-training-page{width:100%!important;min-width:0!important;max-width:100%!important}
+#page-ai_assistant .ai-page-layout>*{min-width:0!important}
+#page-ai_knowledge .ai-training-page>*{min-width:0!important;max-width:100%!important}
+/* Header should occupy its own row, not paint over cards. */
+.main>.topbar,.main>.page-heading{position:static!important;transform:none!important;float:none!important;isolation:auto!important}
+.main>.page-heading{clear:both!important;display:flex!important;align-items:center!important;min-height:80px!important;margin:0 0 18px!important;padding:14px 0!important;background:#fff!important;border:0!important;border-bottom:1px solid #e4eaf2!important;box-shadow:none!important}
+.main>.page-heading>*{min-width:0}
+.main>.topbar{min-height:48px!important;background:#fff!important}
+/* Fix popover clipping and ensure popup is above content without shifting the page. */
+.main>.topbar{overflow:visible!important;z-index:50!important;position:relative!important}
+.notification-center{position:relative!important}
+.notification-center>.notification-panel:not([hidden]){position:absolute!important;right:0!important;left:auto!important;top:calc(100% + 9px)!important;z-index:3000!important;width:min(390px,calc(100vw - 30px))!important;max-height:min(560px,calc(100dvh - 90px))!important;background:#fff!important;box-shadow:0 16px 50px rgba(25,40,65,.16)!important}
+.notification-panel[hidden]{display:none!important}
+/* Restored agent card layout: centered portrait, clean metrics, quiet link, no gradient strip or pill boxes. */
+#page-agents .agents-card-grid{grid-template-columns:repeat(auto-fill,minmax(215px,1fr))!important;gap:15px!important}
+#page-agents .k7-agent{display:flex!important;align-items:center!important;text-align:center!important;min-height:270px!important;padding:22px 17px 17px!important;border-radius:16px!important;border:1px solid #dbe4ef!important;background:#fff!important;box-shadow:0 2px 10px rgba(26,47,79,.035)!important;overflow:hidden!important}
+#page-agents .k7-agent:before{display:none!important}
+#page-agents .k7-agent-avatar{width:58px!important;height:58px!important;border-radius:50%!important;font-size:22px!important;margin:0 0 11px!important;background:#e9f0f9!important;border:2px solid #fff!important;box-shadow:0 0 0 1px #dbe4ef!important}
+#page-agents .k7-agent-name{font-size:15px!important;font-weight:750!important}
+#page-agents .k7-agent-role{font-size:11px!important}
+#page-agents .k7-agent-status{align-self:center!important;margin:9px 0 0!important}
+#page-agents .k7-agent-divider{margin:13px 0 11px!important}
+#page-agents .k7-agent-stats{gap:0!important}
+#page-agents .k7-agent-stats span{background:transparent!important;border:0!important;border-radius:0!important;padding:4px 3px!important}
+#page-agents .k7-agent-stats span+span{border-left:1px solid #e6ebf2!important}
+#page-agents .k7-agent-stats b{font-size:18px!important}
+#page-agents .k7-agent-stats small{font-size:10px!important}
+#page-agents .k7-agent-progress{margin-top:13px!important}
+#page-agents .k7-agent-open{width:auto!important;background:transparent!important;border:0!important;margin-top:12px!important;padding:3px 6px!important;min-height:0!important;color:#2469c5!important;font-weight:700!important}
+#page-agents .k7-agent:hover .k7-agent-open{background:transparent!important;text-decoration:underline}
+@media(max-width:1050px){#page-parts_manual .parts-layout{grid-template-columns:minmax(0,1fr)!important}#page-parts_manual .parts-index{max-height:340px!important}}
+@media(max-width:760px){
+ .main>.topbar{z-index:50!important}
+ .notification-center>.notification-panel:not([hidden]){position:fixed!important;left:10px!important;right:10px!important;top:65px!important;width:auto!important;max-height:calc(100dvh - 145px)!important}
+ #page-agents .agents-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #page-agents .k7-agent{padding:17px 10px!important;min-height:250px!important}
+ #page-agents .k7-agent-avatar{width:48px!important;height:48px!important}
+ #page-agents .k7-agent-stats b{font-size:15px!important}
+ #page-parts_manual .parts-layout{display:flex!important;flex-direction:column!important}
+ #page-parts_manual .parts-index,#page-parts_manual .part-detail{width:100%!important}
+}
+@media(max-width:400px){#page-agents .agents-card-grid{grid-template-columns:1fr!important}}
+[data-theme="dark"] #page-agents .k7-agent,[data-theme="dark"] .main>.page-heading{background:var(--surface)!important;border-color:var(--border)!important}

@@ -1,0 +1,1 @@
+V14 repairs: fixed compact sidebar selector targeting HTML instead of BODY; restored agent card layout; header flow; notification popover stacking; content width/overflow for Parts Manual, AI Assistant and AI Knowledge. Browser verification still required.
