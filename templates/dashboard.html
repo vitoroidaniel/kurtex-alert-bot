@@ -27,6 +27,8 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/home-hybrid.css', v='20261010-hybrid1') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/ai-v117.css', v='20261010v117') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/features/ai-original-restore.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/workspace-mobile-polish.css', v='20261010v121') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/features/ai-chat-bubbles-v122.css', v='20261010v122') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -197,7 +199,7 @@
     <div class="ui-filter-summary" id="cw-filter-summary" aria-live="polite"></div>
     <div class="cw-work-area"><div id="cw-content" class="cw-content" aria-live="polite"><div class="loading">Loading cases...</div></div>
     <aside id="cw-detail" class="cw-detail" aria-label="Selected case details" hidden></aside></div>
-    <div class="cw-board-navigation" id="cw-board-navigation" hidden><span>Drag to pan · Shift + scroll</span><div role="group" aria-label="Move across board"><button type="button" id="cw-pan-left" class="cw-secondary" onclick="cwPan(-1)" aria-label="Scroll board left"><i class="ph ph-caret-left"></i></button><button type="button" id="cw-pan-right" class="cw-secondary" onclick="cwPan(1)" aria-label="Scroll board right"><i class="ph ph-caret-right"></i></button></div></div>
+    <div class="cw-board-navigation" id="cw-board-navigation" hidden><span class="sr-only">Use the arrow buttons to move across groups</span><div role="group" aria-label="Move across board"><button type="button" id="cw-pan-left" class="cw-secondary" onclick="cwPan(-1)" aria-label="Scroll board left"><i class="ph ph-caret-left"></i></button><button type="button" id="cw-pan-right" class="cw-secondary" onclick="cwPan(1)" aria-label="Scroll board right"><i class="ph ph-caret-right"></i></button></div></div>
     <div class="cw-footer"><span id="cw-count"></span><button type="button" id="cw-load-more" class="btn secondary" onclick="cwLoadMore()">Load more cases</button></div>
     <div id="cw-full" class="cw-full" hidden></div>
   </section>

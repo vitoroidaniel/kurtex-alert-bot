@@ -37,7 +37,7 @@ function cwRender(){
  const root=document.getElementById('cw-content');if(!root)return;
  document.querySelectorAll('[data-cw-view]').forEach(b=>{b.classList.toggle('active',b.dataset.cwView===cwView);b.setAttribute('aria-pressed',String(b.dataset.cwView===cwView));});
  const rows=cwData();if(typeof uiWorkspaceFilters==='function')uiWorkspaceFilters(rows);
- document.getElementById('cw-count').textContent=`${rows.length} matching · ${cwState.rows.length} of ${cwState.total} active reports loaded`;
+ document.getElementById('cw-count').textContent=`${rows.length} cases`;
  const more=document.getElementById('cw-load-more');more.hidden=!cwState.hasMore;more.disabled=cwState.busy;more.textContent=cwState.busy?'Loading…':'Load more reports';
  if(!rows.length){const filtered=cwState.rows.length>0;cwUpdateContent(root,`<div class="cw-empty"><i class="ph ${filtered?'ph-magnifying-glass':'ph-check-circle'}" aria-hidden="true"></i><h3>${cwState.busy?'Loading maintenance reports…':filtered?'No reports match these filters':'No active maintenance reports'}</h3><p>${cwState.busy?'':filtered?'Try another search or reset your filters.':'New reports appear here automatically. Closed reports stay in Cases.'}</p>${!cwState.busy?`<button type="button" class="cw-secondary" onclick="${filtered?'cwClearFilters()':'cwOpenDialog(\'new\')'}">${filtered?'Reset filters':'New case'}</button>`:''}</div>`);return;}
  if(cwView==='table'){
