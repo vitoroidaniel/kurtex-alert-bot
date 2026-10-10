@@ -114,7 +114,7 @@ async function loadHomeBriefing() {
     document.getElementById('home-welcome-detail').textContent=m.resolved?'The team has closed '+m.resolved+' case'+(m.resolved===1?'':'s')+' today. '+(m.attention?m.attention+' still need'+(m.attention===1?'s':'')+' attention.':'Your attention queue is clear.'):(m.attention?'Let’s keep things moving. '+m.attention+' case'+(m.attention===1?' needs':'s need')+' attention.':'A clear queue and a fresh start. You’re ready for what’s next.');
     renderHomeAttention(data);renderHomeActivity(data.activity);renderHomeBriefing();
     updateHTML(document.getElementById('recent-table'),caseTable(data.recent_cases));
-    var updated=requestProblems.has('home-briefing')?'Showing saved snapshot · refresh needed':'Updated '+homeTime(data.generated_at,false);
+    var updated='';
     if(status.textContent!==updated)status.textContent=updated;
   }catch(e){
     if(e.name==='AbortError'||serial!==homeState.serial)return;

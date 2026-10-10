@@ -1,0 +1,32 @@
+
+/* Kurtex v123 — consistent responsive cards, real spacing, no hard visual refresh */
+#page-overview .kx-refresh-status{display:none!important}
+#page-overview .kx-manager-stats{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:14px!important;margin-bottom:16px!important}
+#page-overview .kx-manager-stats .home-metric{min-width:0;min-height:140px;padding:17px!important}
+#page-overview .kx-manager-charts{display:grid!important;grid-template-columns:minmax(0,1.3fr) minmax(0,.95fr) minmax(0,.85fr)!important;gap:14px!important;margin:0 0 16px!important;align-items:stretch}
+#page-overview .kx-manager-charts>.kx-panel{min-width:0;min-height:315px}
+#page-overview .kx-manager-bottom{display:grid!important;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr)!important;gap:14px!important;margin-bottom:16px!important}
+#page-overview .kx-manager-bottom>.kx-panel{min-width:0}
+#page-overview .kx-panel{overflow:hidden}
+#page-overview .kx-extra-widgets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px!important;margin-top:16px}
+#page-overview .kx-manager-stats .stat-card:nth-child(6n+5){--kh-accent:#8c65eb;--kh-glow:#f4efff}
+#page-overview .kx-manager-stats .stat-card:nth-child(6n+6){--kh-accent:#16b8b0;--kh-glow:#e9fbfa}
+#page-overview .kx-manager-stats .stat-card .home-metric-footer{border-top:0!important;margin-top:auto}
+#page-overview .kx-manager-stats .stat-card .home-metric-footer:empty{display:none}
+#page-overview .kx-panel,#page-overview .stat-card{transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+#page-fleet_intel .intelligence-search-shell{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:10px!important;align-items:center!important;padding:14px!important}
+#page-fleet_intel .intel-search-row{grid-column:1!important;min-width:0!important;display:flex!important;align-items:center!important;height:43px!important;margin:0!important}
+#page-fleet_intel .intel-search-row input{min-width:0!important;flex:1!important;height:100%!important}
+#page-fleet_intel .intel-search-action{grid-column:2!important;grid-row:1!important;margin:0!important;align-self:center!important}
+#page-fleet_intel .intel-search-btn{height:43px!important;margin:0!important;white-space:nowrap}
+#page-fleet_intel .intel-type-tabs{grid-column:1/-1!important;grid-row:2!important;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;margin:0!important}
+#page-fleet_intel #issue-search-results{grid-column:1/-1!important;min-width:0}
+#page-fleet_intel .intel-summary-top{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:14px!important;margin-bottom:14px!important}
+#page-fleet_intel .recurring-panel,#page-fleet_intel .intelligence-search-shell,#page-fleet_intel #fleet-intel-content{margin-bottom:14px!important}
+#page-overview .kx-panel[draggable=true]{cursor:grab}
+#page-overview .kx-panel.kx-dragging{opacity:.48;outline:2px dashed #e23a45}
+#page-overview .kx-panel.kx-drag-target{outline:2px dashed #e23a45;outline-offset:3px}
+@media(max-width:1400px){#page-overview .kx-manager-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important}#page-overview .kx-manager-charts{grid-template-columns:repeat(2,minmax(0,1fr))!important}#page-overview .kx-manager-charts>.kx-panel:last-child{grid-column:1/-1}}
+@media(max-width:850px){#page-overview .kx-manager-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}#page-overview .kx-manager-charts,#page-overview .kx-manager-bottom,#page-overview .kx-extra-widgets{grid-template-columns:minmax(0,1fr)!important}#page-overview .kx-manager-charts>.kx-panel:last-child{grid-column:auto}}
+@media(max-width:540px){#page-fleet_intel .intelligence-search-shell{grid-template-columns:minmax(0,1fr)!important}#page-fleet_intel .intel-search-row,#page-fleet_intel .intel-search-action{grid-column:1!important;grid-row:auto!important}#page-fleet_intel .intel-search-action button{width:100%}#page-fleet_intel .intel-type-tabs{grid-row:auto!important}#page-fleet_intel .intel-summary-top{grid-template-columns:1fr!important}}
+@media(prefers-reduced-motion:reduce){#page-overview .kx-panel,#page-overview .stat-card{transition:none!important}}
