@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-refinement.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v6.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v7.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/core/kurtex-v8.css') }}">
 </head>
 <body data-user-id="{{ user.id }}" data-user-role="{{ user.role or 'agent' }}" data-is-developer="{{ 'true' if is_developer else 'false' }}" data-allowed-pages="{{ allowed_pages|join(',') }}">
 
@@ -68,8 +69,8 @@
       </div>
     </div>
     <div class="nav-group">
-      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')"><span><i class="ph ph-truck"></i> Fleet</span><i class="ph ph-caret-down nav-caret open" id="caret-group-fleet"></i></div>
-      <div class="nav-group-items open" id="group-fleet">
+      <div class="nav-group-header" role="button" tabindex="0" onclick="toggleGroup('group-fleet')"><span><i class="ph ph-truck"></i> Fleet</span><i class="ph ph-caret-down nav-caret" id="caret-group-fleet"></i></div>
+      <div class="nav-group-items" id="group-fleet">
         <div class="nav-item nav-sub" data-page="fleet" role="button" tabindex="0" onclick="showPage('fleet')"><i class="ph ph-wrench"></i> Fleet Stats</div>
         <div class="nav-item nav-sub" data-page="fleet_intel" role="button" tabindex="0" onclick="showPage('fleet_intel')"><i class="ph ph-magnifying-glass"></i> Fleet Search</div>
         <div class="nav-item nav-sub" data-page="parts_manual" role="button" tabindex="0" onclick="showPage('parts_manual')"><i class="ph ph-book-open-text"></i> Parts Manual</div>
@@ -80,7 +81,6 @@
       <div class="nav-item" data-page="ai_assistant" role="button" tabindex="0" onclick="showPage('ai_assistant')"><i class="ph ph-sparkle"></i> AI Assistant</div>
       {% if is_developer %}<div class="nav-item" data-page="ai_knowledge" role="button" tabindex="0" onclick="showPage('ai_knowledge')"><i class="ph ph-database"></i> AI Knowledge</div>{% endif %}
     </div>
-    {% if is_manager or is_developer %}<div class="nav-section-divider" aria-hidden="true"></div>{% endif %}
     <div class="v3-nav-label v3-nav-label-spaced">Team & administration</div>
     <div class="nav-bottom-cluster">
       {% if is_manager %}<div class="nav-item" data-page="agents" role="button" tabindex="0" onclick="showPage('agents')"><i class="ph ph-users"></i> Agents</div>{% endif %}

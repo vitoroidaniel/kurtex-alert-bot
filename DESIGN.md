@@ -29,3 +29,6 @@ The navigation is a fixed-height shell with an independently scrolling nav list 
 
 ## V7 component rebuild
 Agent card HTML is replaced by a centered employee grid with avatar, status, metrics and progress. Leaderboard charts use refined series colors, rounded bars, and unstacked comparisons. Mobile uses two columns when possible and one on narrow phones. Existing click handlers and data fields are retained.
+
+## V8 sidebar and headers
+Navigation sections are tightly grouped, the sidebar scroll indicator is hidden, collapsed group items are not rendered in compact mode, and page heading banners use a clean surface rather than oversized gray backgrounds.

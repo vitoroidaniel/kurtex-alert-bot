@@ -17,8 +17,17 @@
     const nav=document.querySelector('.sidebar .v3-navigation');
     if(nav){nav.querySelectorAll('[role="button"]').forEach(el=>{
       if(!el.hasAttribute('aria-label')) el.setAttribute('aria-label',el.textContent.trim().replace(/\s+/g,' '));
+      el.setAttribute('title',el.getAttribute('aria-label'));
       el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();el.click()}});
     });}
+
+    nav?.querySelectorAll('.nav-group-header').forEach(el=>{
+      el.addEventListener('click',function(){
+        if(document.body.classList.contains('k6-sidebar-compact') && !window.matchMedia('(max-width:760px)').matches){
+          apply(false);try{localStorage.setItem(KEY,'0')}catch(e){}
+        }
+      });
+    });
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.matchMedia('(max-width:760px)').matches)window.closeSidebar?.()});
   });
 })();
