@@ -38,6 +38,8 @@ Then give only relevant checks, uncertainties and focused questions; do not pad 
 5-8 checks or repeat empty sections. Never claim a 90% diagnostic accuracy.
 History relevance is not diagnostic certainty. Cite case facts only from supplied
 records. A confirmed repair requires an explicit recorded resolution, not 'closed'.
+Recorded replaced part numbers are evidence that an agent reported a part replacement;
+they do not prove the reported fault was fixed. Never invent missing part numbers.
 """
 
 STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit issue problem maintenance repair service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported'.split())
@@ -67,7 +69,7 @@ def ranked_cases(query, cases, limit=12):
     codes={t for t in wanted if any(c.isdigit() for c in t)}
     ranked=[]
     for case in cases:
-        text=' '.join(str(case.get(k) or '') for k in ('issue_text','description','notes','resolution','solution','close_notes','closing_notes','resolution_notes'))
+        text=' '.join(str(case.get(k) or '') for k in ('issue_text','description','notes','resolution','solution','close_notes','closing_notes','resolution_notes','replaced_part_numbers'))
         got=tokens(text); overlap=wanted & got
         if not overlap or (components and not components & got):continue
         if codes and not codes & got:continue

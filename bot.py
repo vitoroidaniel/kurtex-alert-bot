@@ -30,6 +30,8 @@ from bot_app.handlers.agent_handler import (
     cb_done_pick, cb_solve_confirm, cb_solve_cancel,
     cb_delete_confirm, cb_delete_do, cb_delete_keep,
     cb_close_confirm, cb_close_cancel,
+    cb_close_parts_yes, cb_close_parts_no, cb_close_parts_skip,
+    cb_close_parts_cancel, recv_close_parts_text,
     cb_histpage, cb_hist_delete_chat,
     cb_solve_start, cb_close_ask,
 )
@@ -39,7 +41,7 @@ from bot_app.handlers.admin_handler import (
     handle_forward, cb_addrole,
 )
 from bot_app.handlers.scheduler import register_jobs
-from dashboard import start_dashboard_thread
+from api.server import start_api_thread
 from backend.storage.user_store import (
     is_authorized, has_role, sync_telegram_username,
 )
@@ -55,7 +57,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Lightweight runtime heartbeat consumed by the Developer workspace. It lives on
-# the same Railway volume as cases, so the dashboard can verify the bot process
+# the same Railway volume as cases, so the operations API can verify the bot process
 # itself is alive without requiring Railway API credentials.
 _BOT_STARTED_AT = datetime.now(timezone.utc)
 _BOT_RUNTIME = {"updates_processed": 0, "callbacks_processed": 0, "last_update_at": None}
@@ -164,7 +166,7 @@ async def auth_middleware(update: Update, ctx):
         return
     chat = update.effective_chat
 
-    # Keep the dashboard identity current from Telegram itself. Telegram has no
+    # Keep the user identity current from Telegram itself. Telegram has no
     # bulk username lookup by numeric user ID, so every live interaction is an
     # opportunity to refresh an authorized user's @username.
     if is_authorized(user.id):
@@ -554,9 +556,14 @@ def main():
     # ConversationHandler only caused PTB callback-tracking warnings and could
     # intercept the real handlers.
     app.add_handler(get_report_conversation())
-    # Text recovery for a live report whose ConversationHandler state became stale.
-    # Normal conversation handling wins first; this only acts when report_awaiting=comments.
-    app.add_handler(MessageHandler(private & filters.TEXT & ~filters.COMMAND, recover_report_text))
+    # One fallback for free text: close-part numbers OR stale Report comments.
+    # The Report ConversationHandler above gets first chance to process its own messages.
+    async def recover_private_text(update, ctx):
+        if ctx.user_data.get("close_parts_case_id"):
+            await recv_close_parts_text(update, ctx)
+        else:
+            await recover_report_text(update, ctx)
+    app.add_handler(MessageHandler(private & filters.TEXT & ~filters.COMMAND, recover_private_text))
     # Last-resort guard for stale report keyboards after a restart/session loss.
     # Active report callbacks are consumed by ConversationHandler first.
     app.add_handler(CallbackQueryHandler(cb_orphan_report_callback, pattern=r'^rpt_'))
@@ -582,6 +589,10 @@ def main():
     app.add_handler(CallbackQueryHandler(cb_solve_confirm,           pattern=r'^solve_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_solve_cancel,            pattern=r'^solve_cancel\|'))
     app.add_handler(CallbackQueryHandler(cb_close_confirm,           pattern=r'^close_confirm\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_yes,         pattern=r'^close_parts_yes\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_no,          pattern=r'^close_parts_no\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_skip,        pattern=r'^close_parts_skip\|'))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_cancel,      pattern=r'^close_parts_cancel\|'))
     app.add_handler(CallbackQueryHandler(cb_close_cancel,            pattern=r'^close_cancel\|'))
     app.add_handler(CallbackQueryHandler(cb_delete_confirm,          pattern=r'^delete_confirm\|'))
     app.add_handler(CallbackQueryHandler(cb_delete_do,               pattern=r'^delete_do\|'))
@@ -591,7 +602,7 @@ def main():
 
     register_jobs(app)
 
-    start_dashboard_thread()
+    start_api_thread()
     logger.info(f"Starting {BOT_NAME}...")
     # Keep updates that arrive during a short deploy/restart. Dropping them can
     # discard Assign button clicks and makes the bot appear to freeze.

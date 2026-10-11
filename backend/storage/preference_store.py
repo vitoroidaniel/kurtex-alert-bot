@@ -1,11 +1,13 @@
-"""Persistent per-user dashboard preferences (JSON-backed on DATA_DIR volume)."""
+"""Persistent per-user frontend preferences (JSON-backed on DATA_DIR volume)."""
 import json, os
 from pathlib import Path
 from threading import RLock
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-PREFERENCES_FILE = DATA_DIR / "dashboard_preferences.json"
+# Existing installations keep using the same file on their Railway volume.
+_LEGACY_PREFERENCES = DATA_DIR / "dashboard_preferences.json"
+PREFERENCES_FILE = _LEGACY_PREFERENCES if _LEGACY_PREFERENCES.exists() else DATA_DIR / "frontend_preferences.json"
 _lock = RLock()
 
 

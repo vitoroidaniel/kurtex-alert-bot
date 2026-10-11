@@ -200,7 +200,7 @@ def save_maintenance_report(case_id: str, data: dict, report_text: str, media: l
 
 
 def _close_record(case: dict, notes: Optional[str] = None) -> dict:
-    """Shared Telegram/dashboard close transition. Repeated closes preserve history."""
+    """Shared Telegram/API close transition. Repeated closes preserve history."""
     if case.get("status") == "done":
         return case
     closed_at = now_iso()
@@ -213,16 +213,34 @@ def _close_record(case: dict, notes: Optional[str] = None) -> dict:
     return case
 
 
-def close_case(case_id: str, notes: Optional[str] = None) -> Optional[dict]:
+def close_case(case_id: str, notes: Optional[str] = None, *,
+               replaced_parts: Optional[list[str]] = None,
+               parts_replaced: Optional[bool] = None) -> Optional[dict]:
+    """Close atomically, retaining explicitly reported replaced part numbers for AI history.
+
+    ``parts_replaced=None`` preserves the older API/desktop close contract.
+    A repeated close must not overwrite the original repair history.
+    """
     with _FILE_LOCK:
-        cases = _load(CASES_FILE)
+        cases = _load(CASES_FILE, strict=True)
         for case in cases:
             if case["id"] != case_id:
                 continue
+            if case.get("status") == "done":
+                return dict(case)
+            if parts_replaced is not None:
+                numbers = [str(part).strip() for part in (replaced_parts or [])]
+                if len(numbers) > 20 or any(not number or len(number) > 80 for number in numbers):
+                    raise ValueError("Invalid replacement part numbers")
+                case["parts_replaced"] = bool(parts_replaced)
+                case["replaced_parts"] = numbers if parts_replaced else []
+                case["replaced_part_numbers"] = ", ".join(case["replaced_parts"])
+                case["parts_recorded_at"] = now_iso()
             _close_record(case, notes)
-            _save(CASES_FILE, cases)
-            logger.info(f"Case {case_id} closed")
-            return case
+            _save(CASES_FILE, cases, strict=True)
+            logger.info("Case %s closed; replaced part numbers: %s", case_id,
+                        case.get("replaced_part_numbers") or "none/unspecified")
+            return dict(case)
     return None
 
 
@@ -233,7 +251,7 @@ def is_maintenance_report(case: dict) -> bool:
 
 def workspace_revision(case: dict) -> str:
     import hashlib
-    from backend.core.dashboard_data import normalize
+    from backend.core.case_snapshot import normalize
     return hashlib.sha256(json.dumps(normalize(case), sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -438,8 +456,9 @@ async def async_create_case(case_id, driver_name, driver_username, group_name, d
 async def async_assign_case(case_id, agent_id, agent_name, agent_username):
     return await asyncio.to_thread(assign_case, case_id, agent_id, agent_name, agent_username)
 
-async def async_close_case(case_id, notes=None):
-    return await asyncio.to_thread(close_case, case_id, notes)
+async def async_close_case(case_id, notes=None, *, replaced_parts=None, parts_replaced=None):
+    return await asyncio.to_thread(close_case, case_id, notes,
+                                   replaced_parts=replaced_parts, parts_replaced=parts_replaced)
 
 async def async_mark_missed(case_id):
     return await asyncio.to_thread(mark_missed, case_id)

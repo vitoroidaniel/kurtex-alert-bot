@@ -12,7 +12,8 @@ USEFUL_FIELDS=(
  'description','notes','status','resolution','solution','close_notes','closing_notes',
  'resolution_notes','comments','load_type','location','priority','pickup','delivery',
  'setpoint','current_temp','temp_recorder','report_text','report_data','media','opened_at',
- 'assigned_at','closed_at','agent_name','closed_by_name','resolution_secs','response_secs'
+ 'assigned_at','closed_at','agent_name','closed_by_name','resolution_secs','response_secs',
+ 'parts_replaced','replaced_parts','replaced_part_numbers','parts_recorded_at'
 )
 
 class FleetKnowledgeStore:
@@ -47,6 +48,9 @@ class FleetKnowledgeStore:
                 old=db.execute('SELECT fingerprint FROM fleet_cases WHERE case_id=?',(cid,)).fetchone()
                 if old and old['fingerprint']==fp:continue
                 searchable=' '.join(str(v) for v in data.values() if isinstance(v,(str,int,float,bool)))
+                # Index the newly recorded part-number list without indexing bulky
+                # media/report JSON blobs that would slow down every AI search.
+                searchable+=' '+' '.join(str(v) for v in (data.get('replaced_parts') or []))
                 db.execute('''INSERT INTO fleet_cases(case_id,fingerprint,status,searchable,payload,quality,updated_at)
                   VALUES(?,?,?,?,?,?,?) ON CONFLICT(case_id) DO UPDATE SET fingerprint=excluded.fingerprint,
                   status=excluded.status,searchable=excluded.searchable,payload=excluded.payload,

@@ -43,7 +43,7 @@ class LearningStore:
         for case in cases:
             ident=case.get('id') or case.get('full_id')
             if not ident:continue
-            fields={key:case.get(key) for key in ('vehicle_type','unit_number','issue_text','description','notes','status','resolution','solution','close_notes','closing_notes','resolution_notes','closed_at') if case.get(key)}
+            fields={key:case.get(key) for key in ('vehicle_type','unit_number','issue_text','description','notes','status','resolution','solution','close_notes','closing_notes','resolution_notes','closed_at','parts_replaced','replaced_parts','replaced_part_numbers') if case.get(key)}
             self.capture('case:'+str(ident),'case','Case '+str(ident),json.dumps(fields,ensure_ascii=False));count+=1
         return count
     def list(self,status='pending',offset=0):

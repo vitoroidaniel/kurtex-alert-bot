@@ -1,4 +1,4 @@
-"""Shared timezone helpers for the bot and dashboard."""
+"""Shared timezone helpers for the bot and API."""
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 

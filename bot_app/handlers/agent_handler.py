@@ -182,6 +182,8 @@ async def _send_history_page(target, agent_id, page, cases=None, ctx=None):
             f"Issue: {(case.get('description') or '')[:80]}\n"
             f"Closed: {_fmt_dt(case.get('closed_at'))}"
             + (f"\nNote: {_esc(case['notes'])}" if case.get("notes") else "")
+            + (f"\nReplaced part #: {_esc(case['replaced_part_numbers'])}"
+               if case.get("replaced_part_numbers") else "")
         )
         nav = []
         if i == len(batch) - 1:
@@ -288,6 +290,7 @@ async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query   = update.callback_query
     await query.answer()
     ctx.user_data.pop("solving_case_id", None)
+    _clear_close_parts(ctx)
     case_id = query.data.split("|")[1]
     case    = await get_case(case_id)
     if case and case["status"] in ("assigned", "reported"):
@@ -300,6 +303,7 @@ async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    _clear_close_parts(ctx)
     ctx.user_data.pop("solving_case_id", None)
     ctx.user_data.pop("report_case_id", None)
     ctx.user_data.pop("report_handler", None)
@@ -321,6 +325,7 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
+    _clear_close_parts(ctx)
     await query.edit_message_text(
         f"📋 *Close Case*\n\n"
         f"📌 *Group:* {_esc(case['group_name'])}\n"
@@ -342,31 +347,156 @@ async def cb_close_receive_reason(update: Update, ctx: ContextTypes.DEFAULT_TYPE
 
 
 async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Tap ✅ Close → closes instantly, no note, no confirmation."""
-    query   = update.callback_query
+    """Ask about replaced parts BEFORE committing the close."""
+    query = update.callback_query
     await query.answer()
-    case_id = query.data.split("|")[1]
-    case    = await get_case(case_id)
-
-    if not case or case["status"] not in ("assigned", "reported"):
+    case_id = query.data.split("|", 1)[1]
+    case = await get_case(case_id)
+    if not case or case.get("status") not in ("assigned", "reported"):
+        ctx.user_data.pop("close_parts_case_id", None)
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return
-
-    await close_case(case_id, notes=None)
+    ctx.user_data["close_parts_case_id"] = case_id
     await query.edit_message_text(
-        f"✅ *Case closed!*\n\n"
-        f"Group: {_esc(case['group_name'])}\n"
-        f"Driver: {_esc(case['driver_name'])}",
+        "*Before closing this case*\n\nWere any parts replaced?\n"
+        "If yes, record the actual part numbers for Kurtex AI history.",
         parse_mode="Markdown",
-        reply_markup=None,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Yes, parts replaced", callback_data=f"close_parts_yes|{case_id}"),
+            InlineKeyboardButton("No", callback_data=f"close_parts_no|{case_id}"),
+        ], [InlineKeyboardButton("Cancel", callback_data=f"close_parts_cancel|{case_id}")]]),
     )
+
+
+def _clear_close_parts(ctx):
+    ctx.user_data.pop("close_parts_case_id", None)
+
+
+async def _finish_close(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
+                        case_id: str, *, parts_replaced: bool, replaced_parts: list[str]):
+    """Only acknowledge success after case storage confirms the close."""
+    case = await get_case(case_id)
+    if not case or case.get("status") not in ("assigned", "reported"):
+        _clear_close_parts(ctx)
+        message = "This case is no longer active."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(message, reply_markup=None)
+        else:
+            await update.message.reply_text(message)
+        return
+    try:
+        saved = await close_case(case_id, notes=None, parts_replaced=parts_replaced,
+                                replaced_parts=replaced_parts)
+        if not saved or saved.get("status") != "done":
+            raise RuntimeError("Case close was not saved")
+    except Exception:
+        logger.exception("Failed to close case %s with replacement details", case_id)
+        message = "Could not save this case. Please try again from /mycases."
+        if update.callback_query:
+            await update.callback_query.edit_message_text(message, reply_markup=None)
+        else:
+            await update.message.reply_text(message)
+        _clear_close_parts(ctx)
+        return
+
+    _clear_close_parts(ctx)
+    lines = ["Case closed!", "", f"Group: {case.get('group_name', '—')}",
+             f"Driver: {case.get('driver_name', '—')}"]
+    if parts_replaced:
+        lines.append("Replaced part #: " + (", ".join(replaced_parts) if replaced_parts
+                                             else "not provided"))
+    else:
+        lines.append("Parts replaced: No")
+    lines.append("Saved to case history for Kurtex AI.")
+    text = "\n".join(lines)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(text, reply_markup=None)
+    else:
+        await update.message.reply_text(text)
     asyncio.create_task(_show_remaining_after(update.effective_user.id, 0))
+
+
+async def cb_close_parts_yes(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    case_id = query.data.split("|", 1)[1]
+    if ctx.user_data.get("close_parts_case_id") != case_id:
+        await query.edit_message_text("This close step expired. Open the case again from /mycases.")
+        return
+    await query.edit_message_text(
+        "*Part numbers replaced*\n\nSend the actual part number(s) in your next message.\n"
+        "Use one per line or separate multiple numbers with commas.\n\n"
+        "Example: `AB-12345, 456789`\n\n"
+        "Do not guess. If you do not have the number, use the button below.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Part # unavailable", callback_data=f"close_parts_skip|{case_id}"),
+        ], [InlineKeyboardButton("Cancel", callback_data=f"close_parts_cancel|{case_id}")]]),
+    )
+
+
+async def cb_close_parts_no(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    case_id = query.data.split("|", 1)[1]
+    if ctx.user_data.get("close_parts_case_id") != case_id:
+        await query.edit_message_text("This close step expired. Open the case again from /mycases.")
+        return
+    await _finish_close(update, ctx, case_id, parts_replaced=False, replaced_parts=[])
+
+
+async def cb_close_parts_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    case_id = query.data.split("|", 1)[1]
+    if ctx.user_data.get("close_parts_case_id") != case_id:
+        await query.edit_message_text("This close step expired. Open the case again from /mycases.")
+        return
+    await _finish_close(update, ctx, case_id, parts_replaced=True, replaced_parts=[])
+
+
+async def cb_close_parts_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    _clear_close_parts(ctx)
+    case_id = query.data.split("|", 1)[1]
+    case = await get_case(case_id)
+    if case and case.get("status") in ("assigned", "reported"):
+        await query.edit_message_text(
+            _active_case_text(case), parse_mode="Markdown",
+            reply_markup=_active_case_keyboard(case_id, case.get("status", "assigned")))
+    else:
+        await query.edit_message_text("This case is no longer active.", reply_markup=None)
+
+
+async def recv_close_parts_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Plain Telegram chat input for the optional replacement part numbers."""
+    case_id = ctx.user_data.get("close_parts_case_id")
+    if not case_id:
+        return
+    import re
+    raw = (update.message.text or "").strip()
+    numbers = [part.strip() for part in re.split(r"[,;\n]+", raw) if part.strip()]
+    if (not numbers or len(numbers) > 20 or
+            any(len(part) > 80 for part in numbers) or len(raw) > 1600):
+        await update.message.reply_text(
+            "Please send 1-20 actual part numbers (max 80 characters each), "
+            "separated by commas or new lines. Or select 'Part # unavailable'.")
+        return
+    if any(part.casefold() in {"none", "no", "n/a", "unknown", "nu", "nimic", "-"}
+           for part in numbers):
+        await update.message.reply_text(
+            "Please enter actual part numbers, or select 'Part # unavailable' "
+            "on the previous message.")
+        return
+    await _finish_close(update, ctx, case_id, parts_replaced=True, replaced_parts=numbers)
 
 
 async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query   = update.callback_query
     await query.answer()
     ctx.user_data.pop("solving_case_id", None)
+    _clear_close_parts(ctx)
     case_id = query.data.split("|")[1]
     case    = await get_case(case_id)
     if case and case["status"] in ("assigned", "reported"):
