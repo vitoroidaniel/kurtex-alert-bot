@@ -18,6 +18,7 @@ from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, k
 
 from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chicago_timestamp
 from backend.mobile_auth import register_mobile_auth
+from backend.web_sso import register_web_sso
 from backend.core.dashboard_data import CaseSnapshot, DataUnavailable
 from flask import Flask, g, jsonify, render_template, request, session, redirect, Response, send_file
 
@@ -46,6 +47,7 @@ app = Flask(__name__)
 app.secret_key = _dashboard_secret()
 app.config["MAX_CONTENT_LENGTH"] = 82 * 1024 * 1024
 mobile_login_complete = register_mobile_auth(app, DATA_DIR, lambda: _current_allowed_pages())
+web_login_complete = register_web_sso(app, DATA_DIR, lambda: _current_allowed_pages())
 chat_store = ChatStore(DATA_DIR)
 learning_store = LearningStore(DATA_DIR / "ai_learning.sqlite3")
 fleet_knowledge_store = FleetKnowledgeStore(DATA_DIR / "fleet_knowledge.sqlite3")
@@ -1083,6 +1085,9 @@ def telegram_auth():
         pending = session.pop('mobile_oauth', None)
         if pending and time.time() - float(pending.get('ts', 0)) < 600:
             return mobile_login_complete(user_id, pending)
+        web_redirect = web_login_complete(user_id)
+        if web_redirect is not None:
+            return web_redirect
         return redirect("/")
     return redirect("/login?error=invalid")
 
