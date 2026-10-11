@@ -17,6 +17,7 @@ from backend.ai.ai_video import process_video, transcribe_audio, MAX_VIDEO_BYTES
 from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, knowledge_excerpt, COMPONENTS
 
 from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chicago_timestamp
+from backend.mobile_auth import register_mobile_auth
 from backend.core.dashboard_data import CaseSnapshot, DataUnavailable
 from flask import Flask, g, jsonify, render_template, request, session, redirect, Response, send_file
 
@@ -44,6 +45,7 @@ def _dashboard_secret() -> str:
 app = Flask(__name__)
 app.secret_key = _dashboard_secret()
 app.config["MAX_CONTENT_LENGTH"] = 82 * 1024 * 1024
+mobile_login_complete = register_mobile_auth(app, DATA_DIR, lambda: _current_allowed_pages())
 chat_store = ChatStore(DATA_DIR)
 learning_store = LearningStore(DATA_DIR / "ai_learning.sqlite3")
 fleet_knowledge_store = FleetKnowledgeStore(DATA_DIR / "fleet_knowledge.sqlite3")
@@ -1078,6 +1080,9 @@ def telegram_auth():
             "username": data.get("username",""), "photo_url": data.get("photo_url",""),
             "role": role,
         }
+        pending = session.pop('mobile_oauth', None)
+        if pending and time.time() - float(pending.get('ts', 0)) < 600:
+            return mobile_login_complete(user_id, pending)
         return redirect("/")
     return redirect("/login?error=invalid")
 
@@ -2034,7 +2039,7 @@ def _workspace_actor():
     if not user:
         return None, (jsonify({"error": "Please sign in again."}), 401)
     token = session.get("workspace_csrf", "")
-    if not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", "")):
+    if not getattr(g, "mobile_authenticated", False) and (not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", ""))):
         return None, (jsonify({"error": "Reload the page before updating reports."}), 403)
     from backend.storage.user_store import get_user
     stored = get_user(user["id"])
@@ -3065,6 +3070,17 @@ def telegram_report_submit():
     except Exception as exc:
         logger.exception("Telegram mini report submit failed")
         return jsonify({"error":"Report could not be sent. Please retry."}),500
+
+
+@app.route("/mobile/download")
+def mobile_download_page():
+    # Download destinations are configured only after signed app artifacts exist.
+    def public_url(value):
+        parsed = urllib.parse.urlparse(value)
+        return value if parsed.scheme == "https" and parsed.netloc and not parsed.username else ""
+    return render_template("mobile_download.html",
+        android_url=public_url(os.getenv("KURTEX_ANDROID_APK_URL", "")),
+        ios_url=public_url(os.getenv("KURTEX_IOS_TESTFLIGHT_URL", "")))
 
 
 @app.route("/login")
