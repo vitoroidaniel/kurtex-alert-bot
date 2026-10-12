@@ -547,7 +547,10 @@ def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None):
         else:
             items.append(attachment)
         case["updated_at"] = now_iso()
-        case.setdefault("workspace_history", []).append({"action": "attachment_removed" if remove_id else "attachment_added", "author": actor["name"], "created_at": now_iso()})
+        kind = removed if remove_id else attachment
+        is_proof = (kind or {}).get("category") == "proof"
+        action = ("proof_removed" if remove_id else "proof_added") if is_proof else ("attachment_removed" if remove_id else "attachment_added")
+        case.setdefault("workspace_history", []).append({"action": action, "author": actor["name"], "created_at": now_iso()})
         _save(CASES_FILE, cases, strict=True)
         return removed
 

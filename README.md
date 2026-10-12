@@ -130,3 +130,11 @@ Deploy Bot v151 **before** Desktop v158. This is backward compatible with the ex
 **Important:** Set `DATA_DIR` to the existing persistent Railway volume. Sessions that were already lost before this update cannot be reconstructed. If a user is mid-report when this version first deploys, they should open `/mycases` and press Report again.
 
 The Developer role remains excluded from automatic alert notifications by existing policy, but can use bot commands.
+
+## v156 - Proofs and invoices storage
+
+- Existing secure case-attachment upload endpoint now accepts `category=proof` with validated `proof_type` (invoice, repair_proof, receipt, other) and optional description.
+- Adds upload timestamp and uploader name to new documents. Existing attachment metadata remains backward compatible.
+- Proof additions/removals are separately recorded in case history.
+- Uploads and deletions retain existing case-owner/developer authorization and CSRF requirements; reads retain existing Cases permission checks.
+- Desktop v165 is required for the new proof gallery and viewer. Preserve the Railway persistent data volume.

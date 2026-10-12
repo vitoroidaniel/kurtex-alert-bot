@@ -1,0 +1,10 @@
+KURTEX BOT / API v156 - RELEASE NOTES
+Date: October 12, 2026
+
+- Added proof / invoice document metadata to existing authorized attachment upload route.
+- Validates category and proof type; retains 15 MB and extension limits.
+- Stores description, uploader and timestamp with proof records.
+- Added proof_added / proof_removed audit events.
+- Kept legacy files and Telegram reporting unchanged.
+
+Deploy this API before Desktop v165. Preserve existing Railway data volumes and environment variables.

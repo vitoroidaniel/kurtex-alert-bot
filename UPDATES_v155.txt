@@ -1,0 +1,25 @@
+KURTEX BOT / API v155 - COMPANION UPDATE
+October 12, 2026
+
+- Added GET /api/preferences/interface and PUT /api/preferences/interface.
+- Saves each user's theme, notification choices, interface and navigation preferences
+  on the existing DATA_DIR Railway volume, separate from case data.
+- Validates accepted preference fields and size before saving.
+- Added cross-worker file locking to the existing preference store, preventing
+  simultaneous writes from erasing unrelated account settings or notes.
+- Preserves the existing overview, home-grid and home-notes records.
+- Enables secure signed 30-day browser sessions after Telegram web sign-in.
+- Keeps role authorization on the backend. Logout still clears browser cookies.
+- Does not change Telegram Report, case creation, case assignments or bot commands.
+
+DEPLOYMENT
+- Deploy this Bot/API ZIP before Desktop v164.
+- Keep the current Railway DATA_DIR volume and API_SESSION_SECRET/DASHBOARD_SECRET.
+- Do not start a second Telegram polling service with the same BOT_TOKEN.
+- The existing Mobile app continues to use the same API.
+
+TESTS
+- Preference persistence and concurrent-write tests passed.
+- Telegram role-change/report-continuation regression passed.
+- Python syntax checks passed.
+- Production Railway integration was not tested.

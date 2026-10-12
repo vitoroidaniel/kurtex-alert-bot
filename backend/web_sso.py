@@ -95,7 +95,9 @@ def register_web_sso(app, data_dir, allowed_pages):
         user={'id':int(payload['uid']),'first_name':stored.get('name') or stored.get('first_name') or '',
               'username':stored.get('username') or '', 'photo_url':'','role':stored.get('role') or 'agent'}
         # The existing backend remains the authority for sessions and permissions.
-        values={'user':user,'workspace_csrf':secrets.token_urlsafe(32)}
+        # SSO-created cookies must be permanent just like direct Telegram login.
+        # Flask checks the signature age against PERMANENT_SESSION_LIFETIME.
+        values={'_permanent':True,'user':user,'workspace_csrf':secrets.token_urlsafe(32)}
         serializer=app.session_interface.get_signing_serializer(app)
         if not serializer: return jsonify(error='Backend session signing unavailable'),503
         return jsonify({'session_cookie':serializer.dumps(values)})

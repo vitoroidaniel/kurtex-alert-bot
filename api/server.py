@@ -69,7 +69,10 @@ def ai_serialized(fn):
             lock.release()
     return wrapped
 
-app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
+# Persistent browser sign-in is bounded by the backend's signed-cookie lifetime.
+# The browser cookie can outlive a tab, but a 30-day-old signature is rejected.
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                  SESSION_COOKIE_SECURE=True, PERMANENT_SESSION_LIFETIME=timedelta(days=30))
 BOT_TOKEN      = os.getenv("BOT_TOKEN", "")
 API_PORT = int(os.getenv("PORT") or os.getenv("API_PORT") or os.getenv("DASHBOARD_PORT", "8080"))
 
@@ -1092,6 +1095,7 @@ def telegram_auth():
         if not u:
             return redirect("/login?error=unauthorized")
         role = u.get("role", "agent")
+        session.permanent = True
         session["user"] = {
             "id": user_id, "first_name": data.get("first_name",""),
             "username": data.get("username",""), "photo_url": data.get("photo_url",""),
@@ -1137,6 +1141,54 @@ def api_overview_preferences():
         clean[device] = {"order": order, "hidden": hidden, "metrics": metrics}
     save_overview(user_id, clean)
     return jsonify({"ok": True, "overview": clean})
+
+
+# All appearance and notification settings belong to the account, not to a tab.
+# Only known fields are accepted; no session credentials or arbitrary JSON are stored.
+_INTERFACE_BOOL_FIELDS = (
+    "reduceMotion", "fixedSidebar", "compactSidebar", "rememberPage",
+    "notifyNew", "notifyReported", "notifyAssigned", "notifyReassigned",
+    "notifyMissed", "notifyResolved", "notifyPriority", "notifyIntelligence", "notifySound",
+)
+_INTERFACE_PAGES = {"overview", "cases", "case_workspace", "missed", "leaderboard",
+                    "trends", "comparison", "fleet", "fleet_intel", "kurtex_intelligence",
+                    "parts_manual", "ai_assistant", "ai_knowledge", "my_profile", "agents",
+                    "users", "developer"}
+
+
+@app.route("/api/preferences/interface", methods=["GET", "PUT"])
+def api_interface_preferences():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    from backend.storage.preference_store import get_interface, save_interface
+    user_id = session["user"].get("id")
+    if request.method == "GET":
+        return jsonify({"interface": get_interface(user_id)})
+    if request.content_length is not None and request.content_length > 8192:
+        return jsonify({"error": "Settings payload too large."}), 413
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or not isinstance(payload.get("interface"), dict):
+        return jsonify({"error": "Invalid interface settings."}), 400
+    values = payload["interface"]
+    if len(json.dumps(values)) > 4096:
+        return jsonify({"error": "Settings payload too large."}), 413
+    clean = {}
+    for field in _INTERFACE_BOOL_FIELDS:
+        if field in values:
+            if not isinstance(values[field], bool):
+                return jsonify({"error": "Invalid setting: " + field}), 400
+            clean[field] = values[field]
+    for field, allowed in (("theme", {"light", "dark"}),
+                           ("density", {"comfortable", "compact"}),
+                           ("landingPage", {"overview", "cases", "parts_manual", "ai_assistant"}),
+                           ("lastPage", _INTERFACE_PAGES)):
+        if field in values:
+            if not isinstance(values[field], str) or values[field] not in allowed:
+                return jsonify({"error": "Invalid setting: " + field}), 400
+            clean[field] = values[field]
+    # The store merges under one cross-process lock, avoiding lost writes.
+    merged = save_interface(user_id, clean)
+    return jsonify({"ok": True, "interface": merged})
 
 
 @app.route("/api/preferences/home-grid", methods=["GET", "PUT"])
@@ -2203,8 +2255,17 @@ def api_workspace_attachment_upload(case_id):
     if not file or not file.filename: return jsonify({"error":"Select a file."}), 400
     name = secure_filename(file.filename)[:160]
     extension = Path(name).suffix.lower()
-    allowed = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".mp4", ".mov"}
+    allowed = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".mp4", ".mov", ".webm"}
     if extension not in allowed: return jsonify({"error":"Unsupported file type."}), 400
+    # Proofs and invoices share the secure attachment storage, but are a distinct
+    # case collection. Older files have no category and remain general attachments.
+    category = str(request.form.get("category") or "attachment").strip().lower()
+    if category not in ("attachment", "proof"):
+        return jsonify({"error":"Invalid document category."}), 400
+    proof_type = str(request.form.get("proof_type") or "repair_proof").strip().lower()
+    if category == "proof" and proof_type not in ("invoice", "repair_proof", "receipt", "other"):
+        return jsonify({"error":"Invalid proof type."}), 400
+    description = str(request.form.get("description") or "").strip()[:500]
     content = file.stream.read(15*1024*1024+1)
     if len(content)>15*1024*1024: return jsonify({"error":"File exceeds 15 MB."}), 413
     attachment_id = uuid.uuid4().hex
@@ -2213,8 +2274,12 @@ def api_workspace_attachment_upload(case_id):
     path = folder / (attachment_id + extension)
     try:
         path.write_bytes(content)
-        workspace_attachment_write(actor,case_id,attachment={"id":attachment_id,"name":name,"size":len(content),"extension":extension})
-        return jsonify({"ok":True,"id":attachment_id})
+        metadata = {"id":attachment_id,"name":name,"size":len(content),"extension":extension,
+                    "category":category,"created_at":_now_iso(),"uploaded_by":actor.get("name", "")}
+        if category == "proof":
+            metadata.update({"proof_type":proof_type,"description":description})
+        workspace_attachment_write(actor,case_id,attachment=metadata)
+        return jsonify({"ok":True,"id":attachment_id,"category":category})
     except (LookupError,PermissionError,ValueError) as exc:
         path.unlink(missing_ok=True)
         return jsonify({"error":str(exc)}), 403
