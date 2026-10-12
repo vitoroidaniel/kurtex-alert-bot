@@ -209,6 +209,7 @@ def serialize_case(c):
             "load_type":   c.get("load_type") or (c.get("report_data") or {}).get("load") or "",
             "board_stage": c.get("board_stage") or "",
             "shop_info":   c.get("shop_info") or "",
+            "part_number": c.get("part_number") or "",
             "amount":      c.get("amount") or "",
             "report_driver": c.get("report_driver") or c.get("driver_name") or "",
             "unit_number": c.get("unit_number") or "",
@@ -2150,9 +2151,27 @@ def api_workspace_write(case_id=None):
                 raise ValueError("Check the " + key.replace("_", " ") + " field.")
             return value.strip()
         if case_id is None:
-            payload = {key: text(key, key in ("unit_number", "driver", "issue", "request_id"),
-                                120 if key in ("unit_number", "driver", "group", "request_id") else 4000)
-                       for key in ("unit_number", "driver", "issue", "group", "location", "comments", "request_id")}
+            # Accept older mobile clients that do not yet send load details.
+            # Optional group and part number never block report creation.
+            limits = {"unit_number": 120, "driver": 120, "issue": 4000, "group": 120,
+                      "location": 2000, "comments": 4000, "request_id": 120,
+                      "load_type": 40, "pickup": 500, "delivery": 500,
+                      "setpoint": 80, "current_temp": 80, "temp_recorder": 16,
+                      "part_number": 120}
+            payload = {key: text(key, key in ("unit_number", "driver", "issue", "request_id"), maximum)
+                       for key, maximum in limits.items()}
+            if payload["load_type"] not in ("", "JBS Load", "Broker Load", "OpenDeck", "Empty"):
+                raise ValueError("Choose a valid load type.")
+            if payload["temp_recorder"] not in ("", "Yes", "No"):
+                raise ValueError("Choose a valid temperature recorder value.")
+            # Match Telegram reporting: Empty loads have no pickup, delivery,
+            # setpoint, current temperature, or temperature recorder.
+            if payload["load_type"] == "Empty":
+                for key in ("pickup", "delivery", "setpoint", "current_temp", "temp_recorder"):
+                    payload[key] = ""
+            elif payload["load_type"] == "" or data.get("vehicle_type") != "reefer":
+                for key in ("setpoint", "current_temp", "temp_recorder"):
+                    payload[key] = ""
             if data.get("vehicle_type") not in ("truck", "trailer", "reefer") or data.get("priority") not in ("low", "medium", "high", "normal"):
                 raise ValueError("Choose equipment and priority.")
             from backend.storage.user_store import get_all_user_dicts
@@ -2202,7 +2221,7 @@ def api_workspace_write(case_id=None):
             elif action == "edit":
                 fields = data.get("fields")
                 allowed = {"priority", "location", "description", "issue_text", "shop_info", "amount",
-                           "report_driver", "unit_number", "vehicle_type", "comments", "group_name", "load_type", "board_stage"}
+                           "report_driver", "unit_number", "vehicle_type", "comments", "group_name", "load_type", "board_stage", "pickup", "delivery", "part_number", "setpoint", "current_temp", "temp_recorder"}
                 if not isinstance(fields, dict) or not fields or set(fields) - allowed:
                     raise ValueError("Choose valid report fields.")
                 for key, value in fields.items():
@@ -2210,7 +2229,7 @@ def api_workspace_write(case_id=None):
                         raise ValueError("Check the report fields.")
                     if key in ("description", "issue_text") and not value.strip():
                         raise ValueError("The issue and description cannot be empty.")
-                    if key in ("unit_number", "report_driver", "group_name", "shop_info") and len(value.strip()) > 200:
+                    if key in ("unit_number", "report_driver", "group_name", "shop_info", "part_number") and len(value.strip()) > 200:
                         raise ValueError("The " + key.replace("_", " ") + " field is too long.")
                 if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "normal"):
                     raise ValueError("Choose a valid priority.")
@@ -2230,6 +2249,8 @@ def api_workspace_write(case_id=None):
                     raise ValueError("Choose a valid load type.")
                 if "board_stage" in fields and fields["board_stage"] not in ("", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"):
                     raise ValueError("Choose a valid workflow stage.")
+                if "temp_recorder" in fields and fields["temp_recorder"] not in ("", "Yes", "No"):
+                    raise ValueError("Choose a valid temperature recorder value.")
                 payload["fields"] = {k: v.strip() for k, v in fields.items()}
         case = workspace_write(actor, payload, case_id)
         return jsonify({"ok": True, "case": serialize_case(case), "revision": workspace_revision(case)})
@@ -2266,8 +2287,9 @@ def api_workspace_attachment_upload(case_id):
     if category == "proof" and proof_type not in ("invoice", "repair_proof", "receipt", "other"):
         return jsonify({"error":"Invalid proof type."}), 400
     description = str(request.form.get("description") or "").strip()[:500]
-    content = file.stream.read(15*1024*1024+1)
-    if len(content)>15*1024*1024: return jsonify({"error":"File exceeds 15 MB."}), 413
+    limit = (50 if extension in (".mp4", ".mov", ".webm") else 15) * 1024 * 1024
+    content = file.stream.read(limit + 1)
+    if len(content) > limit: return jsonify({"error": f"File exceeds {limit // (1024*1024)} MB."}), 413
     attachment_id = uuid.uuid4().hex
     folder = DATA_DIR / "workspace_uploads" / case_id
     folder.mkdir(parents=True, exist_ok=True)
@@ -2434,6 +2456,30 @@ def _case_telegram_media(c):
                        "previewable": bool(BOT_TOKEN)})
     return result
 
+@app.route("/api/workspace/cases/<case_id>/telegram-media/<int:index>", methods=["DELETE"])
+def api_workspace_telegram_media_delete(case_id, index):
+    actor, error = _workspace_actor()
+    if error:
+        return error
+    from backend.storage.case_store import workspace_telegram_media_remove
+    try:
+        removed = workspace_telegram_media_remove(actor, case_id, index)
+        file_id = (str(removed[1]) if isinstance(removed, (tuple, list)) and len(removed) > 1
+                   else str(removed.get("file_id") or removed.get("id") or "") if isinstance(removed, dict) else "")
+        if file_id:
+            cache_key = hashlib.sha256(file_id.encode()).hexdigest()
+            cache_dir = DATA_DIR / "telegram_media_cache"
+            (cache_dir / (cache_key + ".bin")).unlink(missing_ok=True)
+            (cache_dir / (cache_key + ".json")).unlink(missing_ok=True)
+        return jsonify({"ok": True, "message": "Telegram attachment removed from this case."})
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except Exception:
+        logger.exception("Unable to remove Telegram attachment reference")
+        return jsonify({"error": "Could not remove the attachment. Try again."}), 503
+
 @app.route("/api/cases/<case_id>/media/<int:index>")
 def api_case_telegram_media(case_id, index):
     """Authenticated, bounded Telegram file proxy for report previews.
@@ -2462,37 +2508,103 @@ def api_case_telegram_media(case_id, index):
             return jsonify({"error": "Attachment unavailable."}), 404
         if kind not in ("photo", "video", "document") or not file_id or len(file_id) > 512:
             return jsonify({"error": "Attachment unavailable."}), 404
+        # Cache successful downloads on the existing persistent volume. This avoids
+        # expired Telegram download URLs and repeated requests for the same file.
+        cache_key = hashlib.sha256(file_id.encode()).hexdigest()
+        cache_dir = DATA_DIR / "telegram_media_cache"
+        cache_path = cache_dir / (cache_key + ".bin")
+        meta_path = cache_dir / (cache_key + ".json")
+        if cache_path.is_file() and meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                if cache_path.stat().st_size <= 20 * 1024 * 1024:
+                    return send_file(cache_path, mimetype=meta.get("mime", "application/octet-stream"),
+                                     as_attachment=False, download_name=meta.get("filename", "attachment"),
+                                     max_age=300)
+            except (OSError, ValueError):
+                logger.warning("Cached Telegram file is damaged; retrying upstream")
+        import urllib.error
+        from time import sleep
         info_url = "https://api.telegram.org/bot" + BOT_TOKEN + "/getFile?" + urllib.parse.urlencode({"file_id": file_id})
-        with urllib.request.urlopen(info_url, timeout=12) as resp:
-            info = json.loads(resp.read(32768))
-        if not info.get("ok") or not isinstance(info.get("result"), dict):
-            return jsonify({"error": "Telegram file unavailable."}), 502
+        info = None
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(info_url, timeout=15) as resp:
+                    info = json.loads(resp.read(32768))
+                break
+            except urllib.error.HTTPError as exc:
+                # Telegram responds HTTP 400 for videos above the public Bot API
+                # download limit, before returning file_size / file_path.
+                message = ""
+                try:
+                    detail = json.loads(exc.read(8192))
+                    message = str(detail.get("description", "")).lower()
+                except (ValueError, OSError):
+                    pass
+                if "too big" in message or "too large" in message or "file is too" in message:
+                    return jsonify({"error": "This Telegram video exceeds the 20 MB Bot API download limit. Re-upload the original video directly to this case (up to 50 MB for videos), or compress it first.", "code": "telegram_file_too_large"}), 413
+                if exc.code in (429, 500, 502, 503, 504) and attempt == 0:
+                    sleep(0.4)
+                    continue
+                if exc.code in (400, 404):
+                    return jsonify({"error": "Telegram no longer provides this file to the bot. Ask the sender to re-upload the original to the case.", "code": "telegram_file_unavailable"}), 404
+                logger.warning("Telegram getFile failed with HTTP %s", exc.code)
+                return jsonify({"error": "Telegram is temporarily unable to provide this file. Retry shortly.", "code": "telegram_upstream"}), 502
+            except (TimeoutError, urllib.error.URLError) as exc:
+                if attempt == 0:
+                    sleep(0.4)
+                    continue
+                logger.warning("Telegram getFile network failure: %s", type(exc).__name__)
+                return jsonify({"error": "Telegram connection timed out. Please retry.", "code": "telegram_timeout"}), 504
+        if not info or not info.get("ok") or not isinstance(info.get("result"), dict):
+            return jsonify({"error": "Telegram file reference is unavailable. Ask the sender to re-upload the original.", "code": "telegram_file_unavailable"}), 404
         result = info["result"]
         if int(result.get("file_size") or 0) > 20 * 1024 * 1024:
-            return jsonify({"error": "Telegram file is too large to preview."}), 413
+            return jsonify({"error": "This Telegram video exceeds the 20 MB Bot API download limit. Re-upload the original directly to the case (up to 50 MB for videos), or compress it first.", "code": "telegram_file_too_large"}), 413
         file_path = str(result.get("file_path") or "")
         if not file_path or file_path.startswith("/") or ".." in file_path.split("/") or "://" in file_path:
-            return jsonify({"error": "Invalid Telegram file path."}), 502
+            return jsonify({"error": "Telegram returned an invalid file path.", "code": "telegram_invalid_path"}), 502
         safe_path = "/".join(urllib.parse.quote(segment, safe="") for segment in file_path.split("/"))
         download_url = "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + safe_path
-        with urllib.request.urlopen(download_url, timeout=25) as resp:
-            content = resp.read(20 * 1024 * 1024 + 1)
+        content = None
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(download_url, timeout=40) as resp:
+                    content = resp.read(20 * 1024 * 1024 + 1)
+                break
+            except (urllib.error.URLError, TimeoutError) as exc:
+                if attempt == 0:
+                    sleep(0.4)
+                    continue
+                logger.warning("Telegram file download failed: %s", type(exc).__name__)
+                return jsonify({"error": "Telegram video download timed out. Retry or upload the original to the case.", "code": "telegram_timeout"}), 504
+        if content is None:
+            return jsonify({"error": "Telegram video could not be downloaded. Please retry.", "code": "telegram_upstream"}), 502
         if len(content) > 20 * 1024 * 1024:
-            return jsonify({"error": "Telegram file is too large to preview."}), 413
+            return jsonify({"error": "This Telegram file exceeds the 20 MB Bot API download limit. Re-upload the original directly to the case.", "code": "telegram_file_too_large"}), 413
         extension = Path(file_path).suffix.lower()
         mime = {".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png",
                 ".webp":"image/webp", ".gif":"image/gif", ".pdf":"application/pdf",
-                ".mp4":"video/mp4", ".mov":"video/quicktime", ".txt":"text/plain"}.get(extension)
+                ".mp4":"video/mp4", ".mov":"video/quicktime", ".webm":"video/webm", ".txt":"text/plain"}.get(extension)
         if not mime:
             mime = {"photo":"image/jpeg", "video":"video/mp4"}.get(kind, "application/octet-stream")
         filename = Path(file_path).name.replace('"', '')[:160] or (kind + extension)
-        disposition = "inline" if mime.startswith("image/") or mime.startswith("video/") or mime == "application/pdf" else "attachment"
+        # Cache best-effort. A missing or read-only volume must not break previews.
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            temp_path = cache_dir / (cache_key + ".tmp")
+            temp_path.write_bytes(content)
+            os.replace(temp_path, cache_path)
+            meta_path.write_text(json.dumps({"mime": mime, "filename": filename}), encoding="utf-8")
+        except OSError:
+            logger.warning("Unable to cache Telegram attachment on persistent volume")
+        disposition = "inline" if mime.startswith(("image/", "video/")) or mime == "application/pdf" else "attachment"
         return Response(content, mimetype=mime, headers={
             "Content-Disposition": disposition + '; filename="' + filename + '"',
             "Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
     except Exception:
-        logger.error("Telegram report media preview failed (upstream error)")
-        return jsonify({"error": "Unable to retrieve Telegram attachment."}), 502
+        logger.exception("Telegram report media preview failed")
+        return jsonify({"error": "Unable to retrieve this Telegram attachment. Retry or re-upload the original to the case.", "code": "telegram_upstream"}), 502
 
 @app.route("/api/case")
 def api_case_detail():
@@ -2531,6 +2643,7 @@ def api_case_detail():
                     "priority":         c.get("priority",""),
                     "pickup":           c.get("pickup",""),
                     "delivery":         c.get("delivery",""),
+                    "part_number":      c.get("part_number", "") or (c.get("report_data") or {}).get("part_number", ""),
                     "comments":         c.get("comments",""),
                     "location":         c.get("location",""),
                     "setpoint":         c.get("setpoint",""),
@@ -3023,7 +3136,7 @@ def api_export():
     preferred=["id","driver_name","driver_username","group_name","agent_name","agent_username","status",
       "opened_at","assigned_at","closed_at","response_secs","resolution_secs","description","notes",
       "vehicle_type","unit_number","report_driver","issue_text","load_type","location","priority",
-      "pickup","delivery","comments","setpoint","current_temp","temp_recorder","resolution","solution",
+      "pickup","delivery","comments","setpoint","current_temp","temp_recorder","part_number","resolution","solution",
       "close_notes","closing_notes","resolution_notes","parts_replaced","replaced_parts",
       "replaced_part_numbers","parts_recorded_at","report_text","report_data","media","report_msg_id"]
     discovered=set()

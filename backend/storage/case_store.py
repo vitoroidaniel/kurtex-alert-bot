@@ -280,9 +280,14 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     "vehicle_type": payload["vehicle_type"], "unit_number": payload["unit_number"],
                     "report_driver": payload["driver"], "issue_text": payload["issue"],
                     "location": payload.get("location", ""), "priority": payload["priority"],
+                    "load_type": payload.get("load_type", ""),
+                    "pickup": payload.get("pickup", ""), "delivery": payload.get("delivery", ""),
+                    "setpoint": payload.get("setpoint", ""), "current_temp": payload.get("current_temp", ""),
+                    "temp_recorder": payload.get("temp_recorder", ""),
+                    "part_number": payload.get("part_number", ""),
                     "comments": payload.get("comments", ""), "notes": None, "media": [],
                     "source": "workspace", "created_by_id": actor["id"],
-                    "workspace_request_id": payload["request_id"], "report_data": dict(payload)}
+                    "workspace_request_id": payload["request_id"], "report_data": {**payload, "load": payload.get("load_type", "")}}
             cases.append(case)
         else:
             case = next((c for c in cases if c.get("id") == case_id), None)
@@ -340,9 +345,17 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 case.setdefault("workspace_history", []).append({"action": "stage", "author": actor["name"],
                     "from": previous, "to": payload["stage"], "created_at": now})
             elif payload["action"] == "edit":
-                case.update(payload["fields"])
+                fields = dict(payload["fields"])
+                # Keep the stored case consistent with Telegram load rules.
+                new_load = fields.get("load_type", case.get("load_type") or (case.get("report_data") or {}).get("load", ""))
+                new_equipment = fields.get("vehicle_type", case.get("vehicle_type", ""))
+                if new_load == "Empty":
+                    fields.update({key: "" for key in ("pickup", "delivery", "setpoint", "current_temp", "temp_recorder")})
+                elif new_load == "" or new_equipment != "reefer":
+                    fields.update({key: "" for key in ("setpoint", "current_temp", "temp_recorder")})
+                case.update(fields)
                 if isinstance(case.get("report_data"), dict):
-                    for key, value in payload["fields"].items():
+                    for key, value in fields.items():
                         report_key = {"report_driver": "driver", "load_type": "load", "group_name": "group"}.get(key, key)
                         if report_key in case["report_data"]:
                             case["report_data"][report_key] = value
@@ -554,6 +567,31 @@ def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None):
         _save(CASES_FILE, cases, strict=True)
         return removed
 
+
+def workspace_telegram_media_remove(actor, case_id: str, index: int):
+    """Remove a Telegram media reference from a case with the same ACL as case files.
+
+    This removes the attachment from Kurtex only; it cannot delete a Telegram message.
+    """
+    with _FILE_LOCK:
+        cases = _load(CASES_FILE, strict=True)
+        case = next((c for c in cases if c.get("id") == case_id and is_maintenance_report(c)), None)
+        if not case:
+            raise LookupError("Case not found.")
+        if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
+            raise PermissionError("You cannot manage this case.")
+        media = case.get("media") or []
+        if not isinstance(media, list) or not 0 <= index < len(media):
+            raise LookupError("Telegram attachment not found.")
+        removed = media.pop(index)
+        case["media"] = media
+        case["updated_at"] = now_iso()
+        case.setdefault("workspace_history", []).append({
+            "action": "telegram_attachment_removed", "author": actor.get("name", "Team member"),
+            "created_at": now_iso(), "media_type": str(removed[0] if isinstance(removed, (list, tuple)) and removed else removed.get("type", "") if isinstance(removed, dict) else "")[:30]
+        })
+        _save(CASES_FILE, cases, strict=True)
+        return removed
 
 def workspace_attachment_lookup(case_id, attachment_id):
     with _FILE_LOCK:

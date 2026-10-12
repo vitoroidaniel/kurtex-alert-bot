@@ -138,3 +138,10 @@ The Developer role remains excluded from automatic alert notifications by existi
 - Proof additions/removals are separately recorded in case history.
 - Uploads and deletions retain existing case-owner/developer authorization and CSRF requirements; reads retain existing Cases permission checks.
 - Desktop v165 is required for the new proof gallery and viewer. Preserve the Railway persistent data volume.
+
+## v157 - Telegram media handling and case file deletion
+Authorized case agents/admins may remove Telegram media references from Kurtex; original Telegram messages are unaffected. Better error details for oversized/unavailable videos, retry for temporary errors, persistent cache of successfully downloaded files. Deploy before Desktop v169 / Mobile v150.
+
+
+### v158 - Website maintenance report creation
+New optional load/route/reefer temperature/part fields in POST /api/workspace/cases. Deploy before desktop v170.

@@ -43,7 +43,7 @@ class ProofStorageTests(unittest.TestCase):
     def test_api_validation_contract(self):
         source=(ROOT/'api/server.py').read_text()
         for expected in ('"category"','"proof_type"','"repair_proof"','"invoice"','"receipt"','"description"',
-                         'if category not in ("attachment", "proof")', 'if len(content)>15*1024*1024'):
+                         'if category not in ("attachment", "proof")', 'if len(content) > limit'):
             self.assertIn(expected,source)
 
 if __name__=='__main__':unittest.main()
