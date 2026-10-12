@@ -211,13 +211,15 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("This case is no longer active.", reply_markup=None)
         return ConversationHandler.END
 
-    # Block if agent is mid-report on another case
+    # A previous draft must not permanently lock the user out of reporting
+    # another case after a role edit or interrupted/restarted conversation.
+    # Explicitly pressing Report on a different case starts a fresh draft.
     existing_case_id = ctx.user_data.get("report_case_id")
     if existing_case_id and existing_case_id != case_id:
-        existing = get_case(existing_case_id)
-        if existing and existing["status"] in ("assigned", "reported"):
-            await query.answer("Finish your current report first.", show_alert=True)
-            return ConversationHandler.END
+        logger.info("[REPORT] Switching draft user=%s from_case=%s to_case=%s",
+                    update.effective_user.id, existing_case_id, case_id)
+        for key in ("report", "report_awaiting", "editing_field"):
+            ctx.user_data.pop(key, None)
 
     # Always use the Telegram chat conversation. Never open a Web App/modal.
     # Standard report flow in the Telegram chat, regardless of public URLs.
@@ -251,6 +253,17 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     vtype = query.data.split("|")[1]
     report_case_id = ctx.user_data.get("report_case_id")
     report_handler = ctx.user_data.get("report_handler")
+    # Old inline keyboards can survive a restart even if the in-memory draft
+    # was lost before persistence was enabled. Never create a phantom report.
+    if not report_case_id:
+        logger.warning("[REPORT] TYPE without active case user=%s", update.effective_user.id)
+        await _missing_report_session(query)
+        return ConversationHandler.END
+    from backend.storage.case_store import get_case
+    case = get_case(report_case_id)
+    if not case or case.get("status") not in ("assigned", "reported"):
+        await _missing_report_session(query)
+        return ConversationHandler.END
     ctx.user_data["report"] = {"media": [], "vehicle_type": vtype}
     if report_case_id:
         ctx.user_data["report_case_id"] = report_case_id
@@ -756,19 +769,20 @@ async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cb_orphan_report_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Stop Telegram's spinner for a stale report button outside a live conversation."""
     query = update.callback_query
-    await _ack_report_callback(query, "ORPHAN")
     logger.warning(
         "[REPORT] ORPHAN callback=%r user=%s; no active report conversation",
         getattr(query, "data", None),
         update.effective_user.id if update.effective_user else None,
     )
+    # Answer only once. A previous generic ACK suppressed the visible warning
+    # on some Telegram clients, leaving the button looking unresponsive.
     try:
         await query.answer(
             "This report session expired. Open the active case and press Report again.",
             show_alert=True,
         )
     except TelegramError:
-        pass
+        logger.warning("[REPORT] Could not acknowledge expired button", exc_info=True)
 
 
 def get_report_conversation():
@@ -776,6 +790,8 @@ def get_report_conversation():
     private_media = filters.ChatType.PRIVATE & (filters.PHOTO | filters.VIDEO | filters.Document.ALL)
 
     return ConversationHandler(
+        name="kurtex_telegram_report_v1",
+        persistent=True,
         # Only actions that can legitimately START/re-enter a report belong in
         # entry_points. Putting every report button here makes allow_reentry=True
         # restart an active conversation before its current-state handler gets a

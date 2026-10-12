@@ -117,3 +117,16 @@ Deploy Bot v151 **before** Desktop v158. This is backward compatible with the ex
 - New cases created via + under an agent are assigned **atomically to that agent**, with server-side role checks. Managers can create for other agents; non-managers may create for themselves.
 - Drag-and-drop uses the **left mouse button**. Drag a card to a stage, agent, or Done. Done asks for confirmation, then closes the case and removes it from the active board.
 - The bot does not ask for shop information or amount; those remain dashboard-only.
+
+
+## v154 - Telegram role changes and report continuation
+
+- Role changes in the website preserve the same numeric Telegram account and do not reset its bot authorization.
+- User edits and Telegram username refreshes now share an atomic read/write lock, avoiding concurrent edits overwriting roles.
+- Report drafts and conversation state persist to `DATA_DIR/telegram_report_sessions.pickle` (Railway volume) across ordinary redeploys.
+- Unauthorized Telegram button clicks display an explanation rather than spinning without feedback.
+- Report conversations remain in Telegram chat. No additional questions (Shop Info or Amount) were added.
+
+**Important:** Set `DATA_DIR` to the existing persistent Railway volume. Sessions that were already lost before this update cannot be reconstructed. If a user is mid-report when this version first deploys, they should open `/mycases` and press Report again.
+
+The Developer role remains excluded from automatic alert notifications by existing policy, but can use bot commands.

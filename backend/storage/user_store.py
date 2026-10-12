@@ -12,12 +12,14 @@ Data stored at DATA_DIR/users.json (Railway Volume).
 import json
 import logging
 import os
+import threading
 from pathlib import Path
 
 logger   = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 USERS_FILE = DATA_DIR / "users.json"
+_USERS_LOCK = threading.RLock()
 
 VALID_ROLES = {"developer", "super_admin", "agent"}
 
@@ -32,12 +34,29 @@ def _load() -> dict:
 
 
 def _save(users: dict) -> None:
-    tmp = USERS_FILE.with_suffix(".tmp")
+    # Unique temporary name: concurrent API and bot threads must never share a
+    # single .tmp file. os.replace makes the completed JSON update atomic.
+    tmp = USERS_FILE.with_name(f".users.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         tmp.write_text(json.dumps(users, indent=2), encoding="utf-8")
-        tmp.replace(USERS_FILE)
-    except Exception as e:
-        logger.error(f"Failed to save users: {e}")
+        os.replace(tmp, USERS_FILE)
+    except Exception:
+        logger.exception("Failed to save users")
+        raise
+    finally:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _user_transaction(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        with _USERS_LOCK:
+            return fn(*args, **kwargs)
+    return wrapped
 
 
 def get_user(user_id: int) -> dict | None:
@@ -48,6 +67,7 @@ def get_all_users() -> dict:
     return _load()
 
 
+@_user_transaction
 def add_user(user_id: int, name: str, username: str, role: str) -> bool:
     if role not in VALID_ROLES:
         return False
@@ -62,6 +82,7 @@ def add_user(user_id: int, name: str, username: str, role: str) -> bool:
     return True
 
 
+@_user_transaction
 def remove_user(user_id: int) -> bool:
     users = _load()
     if str(user_id) not in users:
@@ -72,6 +93,7 @@ def remove_user(user_id: int) -> bool:
     return True
 
 
+@_user_transaction
 def edit_role(user_id: int, role: str) -> bool:
     if role not in VALID_ROLES:
         return False
@@ -85,6 +107,7 @@ def edit_role(user_id: int, role: str) -> bool:
 
 
 
+@_user_transaction
 def edit_user(user_id: int, name: str, username: str, role: str) -> bool:
     """Update an existing user's display details and role without changing Telegram ID."""
     if role not in VALID_ROLES:
@@ -93,16 +116,19 @@ def edit_user(user_id: int, name: str, username: str, role: str) -> bool:
     key = str(user_id)
     if key not in users:
         return False
-    users[key] = {
+    # Preserve any extra account metadata. Role changes must not recreate the
+    # Telegram identity or accidentally discard other stored user settings.
+    users[key].update({
         "name": name.strip(),
         "username": (username or "").strip().lstrip("@"),
         "role": role,
-    }
+    })
     _save(users)
     logger.info("User updated: %s (%s) as %s", user_id, name, role)
     return True
 
 
+@_user_transaction
 def sync_telegram_username(user_id: int, username: str) -> bool:
     """Refresh an authorized user's Telegram username from a live Telegram update.
 

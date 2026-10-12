@@ -18,7 +18,7 @@ from telegram.constants import ChatAction
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     CallbackQueryHandler, filters, TypeHandler,
-    ApplicationHandlerStop,
+    ApplicationHandlerStop, PicklePersistence, PersistenceInput,
 )
 
 from backend.core.config import config
@@ -182,13 +182,24 @@ async def auth_middleware(update: Update, ctx):
             raise ApplicationHandlerStop
         return
 
-    # Private chat — must be in user_store
+    # Private chat — must be in user_store.  Inline buttons need an explicit
+    # callback acknowledgement; otherwise Telegram spins indefinitely and the
+    # user cannot tell an account/role problem from a broken Report button.
     if not is_authorized(user.id):
-        if update.message:
+        if update.callback_query:
+            try:
+                await update.callback_query.answer(
+                    "Your Telegram account is not authorized. Ask an admin to check your numeric Telegram ID.",
+                    show_alert=True,
+                )
+            except Exception:
+                logger.exception("Could not acknowledge unauthorized callback user=%s", user.id)
+        elif update.message:
             await update.message.reply_text(
                 "⛔ You are not authorized to use this bot.\n"
                 "Contact an administrator for access."
             )
+        logger.warning("[AUTH] Rejected Telegram interaction user_id=%s chat_type=%s", user.id, getattr(chat, 'type', None))
         raise ApplicationHandlerStop
 
 
@@ -405,8 +416,9 @@ def _register_sigterm(application: Application):
                             await application.bot.send_message(
                                 uid,
                                 "⚠️ *Bot is restarting.*\n\n"
-                                "Your in-progress report was not saved.\n"
-                                "Use /mycases when the bot comes back online.",
+                                "Your in-progress report is saved periodically. "
+                                "When the bot returns, try continuing the report. "
+                                "If the session has expired, open /mycases and press Report again.",
                                 parse_mode="Markdown",
                             )
                         except Exception:
@@ -453,11 +465,24 @@ def main():
         pool_timeout=15.0,
     )
 
+    # Persist Telegram Report conversations and their per-user drafts on the
+    # Railway volume. Role edits through the dashboard do not clear this data,
+    # and a normal Railway redeploy no longer discards the Report button state.
+    # Bot/chat data are intentionally excluded: the alert handler already has
+    # its own durable JSON storage, and contains runtime-only asyncio objects.
+    report_persistence = PicklePersistence(
+        filepath=Path(config.DATA_DIR) / "telegram_report_sessions.pickle",
+        store_data=PersistenceInput(
+            user_data=True, chat_data=False, bot_data=False, callback_data=False,
+        ),
+        update_interval=5,
+    )
     app = (
         Application.builder()
         .token(config.TELEGRAM_TOKEN)
         .request(bot_request)
         .get_updates_request(updates_request)
+        .persistence(report_persistence)
         .post_init(post_init)
         .build()
     )
