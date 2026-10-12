@@ -13,7 +13,8 @@ from backend.ai.ai_learning import LearningStore
 from backend.ai.ai_learning_routes import register_learning_routes
 from backend.ai.fleet_knowledge import FleetKnowledgeStore
 from backend.ai.ai_research import search_research
-from backend.ai.ai_video import process_video, transcribe_audio, MAX_VIDEO_BYTES
+from backend.ai.ai_video import process_video, transcribe_audio, transcribe_audio_with_metadata, MAX_VIDEO_BYTES
+from backend.ai.ai_intent import response_policy, retrieval_query as multilingual_retrieval_query, classify_task, TASK_WORDS
 from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, knowledge_excerpt, COMPONENTS
 
 from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chicago_timestamp
@@ -233,7 +234,7 @@ KURTEX_AI_MODEL=os.getenv("KURTEX_AI_MODEL","@cf/meta/llama-4-scout-17b-16e-inst
 
 KURTEX_AI_SYSTEM = """You are Kurtex Maintenance AI, a diagnostic assistant for a commercial truck, trailer and reefer fleet.
 Act like an experienced senior maintenance advisor while staying careful about uncertainty. Understand English, Romanian,
-Russian, mixed-language mechanic slang, abbreviations and misspellings.
+Russian, Spanish, mixed-language mechanic slang, abbreviations and misspellings.
 Rules:
 - Diagnose systematically: symptom -> likely system -> useful questions/checks -> possible causes -> next action.
 - Never invent a Kurtex case, repair, part number, fault code, measurement, OEM procedure or mechanic finding.
@@ -272,7 +273,7 @@ def _ai_explicit_similar_case_request(message):
     text=str(message or "").lower()
     phrases=("similar case", "similar cases", "previous case", "previous cases", "past case", "past cases",
              "fleet case", "fleet cases", "how did we fix", "how was it solved", "how were they solved",
-             "same issue before", "history cases", "historical cases")
+             "same issue before", "history cases", "historical cases") + TASK_WORDS['history']
     return any(p in text for p in phrases)
 
 def _ai_visual_description_request(message, has_visual=False):
@@ -280,7 +281,7 @@ def _ai_visual_description_request(message, has_visual=False):
     text=str(message or "").lower().strip()
     phrases=("what do you see", "what can you see", "describe this", "describe the image", "describe the picture",
              "what is in this picture", "what's in this picture", "what is in this image", "look at this picture",
-             "look at this image", "what does this show")
+             "look at this image", "what does this show") + TASK_WORDS['visual']
     return any(p in text for p in phrases)
 
 def _cf_ai(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None):
@@ -675,8 +676,9 @@ def _extract_ai_chat_file(f):
         raw=f.read(25_000_001)
         if len(raw)>25_000_000: raise ValueError("Audio must be under 25 MB")
         if not raw: raise ValueError("Audio is empty")
-        transcript=transcribe_audio(raw)
-        return name,{"kind":"audio","mime":f.mimetype or "audio/mpeg","transcript":transcript,"audio_status":"transcribed" if transcript else "no_speech","blob":chat_store.put_blob(raw)}
+        result=transcribe_audio_with_metadata(raw)
+        transcript=result['text']
+        return name,{"kind":"audio","mime":f.mimetype or "audio/mpeg","transcript":transcript,"audio_status":"transcribed" if transcript else "no_speech","audio_language":result.get('language') or "","blob":chat_store.put_blob(raw)}
     raw=f.read(5_000_001)
     if len(raw)>5_000_000: raise ValueError("File is too large (5 MB max)")
     if ext in (".jpg",".jpeg",".png",".webp"):
@@ -787,7 +789,7 @@ def api_ai_chat_item(chat_id):
     chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if not chat:return jsonify({"error":"Chat not found"}),404
     if request.method=="GET":
-        safe=dict(chat); safe["attachments"]=[{k:a.get(k) for k in ("id","name","kind","mime","created_at","duration","audio_status","warning") if a.get(k) is not None} for a in (chat.get("attachments") or [])]
+        safe=dict(chat); safe["attachments"]=[{k:a.get(k) for k in ("id","name","kind","mime","created_at","duration","audio_status","audio_language","visual_status","frames_sampled","frame_timestamps","warning") if a.get(k) is not None} for a in (chat.get("attachments") or [])]
         return jsonify(safe)
     if request.method=="DELETE":
         _save_user_chats([c for c in chats if str(c.get("id"))!=chat_id]); return jsonify({"ok":True})
@@ -814,7 +816,7 @@ def api_ai_chat_file(chat_id):
     except Exception as e:return jsonify({"error":str(e)}),400
     item={"id":uuid.uuid4().hex,"name":name,"created_at":_now_iso(),**parsed}
     chat.setdefault("attachments",[]).append(item);chat["updated_at"]=_now_iso();_save_user_chats(chats)
-    return jsonify({"id":item["id"],"name":name,"kind":item.get("kind"),"mime":item.get("mime"),"audio_status":item.get("audio_status"),"warning":item.get("warning")}),201
+    return jsonify({"id":item["id"],"name":name,"kind":item.get("kind"),"mime":item.get("mime"),"audio_status":item.get("audio_status"),"audio_language":item.get("audio_language"),"visual_status":item.get("visual_status"),"frames_sampled":item.get("frames_sampled"),"frame_timestamps":item.get("frame_timestamps"),"duration":item.get("duration"),"warning":item.get("warning"),"processing_status":"ready"}),201
 
 @app.route("/api/ai/chats/<chat_id>/files/<file_id>",methods=["GET","DELETE"])
 @ai_serialized
@@ -854,7 +856,7 @@ def api_ai_chat_context(chat_id):
 @app.route("/api/ai/status")
 def api_ai_status():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
-    return jsonify({"configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),"model":KURTEX_AI_MODEL,"can_train":_ai_is_trainer(),"knowledge_count":len(_read_ai_knowledge())})
+    return jsonify({"configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),"model":KURTEX_AI_MODEL,"can_train":_ai_is_trainer(),"knowledge_count":len(_read_ai_knowledge()),"languages":["en","ro","ru","es"],"video_frame_sampling":True,"speech_configured":bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN)})
 
 
 def _ai_web_search(query, limit=7):
@@ -877,7 +879,7 @@ def api_ai_chat():
                 if turn.get("request_id")!=request_id:continue
                 if turn.get("content")!=message or (chat_id and saved_chat.get("id")!=chat_id):return jsonify(error="Request ID conflicts with an earlier message"),409
                 answer=saved[index+1]
-                return jsonify(answer=answer.get("content",""),message_id=answer.get("id"),chat_id=saved_chat["id"],title=saved_chat.get("title"),sources=answer.get("sources",[]),research_status=answer.get("research_status"),similar_cases=answer.get("similar_cases",[]),parts=answer.get("parts",[]),replayed=True)
+                return jsonify(answer=answer.get("content",""),message_id=answer.get("id"),chat_id=saved_chat["id"],title=saved_chat.get("title"),sources=answer.get("sources",[]),research_status=answer.get("research_status"),similar_cases=answer.get("similar_cases",[]),parts=answer.get("parts",[]),language=answer.get("language","en"),task=answer.get("task","maintenance_question"),replayed=True)
     chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if chat_id and chat is None:
         return jsonify({"error":"Chat not found"}),404
@@ -901,11 +903,16 @@ def api_ai_chat():
             if media.get("kind")=="image":image_items.append(media)
             elif media.get("kind")=="video":
                 image_items.extend([{**frame,"name":media.get("name", "Video")+" - "+frame["name"]} for frame in media.get("frames",[])])
-                driver_reports.append({"media":"video","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"warning":media.get("warning","")})
+                driver_reports.append({"media":"video","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"audio_language":media.get("audio_language",""),"sampled_timestamps":media.get("frame_timestamps",[]),"warning":media.get("warning","")})
             elif media.get("kind")=="audio":
-                driver_reports.append({"media":"audio","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"warning":media.get("warning","")})
+                driver_reports.append({"media":"audio","name":media.get("name"),"transcript":media.get("transcript",""),"audio_status":media.get("audio_status"),"audio_language":media.get("audio_language",""),"warning":media.get("warning","")})
         if len(image_items)>12:return jsonify({"error":"Too many visual inputs. Send one video and up to four photos per message."}),400
         image_urls=[a["data"] for a in image_items if a.get("data")]
+        video_present=any(m.get('kind')=='video' for m in active_media)
+        speech_text=" ".join(str(x.get('transcript') or '')[:2400] for x in driver_reports)
+        response_contract=response_policy(message,has_video=video_present,has_images=bool(image_urls),transcript=speech_text)
+        # An attachment is ready only after frames and speech processing have completed.
+        # Sampling cannot establish motion or events between the extracted timestamps.
         visual_description_only=_ai_visual_description_request(message,bool(image_urls))
         wants_similar_cases=bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(message)
         observations=""
@@ -914,15 +921,19 @@ def api_ai_chat():
             labels="\n".join(str(a.get("name")) for a in image_items)
             observations=_cf_ai([
                 {"role":"system","content":INSPECTION_POLICY},
-                {"role":"user","content":"Inspect all supplied images independently. Report visible defects, location and uncertainty in at most 220 words. Finish with 'Search terms:' and only the observed component/symptom terms. Do not diagnose hidden causes. Labels in image order:\n"+labels+"\nQuestion: "+message}],650,.1,images=image_urls)
+                {"role":"user","content":"Inspect the supplied still images. For video these are timestamped samples, not the whole video. Match each visible observation to its frame label and timestamp. Report concrete components, visible defects and uncertainties in at most 220 words. Do NOT infer motion between samples or speech from frames. Finish with 'Search terms:' and only observed component/symptom terms. Labels in image order:\n"+labels+"\nQuestion: "+message}],650,.1,images=image_urls)
         visual_terms=observations.rsplit("Search terms:",1)[-1][:350] if "Search terms:" in observations else ""
-        retrieval_query=message+" "+visual_terms+" "+" ".join(x["transcript"][:1200] for x in driver_reports)
+        retrieval_query=multilingual_retrieval_query(message+" "+visual_terms,speech_text)
         ctx=_ai_context(retrieval_query,10)
         ctx["visual_observations"]=observations
         ctx["image_labels"]=[a.get("name") for a in image_items]
         ctx["driver_speech_reports"]=driver_reports
+        ctx["media_evidence_note"]="Video is eight sampled still images plus separate speech transcription, not continuous video understanding. Audio language is provider-reported only. Driver statements are not visually verified."
         ctx["similar_cases_requested"]=wants_similar_cases
         ctx["visual_description_only"]=visual_description_only
+        ctx["response_language"]=response_contract["language"]
+        ctx["task_intent"]=response_contract["task"]
+        ctx["video_frame_coverage"]=[{"file":m.get("name"),"timestamps":m.get("frame_timestamps",[]),"duration_seconds":m.get("duration"),"speech_status":m.get("audio_status"),"speech_language":m.get("audio_language") or None} for m in active_media if m.get("kind")=="video"]
         # Chat-scoped context: explicitly attached files and verified knowledge stay with this conversation.
         attachments=[]
         for a in (chat.get("attachments") or [])[-12:]:
@@ -940,7 +951,7 @@ def api_ai_chat():
         ctx["web_search_results"]=research["results"]
         ctx["web_search_status"]=research["status"]
         stage="prompt"
-        messages=[{"role":"system","content":KURTEX_AI_SYSTEM+INSPECTION_POLICY},{"role":"system","content":
+        messages=[{"role":"system","content":KURTEX_AI_SYSTEM+INSPECTION_POLICY+"\n\nTASK RESPONSE CONTRACT:\n"+response_contract["instructions"]},{"role":"system","content":
           "Current Kurtex page: "+page+"\nRead-only Kurtex context follows. Never claim a record exists unless present here.\nKURTEX CONTEXT:\n"+
           json.dumps(ctx,ensure_ascii=False)}, {"role":"system","content":"""Act as a professional maintenance triage assistant. Use the attached image/document, selected Knowledge, Parts Manual, relevant Kurtex history, and WEB SEARCH RESULTS together when they are relevant to the user's actual request.
 
@@ -949,15 +960,11 @@ IMPORTANT INTENT RULES:
 - Similar fleet cases are optional evidence. Discuss them only when similar_cases_requested is true or the user explicitly asks for previous/history/similar cases. Never force a Similar Cases section into an unrelated answer.
 - A simple question deserves a simple direct answer. Use the full diagnostic workflow only for diagnosis/troubleshooting requests.
 
-For a diagnostic request, prefer this workflow:
-1. Quick assessment — 2-4 sentences stating what is observed vs what is only suspected.
-2. Questions to confirm — ask the few highest-value questions (unit make/model, reefer model, fault/alarm code, temperatures/pressures, when symptom started, recent work/damage) only when missing.
-3. Diagnostic checks — only checks relevant to the evidence, usually 2-4. Start with safe/simple checks. For each check state: what to inspect/test -> what result matters -> what that result points to.
-4. Most likely causes — ranked by evidence, not a random list.
-5. Recommended next action — what to do now, when to stop operation/escalate, and what a technician should verify.
-6. Matching parts — only when a verified Parts Manual/Knowledge source explicitly supports the part/number. Never invent a part number.
-7. Similar Kurtex cases — ONLY when similar_cases_requested is true. Present matching cases as clean, arranged TEXT in the AI reply; the website does not render duplicate Similar Fleet Cases cards. For each useful match, keep factual fields concise (Unit, Driver/Group, Reported issue, Resolution, and optionally Resolved by). Resolution must come ONLY from explicit repair/fix text. If missing, write "Resolution: No recorded resolution". When relevant, show explicitly recorded replaced_part_numbers separately as agent-reported replacements, not as a confirmed fix. Never use solved_by/resolved_by/closed_by as the resolution. Never invent a match percentage. Historical cases are evidence, not proof. Explicitly ignore misleading keyword matches (for example tire air leaks when diagnosing a truck/trailer pneumatic air-system leak).
-8. Sources — compact one-line source list only. Do not add blank bullet lines or excessive spacing.
+For a diagnostic request, do NOT print an eight-section template. Start with the immediate answer or safety action, then give at most three evidence-based checks, each with the useful result to look for. Mention likely causes only when supported. Ask one precise follow-up question if an essential model, code, measurement or symptom is missing. Only include parts, history or sources when they answer the request.
+
+For video, state what is actually visible in the sampled frames, referencing timestamps when possible. Separately summarize any transcribed driver speech in its original meaning. A driver claim is not visual proof; a sampled still frame does not establish continuous motion, sound or what happened between frames. If speech transcription failed or was absent, say so only if relevant.
+
+For requested similar Kurtex cases, present concise structured facts (Unit, Driver/Group, Reported issue, Resolution and optionally Resolved by). Resolution must come ONLY from recorded repair text. If absent say "Resolution: No recorded resolution". If relevant, show recorded replaced_part_numbers separately as agent-reported parts, not a confirmed fix. Do not invent match percentages or include unrelated tire-pressure, coolant, oil or refrigerant cases for an air-system leak. Avoid a long raw dump; prioritize useful confirmed fixes.
 
 For images: describe only what is actually visible; do not infer hidden damage as fact. For web results: use them to improve troubleshooting and identify useful technical references, but do not present a search snippet as an OEM procedure. If make/model or alarm code is needed for an exact procedure, ask for it.
 
@@ -967,19 +974,19 @@ Formatting: use clean headings, compact numbered steps, and single-spaced bullet
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
         messages.append({"role":"user","content":message})
         stage="workers_ai"
-        answer=_cf_ai(messages,2200,.1,images=image_urls)
+        answer=_cf_ai(messages,1900,.1,images=image_urls)
         stage="save_chat"
         answer_id=uuid.uuid4().hex
         similar_cases=_ai_similar_case_cards(retrieval_query,5) if wants_similar_cases else []
         part_matches=[] if visual_description_only else (ctx.get("parts_manual_matches") or [])
         history.extend([{"id":uuid.uuid4().hex,"role":"user","content":message,"at":_now_iso(),"attachment_ids":active_ids,"request_id":request_id},
-                        {"id":answer_id,"role":"assistant","content":answer,"at":_now_iso(),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches}])
+                        {"id":answer_id,"role":"assistant","content":answer,"at":_now_iso(),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches,"language":response_contract["language"],"task":response_contract["task"]}])
         chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
         if not chat.get("title") or chat.get("title")=="New maintenance chat":chat["title"]=_chat_title(message)
         _save_user_chats(chats)
         try:learning_store.capture_chat(_ai_user_key(),chat)
         except Exception:logger.exception("Learning capture failed; chat answer remains saved")
-        return jsonify({"message_id":answer_id,"answer":answer,"chat_id":chat["id"],"title":chat["title"],"elapsed_ms":round((time.monotonic()-started)*1000),"retrieval":ctx["retrieval"],"images_analyzed":len(image_urls),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches})
+        return jsonify({"message_id":answer_id,"answer":answer,"chat_id":chat["id"],"title":chat["title"],"elapsed_ms":round((time.monotonic()-started)*1000),"retrieval":ctx["retrieval"],"images_analyzed":len(image_urls),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches,"language":response_contract["language"],"task":response_contract["task"],"video_frames_reviewed":sum(len(m.get("frames") or []) for m in active_media if m.get("kind")=="video")})
     except Exception as e:
         logger.exception("Kurtex AI chat failed at stage=%s: %s",stage,e)
         _notify_user("ai","Kurtex AI unavailable","AI chat failed at "+stage+". Try again or check AI Training diagnostics.","warning")
@@ -2158,7 +2165,7 @@ def api_workspace_attachment_file(case_id,attachment_id):
     from backend.storage.case_store import workspace_attachment_lookup, workspace_attachment_write
     try:
         case,item=workspace_attachment_lookup(case_id,attachment_id)
-        if actor["role"] not in ("developer","super_admin") and str(case.get("agent_id"))!=str(actor["id"]):
+        if request.method == "DELETE" and actor["role"] not in ("developer","super_admin") and str(case.get("agent_id"))!=str(actor["id"]):
             return jsonify({"error":"Access denied."}),403
         path=DATA_DIR/"workspace_uploads"/case_id/(attachment_id+item["extension"])
         if request.method=="DELETE":
@@ -2234,11 +2241,15 @@ def api_cases():
         if status_f:
             cases = [c for c in cases if (c.get("status") or "").lower() == status_f]
         if search:
-            cases = [c for c in cases if
-                     search in (c.get("driver_name") or "").lower() or
-                     search in (c.get("group_name") or "").lower() or
-                     search in (c.get("agent_name") or "").lower() or
-                     search in (c.get("description") or "").lower()]
+            # Workspace global search includes unit IDs, maintenance issues, comments,
+            # and historical notes (not just driver/group/description).
+            needle = search.casefold()
+            searchable = ("unit_number", "issue_text", "driver_name", "report_driver",
+                          "group_name", "agent_name", "description", "comments", "notes")
+            cases = [c for c in cases if any(
+                needle in str(c.get(key) or "").casefold() for key in searchable
+            ) or any(needle in str(n.get("text") or "").casefold()
+                     for n in (c.get("workspace_notes") or []) if isinstance(n, dict))]
         if f == "home_attention":
             cases = sorted(cases, key=lambda c: ((_home_case_attention(c, now) or {}).get("attention_rank", 4),
                                                 -((_home_case_attention(c, now) or {}).get("age_hours") or 0)))
@@ -2265,6 +2276,86 @@ def api_cases():
         logger.error(f"api_cases error: {e}")
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
+
+def _case_telegram_media(c):
+    """Safe public metadata for legacy Telegram report media (never expose file IDs)."""
+    result = []
+    for index, entry in enumerate(c.get("media") or []):
+        kind, file_id, name = "", "", ""
+        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+            kind, file_id = str(entry[0]), str(entry[1])
+        elif isinstance(entry, dict):
+            kind = str(entry.get("type") or entry.get("kind") or "")
+            file_id = str(entry.get("file_id") or entry.get("id") or "")
+            name = str(entry.get("name") or entry.get("file_name") or "")
+        if not file_id or kind not in ("photo", "video", "document"):
+            continue
+        if not name:
+            suffix = {"photo": ".jpg", "video": ".mp4", "document": ""}[kind]
+            name = "Telegram " + kind + " " + str(index + 1) + suffix
+        result.append({"name": name[:160], "type": kind, "index": index,
+                       "previewable": bool(BOT_TOKEN)})
+    return result
+
+@app.route("/api/cases/<case_id>/media/<int:index>")
+def api_case_telegram_media(case_id, index):
+    """Authenticated, bounded Telegram file proxy for report previews.
+
+    Telegram file IDs and the bot token remain on the server. This is read-only.
+    """
+    actor, error = _workspace_actor_read()
+    if error:
+        return error
+    if not BOT_TOKEN:
+        return jsonify({"error": "Telegram media service is not configured."}), 503
+    try:
+        case = next((c for c in load_cases() if c.get("id") == case_id), None)
+        if not case:
+            return jsonify({"error": "Case not found."}), 404
+        media = case.get("media") or []
+        if index < 0 or index >= len(media):
+            return jsonify({"error": "Attachment not found."}), 404
+        entry = media[index]
+        if isinstance(entry, (list, tuple)) and len(entry) >= 2:
+            kind, file_id = str(entry[0]), str(entry[1])
+        elif isinstance(entry, dict):
+            kind = str(entry.get("type") or entry.get("kind") or "")
+            file_id = str(entry.get("file_id") or entry.get("id") or "")
+        else:
+            return jsonify({"error": "Attachment unavailable."}), 404
+        if kind not in ("photo", "video", "document") or not file_id or len(file_id) > 512:
+            return jsonify({"error": "Attachment unavailable."}), 404
+        info_url = "https://api.telegram.org/bot" + BOT_TOKEN + "/getFile?" + urllib.parse.urlencode({"file_id": file_id})
+        with urllib.request.urlopen(info_url, timeout=12) as resp:
+            info = json.loads(resp.read(32768))
+        if not info.get("ok") or not isinstance(info.get("result"), dict):
+            return jsonify({"error": "Telegram file unavailable."}), 502
+        result = info["result"]
+        if int(result.get("file_size") or 0) > 20 * 1024 * 1024:
+            return jsonify({"error": "Telegram file is too large to preview."}), 413
+        file_path = str(result.get("file_path") or "")
+        if not file_path or file_path.startswith("/") or ".." in file_path.split("/") or "://" in file_path:
+            return jsonify({"error": "Invalid Telegram file path."}), 502
+        safe_path = "/".join(urllib.parse.quote(segment, safe="") for segment in file_path.split("/"))
+        download_url = "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + safe_path
+        with urllib.request.urlopen(download_url, timeout=25) as resp:
+            content = resp.read(20 * 1024 * 1024 + 1)
+        if len(content) > 20 * 1024 * 1024:
+            return jsonify({"error": "Telegram file is too large to preview."}), 413
+        extension = Path(file_path).suffix.lower()
+        mime = {".jpg":"image/jpeg", ".jpeg":"image/jpeg", ".png":"image/png",
+                ".webp":"image/webp", ".gif":"image/gif", ".pdf":"application/pdf",
+                ".mp4":"video/mp4", ".mov":"video/quicktime", ".txt":"text/plain"}.get(extension)
+        if not mime:
+            mime = {"photo":"image/jpeg", "video":"video/mp4"}.get(kind, "application/octet-stream")
+        filename = Path(file_path).name.replace('"', '')[:160] or (kind + extension)
+        disposition = "inline" if mime.startswith("image/") or mime.startswith("video/") or mime == "application/pdf" else "attachment"
+        return Response(content, mimetype=mime, headers={
+            "Content-Disposition": disposition + '; filename="' + filename + '"',
+            "Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
+    except Exception:
+        logger.error("Telegram report media preview failed (upstream error)")
+        return jsonify({"error": "Unable to retrieve Telegram attachment."}), 502
 
 @app.route("/api/case")
 def api_case_detail():
@@ -2303,7 +2394,7 @@ def api_case_detail():
                     "setpoint":         c.get("setpoint",""),
                     "current_temp":     c.get("current_temp",""),
                     "temp_recorder":    c.get("temp_recorder",""),
-                    "attachments": [{"name": m.get("name") or m.get("file_name") or "Attachment", "type": m.get("type") or ""} for m in (c.get("media") or []) if isinstance(m,dict)],
+                    "attachments": _case_telegram_media(c),
                     "updated": fmt_dt(c.get("updated_at") or c.get("closed_at") or c.get("reported_at") or c.get("assigned_at") or c.get("opened_at")),
                     "workspace_notes": c.get("workspace_notes") or [],
                     "workspace_attachments": c.get("workspace_attachments") or [],
@@ -3246,10 +3337,12 @@ def api_video_transcript(chat_id,file_id):
     elif request.method=='POST':
         audio_ref=item.get('audio_blob') or (item.get('blob') if item.get('kind')=='audio' else None)
         if not audio_ref:return jsonify(error='No audio is available. Type the driver explanation instead.'),400
-        try:item['transcript']=transcribe_audio(chat_store.blob_path(audio_ref).read_bytes())
+        try:
+            result=transcribe_audio_with_metadata(chat_store.blob_path(audio_ref).read_bytes())
+            item['transcript']=result['text'];item['audio_language']=result.get('language') or ''
         except Exception:return jsonify(error='Speech transcription failed. Please try again or enter the explanation.'),503
         item['audio_status']='transcribed' if item['transcript'] else 'no_speech';item['warning']='';_save_user_chats(chats)
-    return jsonify(transcript=item.get('transcript',''),audio_status=item.get('audio_status'),warning=item.get('warning',''))
+    return jsonify(transcript=item.get('transcript',''),audio_status=item.get('audio_status'),audio_language=item.get('audio_language',''),warning=item.get('warning',''))
 
 register_learning_routes(app,learning_store,chat_store,_ai_user_key,_ai_is_trainer,load_cases,is_testing,ai_serialized)
 

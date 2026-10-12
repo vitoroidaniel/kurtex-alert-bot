@@ -1,4 +1,9 @@
-"""Bounded local video decoding plus Cloudflare speech transcription."""
+"""Bounded video frame sampling and multilingual speech transcription.
+
+A video is represented to the vision model by eight timestamped still frames.
+Speech is transcribed separately; acoustic diagnosis and unsampled moments are
+not claimed. This module never modifies Telegram case/media workflows.
+"""
 import base64
 import json
 import os
@@ -11,8 +16,16 @@ import urllib.request
 
 VIDEO_SLOTS=BoundedSemaphore(2)
 MAX_VIDEO_BYTES=80*1024*1024
+SAMPLED_FRAMES=8
 
-def transcribe_audio(raw):
+
+def transcribe_audio_with_metadata(raw):
+    """Cloudflare Whisper multilingual auto-detection; returns reported language if supplied.
+
+    No forced English setting: the speech model detects Russian, Romanian,
+    English, Spanish and other supported languages. A missing provider language
+    is kept blank rather than guessed.
+    """
     account=os.getenv('CLOUDFLARE_ACCOUNT_ID','').strip()
     token=os.getenv('CLOUDFLARE_API_TOKEN','').strip()
     if not account or not token:raise RuntimeError('Speech transcription is not configured')
@@ -24,7 +37,17 @@ def transcribe_audio(raw):
     with urllib.request.urlopen(request,timeout=45) as response:payload=json.load(response)
     if not payload.get('success',True):raise RuntimeError('Speech provider rejected the request')
     result=payload.get('result') or {}
-    return str(result.get('text') or '').strip()[:16000]
+    if isinstance(result,str):result={'text':result}
+    if not isinstance(result,dict):result={}
+    lang=result.get('language') or result.get('detected_language') or ''
+    if isinstance(lang,dict):lang=lang.get('code') or lang.get('language') or ''
+    return {'text':str(result.get('text') or '').strip()[:16000], 'language':str(lang or '')[:30]}
+
+
+def transcribe_audio(raw):
+    """Legacy API: keep returning a string for existing callers."""
+    return transcribe_audio_with_metadata(raw)['text']
+
 
 def process_video(raw, suffix, transcriber=None):
     if not raw or len(raw)>MAX_VIDEO_BYTES:raise ValueError('Video must be under 80 MB')
@@ -42,30 +65,36 @@ def process_video(raw, suffix, transcriber=None):
             hours,minutes,seconds=map(float,match.groups());duration=hours*3600+minutes*60+seconds
             if not 0<duration<=120:raise ValueError('Use a video up to 2 minutes.')
             frames=[]
-            # Eight views across the full clip. Never claim continuous-video coverage.
-            for i in range(8):
-                timestamp=round(duration*(i+.5)/8,3);target=folder/f'frame-{i}.jpg'
+            # Eight samples across the clip, not continuous video understanding.
+            for i in range(SAMPLED_FRAMES):
+                timestamp=round(duration*(i+.5)/SAMPLED_FRAMES,3);target=folder/f'frame-{i}.jpg'
                 command=common+['-ss',str(timestamp),'-i',str(source),'-an','-frames:v','1','-vf',
                     'scale=1280:1280:force_original_aspect_ratio=decrease','-q:v','3','-y',str(target)]
                 result=subprocess.run(command,capture_output=True,timeout=12)
                 if result.returncode or not target.exists():raise ValueError('Unable to sample this video. Try MP4/H.264.')
                 frames.append({'kind':'image','mime':'image/jpeg','name':f'Video frame {timestamp:.2f}s',
                     'timestamp':timestamp,'data':'data:image/jpeg;base64,'+base64.b64encode(target.read_bytes()).decode()})
-            audio_status='no_audio';transcript='';warning='';audio_bytes=None
+            audio_status='no_audio';transcript='';warning='';audio_bytes=None;audio_language=''
             if 'Audio:' in metadata:
                 wav=folder/'speech.wav'
                 result=subprocess.run(common+['-i',str(source),'-vn','-t','120','-ac','1','-ar','16000','-y',str(wav)],capture_output=True,timeout=25)
                 if result.returncode or not wav.exists():
-                    audio_status='failed';warning='Audio extraction failed. Add the driver explanation as text.'
+                    audio_status='failed';warning='Audio extraction failed. Video frames are ready; add the driver explanation as text.'
                 else:
                     audio_bytes=wav.read_bytes()
                     try:
-                        transcript=(transcriber or transcribe_audio)(audio_bytes)
+                        result=(transcriber or transcribe_audio_with_metadata)(audio_bytes)
+                        if isinstance(result,dict):
+                            transcript=str(result.get('text') or '').strip()[:16000]
+                            audio_language=str(result.get('language') or '')[:30]
+                        else:transcript=str(result or '').strip()[:16000]
                         audio_status='transcribed' if transcript else 'no_speech'
                     except Exception:
-                        audio_status='failed';warning='Speech transcription failed. Retry transcription or type the driver explanation.'
+                        audio_status='failed';warning='Speech transcription failed. Video frames are ready; retry or type the driver explanation.'
             return {'kind':'video','mime':{'.mov':'video/quicktime','.webm':'video/webm'}.get(suffix,'video/mp4'),
-                'duration':duration,'frames':frames,'_audio_bytes':audio_bytes,'transcript':transcript,'audio_status':audio_status,'warning':warning}
+                'duration':duration,'frames':frames,'frames_sampled':len(frames),'frame_timestamps':[f['timestamp'] for f in frames],
+                'visual_status':'frames_ready','_audio_bytes':audio_bytes,'transcript':transcript,
+                'audio_status':audio_status,'audio_language':audio_language,'warning':warning}
     except (subprocess.TimeoutExpired,FileNotFoundError) as exc:
         raise ValueError('Video processing timed out or decoder is unavailable. Try a shorter MP4.') from exc
     finally:VIDEO_SLOTS.release()

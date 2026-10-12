@@ -42,3 +42,31 @@ The existing Telegram commands, API endpoints and case history remain available.
 To run offline regression tests (no Telegram network or token needed): `python tests/test_v146.py`.
 
 **Deployment:** Replace the code in the **existing** `kurtex-bot` service, keep its Railway volume and environment variables. Do not start another bot process with the same token. Desktop and Mobile deployments are not required for this update.
+
+## v147 - Task-focused multilingual AI and video understanding
+
+**AI backend only.** Telegram Report, Close Case, part-number questions, and all Telegram handlers remain exactly as in v146. Deploy this ZIP to the **existing** `kurtex-bot` service (do not create a second Telegram polling instance).
+
+- The existing Cloudflare Workers AI model is retained; there is no separate self-training model or new secret. Task routing selects concise answers for maintenance diagnosis, fault codes, historical cases, part identification and visual/video inspection.
+- Replies follow the agent's request language (English, Romanian, Russian or Spanish) when recognizable, including multilingual maintenance vocabulary expansion when searching English fleet records. A short ambiguous request may default to English. This is prompt-level behavior, not a guarantee of translation accuracy.
+- Video uploads (MP4, MOV, WEBM; up to 80 MB and 2 minutes) are decoded server-side with `imageio-ffmpeg` into **8 timestamped still frames**. Frames go to the existing vision-capable model, with speech transcribed separately through Cloudflare Whisper. No continuous-motion tracking or audio-acoustic diagnosis is claimed. An image/frame observation must not be presented as something the driver said, or vice versa.
+- Upload JSON and chat attachment metadata now include `processing_status`, `frames_sampled`, `frame_timestamps`, `duration`, `audio_status`, `audio_language` (when the provider supplies it), and `warning` (if audio fails but frames succeed). If the speech provider is unavailable, visual analysis remains usable with an explicit warning.
+- Chat responses now include the detected `language`, `task` and `video_frames_reviewed`. Video timestamps and transcription are passed to the model as separate evidence. Existing conversation and case schemas remain compatible.
+- Cloudflare configuration: keep `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `KURTEX_AI_MODEL` unchanged. The optional `KURTEX_SPEECH_MODEL` defaults to `@cf/openai/whisper-large-v3-turbo`. Live speech accuracy, model vision capability and costs depend on Cloudflare service configuration.
+- No automatic retraining or storing private video data with external search providers is added. Media still uses the existing bot AI chat store and its persistent `DATA_DIR` volume. Keep your existing data volume attached.
+
+**Verification:** `PYTHONPATH=. python -m unittest discover -s tests -p test_v147_ai.py` runs nine offline tests, including real FFmpeg frame extraction, mock multilingual speech transcription, language detection, task selection, and cross-language retrieval. Actual Cloudflare inference and Railway integration require post-deploy testing.
+
+**Deploy order:** bot v147 first, then Desktop v147 and Mobile v147. Older Desktop/Mobile versions can still use the bot's existing AI endpoints.
+
+## v148 - Case Workspace search and attachment preview API
+
+- Expands existing read-only `/api/cases?filter=all&search=` to include unit number, maintenance issue, reported driver, comments and workspace note text (including multilingual casefold matching).
+- Returns original Telegram report media as attachment metadata (`name`, `type`, `index`, `previewable`) without exposing Telegram file IDs.
+- Adds authenticated, read-only `/api/cases/<case_id>/media/<index>` proxy to retrieve Telegram photos, videos and documents from the existing BOT_TOKEN, with a 20 MB maximum, timeout, MIME filtering and sanitized file paths.
+- Allows users who have Cases access to **read** managed workspace attachments in Case View and Report View. Existing upload/delete permissions and CSRF protections are unchanged.
+- No changes to Telegram Report, Close Case, part-number capture, AI model or message handlers.
+
+Deploy this bot ZIP before Desktop v148 for full historical search and original Telegram attachment previews. Preserve all existing Railway variables and persistent volumes. Telegram media may be unavailable if Telegram no longer provides the file. No new environment variables are required.
+
+Validation: Python syntax and isolated unit tests for media metadata, bounded proxy retrieval and missing attachment handling passed. Live Telegram network calls and Railway authentication have not been tested.
