@@ -102,3 +102,18 @@ Companion backend update for Desktop v158:
 - All writes remain atomic on the existing volume-backed `cases.json`, with revision conflict protection and workspace history. No database migration is needed.
 
 Deploy Bot v151 **before** Desktop v158. This is backward compatible with the existing Mobile app and Telegram Report flow.
+
+
+## v152 API update for Desktop v161
+
+- `/api/cases?filter=workspace` returns only active `reported` maintenance cases.
+- `move` workspace action atomically updates assigned agent and workflow stage, retaining original Telegram report data and audit history.
+- Adds `meijer` as a workflow stage; Shop Info and Amount remain dashboard-only fields.
+- No new Telegram prompts or changes to bot command flow.
+
+
+## Bot v153: new reported cases / agent workflow (Oct 12, 2026)
+- Case Workspace includes **only reports submitted on/after 2026-10-12 Chicago local date**. Older reports remain accessible in Cases history. This is not a migration or deletion.
+- New cases created via + under an agent are assigned **atomically to that agent**, with server-side role checks. Managers can create for other agents; non-managers may create for themselves.
+- Drag-and-drop uses the **left mouse button**. Drag a card to a stage, agent, or Done. Done asks for confirmation, then closes the case and removes it from the active board.
+- The bot does not ask for shop information or amount; those remain dashboard-only.

@@ -2078,7 +2078,7 @@ def api_workspace_agents():
                      for u in get_all_user_dicts()
                      if u.get("role") in ("agent", "super_admin") and u.get("name")),
                     key=lambda a: a["name"].casefold())
-    return jsonify({"agents": agents, "can_reassign_any": actor["role"] in ("developer", "super_admin")})
+    return jsonify({"agents": agents, "current_user_id": actor["id"], "can_reassign_any": actor["role"] in ("developer", "super_admin")})
 
 
 @app.route("/api/workspace/cases", methods=["POST"])
@@ -2103,10 +2103,22 @@ def api_workspace_write(case_id=None):
                        for key in ("unit_number", "driver", "issue", "group", "location", "comments", "request_id")}
             if data.get("vehicle_type") not in ("truck", "trailer", "reefer") or data.get("priority") not in ("low", "medium", "high", "normal"):
                 raise ValueError("Choose equipment and priority.")
-            payload.update({"id": str(uuid.uuid4()), "vehicle_type": data["vehicle_type"], "priority": data["priority"]})
+            from backend.storage.user_store import get_all_user_dicts
+            requested_agent_id = str(data.get("agent_id") or actor["id"]).strip()
+            target = next((u for u in get_all_user_dicts()
+                           if str(u["id"]) == requested_agent_id
+                           and u.get("role") in ("agent", "super_admin") and u.get("name")), None)
+            if target is None:
+                raise ValueError("Choose a valid active agent for this case.")
+            if str(target["id"]) != str(actor["id"]) and actor["role"] not in ("developer", "super_admin"):
+                raise PermissionError("Only a manager can create cases for another agent.")
+            payload.update({"id": str(uuid.uuid4()), "vehicle_type": data["vehicle_type"],
+                            "priority": data["priority"], "target_agent": {
+                                "id": target["id"], "name": target["name"],
+                                "username": target.get("username", "")}})
         else:
             action = data.get("action")
-            if action not in ("close", "edit", "note", "note_edit", "note_delete", "reassign", "stage"):
+            if action not in ("close", "edit", "note", "note_edit", "note_delete", "reassign", "stage", "move"):
                 raise ValueError("Choose a valid report action.")
             payload = {"action": action, "revision": text("revision", True, 64)}
             if action in ("note", "note_edit", "note_delete"):
@@ -2117,7 +2129,7 @@ def api_workspace_write(case_id=None):
                     if type(index) is not int or index < 0:
                         raise ValueError("Choose a valid note.")
                     payload["index"] = index
-            elif action == "reassign":
+            elif action in ("reassign", "move"):
                 # Resolve identity from the authoritative roster, never from client-provided names.
                 from backend.storage.user_store import get_all_user_dicts
                 target_id = str(data.get("agent_id") or "").strip()
@@ -2126,8 +2138,12 @@ def api_workspace_write(case_id=None):
                 if not target: raise ValueError("Choose an active agent from the team.")
                 payload["target"] = {"id": target["id"], "name": target["name"],
                                      "username": target.get("username", "")}
+                if action == "move":
+                    if data.get("stage") not in ("", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"):
+                        raise ValueError("Choose a valid workflow stage.")
+                    payload["stage"] = data["stage"]
             elif action == "stage":
-                allowed_stages = {"", "jbs_plant", "dealer_shop", "monitoring", "to_yard", "at_yard"}
+                allowed_stages = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"}
                 if data.get("stage") not in allowed_stages:
                     raise ValueError("Choose a valid workflow stage.")
                 payload["stage"] = data["stage"]
@@ -2160,7 +2176,7 @@ def api_workspace_write(case_id=None):
                             raise ValueError("Enter a valid amount (for example, 125.50).")
                 if "load_type" in fields and fields["load_type"] not in ("", "JBS Load", "Meijer Load", "Broker Load", "OpenDeck", "Empty"):
                     raise ValueError("Choose a valid load type.")
-                if "board_stage" in fields and fields["board_stage"] not in ("", "jbs_plant", "dealer_shop", "monitoring", "to_yard", "at_yard"):
+                if "board_stage" in fields and fields["board_stage"] not in ("", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"):
                     raise ValueError("Choose a valid workflow stage.")
                 payload["fields"] = {k: v.strip() for k, v in fields.items()}
         case = workspace_write(actor, payload, case_id)
@@ -2265,8 +2281,11 @@ def api_cases():
             if "cases" not in _current_allowed_pages():
                 return jsonify({"error": "You do not have access to cases."}), 403
             from backend.storage.case_store import is_maintenance_report
+            # New board starts on Oct 12 Chicago time. Older reports remain in
+            # the normal Cases history; editing them must not import them here.
             cases = [c for c in cases if is_maintenance_report(c) and not c.get("closed_at")
-                     and c.get("status") in ("open", "assigned", "reported")]
+                     and c.get("status") == "reported"
+                     and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"]
         if f != "testing":
             cases = [c for c in cases if not is_testing(c)]
         if f in {"home_reported", "home_resolved", "home_attention"}:
