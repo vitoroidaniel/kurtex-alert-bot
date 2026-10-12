@@ -201,6 +201,12 @@ def serialize_case(c):
             "driver":      c.get("driver_name") or "—",
             "group":       c.get("group_name") or "—",
             "agent":       c.get("agent_name") or "—",
+            "agent_id":    c.get("agent_id"),
+            "can_reassign": _workspace_can_manage(c, session.get("user") or {}) if session.get("user") else False,
+            "load_type":   c.get("load_type") or (c.get("report_data") or {}).get("load") or "",
+            "board_stage": c.get("board_stage") or "",
+            "shop_info":   c.get("shop_info") or "",
+            "amount":      c.get("amount") or "",
             "report_driver": c.get("report_driver") or c.get("driver_name") or "",
             "unit_number": c.get("unit_number") or "",
             "vehicle_type": (c.get("vehicle_type") or "").lower(),
@@ -2062,6 +2068,19 @@ def _workspace_actor():
     return {**stored, "id": user["id"], "role": role}, None
 
 
+@app.route("/api/workspace/agents")
+def api_workspace_agents():
+    """Small, authenticated assignment roster; no role administration data."""
+    actor, error = _workspace_actor_read()
+    if error: return error
+    from backend.storage.user_store import get_all_user_dicts
+    agents = sorted(({"id": u["id"], "name": u["name"], "username": u.get("username", "")}
+                     for u in get_all_user_dicts()
+                     if u.get("role") in ("agent", "super_admin") and u.get("name")),
+                    key=lambda a: a["name"].casefold())
+    return jsonify({"agents": agents, "can_reassign_any": actor["role"] in ("developer", "super_admin")})
+
+
 @app.route("/api/workspace/cases", methods=["POST"])
 @app.route("/api/workspace/cases/<case_id>", methods=["PATCH"])
 def api_workspace_write(case_id=None):
@@ -2087,7 +2106,7 @@ def api_workspace_write(case_id=None):
             payload.update({"id": str(uuid.uuid4()), "vehicle_type": data["vehicle_type"], "priority": data["priority"]})
         else:
             action = data.get("action")
-            if action not in ("close", "edit", "note", "note_edit", "note_delete"):
+            if action not in ("close", "edit", "note", "note_edit", "note_delete", "reassign", "stage"):
                 raise ValueError("Choose a valid report action.")
             payload = {"action": action, "revision": text("revision", True, 64)}
             if action in ("note", "note_edit", "note_delete"):
@@ -2098,17 +2117,51 @@ def api_workspace_write(case_id=None):
                     if type(index) is not int or index < 0:
                         raise ValueError("Choose a valid note.")
                     payload["index"] = index
+            elif action == "reassign":
+                # Resolve identity from the authoritative roster, never from client-provided names.
+                from backend.storage.user_store import get_all_user_dicts
+                target_id = str(data.get("agent_id") or "").strip()
+                target = next((u for u in get_all_user_dicts()
+                               if str(u["id"]) == target_id and u.get("role") in ("agent", "super_admin")), None)
+                if not target: raise ValueError("Choose an active agent from the team.")
+                payload["target"] = {"id": target["id"], "name": target["name"],
+                                     "username": target.get("username", "")}
+            elif action == "stage":
+                allowed_stages = {"", "jbs_plant", "dealer_shop", "monitoring", "to_yard", "at_yard"}
+                if data.get("stage") not in allowed_stages:
+                    raise ValueError("Choose a valid workflow stage.")
+                payload["stage"] = data["stage"]
             elif action == "edit":
                 fields = data.get("fields")
-                if not isinstance(fields, dict) or not fields or set(fields) - {"priority", "location", "description", "issue_text"}:
+                allowed = {"priority", "location", "description", "issue_text", "shop_info", "amount",
+                           "report_driver", "unit_number", "vehicle_type", "comments", "group_name", "load_type", "board_stage"}
+                if not isinstance(fields, dict) or not fields or set(fields) - allowed:
                     raise ValueError("Choose valid report fields.")
                 for key, value in fields.items():
                     if not isinstance(value, str) or len(value.strip()) > 4000:
                         raise ValueError("Check the report fields.")
                     if key in ("description", "issue_text") and not value.strip():
                         raise ValueError("The issue and description cannot be empty.")
+                    if key in ("unit_number", "report_driver", "group_name", "shop_info") and len(value.strip()) > 200:
+                        raise ValueError("The " + key.replace("_", " ") + " field is too long.")
                 if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "normal"):
                     raise ValueError("Choose a valid priority.")
+                if "vehicle_type" in fields and fields["vehicle_type"] not in ("truck", "trailer", "reefer", ""):
+                    raise ValueError("Choose valid equipment.")
+                if "amount" in fields:
+                    raw = fields["amount"].strip()
+                    if raw:
+                        from decimal import Decimal, InvalidOperation
+                        try:
+                            amount = Decimal(raw)
+                            if not amount.is_finite() or amount < 0 or amount > 10000000 or amount.as_tuple().exponent < -2:
+                                raise ValueError("Amount must be between 0 and 10000000 with up to 2 decimals.")
+                        except InvalidOperation:
+                            raise ValueError("Enter a valid amount (for example, 125.50).")
+                if "load_type" in fields and fields["load_type"] not in ("", "JBS Load", "Meijer Load", "Broker Load", "OpenDeck", "Empty"):
+                    raise ValueError("Choose a valid load type.")
+                if "board_stage" in fields and fields["board_stage"] not in ("", "jbs_plant", "dealer_shop", "monitoring", "to_yard", "at_yard"):
+                    raise ValueError("Choose a valid workflow stage.")
                 payload["fields"] = {k: v.strip() for k, v in fields.items()}
         case = workspace_write(actor, payload, case_id)
         return jsonify({"ok": True, "case": serialize_case(case), "revision": workspace_revision(case)})
@@ -2385,7 +2438,12 @@ def api_case_detail():
                     "unit_number":      c.get("unit_number",""),
                     "report_driver":    c.get("report_driver",""),
                     "issue_text":       c.get("issue_text",""),
-                    "load_type":        c.get("load_type",""),
+                    "load_type":        c.get("load_type", "") or (c.get("report_data") or {}).get("load", ""),
+                    "board_stage":      c.get("board_stage", ""),
+                    "shop_info":        c.get("shop_info", ""),
+                    "amount":           c.get("amount", ""),
+                    "agent_id":         c.get("agent_id"),
+                    "can_reassign":     _workspace_can_manage(c, session["user"]),
                     "priority":         c.get("priority",""),
                     "pickup":           c.get("pickup",""),
                     "delivery":         c.get("delivery",""),

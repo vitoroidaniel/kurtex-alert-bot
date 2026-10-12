@@ -90,3 +90,15 @@ Only the **Report handler** was adjusted, using the chat conversation flow from 
 Verification: `PYTHONPATH=. python tests/test_v150_report_restore.py`, `PYTHONPATH=. python tests/test_v146.py`, and `PYTHONPATH=. python -m unittest discover -s tests -p test_v147_ai.py` run without a Telegram token or live network.
 
 Deploy only to the existing `kurtex-bot` Railway service, retaining its volume and environment variables. Don't run two Telegram pollers with the same bot token.
+
+## v151 - Case Workspace write API
+
+Companion backend update for Desktop v158:
+
+- `GET /api/workspace/agents` returns the authenticated assignment roster for users with Cases permission.
+- `PATCH /api/workspace/cases/<case_id>` supports `action=reassign` with an existing agent ID, and `action=stage` for the defined workflow stages. Both actions require a current case revision, an active case, and manager or assigned-agent authorization. They also work for pending Telegram cases before a report is submitted.
+- `action=edit` now validates and persists shop info, amount, report driver, unit number, vehicle type, comments, load type, group, workflow stage and the existing fields. Amount is limited to nonnegative values up to 10000000 with two decimal places.
+- Summary and detail API responses expose the fields needed by the Desktop editor and board, including assignment permissions.
+- All writes remain atomic on the existing volume-backed `cases.json`, with revision conflict protection and workspace history. No database migration is needed.
+
+Deploy Bot v151 **before** Desktop v158. This is backward compatible with the existing Mobile app and Telegram Report flow.

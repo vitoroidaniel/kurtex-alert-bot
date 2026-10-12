@@ -284,10 +284,12 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             cases.append(case)
         else:
             case = next((c for c in cases if c.get("id") == case_id), None)
-            if not case or not is_maintenance_report(case):
-                raise LookupError("Maintenance report not found.")
+            if not case:
+                raise LookupError("Case not found.")
+            if payload["action"] not in ("reassign", "stage") and not is_maintenance_report(case):
+                raise LookupError("Maintenance report not found. Awaiting Telegram report.")
             if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
-                raise PermissionError("Only the assigned agent or a manager can update this report.")
+                raise PermissionError("Only the assigned agent or a manager can update this case.")
             # Close is idempotent, including a retry after a lost response.
             if payload["action"] == "close" and case.get("status") == "done":
                 return case
@@ -311,11 +313,34 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     notes[index]["edited_at"] = now
                 else:
                     notes.pop(index)
+            elif payload["action"] == "reassign":
+                target = payload["target"]
+                if str(case.get("agent_id")) == str(target["id"]):
+                    return dict(case)
+                previous = case.get("agent_name") or "Unassigned"
+                case.update({"agent_id": target["id"], "agent_name": target["name"],
+                             "agent_username": target.get("username", ""), "assigned_at": now,
+                             "reassigned": True})
+                if case.get("status") == "open":
+                    case["status"] = "assigned"
+                case.setdefault("workspace_history", []).append({"action": "reassign", "author": actor["name"],
+                    "from": previous, "to": target["name"], "created_at": now})
+            elif payload["action"] == "stage":
+                previous = case.get("board_stage") or ""
+                case["board_stage"] = payload["stage"]
+                case.setdefault("workspace_history", []).append({"action": "stage", "author": actor["name"],
+                    "from": previous, "to": payload["stage"], "created_at": now})
             elif payload["action"] == "edit":
                 case.update(payload["fields"])
+                if isinstance(case.get("report_data"), dict):
+                    for key, value in payload["fields"].items():
+                        report_key = {"report_driver": "driver", "load_type": "load", "group_name": "group"}.get(key, key)
+                        if report_key in case["report_data"]:
+                            case["report_data"][report_key] = value
             case["updated_at"] = now
-            case.setdefault("workspace_history", []).append({"action": payload["action"],
-                "author": actor["name"], "created_at": now})
+            if payload["action"] not in ("reassign", "stage"):
+                case.setdefault("workspace_history", []).append({"action": payload["action"],
+                    "author": actor["name"], "created_at": now})
         _save(CASES_FILE, cases, strict=True)
         return dict(case)
 
