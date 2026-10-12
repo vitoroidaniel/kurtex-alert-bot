@@ -75,3 +75,18 @@ Validation: Python syntax and isolated unit tests for media metadata, bounded pr
 ## v149 — Load type choices
 
 Telegram chat-based Report and Edit Report now offer JBS Load, Broker Load, Meijer Load, OpenDeck and Empty. Meijer Load and OpenDeck follow the existing pickup/delivery flow. Empty continues to skip pickup/delivery. The legacy HTML form's dropdown has the same choices. No desktop or mobile changes.
+
+## v150 - Restore the original Telegram chat Report (user-supplied reference)
+
+Only the **Report handler** was adjusted, using the chat conversation flow from the user-supplied `kurtex-alert-bot-master(9).zip` as the reference. All other existing v149 bot/API/AI/Close Case functionality is preserved.
+
+- Report opens in **Telegram chat**, not a Mini App. The legacy Mini App HTTP route remains for compatibility but the Telegram Report buttons do not open it.
+- Load type options: **JBS Load, Broker Load, Meijer Load, OpenDeck, Empty**. The first four continue through Pickup, Delivery, Current Location; Empty asks **Current Location only**, then Comments, Media, Priority and Preview.
+- **Reefer + Empty** does not ask Setpoint, Current temperature or Temp recorder, including when the agent taps **Skip** on Current Location. These fields are also excluded from the preview and edit menu. If the load is changed to Empty while editing, stale temperature values are discarded.
+- **Loaded Reefer** still asks all three temperature questions. Truck/Trailer never ask reefer temperature questions.
+- **Close Case** still asks whether parts were replaced, then optionally records actual part numbers for AI history (unchanged v146 logic). Part numbers are **not** asked during Report.
+- Existing bot API, AI, media, case persistence and other handlers are unchanged. No new Railway environment variables.
+
+Verification: `PYTHONPATH=. python tests/test_v150_report_restore.py`, `PYTHONPATH=. python tests/test_v146.py`, and `PYTHONPATH=. python -m unittest discover -s tests -p test_v147_ai.py` run without a Telegram token or live network.
+
+Deploy only to the existing `kurtex-bot` Railway service, retaining its volume and environment variables. Don't run two Telegram pollers with the same bot token.

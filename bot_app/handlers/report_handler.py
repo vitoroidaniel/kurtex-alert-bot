@@ -95,6 +95,26 @@ PRIORITY_META = {
 }
 
 
+def _needs_reefer_temps(report: dict) -> bool:
+    """Empty reefer loads do not require temperature/recorder questions.
+
+    This rule must be shared by the normal path, Skip path, Edit and preview.
+    """
+    return (report.get("vehicle_type") == "reefer" and
+            str(report.get("load", "")).strip().casefold() != "empty")
+
+
+def _save_load_choice(report: dict, label: str) -> None:
+    """Keep the selected load and its dependent report fields consistent."""
+    report["load"] = label
+    if label.strip().casefold() == "empty":
+        report["pickup"] = "—"
+        report["delivery"] = "—"
+        # A prior load selection/edit must never leave stale temperatures on Empty.
+        for key in ("setpoint", "current_temp", "temp_recorder"):
+            report.pop(key, None)
+
+
 def _type_kb():
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("🚛 Truck",   callback_data="rpt_type|truck"),
@@ -163,7 +183,7 @@ def _build_report(d: dict) -> str:
     else:
         lines.append(f"Current Location: {_esc(d.get('location', '—'))}")
 
-    if vtype == "reefer":
+    if _needs_reefer_temps(d):
         lines += [
             "",
             f"*Setpoint:* {_esc(d.get('setpoint', '—'))}",
@@ -273,7 +293,7 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ltype = query.data.split("|", 1)[1]
     label_map = {"jbs": "JBS Load", "broker": "Broker Load", "meijer": "Meijer Load", "opendeck": "OpenDeck", "empty": "Empty"}
     label = label_map.get(ltype, ltype.title())
-    ctx.user_data["report"]["load"] = label
+    _save_load_choice(ctx.user_data["report"], label)
 
     if ltype == "empty":
         # Empty — no PU or Delivery, jump straight to current location
@@ -295,7 +315,15 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def recv_load(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["report"]["load"] = update.message.text.strip()
+    # Keep the original chat text fallback, but respect Empty exactly like its button.
+    raw = update.message.text.strip()
+    choices = {"jbs load": "JBS Load", "broker load": "Broker Load",
+               "meijer load": "Meijer Load", "opendeck": "OpenDeck", "empty": "Empty"}
+    label = choices.get(raw.casefold(), raw)
+    _save_load_choice(ctx.user_data["report"], label)
+    if label.casefold() == "empty":
+        await update.message.reply_text("Current Location:", reply_markup=SKIP_KB)
+        return ASK_LOCATION
     await update.message.reply_text("Pick up Location / Time:", reply_markup=SKIP_KB)
     return ASK_PICKUP
 
@@ -314,8 +342,7 @@ async def recv_delivery(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["location"] = update.message.text.strip()
-    vtype = ctx.user_data["report"].get("vehicle_type", "truck")
-    if vtype == "reefer":
+    if _needs_reefer_temps(ctx.user_data["report"]):
         await update.message.reply_text("Setpoint temperature (e.g. -10°C):", reply_markup=SKIP_KB)
         return ASK_SETPOINT
     # truck/trailer — skip straight to comments, no temp questions
@@ -413,9 +440,9 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _missing_report_session(query)
         return ConversationHandler.END
     report = ctx.user_data.get("report", {})
-    vtype  = report.get("vehicle_type", "truck")
+    needs_temps = _needs_reefer_temps(report)
 
-    # Step order: pickup → delivery → location → (reefer only: setpoint → current_temp → temp_recorder) → comments → media
+    # Step order: pickup → delivery → location → (loaded reefer only: temperatures) → comments → media
     if "pickup" not in report:
         report["pickup"] = "—"
         await query.edit_message_text("Delivery Location / Time:", reply_markup=SKIP_KB)
@@ -426,18 +453,18 @@ async def cb_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return ASK_LOCATION
     elif "location" not in report:
         report["location"] = "—"
-        if vtype == "reefer":
+        if needs_temps:
             await query.edit_message_text("Setpoint temperature:", reply_markup=SKIP_KB)
             return ASK_SETPOINT
         # truck / trailer — straight to comments, never ask temp
         ctx.user_data["report_awaiting"] = "comments"
         await query.edit_message_text("Comments:", reply_markup=SKIP_KB)
         return ASK_COMMENTS
-    elif vtype == "reefer" and "setpoint" not in report:
+    elif needs_temps and "setpoint" not in report:
         report["setpoint"] = "—"
         await query.edit_message_text("Current temperature:", reply_markup=SKIP_KB)
         return ASK_CURRENT_TEMP
-    elif vtype == "reefer" and "current_temp" not in report:
+    elif needs_temps and "current_temp" not in report:
         report["current_temp"] = "—"
         await query.edit_message_text(
             "Temp recorder: Y or N?",
@@ -608,7 +635,7 @@ async def _show_preview(target, ctx, edit=True):
         await msg.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=_confirm_kb())
 
 
-def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
+def _edit_fields_kb(vtype: str, report: dict | None = None) -> InlineKeyboardMarkup:
     fields = [
         ("Unit number",   "rpt_editfield|unit"),
         ("Driver name",   "rpt_editfield|driver"),
@@ -620,7 +647,7 @@ def _edit_fields_kb(vtype: str) -> InlineKeyboardMarkup:
         ("Comments",      "rpt_editfield|comments"),
         ("Priority",      "rpt_editfield|priority"),
     ]
-    if vtype in ("trailer", "reefer"):
+    if vtype == "reefer" and _needs_reefer_temps(report or {"vehicle_type": vtype}):
         fields[7:7] = [
             ("Setpoint",      "rpt_editfield|setpoint"),
             ("Current temp",  "rpt_editfield|current_temp"),
@@ -639,7 +666,7 @@ async def cb_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _missing_report_session(query)
         return ConversationHandler.END
     vtype = ctx.user_data.get("report", {}).get("vehicle_type", "truck")
-    await query.edit_message_text("Which field would you like to edit?", reply_markup=_edit_fields_kb(vtype))
+    await query.edit_message_text("Which field would you like to edit?", reply_markup=_edit_fields_kb(vtype, ctx.user_data["report"]))
     return ASK_EDIT_FIELD
 
 
@@ -707,7 +734,10 @@ async def cb_edit_val_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     field = ctx.user_data.pop("editing_field", None)
     value = query.data.split("|")[1]
     if field:
-        ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
+        if field == "load":
+            _save_load_choice(ctx.user_data["report"], value)
+        else:
+            ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
     await _show_preview(query, ctx, edit=True)
     return CONFIRM
 
@@ -716,7 +746,10 @@ async def recv_edit_value(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     value = update.message.text.strip()
     field = ctx.user_data.pop("editing_field", None)
     if field:
-        ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
+        if field == "load":
+            _save_load_choice(ctx.user_data["report"], value)
+        else:
+            ctx.user_data["report"]["unit_number" if field == "unit" else field] = value
     await _show_preview(update.message, ctx, edit=False)
     return CONFIRM
 
