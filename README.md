@@ -70,3 +70,8 @@ To run offline regression tests (no Telegram network or token needed): `python t
 Deploy this bot ZIP before Desktop v148 for full historical search and original Telegram attachment previews. Preserve all existing Railway variables and persistent volumes. Telegram media may be unavailable if Telegram no longer provides the file. No new environment variables are required.
 
 Validation: Python syntax and isolated unit tests for media metadata, bounded proxy retrieval and missing attachment handling passed. Live Telegram network calls and Railway authentication have not been tested.
+
+
+## v149 — Load type choices
+
+Telegram chat-based Report and Edit Report now offer JBS Load, Broker Load, Meijer Load, OpenDeck and Empty. Meijer Load and OpenDeck follow the existing pickup/delivery flow. Empty continues to skip pickup/delivery. The legacy HTML form's dropdown has the same choices. No desktop or mobile changes.

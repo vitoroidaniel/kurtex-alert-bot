@@ -74,11 +74,13 @@ async def _missing_report_session(query):
 
 SKIP_KB = InlineKeyboardMarkup([[InlineKeyboardButton("Skip", callback_data="rpt_skip")]])
 
-LOAD_TYPE_KB = InlineKeyboardMarkup([[
-    InlineKeyboardButton("JBS Load",    callback_data="rpt_loadtype|jbs"),
-    InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker"),
-    InlineKeyboardButton("Empty",       callback_data="rpt_loadtype|empty"),
-]])
+LOAD_TYPE_KB = InlineKeyboardMarkup([
+    [InlineKeyboardButton("JBS Load", callback_data="rpt_loadtype|jbs"),
+     InlineKeyboardButton("Broker Load", callback_data="rpt_loadtype|broker")],
+    [InlineKeyboardButton("Meijer Load", callback_data="rpt_loadtype|meijer"),
+     InlineKeyboardButton("OpenDeck", callback_data="rpt_loadtype|opendeck")],
+    [InlineKeyboardButton("Empty", callback_data="rpt_loadtype|empty")],
+])
 
 VTYPE_LABELS = {
     "truck":   "Truck",
@@ -150,7 +152,7 @@ def _build_report(d: dict) -> str:
         "",
     ]
 
-    # Load label — just "JBS Load" or "Broker Load" or "Empty", no colon, no "Load:" prefix
+    # Load label — selected load type, without a "Load:" prefix
     # Empty only shows Current Location
     if load and load != "—":
         lines.append(f"*{_esc(load)}*")
@@ -269,7 +271,7 @@ async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _missing_report_session(query)
         return ConversationHandler.END
     ltype = query.data.split("|", 1)[1]
-    label_map = {"jbs": "JBS Load", "broker": "Broker Load", "empty": "Empty"}
+    label_map = {"jbs": "JBS Load", "broker": "Broker Load", "meijer": "Meijer Load", "opendeck": "OpenDeck", "empty": "Empty"}
     label = label_map.get(ltype, ltype.title())
     ctx.user_data["report"]["load"] = label
 
@@ -670,11 +672,13 @@ async def cb_edit_field(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "comments": "Enter new comments:", "priority": "Select new priority:",
     }
     if field == "load":
-        await query.edit_message_text("Select load type:", reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("JBS Load",    callback_data="rpt_editval|JBS Load"),
-            InlineKeyboardButton("Broker Load", callback_data="rpt_editval|Broker Load"),
-            InlineKeyboardButton("Empty",       callback_data="rpt_editval|Empty"),
-        ]]))
+        await query.edit_message_text("Select load type:", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("JBS Load", callback_data="rpt_editval|JBS Load"),
+             InlineKeyboardButton("Broker Load", callback_data="rpt_editval|Broker Load")],
+            [InlineKeyboardButton("Meijer Load", callback_data="rpt_editval|Meijer Load"),
+             InlineKeyboardButton("OpenDeck", callback_data="rpt_editval|OpenDeck")],
+            [InlineKeyboardButton("Empty", callback_data="rpt_editval|Empty")],
+        ]))
         return ASK_EDIT_VALUE
     if field == "temp_recorder":
         await query.edit_message_text(prompts[field], reply_markup=InlineKeyboardMarkup([[
