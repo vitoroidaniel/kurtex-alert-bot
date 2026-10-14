@@ -21,6 +21,8 @@ from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chi
 from backend.web_sso import register_web_sso
 from backend.core.case_snapshot import CaseSnapshot, DataUnavailable
 from flask import Flask, g, jsonify, render_template, request, session, redirect, Response, send_file
+from flask_sock import Sock
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
@@ -46,6 +48,7 @@ def _api_session_secret() -> str:
 app = Flask(__name__, template_folder=str(Path(__file__).resolve().parents[1] / "templates"),
             static_folder=str(Path(__file__).resolve().parents[1] / "static"))
 app.secret_key = _api_session_secret()
+sock = Sock(app)
 app.config["MAX_CONTENT_LENGTH"] = 82 * 1024 * 1024
 web_login_complete = register_web_sso(app, DATA_DIR, lambda: _current_allowed_pages())
 chat_store = ChatStore(DATA_DIR)
@@ -220,6 +223,8 @@ def serialize_case(c):
             "notes_count": int(bool(c.get("comments") or (c.get("notes") and c.get("notes") != "case reported"))) + len(c.get("workspace_notes") or []),
             "attachment_count": len(c.get("media") or []) + len(c.get("workspace_attachments") or []),
             "status":      c.get("status") or "open",
+            "source":      c.get("source") or "telegram",
+            "closed_in_workspace": any(isinstance(h,dict) and h.get("action")=="close" for h in (c.get("workspace_history") or [])),
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
             "opened_raw":  case_local_date(c),
@@ -2345,6 +2350,172 @@ def _workspace_actor_read():
         return None,(jsonify({"error":"Access denied."}),403)
     return {**stored,"id":user["id"],"role":role},None
 
+def _workspace_board_version(actor):
+    """Cheap cross-process version check; no JSON parsing for unchanged boards."""
+    try:
+        stat = (DATA_DIR / "cases.json").stat()
+        signature = f"{stat.st_ino}:{stat.st_size}:{stat.st_mtime_ns}:{actor['id']}:{actor['role']}"
+        return hashlib.blake2s(signature.encode(), digest_size=12).hexdigest()
+    except OSError:
+        return None
+
+
+# Read-only realtime channel. The gateways authenticate users before requesting a
+# short-lived ticket; the socket authenticates again and never accepts writes.
+# Case updates from Telegram and other processes are detected through the
+# persistent case file version, so no in-memory-only event bus is required.
+_REALTIME_SALT = "kurtex-workspace-ws-v1"
+
+def _realtime_signer():
+    return URLSafeTimedSerializer(app.secret_key, salt=_REALTIME_SALT)
+
+
+@app.route("/api/workspace/realtime-ticket", methods=["POST"])
+def api_workspace_realtime_ticket():
+    actor, error = _workspace_actor_read()
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    origin = str(payload.get("origin") or "")
+    parsed = urllib.parse.urlsplit(origin)
+    if parsed.scheme not in ("https", "http") or not parsed.netloc or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return jsonify({"error": "Invalid realtime origin."}), 400
+    # HTTP is only valid for local development, never for deployed origins.
+    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1"):
+        return jsonify({"error": "Realtime requires HTTPS."}), 400
+    ticket = _realtime_signer().dumps({"uid": str(actor["id"]), "origin": origin})
+    return jsonify({"ticket": ticket, "expires_in": 45})
+
+
+@sock.route("/ws/workspace")
+def workspace_socket(ws):
+    # Authentication is the first socket message; tickets never appear in URLs
+    # or proxy access logs. A socket only emits invalidation/version signals.
+    try:
+        raw = ws.receive(timeout=8)
+        message = json.loads(raw or "null")
+        if not isinstance(message, dict) or message.get("type") != "auth":
+            ws.close()
+            return
+        signed = _realtime_signer().loads(str(message.get("ticket") or ""), max_age=45)
+        if not hmac.compare_digest(str(signed.get("origin") or ""), str(request.headers.get("Origin") or "")):
+            ws.close()
+            return
+        user_id = int(signed["uid"])
+    except (ValueError, TypeError, KeyError, BadSignature, SignatureExpired, OSError):
+        ws.close()
+        return
+    from backend.storage.user_store import get_user
+    def authorized_actor():
+        stored = get_user(user_id)
+        if not stored:
+            return None
+        role = _website_role(stored.get("role"))
+        if "cases" not in _load_role_permissions().get(role, []):
+            return None
+        return {"id": user_id, "role": role}
+
+    actor = authorized_actor()
+    if not actor:
+        ws.close()
+        return
+    version = _workspace_board_version(actor)
+    ws.send(json.dumps({"type": "ready", "version": version}))
+    last_heartbeat = last_auth_check = connected_at = time.monotonic()
+    while True:
+        try:
+            # A timeout is expected: the channel is server-to-client only.
+            # The file stat is O(1) even with thousands of historical cases.
+            incoming = ws.receive(timeout=0.75)
+            if incoming:
+                # Clients cannot change cases through WebSocket.
+                # Unexpected messages are ignored; all writes use authenticated HTTP.
+                pass
+            now = time.monotonic()
+            # Periodically renew the signed-ticket authentication on reconnect.
+            if now - connected_at > 1800:
+                ws.close()
+                return
+            if now - last_auth_check >= 25:
+                actor = authorized_actor()
+                if not actor:
+                    ws.close()
+                    return
+                last_auth_check = now
+            next_version = _workspace_board_version(actor)
+            if next_version != version:
+                version = next_version
+                ws.send(json.dumps({"type": "changed", "version": version}))
+            if now - last_heartbeat >= 20:
+                ws.send(json.dumps({"type": "heartbeat"}))
+                last_heartbeat = now
+        except Exception:
+            # A closed browser/socket ends the worker cleanly. Polling remains
+            # available in the clients if a proxy blocks WebSocket upgrades.
+            return
+
+
+@app.route("/api/workspace/board")
+def api_workspace_board():
+    """Compact active board without expensive historical analytics.
+
+    Returns an unchanged marker when the on-disk version is identical. This
+    avoids transferring/re-rendering the board for each 15-second poll.
+    """
+    actor, error = _workspace_actor_read()
+    if error:
+        return error
+    since = request.args.get("since", "")[:64]
+    version = _workspace_board_version(actor)
+    if since and version and hmac.compare_digest(since, version):
+        return jsonify({"unchanged": True, "version": version})
+    from backend.storage.case_store import is_maintenance_report
+    cases = load_cases()
+    after = _workspace_board_version(actor)
+    if after != version:
+        cases = load_cases()  # A writer completed while the snapshot was loading.
+        version = _workspace_board_version(actor)
+    else:
+        version = after
+    board = [c for c in cases if is_maintenance_report(c)
+             and c.get("status") == "reported" and not c.get("closed_at")
+             and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
+             and not is_testing(c)]
+    board.sort(key=lambda c: c.get("reported_at") or c.get("opened_at") or "", reverse=True)
+    from backend.storage.case_store import workspace_revision
+    summaries = []
+    for c in board:
+        summary = serialize_case(c)
+        # Mobile drag-and-drop needs the same optimistic revision as Desktop.
+        # The permission is checked again on the server for every write.
+        summary["revision"] = workspace_revision(c)
+        summary["can_manage"] = _workspace_can_manage(c, actor)
+        summary["can_reassign"] = summary["can_manage"]
+        summaries.append(summary)
+    return jsonify({"cases": summaries, "total": len(board),
+                    "has_more": False, "version": version, "unchanged": False})
+
+
+_case_intelligence_cache = {"signature": None, "tags": {}}
+_case_intelligence_lock = Lock()
+
+
+def _cached_case_intelligence_tags():
+    """Compute fleet intelligence once per case-file version, not per agent."""
+    try:
+        stat = (DATA_DIR / "cases.json").stat()
+        signature = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    except OSError:
+        signature = None
+    with _case_intelligence_lock:
+        if signature is not None and _case_intelligence_cache["signature"] == signature:
+            return _case_intelligence_cache["tags"]
+        _, tags = build_kurtex_intelligence([c for c in load_cases() if not is_testing(c)])
+        if signature is not None and not getattr(g, "case_data_stale", False):
+            _case_intelligence_cache.update(signature=signature, tags=tags)
+        return tags
+
+
 @app.route("/api/cases")
 def api_cases():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
@@ -2388,6 +2559,18 @@ def api_cases():
             else:
                 cases = [c for c in cases if str(c.get("status") or "").lower() in {"done", "resolved", "closed"}
                          and chicago_date_str(c.get("closed_at")) == now.date().isoformat()]
+        if f == "workspace_closed":
+            # A closed case belongs here only when a workspace close action was recorded.
+            cases = [c for c in cases if c.get("status") == "done" and
+                     any(isinstance(h, dict) and h.get("action") == "close"
+                         for h in (c.get("workspace_history") or []))]
+        agent_filter = request.args.get("agent", "").strip().casefold()[:120]
+        if agent_filter:
+            cases = [c for c in cases if agent_filter in str(c.get("agent_name") or "").casefold()
+                     or agent_filter in str(c.get("agent_username") or "").casefold()]
+        source_filter = request.args.get("source", "").strip().lower()
+        if source_filter in {"workspace", "telegram"}:
+            cases = [c for c in cases if (str(c.get("source") or "telegram").lower() == "workspace") == (source_filter == "workspace")]
         if date_filter:
             cases = [c for c in cases if case_local_date(c) == date_filter]
         elif f == "today":    cases = [c for c in cases if case_local_date(c) == today_str()]
@@ -2400,26 +2583,48 @@ def api_cases():
         if status_f:
             cases = [c for c in cases if (c.get("status") or "").lower() == status_f]
         if search:
+            # Search across history; include AI retrieval aliases and fuzzy fault wording
+            # only when explicitly requested. The matching is deterministic and never
+            # invents cases or relies on external model availability.
+            smart = request.args.get("smart") == "1"
             # Workspace global search includes unit IDs, maintenance issues, comments,
             # and historical notes (not just driver/group/description).
             needle = search.casefold()
             searchable = ("unit_number", "issue_text", "driver_name", "report_driver",
                           "group_name", "agent_name", "description", "comments", "notes")
-            cases = [c for c in cases if any(
-                needle in str(c.get(key) or "").casefold() for key in searchable
-            ) or any(needle in str(n.get("text") or "").casefold()
-                     for n in (c.get("workspace_notes") or []) if isinstance(n, dict))]
+            def literal_match(c):
+                return (any(needle in str(c.get(key) or "").casefold() for key in searchable)
+                        or any(needle in str(n.get("text") or "").casefold()
+                               for n in (c.get("workspace_notes") or []) if isinstance(n, dict)))
+            exact = [c for c in cases if literal_match(c)]
+            if smart and len(search) >= 3:
+                from backend.ai.maintenance_ai import ranked_cases
+                # Existing maintenance-AI subsystem/token matching, used only to
+                # supplement literal hits; preserve all exact hits (no 8-result cap).
+                semantic = ranked_cases(search, cases, limit=min(len(cases), 250))
+                seen = {str(c.get("id")) for c in exact}
+                exact.extend(c for c in semantic if str(c.get("id")) not in seen)
+            if smart:
+                exact.sort(key=lambda c: c.get("opened_at") or "", reverse=True)
+                # Literal matches first; AI retrieval matches follow in relevance order.
+                seen_ids = {str(c.get("id")) for c in exact if literal_match(c)}
+                exact = [c for c in exact if str(c.get("id")) in seen_ids] + [c for c in exact if str(c.get("id")) not in seen_ids]
+            cases = exact
         if f == "home_attention":
             cases = sorted(cases, key=lambda c: ((_home_case_attention(c, now) or {}).get("attention_rank", 4),
                                                 -((_home_case_attention(c, now) or {}).get("age_hours") or 0)))
-        else:
+        elif not (search and request.args.get("smart") == "1"):
             cases = sorted(cases, key=lambda c: (c.get("reported_at") or c.get("opened_at", "")) if f == "workspace" else c.get("opened_at", ""), reverse=True)
         total = len(cases)
         page = cases[offset:offset+limit]
-        try:
-            _,ki_tags=build_kurtex_intelligence([c for c in load_cases() if not is_testing(c)])
-        except Exception:
-            ki_tags={}
+        # The active board does not need historical AI/analytics on every poll.
+        if f == "workspace" or (search and request.args.get("smart") == "1"):
+            ki_tags = {}
+        else:
+            try:
+                ki_tags=_cached_case_intelligence_tags()
+            except Exception:
+                ki_tags={}
         serialized=[]
         for c in page:
             row=serialize_case(c); cid=_ki_case_id(c); row["ki_tags"]=ki_tags.get(cid,[])
@@ -3455,9 +3660,30 @@ def _learning_sync_worker():
         Event().wait(60)
 
 def run_api_server():
+    """Run a threaded production WSGI worker alongside Telegram polling.
+
+    WebSockets occupy one gthread while connected. 32 threads leave headroom
+    for ordinary API requests with approximately ten concurrent agents.
+    If the worker crashes, the supervisor restarts it; bot polling continues.
+    """
     Thread(target=_learning_sync_worker,daemon=True,name="maintenance-learning-sync").start()
-    logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False)
+    if os.getenv("KURTEX_API_SERVER", "gunicorn").lower() == "werkzeug":
+        # Development-only fallback for local testing.
+        logging.getLogger("werkzeug").setLevel(logging.ERROR)
+        app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False, threaded=True)
+        return
+    import subprocess, sys
+    command = [sys.executable, "-m", "gunicorn", "api.server:app", "--bind", f"0.0.0.0:{API_PORT}",
+               "--worker-class", "gthread", "--workers", "1", "--threads", "32",
+               "--timeout", "120", "--graceful-timeout", "25"]
+    while True:
+        try:
+            worker = subprocess.Popen(command, cwd=str(Path(__file__).resolve().parents[1]))
+            status = worker.wait()
+            logger.error("Kurtex API worker exited (%s); restarting shortly.", status)
+        except OSError:
+            logger.exception("Unable to launch Kurtex API worker")
+        time.sleep(3)
 
 def start_api_thread():
     Thread(target=run_api_server, daemon=True, name="kurtex-api").start()

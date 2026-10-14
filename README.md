@@ -145,3 +145,15 @@ Authorized case agents/admins may remove Telegram media references from Kurtex; 
 
 ### v158 - Website maintenance report creation
 New optional load/route/reefer temperature/part fields in POST /api/workspace/cases. Deploy before desktop v170.
+
+### Performance release v159
+See UPDATES_v159.txt for changes and deployment requirements.
+
+### Concurrency deployment guidance
+All processes writing cases must share the same Linux filesystem and `DATA_DIR` volume. File locks are advisory and only protect cooperating processes. Keep one writable Railway service attached to the case volume; do not deploy independent writable replicas or switch to a non-POSIX volume without testing lock semantics. Take a backup of `cases.json` and attachments before upgrading. The mobile and desktop boards poll for changes about every 15 seconds. At larger scale, migrate to PostgreSQL and an event-based update channel.
+
+## v160 realtime update
+See UPDATES_v160.txt. The backend uses authenticated read-only WebSocket invalidations; all writes still use HTTP with revisions.
+
+## v161
+Case history agent/source/closed-in-workspace filters and AI retrieval-backed smart matching.

@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import threading
+import fcntl
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -27,7 +28,51 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 CASES_FILE   = DATA_DIR / "cases.json"
 ALERTS_FILE  = DATA_DIR / "active_alerts.json"
-_FILE_LOCK   = threading.RLock()
+class _ProcessFileLock:
+    """Reentrant across nested helpers and exclusive across API/bot processes.
+
+    An atomic os.replace alone prevents partial files, not lost updates when
+    multiple processes load/modify/save the same JSON document concurrently.
+    All existing case-store read/modify/write blocks already use _FILE_LOCK.
+    """
+    def __init__(self, path):
+        self.path = path
+        self.thread_lock = threading.RLock()
+        self.local = threading.local()
+
+    def __enter__(self):
+        self.thread_lock.acquire()
+        try:
+            depth = getattr(self.local, 'depth', 0)
+            if depth == 0:
+                fd = os.open(str(self.path), os.O_CREAT | os.O_RDWR, 0o600)
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX)
+                except BaseException:
+                    os.close(fd)
+                    raise
+                self.local.fd = fd
+            self.local.depth = depth + 1
+            return self
+        except BaseException:
+            self.thread_lock.release()
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            depth = self.local.depth - 1
+            self.local.depth = depth
+            if depth == 0:
+                fd = self.local.fd
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                finally:
+                    os.close(fd)
+                    del self.local.fd
+        finally:
+            self.thread_lock.release()
+
+_FILE_LOCK = _ProcessFileLock(DATA_DIR / '.cases-write.lock')
 _READ_CACHE = {}
 
 
@@ -36,6 +81,8 @@ _READ_CACHE = {}
 def _load(path: Path, *, strict: bool = False) -> list[dict]:
     with _FILE_LOCK:
         if not path.exists():
+            if path == CASES_FILE and path.with_name('.cases-initialized').exists():
+                raise FileNotFoundError('Previously initialized case storage is missing; refusing to reset cases.')
             return []
         try:
             stat=path.stat()
@@ -49,7 +96,7 @@ def _load(path: Path, *, strict: bool = False) -> list[dict]:
             return [dict(row) for row in cached[1]] if cached[2] else copy.deepcopy(cached[1])
         except Exception as e:
             logger.error(f"Failed to load {path.name}: {e}")
-            if strict:
+            if strict or path == CASES_FILE:
                 raise
             return []
 
@@ -67,10 +114,14 @@ def _save(path: Path, data: list[dict] | dict, *, strict: bool = False) -> None:
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(tmp, path)
+            if path == CASES_FILE:
+                marker = path.with_name('.cases-initialized')
+                if not marker.exists():
+                    marker.touch(mode=0o600)
             _READ_CACHE.pop(path,None)
         except Exception as e:
             logger.error(f"Failed to save {path.name}: {e}")
-            if strict:
+            if strict or path == CASES_FILE:
                 raise
         finally:
             try:
