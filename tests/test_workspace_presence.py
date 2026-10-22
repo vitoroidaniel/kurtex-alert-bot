@@ -41,6 +41,14 @@ class PresenceTests(unittest.TestCase):
         self.assertEqual(self.hub.snapshot(99)[1], [])
         self.assertEqual(self.hub.changes(0, "99")[1][-1]["action"], "left")
 
+    def test_idle_socket_can_publish_after_expiry(self):
+        a = self.hub.join(12)
+        self.hub.publish(a, "viewing", "KT-1", name="A")
+        self.now = 31
+        self.hub.snapshot(99)
+        self.assertTrue(self.hub.publish(a, "editing", "KT-1", name="A"))
+        self.assertEqual(self.hub.snapshot(99)[1][0]["action"], "editing")
+
     def test_bounded_log_requires_resync(self):
         a = self.hub.join(12)
         for i in range(5):
