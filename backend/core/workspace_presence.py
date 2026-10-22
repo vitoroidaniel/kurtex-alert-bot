@@ -41,11 +41,17 @@ class PresenceHub:
         now = self.clock()
         expired = [item for item in self.connections.values()
                    if item.get("action") and now - item["at"] > self.ttl]
+        affected = set()
         for item in expired:
-            uid = item["agent_id"]
+            affected.add(item["agent_id"])
             item["action"] = None
             item.pop("event", None)
-            self._leave_if_absent(uid)
+        for uid in affected:
+            current = self._latest(uid)
+            if current is None:
+                self._leave_if_absent(uid)
+            else:
+                self._emit(current["event"])
 
     def join(self, uid):
         with self.lock:
@@ -77,9 +83,15 @@ class PresenceHub:
             uid = entry["agent_id"]
             entry["at"] = self.clock()
             if action in ("idle", "left"):
+                was_active = bool(entry.get("action"))
                 entry["action"] = None
                 entry.pop("event", None)
-                self._leave_if_absent(uid)
+                if was_active:
+                    current = self._latest(uid)
+                    if current is None:
+                        self._leave_if_absent(uid)
+                    else:
+                        self._emit(current["event"])
             else:
                 event = {"type": "presence", "agent_id": uid, "agent_name": str(name)[:48],
                          "action": action, "case_id": case_id, "field": field}
@@ -103,7 +115,11 @@ class PresenceHub:
         with self.lock:
             entry = self.connections.pop(key, None)
             if entry and entry.get("action"):
-                self._leave_if_absent(entry["agent_id"])
+                current = self._latest(entry["agent_id"])
+                if current is None:
+                    self._leave_if_absent(entry["agent_id"])
+                else:
+                    self._emit(current["event"])
 
 
 workspace_presence = PresenceHub()
