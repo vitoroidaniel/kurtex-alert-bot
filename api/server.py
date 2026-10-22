@@ -2389,8 +2389,7 @@ def api_workspace_realtime_ticket():
 
 @sock.route("/ws/workspace")
 def workspace_socket(ws):
-    # Authentication is the first socket message; tickets never appear in URLs
-    # or proxy access logs. A socket only emits invalidation/version signals.
+    """Authenticated realtime board invalidation and ephemeral teammate presence."""
     try:
         raw = ws.receive(timeout=8)
         message = json.loads(raw or "null")
@@ -2406,6 +2405,8 @@ def workspace_socket(ws):
         ws.close()
         return
     from backend.storage.user_store import get_user
+    from backend.core.workspace_presence import workspace_presence
+
     def authorized_actor():
         stored = get_user(user_id)
         if not stored:
@@ -2413,46 +2414,63 @@ def workspace_socket(ws):
         role = _website_role(stored.get("role"))
         if "cases" not in _load_role_permissions().get(role, []):
             return None
-        return {"id": user_id, "role": role}
+        return {"id": user_id, "name": stored.get("name") or "Teammate", "role": role}
 
     actor = authorized_actor()
     if not actor:
         ws.close()
         return
-    version = _workspace_board_version(actor)
-    ws.send(json.dumps({"type": "ready", "version": version}))
-    last_heartbeat = last_auth_check = connected_at = time.monotonic()
-    while True:
-        try:
-            # A timeout is expected: the channel is server-to-client only.
-            # The file stat is O(1) even with thousands of historical cases.
-            incoming = ws.receive(timeout=0.75)
-            if incoming:
-                # Clients cannot change cases through WebSocket.
-                # Unexpected messages are ignored; all writes use authenticated HTTP.
-                pass
-            now = time.monotonic()
-            # Periodically renew the signed-ticket authentication on reconnect.
-            if now - connected_at > 1800:
-                ws.close()
-                return
-            if now - last_auth_check >= 25:
-                actor = authorized_actor()
-                if not actor:
-                    ws.close()
+    connection = workspace_presence.join(user_id)
+    try:
+        version = _workspace_board_version(actor)
+        ws.send(json.dumps({"type": "ready", "version": version}))
+        cursor, peers = workspace_presence.snapshot(user_id)
+        for peer in peers:
+            ws.send(json.dumps(peer))
+        last_heartbeat = last_auth_check = connected_at = time.monotonic()
+        last_presence_input = 0.0
+        while True:
+            try:
+                incoming = ws.receive(timeout=0.75)
+                now = time.monotonic()
+                if incoming:
+                    # Never accept case writes over the presence channel.
+                    # Rate-limit presence updates per connection and cap payload size.
+                    if len(incoming) <= 512 and now - last_presence_input >= 0.15:
+                        last_presence_input = now
+                        try:
+                            msg = json.loads(incoming)
+                            if isinstance(msg, dict) and msg.get("type") == "presence":
+                                workspace_presence.publish(
+                                    connection, msg.get("action"),
+                                    msg.get("case_id", ""), msg.get("field", ""),
+                                    actor["name"])
+                        except (ValueError, TypeError):
+                            pass
+                if now - connected_at > 1800:
                     return
-                last_auth_check = now
-            next_version = _workspace_board_version(actor)
-            if next_version != version:
-                version = next_version
-                ws.send(json.dumps({"type": "changed", "version": version}))
-            if now - last_heartbeat >= 20:
-                ws.send(json.dumps({"type": "heartbeat"}))
-                last_heartbeat = now
-        except Exception:
-            # A closed browser/socket ends the worker cleanly. Polling remains
-            # available in the clients if a proxy blocks WebSocket upgrades.
-            return
+                if now - last_auth_check >= 25:
+                    actor = authorized_actor()
+                    if not actor:
+                        return
+                    last_auth_check = now
+                next_version = _workspace_board_version(actor)
+                if next_version != version:
+                    version = next_version
+                    ws.send(json.dumps({"type": "changed", "version": version}))
+                cursor, updates = workspace_presence.changes(cursor, user_id)
+                if updates is None:
+                    # Client resynchronizes after reconnect.
+                    return
+                for update in updates:
+                    ws.send(json.dumps(update))
+                if now - last_heartbeat >= 20:
+                    ws.send(json.dumps({"type": "heartbeat"}))
+                    last_heartbeat = now
+            except Exception:
+                return
+    finally:
+        workspace_presence.leave(connection)
 
 
 @app.route("/api/workspace/board")
