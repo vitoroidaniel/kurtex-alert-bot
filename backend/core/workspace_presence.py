@@ -39,10 +39,12 @@ class PresenceHub:
 
     def _expire(self):
         now = self.clock()
-        expired = [(key, item["agent_id"]) for key, item in self.connections.items()
-                   if now - item["at"] > self.ttl]
-        for key, uid in expired:
-            self.connections.pop(key, None)
+        expired = [item for item in self.connections.values()
+                   if item.get("action") and now - item["at"] > self.ttl]
+        for item in expired:
+            uid = item["agent_id"]
+            item["action"] = None
+            item.pop("event", None)
             self._leave_if_absent(uid)
 
     def join(self, uid):
