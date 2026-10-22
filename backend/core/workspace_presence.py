@@ -69,7 +69,6 @@ class PresenceHub:
 
     def publish(self, key, action, case_id="", field="", name=""):
         with self.lock:
-            self._expire()
             entry = self.connections.get(key)
             if entry is None or action not in _ALLOWED:
                 return False
@@ -80,6 +79,7 @@ class PresenceHub:
                     return False
             elif case_id or field:
                 return False
+            self._expire()
             uid = entry["agent_id"]
             entry["at"] = self.clock()
             if action in ("idle", "left"):
