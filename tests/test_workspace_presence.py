@@ -29,9 +29,18 @@ class PresenceTests(unittest.TestCase):
         self.hub.publish(b, "editing", "KT-2", name="A")
         cursor = self.hub.seq
         self.hub.leave(a)
-        self.assertEqual(self.hub.changes(cursor, "99")[1], [])
+        self.assertEqual(self.hub.changes(cursor, "99")[1][-1]["case_id"], "KT-2")
         self.hub.leave(b)
         self.assertEqual(self.hub.changes(cursor, "99")[1][-1]["action"], "left")
+
+    def test_idle_falls_back_to_other_tab(self):
+        a = self.hub.join(12)
+        b = self.hub.join(12)
+        self.hub.publish(a, "viewing", "KT-1", name="A")
+        self.hub.publish(b, "editing", "KT-2", name="A")
+        cursor = self.hub.seq
+        self.hub.publish(b, "idle")
+        self.assertEqual(self.hub.changes(cursor, "99")[1][-1]["case_id"], "KT-1")
 
     def test_timeout_and_snapshot(self):
         a = self.hub.join(12)
