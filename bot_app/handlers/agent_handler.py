@@ -18,7 +18,6 @@ from telegram.ext import (
 from backend.core.app_time import chicago_date_str, chicago_timestamp, today_str, week_start_str
 from backend.storage.case_store import (
     async_close_case as close_case,
-    async_count_active_cases_for_agent,
     async_get_active_case_for_agent as get_active_case_for_agent,
     async_get_active_cases_for_agent,
     async_get_agent_cases_page_data,
@@ -60,7 +59,7 @@ def _fmt_dt(iso) -> str:
 
 def _active_case_text(case: dict, index: int | None = None, total: int | None = None) -> str:
     status = case.get("status", "assigned")
-    badge = "📋 <b>Reported Case</b>" if status == "reported" else "⏳ <b>Non-Reported Case</b>"
+    badge = "📋 <b>Reported Case</b>" if status == "reported" else "⏳ <b>Current Case</b>"
     if index is not None and total is not None:
         badge = f"{badge} ({index}/{total})"
     opened = _fmt_dt(case.get("opened_at"))
@@ -564,8 +563,7 @@ async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await safe_edit_message_text(
             query,
             "<b>Before closing this case</b>\n\n"
-            "Were any parts replaced?\n"
-            "If yes, record the actual part numbers for Kurtex AI history.",
+            "Were any parts replaced?",
             reply_markup=InlineKeyboardMarkup([
                 [
                     InlineKeyboardButton("Yes, parts replaced", callback_data=f"close_parts_yes|{case_id}"),
@@ -593,7 +591,7 @@ async def _finish_close(
     parts_replaced: bool,
     replaced_parts: list[str],
 ):
-    """Persist close, then show a clean summary + next-case action (Option 1, zero DM flood)."""
+    """Persist close and confirm completion cleanly without extra navigation buttons."""
     case = await get_case(case_id)
     if not case or case.get("status") not in ("assigned", "reported"):
         _clear_close_parts(ctx)
@@ -624,7 +622,6 @@ async def _finish_close(
 
     _clear_close_parts(ctx)
     user_id = update.effective_user.id
-    counts = await async_count_active_cases_for_agent(user_id)
 
     lines = [
         "✅ <b>Case closed!</b>",
@@ -637,27 +634,12 @@ async def _finish_close(
         lines.append(f"🔧 <b>Replaced part #:</b> {part_text}")
     else:
         lines.append("🔧 <b>Parts replaced:</b> No")
-    lines.append("💾 Saved to case history for Kurtex AI.")
-    lines.append("")
-    if counts["total"] > 0:
-        lines.append(
-            f"📊 <b>Remaining active:</b> {counts['total']} "
-            f"({counts['assigned']} non-reported · {counts['reported']} reported)"
-        )
-        next_label = "➡️ Next Non-Reported Case" if counts["assigned"] > 0 else "➡️ Next Active Case"
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton(next_label, callback_data="mycases_next_case"),
-            InlineKeyboardButton("📋 View /mycases", callback_data="mycases_page|all|0"),
-        ]])
-    else:
-        lines.append("🎉 All caught up — no active cases remaining!")
-        kb = None
 
     text = "\n".join(lines)
     if getattr(update, "callback_query", None):
-        await safe_edit_message_text(update.callback_query, text, reply_markup=kb)
+        await safe_edit_message_text(update.callback_query, text, reply_markup=None)
     else:
-        await safe_reply_text(update.message, text, reply_markup=kb)
+        await safe_reply_text(update.message, text, reply_markup=None)
     await _show_remaining_after(user_id, 0)
 
 

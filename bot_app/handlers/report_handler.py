@@ -16,7 +16,6 @@ from telegram.ext import (
 
 from backend.core.config import config
 from backend.storage.case_store import (
-    async_count_active_cases_for_agent,
     async_get_case,
     async_save_maintenance_report,
 )
@@ -583,21 +582,7 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             if "busy_agents" in ctx.bot_data and update.effective_user:
                 ctx.bot_data["busy_agents"].discard(update.effective_user.id)
 
-            counts = await async_count_active_cases_for_agent(update.effective_user.id)
-            if counts["total"] > 0:
-                next_label = "➡️ Next Non-Reported Case" if counts["assigned"] > 0 else "➡️ Next Active Case"
-                kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(next_label, callback_data="mycases_next_case"),
-                    InlineKeyboardButton("📋 View /mycases", callback_data="mycases_page|all|0"),
-                ]])
-                done_msg = (
-                    f"✅ <b>Report sent!</b>\n\n"
-                    f"📊 Remaining active: <b>{counts['total']}</b> ({counts['assigned']} non-reported)"
-                )
-            else:
-                kb = None
-                done_msg = "✅ <b>Report sent!</b>\n\n🎉 No active cases remaining."
-            await safe_edit_message_text(query, done_msg, reply_markup=kb)
+            await safe_edit_message_text(query, "✅ <b>Report sent!</b>", reply_markup=None)
             return ConversationHandler.END
 
         except TelegramError as exc:
