@@ -172,10 +172,10 @@ def month_start_str():
     return chicago_now().date().replace(day=1).isoformat()
 
 def fmt_dt(iso):
-    if not iso: return "—"
+    if not iso: return "вЂ”"
     try:
         dt = chicago_timestamp(iso)
-        return dt.strftime("%b %d %H:%M") if dt else "—"
+        return dt.strftime("%b %d %H:%M") if dt else "вЂ”"
     except: return str(iso)[:16]
 
 def norm_uname(u):
@@ -189,7 +189,7 @@ def case_local_date(c):
     return chicago_date_str(iso) or (iso or "")[:10]
 
 def fmt_secs(secs):
-    if secs is None: return "—"
+    if secs is None: return "вЂ”"
     secs = int(secs)
     if secs < 60: return f"{secs}s"
     if secs < 3600: return f"{secs//60}m {secs%60}s"
@@ -205,7 +205,7 @@ _TEST_VALUE_RE = re.compile(
 
 def is_testing(c):
     # Testing tab/filter removed: cases from testing groups are no longer
-    # excluded from stats — they now count as normal active cases.
+    # excluded from stats вЂ” they now count as normal active cases.
     return False
 
 
@@ -224,7 +224,7 @@ def is_history_test_case(c):
     if _TEST_VALUE_RE.match(unit) or _TEST_VALUE_RE.match(driver) or _TEST_VALUE_RE.match(issue):
         return True
     u_low, d_low, i_low = unit.lower(), driver.lower(), issue.lower()
-    if u_low and u_low not in {"-", "—"} and u_low == d_low and (u_low == i_low or not i_low or len(i_low) <= 2):
+    if u_low and u_low not in {"-", "вЂ”"} and u_low == d_low and (u_low == i_low or not i_low or len(i_low) <= 2):
         if len(u_low) <= 3 or u_low.isdigit():
             return True
     return False
@@ -242,9 +242,9 @@ def serialize_case(c):
         return {
             "id":          (c.get("id") or "")[:8],
             "full_id":     c.get("id") or "",
-            "driver":      c.get("driver_name") or "—",
-            "group":       c.get("group_name") or "—",
-            "agent":       c.get("agent_name") or "—",
+            "driver":      c.get("driver_name") or "вЂ”",
+            "group":       c.get("group_name") or "вЂ”",
+            "agent":       c.get("agent_name") or "вЂ”",
             "agent_id":    c.get("agent_id"),
             "can_reassign": _workspace_can_manage(c, session.get("user") or {}) if session.get("user") else False,
             "load_type":   c.get("load_type") or (c.get("report_data") or {}).get("load") or "",
@@ -274,13 +274,13 @@ def serialize_case(c):
         }
     except Exception as e:
         logger.error(f"serialize_case error: {e}")
-        return {"id":"?","full_id":"","driver":"—","group":"—","agent":"—",
-                "status":"open","opened":"—","closed":"—","opened_raw":"",
-                "response":"—","description":"","notes":"","reassigned":False}
+        return {"id":"?","full_id":"","driver":"вЂ”","group":"вЂ”","agent":"вЂ”",
+                "status":"open","opened":"вЂ”","closed":"вЂ”","opened_raw":"",
+                "response":"вЂ”","description":"","notes":"","reassigned":False}
 
 
 
-# ── Kurtex AI / Cloudflare Workers AI ─────────────────────────────────────────
+# в”Ђв”Ђ Kurtex AI / Cloudflare Workers AI в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "").strip()
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
 KURTEX_AI_MODEL=os.getenv("KURTEX_AI_MODEL","@cf/meta/llama-4-scout-17b-16e-instruct").strip()
@@ -467,7 +467,7 @@ def _ai_similar_case_cards(query,limit=5):
 
 def _ai_clip(value,limit):
     text=re.sub(r"\s+"," ",str(value or "")).strip()
-    return text if len(text)<=limit else text[:max(0,limit-1)]+"…"
+    return text if len(text)<=limit else text[:max(0,limit-1)]+"вЂ¦"
 
 def _ai_context(query="",limit=18):
     """Build a small, relevant context instead of dumping fleet history into every prompt."""
@@ -1047,7 +1047,7 @@ For requested similar Kurtex cases, present concise structured facts (Unit, Driv
 
 For images: describe only what is actually visible; do not infer hidden damage as fact. For web results: use them to improve troubleshooting and identify useful technical references, but do not present a search snippet as an OEM procedure. If make/model or alarm code is needed for an exact procedure, ask for it.
 
-Formatting: use clean headings, compact numbered steps, and single-spaced bullets. Do not output literal backslashes before line breaks, bullet characters, or markdown punctuation. Avoid vague advice such as merely "inspect electrical" — say what should be checked and what the result means."""}]
+Formatting: use clean headings, compact numbered steps, and single-spaced bullets. Do not output literal backslashes before line breaks, bullet characters, or markdown punctuation. Avoid vague advice such as merely "inspect electrical" вЂ” say what should be checked and what the result means."""}]
         for item in history[-8:]:
             role=item.get("role"); content=_ai_clip(item.get("content"),1800)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
@@ -1075,14 +1075,14 @@ Formatting: use clean headings, compact numbered steps, and single-spaced bullet
 
 def _maintenance_tokens(value):
     text=str(value or "").lower()
-    replacements={"turbina":"turbo turbocharger","турбина":"turbo turbocharger","турбо":"turbo","presiune":"pressure boost",
-    "давление":"pressure boost","pierde aer":"air leak","scapa aer":"air leak","scapă aer":"air leak","утечка воздуха":"air leak",
-    "frana":"brake","frână":"brake","тормоз":"brake","тормоза":"brake","motor":"engine","двигатель":"engine",
-    "ulei":"oil","масло":"oil","temperatura":"temperature","температура":"temperature","frig":"cooling reefer",
-    "remorca":"trailer","remorcă":"trailer","прицеп":"trailer","camion":"truck","грузовик":"truck",
-    "baterie":"battery","аккумулятор":"battery"}
+    replacements={"turbina":"turbo turbocharger","С‚СѓСЂР±РёРЅР°":"turbo turbocharger","С‚СѓСЂР±Рѕ":"turbo","presiune":"pressure boost",
+    "РґР°РІР»РµРЅРёРµ":"pressure boost","pierde aer":"air leak","scapa aer":"air leak","scapДѓ aer":"air leak","СѓС‚РµС‡РєР° РІРѕР·РґСѓС…Р°":"air leak",
+    "frana":"brake","frГўnДѓ":"brake","С‚РѕСЂРјРѕР·":"brake","С‚РѕСЂРјРѕР·Р°":"brake","motor":"engine","РґРІРёРіР°С‚РµР»СЊ":"engine",
+    "ulei":"oil","РјР°СЃР»Рѕ":"oil","temperatura":"temperature","С‚РµРјРїРµСЂР°С‚СѓСЂР°":"temperature","frig":"cooling reefer",
+    "remorca":"trailer","remorcДѓ":"trailer","РїСЂРёС†РµРї":"trailer","camion":"truck","РіСЂСѓР·РѕРІРёРє":"truck",
+    "baterie":"battery","Р°РєРєСѓРјСѓР»СЏС‚РѕСЂ":"battery"}
     for a,b in replacements.items(): text=text.replace(a,b)
-    return set(re.findall(r"[a-z0-9ăâîșşțţа-яё_-]{3,}",text,re.I))
+    return set(re.findall(r"[a-z0-9ДѓГўГ®И™ЕџИ›ЕЈР°-СЏС‘_-]{3,}",text,re.I))
 
 def _part_case_candidates(part,limit=90):
     all_cases=[c for c in load_cases() if not is_testing(c)]
@@ -1152,7 +1152,7 @@ def api_ai_test():
         return jsonify({"ok":False,"error":str(e),"model":KURTEX_AI_MODEL,
           "account_id_set":bool(CLOUDFLARE_ACCOUNT_ID),"token_set":bool(CLOUDFLARE_API_TOKEN)}),503
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
+# в”Ђв”Ђ Auth в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 @app.route("/auth/telegram")
 def telegram_auth():
@@ -1184,7 +1184,7 @@ def logout():
     return redirect("/login")
 
 
-# ── Persistent UI preferences ────────────────────────────────────────────────
+# в”Ђв”Ђ Persistent UI preferences в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 @app.route("/api/preferences/overview", methods=["GET", "PUT"])
 def api_overview_preferences():
@@ -1287,7 +1287,7 @@ def api_home_grid_preferences():
     return jsonify({"ok": True, "layout": clean})
 
 
-# ── Website role permissions ─────────────────────────────────────────────────
+# в”Ђв”Ђ Website role permissions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 ROLE_PERMISSION_DEFAULTS = {
     "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","my_profile"],
     "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","shifts","bot_issues","my_profile"],
@@ -1367,7 +1367,7 @@ def api_developer_permissions():
     saved=_save_role_permissions(incoming)
     return jsonify({"ok":True,"permissions":_load_role_permissions()})
 
-# ── Developer workspace ─────────────────────────────────────────────────────
+# в”Ђв”Ђ Developer workspace в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _developer_only():
     user = session.get("user") or {}
     return user.get("role") == "developer"
@@ -1502,7 +1502,7 @@ def api_developer_user(user_id):
     if not edit_user(user_id, name, username, role): return jsonify({"error":"User not found."}), 404
     return jsonify({"ok":True})
 
-# ── API ───────────────────────────────────────────────────────────────────────
+# в”Ђв”Ђ API в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 
 _PART_IMAGE_CACHE = {}
@@ -1881,7 +1881,7 @@ def build_kurtex_intelligence(cases):
         pct=None if old==0 else round((n-old)/old*100)
         fid="emerging:"+cat.lower().replace(" ","-").replace("&","and").replace("/","-")
         severity="critical" if n>=8 and (old==0 or n>=old*3) else "elevated"
-        evidence=f"{n} cases · {len(units)} units · " + ("new pattern vs previous 14 days" if old==0 else f"+{pct}% vs previous 14 days")
+        evidence=f"{n} cases В· {len(units)} units В· " + ("new pattern vs previous 14 days" if old==0 else f"+{pct}% vs previous 14 days")
         findings.append({"id":fid,"type":"emerging_problem","title":f"{cat} reports are increasing","category":cat,"severity":severity,"evidence":evidence,"summary":f"Kurtex found {n} {cat.lower()} cases in the last 14 days compared with {old} in the previous 14 days.","case_ids":ids,"units":units,"count":n,"previous_count":old})
         tag(ids,"Emerging","emerging",fid)
     by_unit={}
@@ -1957,7 +1957,7 @@ def _home_case_attention(case, now):
         return None
     urgent = str(case.get("priority") or "normal").lower() in {"critical", "urgent", "high", "high priority"}
     missed = str(case.get("status") or "").lower() == "missed"
-    waiting = not case.get("agent_id") and str(case.get("agent_name") or "").strip().lower() in {"", "—", "unassigned"}
+    waiting = not case.get("agent_id") and str(case.get("agent_name") or "").strip().lower() in {"", "вЂ”", "unassigned"}
     started = _home_timestamp(case.get("reported_at") or case.get("opened_at"))
     age = max(0, (now - started).total_seconds() / 3600) if started else None
     aging = is_maintenance_report(case) and age is not None and age >= 24
@@ -1999,7 +1999,7 @@ def api_home_briefing():
             continue
         priority = str(c.get("priority") or "normal").lower()
         urgent = priority in {"critical", "urgent", "high", "high priority"}
-        waiting = not c.get("agent_id") and str(c.get("agent_name") or "").strip().lower() in {"", "—", "unassigned"}
+        waiting = not c.get("agent_id") and str(c.get("agent_name") or "").strip().lower() in {"", "вЂ”", "unassigned"}
         high_priority += int(urgent)
         unassigned += int(waiting)
         state = _home_case_attention(c, now)
@@ -2940,6 +2940,104 @@ def api_case_telegram_media(case_id, index):
         logger.exception("Telegram report media preview failed")
         return jsonify({"error": "Unable to retrieve this Telegram attachment. Retry or re-upload the original to the case.", "code": "telegram_upstream"}), 502
 
+_ISSUE_SUMMARY_CACHE = {}
+_ISSUE_SUMMARY_LOCK = Lock()
+_ISSUE_SUMMARY_FILE = DATA_DIR / "issue_summaries.json"
+_ISSUE_SUMMARY_MAX_WORDS = 5
+
+
+def _issue_summary_fallback(text, limit=_ISSUE_SUMMARY_MAX_WORDS):
+    words = re.sub(r"\s+", " ", str(text or "")).strip().split(" ")
+    words = [w for w in words if w]
+    if len(words) <= limit:
+        return " ".join(words)
+    return " ".join(words[:limit]).rstrip(",.;:-") + "вЂ¦"
+
+
+def _issue_summary_clean(raw, limit=_ISSUE_SUMMARY_MAX_WORDS):
+    line = next((ln for ln in str(raw or "").splitlines() if ln.strip()), "")
+    line = re.sub(r"^(?:summary|issue|title)\s*[:\-]\s*", "", line.strip(), flags=re.I).strip(" \t\"'`*.")
+    words = [w for w in re.split(r"\s+", line) if w]
+    return " ".join(words[:limit])
+
+
+def _issue_summary_load():
+    with _ISSUE_SUMMARY_LOCK:
+        if _ISSUE_SUMMARY_CACHE.get("__loaded__"):
+            return
+        _ISSUE_SUMMARY_CACHE["__loaded__"] = True
+        try:
+            data = json.loads(_ISSUE_SUMMARY_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                _ISSUE_SUMMARY_CACHE.update({str(k): str(v) for k, v in data.items() if str(v).strip()})
+        except Exception:
+            pass
+
+
+def _issue_summary_for(text):
+    """Return a 2-5 word AI headline for a long issue text (cached); short text is returned unchanged."""
+    import hashlib
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not text:
+        return "", False
+    if len(text.split(" ")) <= _ISSUE_SUMMARY_MAX_WORDS:
+        return text, False
+    key = hashlib.sha1(text.lower().encode("utf-8")).hexdigest()
+    _issue_summary_load()
+    cached = _ISSUE_SUMMARY_CACHE.get(key)
+    if cached:
+        return cached, True
+    try:
+        answer = _cf_ai([
+            {"role": "system", "content": "You write ultra-short headlines for fleet maintenance reports. Summarize the reported issue in 2 to 5 words as a plain noun phrase, in the same language as the report. Use no quotes, no punctuation at the end, no preamble. Output only the headline."},
+            {"role": "user", "content": text[:900]},
+        ], max_tokens=24, temperature=0.1)
+        summary = _issue_summary_clean(answer)
+    except Exception as exc:
+        logger.warning("Issue summary failed: %s", exc)
+        summary = ""
+    if len(summary) < 3:
+        return _issue_summary_fallback(text), False
+    with _ISSUE_SUMMARY_LOCK:
+        _ISSUE_SUMMARY_CACHE[key] = summary
+        try:
+            store = {k: v for k, v in _ISSUE_SUMMARY_CACHE.items() if k != "__loaded__"}
+            if len(store) > 5000:
+                for k in list(store)[:len(store) - 5000]:
+                    store.pop(k, None)
+                    _ISSUE_SUMMARY_CACHE.pop(k, None)
+            tmp = _ISSUE_SUMMARY_FILE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(store, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(_ISSUE_SUMMARY_FILE)
+        except Exception:
+            pass
+    return summary, True
+
+
+@app.route("/api/case-summary")
+def api_case_summary():
+    if not session.get("user"): return jsonify({"error": "unauthorized"}), 401
+    case_id = request.args.get("id", "").strip()
+    if not case_id: return jsonify({"error": "no id"}), 400
+    try:
+        if load_cases is _DEFAULT_LOAD_CASES and case_store._storage_dir().resolve() == DATA_DIR.resolve():
+            raw_case, ambiguous = case_store.get_case_or_prefix(case_id)
+            if ambiguous: return jsonify({"error": "Ambiguous case ID. Use the full ID."}), 409
+            case = normalize_case(raw_case) if raw_case else None
+        else:
+            cases = load_cases()
+            found = [c for c in cases if c["id"] == case_id] or [c for c in cases if c["id"].startswith(case_id)]
+            if len(found) > 1: return jsonify({"error": "Ambiguous case ID. Use the full ID."}), 409
+            case = found[0] if found else None
+        if not case: return jsonify({"error": "not found"}), 404
+        text = case.get("issue_text") or case.get("description") or ""
+        summary, ai = _issue_summary_for(text)
+        return jsonify({"summary": summary, "ai": ai})
+    except Exception as exc:
+        logger.warning("api_case_summary error: %s", exc)
+        return jsonify({"error": "summary unavailable"}), 500
+
+
 @app.route("/api/case")
 def api_case_detail():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
@@ -3318,7 +3416,7 @@ def api_report():
                 return jsonify({"error":"Choose a valid start and end date in order."}), 400
         cases     = load_cases()
         if period == "today":
-            label = "Today — " + chicago_now().strftime("%B %d, %Y")
+            label = "Today вЂ” " + chicago_now().strftime("%B %d, %Y")
             cases = [c for c in cases if case_local_date(c) == today_str()]
         elif period == "week":
             label = "This Week"; cases = [c for c in cases if case_local_date(c) >= week_start_str()]
@@ -3531,7 +3629,7 @@ def api_fleet_knowledge_csv():
     return jsonify(ok=True,rows=len(rows),stats=fleet_knowledge_store.stats(),**result)
 
 
-# ── HTML pages ────────────────────────────────────────────────────────────────
+# в”Ђв”Ђ HTML pages в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 
 
@@ -3572,7 +3670,7 @@ def api_trends():
         for (u,k),n in sorted(pairs.items(),key=lambda x:x[1],reverse=True):
             if n<2: continue
             vt=next((str(c.get("vehicle_type") or "Unit").title() for c in cur if str(c.get("unit_number") or "").strip()==u),"Unit")
-            hotspots.append({"label":u,"value":f"{n} cases","detail":f"{vt} · {k} · same problem reported {n} times"})
+            hotspots.append({"label":u,"value":f"{n} cases","detail":f"{vt} В· {k} В· same problem reported {n} times"})
             if len(hotspots)>=7: break
         complete=max(0,len(cur)-incomplete)
         data_quality=[{"label":"Complete case records","value":complete,"detail":f"{round(complete/len(cur)*100) if cur else 0}% usable without cleanup"},{"label":"Incomplete / pending records","value":incomplete,"detail":"May reduce analytics confidence"},{"label":"Cases with unit number","value":sum(1 for c in cur if str(c.get('unit_number') or '').strip()),"detail":"Can be linked to unit history"}]
@@ -3607,10 +3705,10 @@ def api_comparison():
         for l,x,y,u,help_text in vals:
             delta=(x-y) if u==" pp" else pct(x,y); rows.append({"label":l,"current":f"{x}%" if u==" pp" else x,"previous":f"{y}%" if u==" pp" else y,"delta":delta,"unit":u,"help":help_text})
         cc,pc=Counter(category(c) for c in cur),Counter(category(c) for c in prev); category_change=[]
-        for k in set(cc)|set(pc): category_change.append({"label":k,"value":cc[k],"detail":f"Previous {pc[k]} · {pct(cc[k],pc[k]):+d}%"})
+        for k in set(cc)|set(pc): category_change.append({"label":k,"value":cc[k],"detail":f"Previous {pc[k]} В· {pct(cc[k],pc[k]):+d}%"})
         category_change=sorted(category_change,key=lambda x:abs(int(x['detail'].split()[-1].replace('%',''))),reverse=True)[:7]
         ce=Counter((str(c.get("vehicle_type") or "Unknown").title()) for c in cur); peq=Counter((str(c.get("vehicle_type") or "Unknown").title()) for c in prev); equipment_change=[]
-        for k in set(ce)|set(peq): equipment_change.append({"label":k,"value":ce[k],"detail":f"Previous {peq[k]} · {pct(ce[k],peq[k]):+d}%"})
+        for k in set(ce)|set(peq): equipment_change.append({"label":k,"value":ce[k],"detail":f"Previous {peq[k]} В· {pct(ce[k],peq[k]):+d}%"})
         equipment_change=sorted(equipment_change,key=lambda x:x['value'],reverse=True)
         new=sorted(a['recurring']-b['recurring']); cleared=sorted(b['recurring']-a['recurring'])
         new_rows=[{"label":u,"value":"Repeat","detail":"Repeats a problem now, but did not in the previous period"} for u in new[:8]]; cleared_rows=[{"label":u,"value":"Clear","detail":"Repeated a problem previously, but not in the current period"} for u in cleared[:8]]
@@ -3638,7 +3736,7 @@ def api_fleet_intelligence():
             cases = data["cases"]
             total = len(cases)
             issues = Counter((c.get("issue_text") or "")[:50] for c in cases if c.get("issue_text"))
-            top_issue = issues.most_common(1)[0][0] if issues else "—"
+            top_issue = issues.most_common(1)[0][0] if issues else "вЂ”"
             last_case = max(cases, key=lambda c: c.get("opened_at",""))
             top_units.append({
                 "unit": unit, "vtype": data["vtype"], "total": total,
@@ -3654,7 +3752,7 @@ def api_fleet_intelligence():
         for name, cases in driver_data.items():
             total = len(cases)
             issues = Counter((c.get("issue_text") or "")[:50] for c in cases if c.get("issue_text"))
-            top_issue = issues.most_common(1)[0][0] if issues else "—"
+            top_issue = issues.most_common(1)[0][0] if issues else "вЂ”"
             top_drivers.append({"name": name, "total": total, "top_issue": top_issue})
         top_drivers.sort(key=lambda x: -x["total"])
         return jsonify({
@@ -3697,14 +3795,14 @@ def _miniapp_user():
     return _verify_webapp_init_data(request.headers.get("X-Telegram-Init-Data", ""))
 
 def _report_markdown(data):
-    labels={"truck":"Truck","trailer":"Trailer","reefer":"Reefer"}; icons={"low":"🟢","medium":"🟡","high":"🔴"}
+    labels={"truck":"Truck","trailer":"Trailer","reefer":"Reefer"}; icons={"low":"рџџў","medium":"рџџЎ","high":"рџ”ґ"}
     def esc(v):
-        v=str(v or "—")
+        v=str(v or "вЂ”")
         for ch in "_*`[": v=v.replace(ch,"\\"+ch)
         return v
     vt=data.get("vehicle_type","truck"); pr=data.get("priority","medium")
     unit_label="Truck" if vt=="truck" else "Trailer"
-    lines=[f"{icons.get(pr,'🟡')} *Case Report — {labels.get(vt,vt.title())}*",f"Priority: *{pr.title()}*","",f"*{unit_label}:* {esc(data.get('unit_number'))}",f"*Driver:* {esc(data.get('driver'))}","",f"*Issue:* {esc(data.get('issue'))}","",f"*{esc(data.get('load'))}*",f"Pick up Location/Time: {esc(data.get('pickup'))}",f"Delivery Location/Time: {esc(data.get('delivery'))}",f"Current Location: {esc(data.get('location'))}"]
+    lines=[f"{icons.get(pr,'рџџЎ')} *Case Report вЂ” {labels.get(vt,vt.title())}*",f"Priority: *{pr.title()}*","",f"*{unit_label}:* {esc(data.get('unit_number'))}",f"*Driver:* {esc(data.get('driver'))}","",f"*Issue:* {esc(data.get('issue'))}","",f"*{esc(data.get('load'))}*",f"Pick up Location/Time: {esc(data.get('pickup'))}",f"Delivery Location/Time: {esc(data.get('delivery'))}",f"Current Location: {esc(data.get('location'))}"]
     if vt=="reefer": lines += ["",f"*Setpoint:* {esc(data.get('setpoint'))}",f"*Current temp:* {esc(data.get('current_temp'))}",f"*Temp recorder:* {esc(data.get('temp_recorder'))}"]
     if data.get("comments"): lines += ["",f"*Comments:* {esc(data.get('comments'))}"]
     lines += ["",f"*Reported by:* {esc(data.get('handler'))}"]
@@ -3865,7 +3963,7 @@ def start_api_thread():
 
 
 
-# ── Operations intelligence: recurring issues, similarity, knowledge ─────────
+# в”Ђв”Ђ Operations intelligence: recurring issues, similarity, knowledge в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _case_search_text(c):
     return " ".join(str(c.get(k) or "") for k in ("description","notes","issue_text","vehicle_type","unit_number","load_type")).lower()
 
@@ -4002,7 +4100,7 @@ def api_video_transcript(chat_id,file_id):
 register_learning_routes(app,learning_store,chat_store,_ai_user_key,_ai_is_trainer,load_cases,is_testing,ai_serialized)
 
 
-# ── Shifts management & operational bot APIs ─────────────────────────────────
+# в”Ђв”Ђ Shifts management & operational bot APIs в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
 _SHIFT_TIMEZONES = [
     "America/Chicago",
@@ -4263,12 +4361,12 @@ def _notify_feedback_reporter(item: dict) -> bool:
     from telegram import Bot
 
     status_label = {
-        "open": "🔵 Open",
-        "in_progress": "🟡 In Progress",
-        "resolved": "✅ Resolved",
+        "open": "рџ”µ Open",
+        "in_progress": "рџџЎ In Progress",
+        "resolved": "вњ… Resolved",
     }.get(item.get("status"), item.get("status") or "Updated")
     lines = [
-        f"📩 <b>Bot Report Update</b> · <code>{_html.escape(str(item['id']), quote=False)}</code>",
+        f"рџ“© <b>Bot Report Update</b> В· <code>{_html.escape(str(item['id']), quote=False)}</code>",
         f"<b>Status:</b> {_html.escape(status_label, quote=False)}",
     ]
     if item.get("resolved_by"):
