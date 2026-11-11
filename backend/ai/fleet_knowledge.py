@@ -3,6 +3,7 @@
 Fleet evidence is retrieval context, not manually approved repair guidance.  It is
 kept separate from developer-reviewed AI feedback/lessons.
 """
+from contextlib import contextmanager
 import hashlib, json, sqlite3
 from datetime import datetime, timezone
 from backend.ai.maintenance_ai import tokens, knowledge_excerpt
@@ -24,8 +25,16 @@ class FleetKnowledgeStore:
               case_id TEXT PRIMARY KEY, fingerprint TEXT, status TEXT, searchable TEXT,
               payload TEXT, quality TEXT, updated_at TEXT)''')
             db.execute('CREATE INDEX IF NOT EXISTS fleet_cases_status ON fleet_cases(status,updated_at)')
+    @contextmanager
     def connect(self):
-        db=sqlite3.connect(self.path,timeout=10);db.row_factory=sqlite3.Row;return db
+        db=sqlite3.connect(self.path,timeout=10);db.row_factory=sqlite3.Row
+        try:
+            db.execute('PRAGMA busy_timeout=10000')
+            db.execute('PRAGMA journal_mode=WAL')
+            with db:
+                yield db
+        finally:
+            db.close()
     def _record(self,case):
         data={k:case.get(k) for k in USEFUL_FIELDS if case.get(k) not in (None,'',[],{})}
         # Preserve additional scalar/report fields so future report questions are searchable.
@@ -35,21 +44,17 @@ class FleetKnowledgeStore:
     def ingest_cases(self,cases):
         changed=0; skipped=0; now=datetime.now(timezone.utc).isoformat()
         with self.connect() as db:
+            existing={r['case_id']:r['fingerprint'] for r in db.execute('SELECT case_id,fingerprint FROM fleet_cases')}
             for case in cases:
                 cid=str(case.get('id') or case.get('full_id') or '').strip()
                 if not cid:skipped+=1;continue
                 data=self._record(case); payload=json.dumps(data,ensure_ascii=False,sort_keys=True,default=str)
                 fp=hashlib.sha256(payload.encode()).hexdigest()
-                # A case can be useful even before closure if a detailed report exists.  Mark
-                # incomplete evidence accordingly so the AI never treats it as a confirmed fix.
+                if existing.get(cid)==fp:continue
                 resolved=bool(case.get('closed_at') or str(case.get('status','')).lower()=='done')
                 detail=' '.join(str(data.get(k,'')) for k in ('issue_text','description','notes','comments','resolution','solution','close_notes','resolution_notes'))
                 quality='resolved' if resolved else ('reported' if len(detail.strip())>=20 else 'incomplete')
-                old=db.execute('SELECT fingerprint FROM fleet_cases WHERE case_id=?',(cid,)).fetchone()
-                if old and old['fingerprint']==fp:continue
                 searchable=' '.join(str(v) for v in data.values() if isinstance(v,(str,int,float,bool)))
-                # Index the newly recorded part-number list without indexing bulky
-                # media/report JSON blobs that would slow down every AI search.
                 searchable+=' '+' '.join(str(v) for v in (data.get('replaced_parts') or []))
                 db.execute('''INSERT INTO fleet_cases(case_id,fingerprint,status,searchable,payload,quality,updated_at)
                   VALUES(?,?,?,?,?,?,?) ON CONFLICT(case_id) DO UPDATE SET fingerprint=excluded.fingerprint,

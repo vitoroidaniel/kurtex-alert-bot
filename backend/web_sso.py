@@ -26,8 +26,10 @@ def register_web_sso(app, data_dir, allowed_pages):
     signer = URLSafeTimedSerializer(app.secret_key, salt='kurtex-web-sso-v1')
     path = Path(data_dir) / 'web_sso_codes.sqlite3'
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as con:
-        con.execute('CREATE TABLE IF NOT EXISTS codes (digest TEXT PRIMARY KEY, expires INTEGER NOT NULL)')
+    from contextlib import closing
+    with closing(sqlite3.connect(path)) as con:
+        with con:
+            con.execute('CREATE TABLE IF NOT EXISTS codes (digest TEXT PRIMARY KEY, expires INTEGER NOT NULL)')
 
     def client_url(name):
         if name not in CLIENTS: return None
@@ -62,9 +64,11 @@ def register_web_sso(app, data_dir, allowed_pages):
                    'challenge': pending['challenge'], 'jti': jti}
         code = signer.dumps(payload)
         digest = hashlib.sha256(jti.encode()).hexdigest()
-        with sqlite3.connect(path, timeout=10) as con:
-            con.execute('DELETE FROM codes WHERE expires < ?', (int(time.time()),))
-            con.execute('INSERT INTO codes (digest, expires) VALUES (?,?)', (digest, int(time.time())+120))
+        from contextlib import closing
+        with closing(sqlite3.connect(path, timeout=10)) as con:
+            with con:
+                con.execute('DELETE FROM codes WHERE expires < ?', (int(time.time()),))
+                con.execute('INSERT INTO codes (digest, expires) VALUES (?,?)', (digest, int(time.time())+120))
         response = redirect(origin+'/auth/complete?'+urlencode({'code':code,'state':pending['state']}))
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['Cache-Control'] = 'no-store'
@@ -86,9 +90,11 @@ def register_web_sso(app, data_dir, allowed_pages):
             return jsonify(error='Sign-in verification failed'),403
         digest=hashlib.sha256(str(payload.get('jti','')).encode()).hexdigest()
         # Atomic one-use consumption. Expired/replayed codes are rejected.
-        with sqlite3.connect(path,timeout=10) as con:
-            cur=con.execute('DELETE FROM codes WHERE digest=? AND expires>=?', (digest,int(time.time())))
-            if cur.rowcount!=1: return jsonify(error='Sign-in code already used or expired'),401
+        from contextlib import closing
+        with closing(sqlite3.connect(path,timeout=10)) as con:
+            with con:
+                cur=con.execute('DELETE FROM codes WHERE digest=? AND expires>=?', (digest,int(time.time())))
+                if cur.rowcount!=1: return jsonify(error='Sign-in code already used or expired'),401
         from backend.storage.user_store import get_user
         stored=get_user(int(payload['uid']))
         if not stored: return jsonify(error='Account no longer authorized'),403

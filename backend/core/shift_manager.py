@@ -1,75 +1,35 @@
-"""
-shift_manager.py - Returns which admins are currently on shift.
-Now reads users dynamically from user_store instead of hardcoded shifts.py.
-"""
+"""shift_manager.py -- Resolves active alert recipients from DB-backed shifts."""
 
-from datetime import datetime, time
-import zoneinfo
-from backend.core.shifts import SHIFTS, TIMEZONE
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+
+from backend.storage import shift_store, user_store
 
 
 def _get_all_alert_users() -> list[dict]:
-    """Pull alert-eligible users (super_admin + agent) from dynamic store."""
-    from backend.storage.user_store import get_all_user_dicts
-    return [u for u in get_all_user_dicts() if u["role"] in ("super_admin", "agent")]
+    """Pull all alert-eligible users (super_admin + agent), excluding developer."""
+    return [
+        u for u in user_store.get_all_user_dicts()
+        if u["role"] in ("super_admin", "agent")
+    ]
 
 
-def get_on_shift_admins() -> list[dict]:
-    """Returns list of alert-eligible users currently on shift."""
-    try:
-        tz = zoneinfo.ZoneInfo(TIMEZONE)
-    except Exception:
-        tz = zoneinfo.ZoneInfo("America/Chicago")
-
-    now      = datetime.now(tz)
-    weekday  = now.weekday()
-    now_time = now.time().replace(second=0, microsecond=0)
-
-    in_shift = False
-    for shift in SHIFTS:
-        if weekday not in shift["days"]:
-            continue
-        s = shift["start"]
-        e = shift["end"]
-        if s <= e:
-            if s <= now_time < e:
-                in_shift = True
-                break
-        else:
-            if now_time >= s or now_time < e:
-                in_shift = True
-                break
-
-    if not in_shift:
-        return []
-
-    return _get_all_alert_users()
+def get_on_shift_admins(now_utc: Optional[datetime] = None) -> list[dict]:
+    """Return alert-eligible users assigned to currently active shift(s)."""
+    state = shift_store.get_on_shift_state(now_utc)
+    return state["on_duty_users"]
 
 
 def get_all_admins() -> list[dict]:
-    """Returns all alert-eligible users regardless of shift (fallback)."""
+    """Return all alert-eligible users regardless of shift (fallback)."""
     return _get_all_alert_users()
 
 
-def get_current_shift_name() -> str:
-    try:
-        tz = zoneinfo.ZoneInfo(TIMEZONE)
-    except Exception:
-        tz = zoneinfo.ZoneInfo("America/Chicago")
-
-    now      = datetime.now(tz)
-    weekday  = now.weekday()
-    now_time = now.time().replace(second=0, microsecond=0)
-
-    for shift in SHIFTS:
-        if weekday not in shift["days"]:
-            continue
-        s, e = shift["start"], shift["end"]
-        if s <= e:
-            if s <= now_time < e:
-                return shift["name"]
-        else:
-            if now_time >= s or now_time < e:
-                return shift["name"]
-
-    return "Off Hours"
+def get_current_shift_name(now_utc: Optional[datetime] = None) -> str:
+    state = shift_store.get_on_shift_state(now_utc)
+    active = state["active_shifts"]
+    if active:
+        return ", ".join(s["name"] for s in active)
+    return "Off Hours" if state["has_configured_shifts"] else "No Shifts Configured"

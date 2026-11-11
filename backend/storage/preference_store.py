@@ -1,107 +1,109 @@
-"""Persistent per-user frontend preferences (JSON-backed on DATA_DIR volume)."""
-import json, os
+"""SQLite-backed per-user frontend preferences on DATA_DIR volume."""
+
+from __future__ import annotations
+
+import json
+import os
 from pathlib import Path
-from threading import RLock
-from contextlib import contextmanager
-import fcntl
+
+from backend.core.app_time import utc_now
+from backend.storage import db
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-# Existing installations keep using the same file on their Railway volume.
-_LEGACY_PREFERENCES = DATA_DIR / "dashboard_preferences.json"
-PREFERENCES_FILE = _LEGACY_PREFERENCES if _LEGACY_PREFERENCES.exists() else DATA_DIR / "frontend_preferences.json"
-_lock = RLock()
-_LOCK_FILE = DATA_DIR / 'frontend_preferences.lock'
-
-@contextmanager
-def _storage_lock():
-    # Thread and cross-worker process lock: multiple Railway workers must not
-    # clobber each other's account preference writes.
-    with _lock:
-        with _LOCK_FILE.open('a+') as lockfile:
-            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(lockfile.fileno(), fcntl.LOCK_UN)
+PREFERENCES_FILE = DATA_DIR / "frontend_preferences.json"
 
 
-def _load():
-    if not PREFERENCES_FILE.exists():
+def _storage_dir() -> Path:
+    env_dir = Path(os.getenv("DATA_DIR", "/app/data"))
+    if env_dir != DATA_DIR:
+        env_dir.mkdir(parents=True, exist_ok=True)
+        return env_dir
+    return DATA_DIR
+
+
+def _read_user_prefs(user_id) -> dict:
+    with db.read_conn(_storage_dir()) as conn:
+        row = conn.execute(
+            "SELECT data_json FROM preferences WHERE user_id=?",
+            (str(user_id),),
+        ).fetchone()
+    if not row:
         return {}
     try:
-        data = json.loads(PREFERENCES_FILE.read_text(encoding="utf-8"))
+        data = json.loads(row["data_json"])
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
 
-def _save(data):
-    tmp = PREFERENCES_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(PREFERENCES_FILE)
+def _update_user_section(user_id, section: str, value) -> None:
+    now = utc_now().isoformat()
+    uid = str(user_id)
+    with db.write_tx(_storage_dir()) as conn:
+        row = conn.execute(
+            "SELECT data_json FROM preferences WHERE user_id=?",
+            (uid,),
+        ).fetchone()
+        data = {}
+        if row:
+            try:
+                parsed = json.loads(row["data_json"])
+                if isinstance(parsed, dict):
+                    data = parsed
+            except Exception:
+                data = {}
+        if section == "interface":
+            existing = data.get("interface")
+            merged = dict(existing) if isinstance(existing, dict) else {}
+            merged.update(value)
+            data["interface"] = merged
+        else:
+            data[section] = value
+        conn.execute(
+            """INSERT INTO preferences(user_id, data_json, updated_at) VALUES(?,?,?)
+               ON CONFLICT(user_id) DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at""",
+            (uid, json.dumps(data, ensure_ascii=False, separators=(",", ":")), now),
+        )
 
 
 def get_overview(user_id):
-    with _storage_lock():
-        row = _load().get(str(user_id), {})
-        value = row.get("overview", {}) if isinstance(row, dict) else {}
-        return value if isinstance(value, dict) else {}
+    value = _read_user_prefs(user_id).get("overview", {})
+    return value if isinstance(value, dict) else {}
 
 
 def save_overview(user_id, value):
-    with _storage_lock():
-        data = _load()
-        row = data.setdefault(str(user_id), {})
-        row["overview"] = value
-        _save(data)
-        return value
+    _update_user_section(user_id, "overview", value)
+    return value
 
 
 def get_home_grid(user_id):
-    with _storage_lock():
-        row = _load().get(str(user_id), {})
-        return row.get("home_grid", {}) if isinstance(row, dict) else {}
+    value = _read_user_prefs(user_id).get("home_grid", {})
+    return value if isinstance(value, dict) else {}
+
 
 def save_home_grid(user_id, value):
-    with _storage_lock():
-        data = _load()
-        row = data.setdefault(str(user_id), {})
-        row["home_grid"] = value
-        _save(data)
-        return value
+    _update_user_section(user_id, "home_grid", value)
+    return value
 
 
 def get_home_notes(user_id):
-    with _storage_lock():
-        row = _load().get(str(user_id), {})
-        result = row.get("home_notes", []) if isinstance(row, dict) else []
-        return result if isinstance(result, list) else []
+    result = _read_user_prefs(user_id).get("home_notes", [])
+    return result if isinstance(result, list) else []
+
 
 def save_home_notes(user_id, value):
-    with _storage_lock():
-        data = _load()
-        row = data.setdefault(str(user_id), {})
-        row["home_notes"] = value
-        _save(data)
-        return value
+    _update_user_section(user_id, "home_notes", value)
+    return value
 
 
 def get_interface(user_id):
     """Return the account's interface/notification settings, or an empty record."""
-    with _storage_lock():
-        row = _load().get(str(user_id), {})
-        value = row.get("interface", {}) if isinstance(row, dict) else {}
-        return dict(value) if isinstance(value, dict) else {}
+    value = _read_user_prefs(user_id).get("interface", {})
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def save_interface(user_id, value):
     """Update only interface settings; never erase saved layout, notes or widgets."""
-    with _storage_lock():
-        data = _load()
-        row = data.setdefault(str(user_id), {})
-        current = row.get("interface", {}) if isinstance(row.get("interface"), dict) else {}
-        merged = {**current, **value}
-        row["interface"] = merged
-        _save(data)
-        return dict(merged)
+    _update_user_section(user_id, "interface", value)
+    return get_interface(user_id)

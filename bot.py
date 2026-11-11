@@ -1,53 +1,102 @@
 """
-Kurtex Alert Bot — Truck Maintenance Command Center
-Dynamic user management via Telegram commands + forward-to-add flow.
+Kurtex Alert Bot -- Truck Maintenance Command Center
+High-concurrency Telegram bot + SQLite-backed shared API.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import os
+import re
 import signal
 from datetime import datetime, timezone
 from pathlib import Path
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.error import BadRequest, Conflict, NetworkError, TimedOut
-from telegram.request import HTTPXRequest
+from telegram import BotCommandScopeChat, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
+from telegram.error import BadRequest, Conflict, NetworkError, TimedOut
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters, TypeHandler,
-    ApplicationHandlerStop, PicklePersistence, PersistenceInput,
+    Application,
+    ApplicationHandlerStop,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    PersistenceInput,
+    PicklePersistence,
+    TypeHandler,
+    filters,
 )
+from telegram.request import HTTPXRequest
 
-from backend.core.config import config
+from api.server import start_api_thread, stop_api_server
 from backend.core.app_time import CENTRAL_TIMEZONE_LABEL, chicago_timestamp
-from bot_app.handlers.alert_handler import AlertHandler, TRIGGER_WORDS
-from bot_app.handlers.report_handler import get_report_conversation, cb_orphan_report_callback, recover_report_text
-from bot_app.handlers.agent_handler import (
-    cmd_done, cmd_mycases, cmd_mystats, cmd_casehistory,
-    cb_done_pick, cb_solve_confirm, cb_solve_cancel,
-    cb_delete_confirm, cb_delete_do, cb_delete_keep,
-    cb_close_confirm, cb_close_cancel,
-    cb_close_parts_yes, cb_close_parts_no, cb_close_parts_skip,
-    cb_close_parts_cancel, recv_close_parts_text,
-    cb_histpage, cb_hist_delete_chat,
-    cb_solve_start, cb_close_ask,
+from backend.core.config import config
+from backend.core.shift_manager import get_current_shift_name, get_on_shift_admins
+from backend.storage.case_store import async_get_untouched_unassigned_cases, ensure_indexes
+from backend.storage.shift_store import get_on_shift_state
+from backend.storage.user_store import (
+    add_user,
+    get_all_users,
+    get_user,
+    has_role,
+    is_authorized,
+    sync_telegram_username,
 )
 from bot_app.handlers.admin_handler import (
-    cmd_report, cmd_leaderboard, cmd_missed, _is_main_admin,
-    cmd_adduser, cmd_removeuser, cmd_editrole, cmd_listusers,
-    handle_forward, cb_addrole,
+    _is_main_admin,
+    cb_addrole,
+    cmd_adduser,
+    cmd_editrole,
+    cmd_leaderboard,
+    cmd_listusers,
+    cmd_missed,
+    cmd_removeuser,
+    cmd_report,
+    handle_forward,
+)
+from bot_app.handlers.agent_handler import (
+    cb_close_ask,
+    cb_close_cancel,
+    cb_close_confirm,
+    cb_close_parts_cancel,
+    cb_close_parts_no,
+    cb_close_parts_skip,
+    cb_close_parts_yes,
+    cb_delete_confirm,
+    cb_delete_do,
+    cb_delete_keep,
+    cb_done_pick,
+    cb_hist_delete_chat,
+    cb_histpage,
+    cb_mycases_clear,
+    cb_mycases_next_case,
+    cb_mycases_open,
+    cb_mycases_page,
+    cb_mycases_view,
+    cb_solve_cancel,
+    cb_solve_confirm,
+    cmd_casehistory,
+    cmd_done,
+    cmd_mycases,
+    cmd_mystats,
+    recv_close_parts_text,
+)
+from bot_app.handlers.alert_handler import AlertHandler, TRIGGER_WORDS
+from bot_app.handlers.feedback_handler import (
+    get_alert_broadcast_conversation,
+    get_feedback_conversation,
+)
+from bot_app.handlers.report_handler import (
+    cb_orphan_report_callback,
+    get_report_conversation,
+    recover_report_text,
 )
 from bot_app.handlers.scheduler import register_jobs
-from api.server import start_api_thread
-from backend.storage.user_store import (
-    is_authorized, has_role, sync_telegram_username,
-)
-from backend.storage.case_store import async_get_untouched_unassigned_cases
+from bot_app.telegram_utils import esc_html, safe_answer, safe_reply_text, safe_send_message
 
-BOT_NAME    = "Kurtex Alert Bot"
+BOT_NAME = "Kurtex Alert Bot"
 BOT_TAGLINE = "Truck Maintenance Command Center"
 
 logging.basicConfig(
@@ -56,16 +105,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Lightweight runtime heartbeat consumed by the Developer workspace. It lives on
-# the same Railway volume as cases, so the operations API can verify the bot process
-# itself is alive without requiring Railway API credentials.
 _BOT_STARTED_AT = datetime.now(timezone.utc)
 _BOT_RUNTIME = {"updates_processed": 0, "callbacks_processed": 0, "last_update_at": None}
 
-def _heartbeat_path():
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
+
+
+def _heartbeat_path() -> Path:
     return Path(config.DATA_DIR) / "bot_runtime.json"
 
-def _write_bot_heartbeat(username=""):
+
+def _write_bot_heartbeat(username: str = "") -> None:
     path = _heartbeat_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -87,28 +138,30 @@ def _write_bot_heartbeat(username=""):
         os.replace(tmp, path)
     except Exception as exc:
         logger.warning("[HEALTH] Could not write bot heartbeat: %s", exc)
-        try: tmp.unlink(missing_ok=True)
-        except OSError: pass
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
-async def _bot_heartbeat_loop(application):
+
+async def _bot_heartbeat_loop(application: Application) -> None:
     while True:
         try:
             me = application.bot_data.get("bot_identity") or {}
             _BOT_RUNTIME["polling_running"] = bool(application.updater and application.updater.running)
-            _write_bot_heartbeat(me.get("username", ""))
+            await asyncio.to_thread(_write_bot_heartbeat, me.get("username", ""))
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("[HEALTH] Bot heartbeat failed")
         await asyncio.sleep(20)
 
-async def runtime_update_middleware(update: Update, ctx):
+
+async def runtime_update_middleware(update: Update, ctx) -> None:
     _BOT_RUNTIME["updates_processed"] += 1
     _BOT_RUNTIME["last_update_at"] = datetime.now(timezone.utc).isoformat()
     if update.callback_query is not None:
         _BOT_RUNTIME["callbacks_processed"] += 1
-# httpx logs Telegram URLs at INFO level, which exposes the bot token and
-# creates enough noise to hide real callback errors in Railway logs.
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
 
 
 def _acquire_instance_lock():
@@ -127,30 +180,20 @@ def _acquire_instance_lock():
     except BlockingIOError:
         logger.critical("Another bot process already owns the polling lock; stopping duplicate instance.")
         return None
-    except (ImportError, OSError) as e:
-        # Local non-Linux development should still work; Railway uses Linux.
-        logger.warning(f"Could not create single-instance lock: {e}")
+    except (ImportError, OSError) as exc:
+        logger.warning("Could not create single-instance lock: %s", exc)
         return True
 
 
-# ── Typing decorator ──────────────────────────────────────────────────────────
-
 def with_typing(fn):
+    """Run command directly without burning a blocking sendChatAction round-trip."""
     async def wrapper(update: Update, ctx):
-        if update.effective_chat:
-            try:
-                await ctx.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
-            except Exception:
-                pass
         return await fn(update, ctx)
     wrapper.__name__ = fn.__name__
     return wrapper
 
 
-# ── Callback diagnostics ─────────────────────────────────────────────────────
-
-async def callback_trace_middleware(update: Update, ctx):
-    """Log every inline-button update before auth/handler routing."""
+async def callback_trace_middleware(update: Update, ctx) -> None:
     query = update.callback_query
     if query is None:
         return
@@ -158,60 +201,55 @@ async def callback_trace_middleware(update: Update, ctx):
     logger.info("[CALLBACK] RECEIVED data=%r user=%s", query.data, user_id)
 
 
-# ── Auth middleware ───────────────────────────────────────────────────────────
-
-async def auth_middleware(update: Update, ctx):
+async def auth_middleware(update: Update, ctx) -> None:
     user = update.effective_user
     if not user:
         return
     chat = update.effective_chat
 
-    # Keep the user identity current from Telegram itself. Telegram has no
-    # bulk username lookup by numeric user ID, so every live interaction is an
-    # opportunity to refresh an authorized user's @username.
-    if is_authorized(user.id):
-        try:
-            sync_telegram_username(user.id, user.username or "")
-        except Exception:
-            logger.exception("Unable to refresh Telegram username for user=%s", user.id)
+    # Fast cached user lookup; only touches SQLite write tx if @username changed.
+    stored = get_user(user.id)
+    if stored is not None:
+        clean_uname = (user.username or "").strip().lstrip("@")
+        if stored.get("username", "") != clean_uname:
+            try:
+                await asyncio.to_thread(sync_telegram_username, user.id, clean_uname)
+            except Exception:
+                logger.exception("Unable to refresh Telegram username for user=%s", user.id)
 
-    # Allow group messages through (alert triggers, etc.)
     if chat and chat.type in ("group", "supergroup"):
         msg = update.effective_message
         if msg and msg.text and msg.text.startswith("/"):
             raise ApplicationHandlerStop
         return
 
-    # Private chat — must be in user_store.  Inline buttons need an explicit
-    # callback acknowledgement; otherwise Telegram spins indefinitely and the
-    # user cannot tell an account/role problem from a broken Report button.
-    if not is_authorized(user.id):
+    if stored is None:
         if update.callback_query:
-            try:
-                await update.callback_query.answer(
-                    "Your Telegram account is not authorized. Ask an admin to check your numeric Telegram ID.",
-                    show_alert=True,
-                )
-            except Exception:
-                logger.exception("Could not acknowledge unauthorized callback user=%s", user.id)
-        elif update.message:
-            await update.message.reply_text(
-                "⛔ You are not authorized to use this bot.\n"
-                "Contact an administrator for access."
+            await safe_answer(
+                update.callback_query,
+                "Your Telegram account is not authorized. Ask an admin to check your numeric Telegram ID.",
+                show_alert=True,
             )
-        logger.warning("[AUTH] Rejected Telegram interaction user_id=%s chat_type=%s", user.id, getattr(chat, 'type', None))
+        elif update.message:
+            await safe_reply_text(
+                update.message,
+                "⛔ You are not authorized to use this bot.\nContact an administrator for access.",
+                parse_mode=None,
+            )
+        logger.warning("[AUTH] Rejected Telegram interaction user_id=%s chat_type=%s", user.id, getattr(chat, "type", None))
         raise ApplicationHandlerStop
 
 
-# ── Startup ───────────────────────────────────────────────────────────────────
+async def close_parts_text_middleware(update: Update, ctx) -> None:
+    """Ensure replacement part numbers are never stolen by an older report draft."""
+    if ctx.user_data.get("close_parts_case_id"):
+        await recv_close_parts_text(update, ctx)
+        raise ApplicationHandlerStop
+
+
+# ── Startup / Shutdown ────────────────────────────────────────────────────────
 
 async def post_init(application: Application) -> None:
-    from telegram import BotCommandScopeChat
-
-    # ── Force polling mode before getUpdates starts ───────────────────────
-    # Polling and webhooks are mutually exclusive. Always issue deleteWebhook
-    # (even when getWebhookInfo currently looks empty), then verify Telegram
-    # accepted it. This also cleans up webhooks left by old deployments.
     try:
         webhook_info = await application.bot.get_webhook_info()
         if webhook_info.url:
@@ -225,26 +263,24 @@ async def post_init(application: Application) -> None:
         logger.exception("[TELEGRAM] Could not force polling mode before startup")
         raise
 
-    # Do not run a background webhook watchdog here. Polling is the only
-    # update transport for this service; startup cleanup above is sufficient.
-    # A watchdog created from post_init runs before Application.start() and can
-    # interfere with startup/callback diagnostics.
-
-    # Reload unassigned alerts from disk so admins can still accept after restart
+    await ensure_indexes()
     alert_h = application.bot_data.get("alert_handler")
     if alert_h:
-        alert_h.load_from_disk()
+        await asyncio.to_thread(alert_h.load_from_disk)
 
     base_commands = [
         ("start",       "Register with Kurtex Alert Bot"),
         ("shifts",      "Current shift roster"),
         ("mycases",     "Your active cases"),
+        ("unassigned",  "Untouched unassigned cases"),
         ("done",        "Today's closed cases"),
         ("casehistory", "Full closed case history"),
         ("mystats",     "Your performance stats"),
+        ("bug",         "Report a bot error or ask for help"),
         ("help",        "Commands and help"),
     ]
     manager_commands = base_commands + [
+        ("alert",       "Broadcast an alert to all users"),
         ("report",      "Daily summary"),
         ("leaderboard", "Weekly top performers"),
         ("missed",      "Unhandled alerts today"),
@@ -256,89 +292,102 @@ async def post_init(application: Application) -> None:
 
     await application.bot.set_my_commands(base_commands)
 
-    # Set extended command list for developer + super_admin
-    from backend.storage.user_store import get_all_users
-    for uid_str, u in get_all_users().items():
+    for uid_str, u in (await asyncio.to_thread(get_all_users)).items():
         if u["role"] in ("developer", "super_admin"):
             try:
                 await application.bot.set_my_commands(
                     manager_commands,
                     scope=BotCommandScopeChat(chat_id=int(uid_str)),
                 )
-            except Exception as e:
-                logger.warning(f"Could not set commands for {uid_str}: {e}")
+            except Exception as exc:
+                logger.warning("Could not set commands for %s: %s", uid_str, exc)
 
     me = await application.bot.get_me()
     application.bot_data["bot_identity"] = {"id": me.id, "username": me.username or ""}
-    _write_bot_heartbeat(me.username or "")
+    await asyncio.to_thread(_write_bot_heartbeat, me.username or "")
     application.create_task(_bot_heartbeat_loop(application), name="kurtex-bot-heartbeat")
-    logger.info(f"{BOT_NAME} started as @{me.username}")
+    logger.info("%s started as @%s", BOT_NAME, me.username)
+
+
+async def post_shutdown(application: Application) -> None:
+    stop_api_server()
 
 
 # ── Commands ──────────────────────────────────────────────────────────────────
 
 @with_typing
 async def cmd_start(update: Update, ctx):
-    """
-    /start now just welcomes the user.
-    If they're already in user_store (added by forward or /adduser), they're good.
-    If not in store but reached here (shouldn't happen due to auth_middleware),
-    we auto-add them as agent so they don't get locked out.
-    """
-    from backend.storage.user_store import get_user, add_user
-    user    = update.effective_user
-    stored  = get_user(user.id)
-
+    user = update.effective_user
+    stored = await asyncio.to_thread(get_user, user.id)
     if not stored:
-        # Edge case: user somehow bypassed auth — auto-register as agent
         name = f"{user.first_name} {user.last_name or ''}".strip()
-        add_user(user.id, name, user.username or "", "agent")
-        stored = get_user(user.id)
+        await asyncio.to_thread(add_user, user.id, name, user.username or "", "agent")
+        stored = await asyncio.to_thread(get_user, user.id)
 
     role = stored["role"] if stored else "agent"
-    await update.message.reply_text(
-        f"👋 Welcome to *{BOT_NAME}!*\n\n_{BOT_TAGLINE}_\n\n"
-        f"You're registered as *{role}*.\n\n"
+    await safe_reply_text(
+        update.message,
+        f"👋 Welcome to <b>{esc_html(BOT_NAME)}!</b>\n\n"
+        f"<i>{esc_html(BOT_TAGLINE)}</i>\n\n"
+        f"You're registered as <b>{esc_html(role)}</b>.\n\n"
+        "/mycases — Manage your active cases\n"
         "/shifts — See who is on duty\n"
         "/help — All commands",
-        parse_mode="Markdown",
     )
 
 
 @with_typing
 async def cmd_shifts(update: Update, ctx):
-    from backend.core.shift_manager import get_on_shift_admins, get_current_shift_name
-    shift_name = get_current_shift_name()
-    on_shift   = get_on_shift_admins()
+    state = await asyncio.to_thread(get_on_shift_state)
+    shift_name = await asyncio.to_thread(get_current_shift_name)
+    on_shift = state["on_duty_users"]
+    all_shifts = state["shifts"]
 
-    if not on_shift:
-        await update.message.reply_text(
-            f"Shift: {shift_name}\n\nNo agents scheduled. All admins will be notified."
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    lines = [f"🕒 <b>Current Shift:</b> {esc_html(shift_name)}\n"]
+
+    if on_shift:
+        lines.append("<b>On duty (receiving alerts):</b>")
+        for a in on_shift:
+            uname = f" (@{esc_html(a['username'])})" if a.get("username") else ""
+            lines.append(f"  • {esc_html(a['name'])}{uname}")
+    elif not state["has_configured_shifts"]:
+        lines.append(
+            "No shifts configured yet in Kurtex Desktop. All agents/admins receive alerts."
         )
-        return
+    else:
+        lines.append("No agents assigned to an active shift right now. Fallback notifies all admins.")
 
-    names = "\n".join(
-        f"  {a['name']} (@{a['username']})" if a["username"] else f"  {a['name']}"
-        for a in on_shift
-    )
-    await update.message.reply_text(f"Shift: {shift_name}\n\nOn duty:\n{names}")
+    if all_shifts:
+        lines.append("\n<b>Configured Shifts:</b>")
+        active_ids = {s["id"] for s in state["active_shifts"]}
+        for s in all_shifts:
+            status_icon = "🟢" if s["id"] in active_ids else ("⚪️" if s["enabled"] else "⏸")
+            days_str = ", ".join(day_names[d] for d in s["days"] if 0 <= d < 7)
+            lines.append(
+                f"{status_icon} <b>{esc_html(s['name'])}</b> "
+                f"({esc_html(s['start_time'])}–{esc_html(s['end_time'])}, {esc_html(s['timezone'])})\n"
+                f"   Days: {esc_html(days_str)} · Assigned: {len(s.get('user_ids') or [])}"
+            )
+
+    await safe_reply_text(update.message, "\n".join(lines))
 
 
 @with_typing
 async def cmd_unassigned(update: Update, ctx):
-    """Show only untouched, still-unassigned cases with a fresh Assign button."""
+    """Show untouched, still-unassigned cases with a fresh Assign button."""
     cases = await async_get_untouched_unassigned_cases()
     if not cases:
-        await update.message.reply_text("No untouched unassigned cases.")
+        await safe_reply_text(update.message, "No untouched unassigned cases.", parse_mode=None)
         return
 
-    # Avoid flooding a private chat if stale data has accumulated. The newest
-    # untouched cases are the useful recovery targets; the count remains clear.
     limit = 20
     shown = cases[:limit]
-    await update.message.reply_text(
+    await safe_reply_text(
+        update.message,
         f"Unassigned untouched cases: {len(cases)}"
-        + (f"\nShowing newest {limit}." if len(cases) > limit else "")
+        + (f"\nShowing newest {limit}." if len(cases) > limit else ""),
+        parse_mode=None,
     )
 
     for case in shown:
@@ -346,41 +395,43 @@ async def cmd_unassigned(update: Update, ctx):
         opened_dt = chicago_timestamp(case.get("opened_at"))
         opened = opened_dt.strftime("%Y-%m-%d %H:%M") if opened_dt else ""
         text = (
-            "🔔 Unassigned Case\n\n"
-            f"Group: {case.get('group_name') or '—'}\n"
-            f"Driver: {case.get('driver_name') or '—'}\n"
-            f"Issue: {(case.get('description') or '—')[:300]}\n"
-            f"Opened: {opened or '—'} {CENTRAL_TIMEZONE_LABEL}"
+            "🔔 <b>Unassigned Case</b>\n\n"
+            f"<b>Group:</b> {esc_html(case.get('group_name'))}\n"
+            f"<b>Driver:</b> {esc_html(case.get('driver_name'))}\n"
+            f"<b>Issue:</b> {esc_html((case.get('description') or '—')[:300])}\n"
+            f"<b>Opened:</b> {esc_html(opened or '—')} {esc_html(CENTRAL_TIMEZONE_LABEL)}"
         )
         kb = InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Assign", callback_data=f"assign|{case_id}")
         ]])
-        await update.message.reply_text(text, reply_markup=kb)
+        await safe_reply_text(update.message, text, reply_markup=kb)
 
 
 @with_typing
 async def cmd_help(update: Update, ctx):
-    user     = update.effective_user
-    is_super = _is_main_admin(user.id)
-    is_dev   = has_role(user.id, "developer")
-    words    = "  ".join(TRIGGER_WORDS)
+    user = update.effective_user
+    is_super = await asyncio.to_thread(_is_main_admin, user.id)
+    is_dev = await asyncio.to_thread(has_role, user.id, "developer")
+    words = "  ".join(TRIGGER_WORDS)
 
     text = (
-        f"*{BOT_NAME}*\n_{BOT_TAGLINE}_\n\n"
-        "📢 *Driver reporting* — post in driver group:\n"
-        f"`{words}`\n\n"
-        "_Example: #maintenance engine overheating, truck 42_\n\n"
-        "*Agent commands:*\n"
-        "/mycases — Active cases\n"
+        f"<b>{esc_html(BOT_NAME)}</b>\n<i>{esc_html(BOT_TAGLINE)}</i>\n\n"
+        "📢 <b>Driver reporting</b> — post in driver group:\n"
+        f"<code>{esc_html(words)}</code>\n\n"
+        "<i>Example: #maintenance engine overheating, truck 42</i>\n\n"
+        "<b>Agent commands:</b>\n"
+        "/mycases — Active cases (paginated / compact list)\n"
         "/unassigned — Untouched unassigned cases\n"
         "/done — Today's closed cases\n"
         "/casehistory — Full history\n"
         "/mystats — Your stats\n"
         "/shifts — Shift roster\n"
+        "/bug — Report a bot bug, error, or ask for help\n"
     )
     if is_super:
         text += (
-            "\n*Admin commands:*\n"
+            "\n<b>Admin commands:</b>\n"
+            "/alert — Broadcast an alert to all users\n"
             "/report — Daily summary\n"
             "/leaderboard — Weekly top performers\n"
             "/missed — Unhandled alerts\n"
@@ -388,43 +439,46 @@ async def cmd_help(update: Update, ctx):
             "/adduser — Add user by ID and role\n"
             "/removeuser — Remove a user\n"
             "/editrole — Change a user's role\n"
-            "\n💡 *Tip:* Forward any message from a user to add them quickly.\n"
+            "\n💡 <b>Tip:</b> Forward any message from a user to add them quickly.\n"
         )
     if is_dev and not is_super:
         text += (
-            "\n*Developer commands:*\n"
+            "\n<b>Developer commands:</b>\n"
+            "/alert — Broadcast an alert to all users\n"
             "/listusers — All users and roles\n"
             "/adduser — Add user by ID and role\n"
             "/removeuser — Remove a user\n"
             "/editrole — Change a user's role\n"
-            "\n💡 *Tip:* Forward any message from a user to add them quickly.\n"
+            "\n💡 <b>Tip:</b> Forward any message from a user to add them quickly.\n"
         )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🐞 Report Bot Issue / Help", callback_data="bug_start"),
+    ]])
+    await safe_reply_text(update.message, text, reply_markup=kb)
 
-
-# ── SIGTERM handler ───────────────────────────────────────────────────────────
 
 def _register_sigterm(application: Application):
     def _handle(signum, frame):
-        logger.info("SIGTERM — notifying admins mid-conversation")
+        logger.info("SIGTERM -- shutting down API worker and notifying admins")
+        stop_api_server()
 
         async def _notify():
             try:
                 for uid, udata in application.user_data.items():
                     if udata.get("report_case_id"):
                         try:
-                            await application.bot.send_message(
+                            await safe_send_message(
+                                application.bot,
                                 uid,
-                                "⚠️ *Bot is restarting.*\n\n"
+                                "⚠️ <b>Bot is restarting.</b>\n\n"
                                 "Your in-progress report is saved periodically. "
                                 "When the bot returns, try continuing the report. "
                                 "If the session has expired, open /mycases and press Report again.",
-                                parse_mode="Markdown",
                             )
                         except Exception:
                             pass
-            except Exception as e:
-                logger.warning(f"SIGTERM notify error: {e}")
+            except Exception as exc:
+                logger.warning("SIGTERM notify error: %s", exc)
 
         try:
             loop = asyncio.get_event_loop()
@@ -436,8 +490,6 @@ def _register_sigterm(application: Application):
     signal.signal(signal.SIGTERM, _handle)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
     instance_lock = _acquire_instance_lock()
     if instance_lock is None:
@@ -445,13 +497,8 @@ def main():
 
     alert_h = AlertHandler()
 
-    # Use dedicated HTTP clients for normal Bot API calls and long polling.
-    # A transient Railway/Telegram socket reset must not leave the bot looking
-    # alive while getUpdates is unhealthy.  The updater already retries
-    # NetworkError; these timeouts give it enough room to finish long polls
-    # and reconnect cleanly instead of churning connections.
     bot_request = HTTPXRequest(
-        connection_pool_size=32,
+        connection_pool_size=64,
         connect_timeout=15.0,
         read_timeout=30.0,
         write_timeout=30.0,
@@ -465,17 +512,12 @@ def main():
         pool_timeout=15.0,
     )
 
-    # Persist Telegram Report conversations and their per-user drafts on the
-    # Railway volume. Role edits through the dashboard do not clear this data,
-    # and a normal Railway redeploy no longer discards the Report button state.
-    # Bot/chat data are intentionally excluded: the alert handler already has
-    # its own durable JSON storage, and contains runtime-only asyncio objects.
     report_persistence = PicklePersistence(
         filepath=Path(config.DATA_DIR) / "telegram_report_sessions.pickle",
         store_data=PersistenceInput(
             user_data=True, chat_data=False, bot_data=False, callback_data=False,
         ),
-        update_interval=5,
+        update_interval=30,
     )
     app = (
         Application.builder()
@@ -483,7 +525,9 @@ def main():
         .request(bot_request)
         .get_updates_request(updates_request)
         .persistence(report_persistence)
+        .concurrent_updates(16)
         .post_init(post_init)
+        .post_shutdown(post_shutdown)
         .build()
     )
 
@@ -494,35 +538,12 @@ def main():
         update_id = getattr(update, "update_id", "unknown") if update else "unknown"
         error = ctx.error
 
-        # A webhook conflict means something else used setWebhook with this
-        # token. Remove it immediately; PTB's polling loop will retry getUpdates.
         if isinstance(error, Conflict) and "webhook" in str(error).lower():
-            logger.error(
-                "[TELEGRAM] Polling/webhook conflict (update_id=%s): %s; forcing polling mode",
-                update_id, error,
-            )
+            logger.error("[TELEGRAM] Polling/webhook conflict (update_id=%s): %s", update_id, error)
             try:
                 await ctx.bot.delete_webhook(drop_pending_updates=False)
-                info = await ctx.bot.get_webhook_info()
-                if info.url:
-                    logger.critical(
-                        "[TELEGRAM] Webhook remains active at %s. Check for another Railway service/deployment using this BOT_TOKEN.",
-                        info.url,
-                    )
-                else:
-                    logger.warning("[TELEGRAM] Webhook removed after conflict; polling will retry")
             except Exception as cleanup_error:
                 logger.exception("[TELEGRAM] Failed to recover from webhook conflict: %s", cleanup_error)
-            return
-
-        # getUpdates/network disconnects are recoverable. PTB's polling loop
-        # reconnects automatically, so don't bury the useful logs in a full
-        # traceback for every temporary socket reset.
-        if isinstance(error, (NetworkError, TimedOut)):
-            logger.warning(
-                "Telegram network interruption (update_id=%s): %s; polling will retry",
-                update_id, error,
-            )
             return
 
         if isinstance(error, BadRequest):
@@ -531,6 +552,10 @@ def main():
                 update_id, error,
                 exc_info=(type(error), error, error.__traceback__),
             )
+            return
+
+        if isinstance(error, (NetworkError, TimedOut)):
+            logger.warning("Telegram network interruption (update_id=%s): %s; polling will retry", update_id, error)
             return
 
         logger.error(
@@ -543,11 +568,15 @@ def main():
     app.bot_data["alert_handler"] = alert_h
     _register_sigterm(app)
 
-    app.add_handler(TypeHandler(Update, runtime_update_middleware), group=-3)
-    app.add_handler(TypeHandler(Update, callback_trace_middleware), group=-2)
-    app.add_handler(TypeHandler(Update, auth_middleware), group=-1)
-
     private = filters.ChatType.PRIVATE
+
+    app.add_handler(TypeHandler(Update, runtime_update_middleware), group=-4)
+    app.add_handler(TypeHandler(Update, callback_trace_middleware), group=-3)
+    app.add_handler(TypeHandler(Update, auth_middleware), group=-2)
+    app.add_handler(
+        MessageHandler(private & filters.TEXT & ~filters.COMMAND, close_parts_text_middleware),
+        group=-1,
+    )
 
     # ── Core commands ──
     app.add_handler(CommandHandler("start",       cmd_start,       filters=private))
@@ -570,67 +599,65 @@ def main():
     app.add_handler(CommandHandler("editrole",   cmd_editrole,   filters=private))
     app.add_handler(CommandHandler("listusers",  cmd_listusers,  filters=private))
 
-    # ── Forward-to-add: catches forwarded messages in private chat ──
+    # ── Forward-to-add ──
     app.add_handler(MessageHandler(private & filters.FORWARDED, handle_forward))
-
-    # ── Role selection callback (from forward flow) ──
     app.add_handler(CallbackQueryHandler(cb_addrole, pattern=r"^addrole\|"))
 
-    # Solve/close callbacks are registered below as ordinary callback handlers.
-    # They don't hold conversational state, so wrapping them in an empty
-    # ConversationHandler only caused PTB callback-tracking warnings and could
-    # intercept the real handlers.
+    # ── Conversation handlers (support/feedback, team /alert, report) + recovery ──
+    app.add_handler(get_feedback_conversation())
+    app.add_handler(get_alert_broadcast_conversation())
     app.add_handler(get_report_conversation())
-    # One fallback for free text: close-part numbers OR stale Report comments.
-    # The Report ConversationHandler above gets first chance to process its own messages.
+
     async def recover_private_text(update, ctx):
         if ctx.user_data.get("close_parts_case_id"):
             await recv_close_parts_text(update, ctx)
         else:
             await recover_report_text(update, ctx)
-    app.add_handler(MessageHandler(private & filters.TEXT & ~filters.COMMAND, recover_private_text))
-    # Last-resort guard for stale report keyboards after a restart/session loss.
-    # Active report callbacks are consumed by ConversationHandler first.
-    app.add_handler(CallbackQueryHandler(cb_orphan_report_callback, pattern=r'^rpt_'))
 
-    import re as _re
+    app.add_handler(MessageHandler(private & filters.TEXT & ~filters.COMMAND, recover_private_text))
+    app.add_handler(CallbackQueryHandler(cb_orphan_report_callback, pattern=r"^rpt_"))
+
     def _build_pattern(words):
-        return '|'.join(
-            _re.escape(w) if w.startswith('#') else r'\b' + _re.escape(w) + r'\b'
+        return "|".join(
+            re.escape(w) if w.startswith("#") else r"\b" + re.escape(w) + r"\b"
             for w in words
         )
 
-    _trigger_regex = f'(?i)({_build_pattern(TRIGGER_WORDS)})'
+    _trigger_regex = f"(?i)({_build_pattern(TRIGGER_WORDS)})"
     app.add_handler(MessageHandler(
-        filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO) &
-        (filters.Regex(_trigger_regex) | filters.CaptionRegex(_trigger_regex)),
+        filters.ChatType.GROUPS & (filters.TEXT | filters.PHOTO)
+        & (filters.Regex(_trigger_regex) | filters.CaptionRegex(_trigger_regex)),
         alert_h.handle,
     ))
 
-    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment,  pattern=r'^(assign|assignrpt|ignore)\|'))
-    app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,    pattern=r'^reassign_'))
-    app.add_handler(CallbackQueryHandler(cb_done_pick,               pattern=r'^done_pick\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_ask,               pattern=r'^close_ask\|'))
-    app.add_handler(CallbackQueryHandler(cb_solve_confirm,           pattern=r'^solve_confirm\|'))
-    app.add_handler(CallbackQueryHandler(cb_solve_cancel,            pattern=r'^solve_cancel\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_confirm,           pattern=r'^close_confirm\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_parts_yes,         pattern=r'^close_parts_yes\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_parts_no,          pattern=r'^close_parts_no\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_parts_skip,        pattern=r'^close_parts_skip\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_parts_cancel,      pattern=r'^close_parts_cancel\|'))
-    app.add_handler(CallbackQueryHandler(cb_close_cancel,            pattern=r'^close_cancel\|'))
-    app.add_handler(CallbackQueryHandler(cb_delete_confirm,          pattern=r'^delete_confirm\|'))
-    app.add_handler(CallbackQueryHandler(cb_delete_do,               pattern=r'^delete_do\|'))
-    app.add_handler(CallbackQueryHandler(cb_delete_keep,             pattern=r'^delete_keep\|'))
-    app.add_handler(CallbackQueryHandler(cb_histpage,                pattern=r'^histpage\|'))
-    app.add_handler(CallbackQueryHandler(cb_hist_delete_chat,        pattern=r'^hist_delete_chat$'))
+    # ── Callbacks ──
+    app.add_handler(CallbackQueryHandler(alert_h.handle_assignment,  pattern=r"^(assign|assignrpt|ignore)\|"))
+    app.add_handler(CallbackQueryHandler(alert_h.handle_reassign,    pattern=r"^reassign_"))
+    app.add_handler(CallbackQueryHandler(cb_mycases_page,            pattern=r"^(mycases_page\||mycases_noop$)"))
+    app.add_handler(CallbackQueryHandler(cb_mycases_view,            pattern=r"^mycases_view\|"))
+    app.add_handler(CallbackQueryHandler(cb_mycases_open,            pattern=r"^mycases_open\|"))
+    app.add_handler(CallbackQueryHandler(cb_mycases_clear,           pattern=r"^mycases_clear$"))
+    app.add_handler(CallbackQueryHandler(cb_mycases_next_case,       pattern=r"^mycases_next_case$"))
+    app.add_handler(CallbackQueryHandler(cb_done_pick,               pattern=r"^done_pick\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_ask,               pattern=r"^close_ask\|"))
+    app.add_handler(CallbackQueryHandler(cb_solve_confirm,           pattern=r"^solve_confirm\|"))
+    app.add_handler(CallbackQueryHandler(cb_solve_cancel,            pattern=r"^solve_cancel\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_confirm,           pattern=r"^close_confirm\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_yes,         pattern=r"^close_parts_yes\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_no,          pattern=r"^close_parts_no\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_skip,        pattern=r"^close_parts_skip\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_parts_cancel,      pattern=r"^close_parts_cancel\|"))
+    app.add_handler(CallbackQueryHandler(cb_close_cancel,            pattern=r"^close_cancel\|"))
+    app.add_handler(CallbackQueryHandler(cb_delete_confirm,          pattern=r"^delete_confirm\|"))
+    app.add_handler(CallbackQueryHandler(cb_delete_do,               pattern=r"^delete_do\|"))
+    app.add_handler(CallbackQueryHandler(cb_delete_keep,             pattern=r"^delete_keep\|"))
+    app.add_handler(CallbackQueryHandler(cb_histpage,                pattern=r"^histpage\|"))
+    app.add_handler(CallbackQueryHandler(cb_hist_delete_chat,        pattern=r"^hist_delete_chat$"))
 
     register_jobs(app)
 
     start_api_thread()
-    logger.info(f"Starting {BOT_NAME}...")
-    # Keep updates that arrive during a short deploy/restart. Dropping them can
-    # discard Assign button clicks and makes the bot appear to freeze.
+    logger.info("Starting %s...", BOT_NAME)
     app.run_polling(
         drop_pending_updates=False,
         timeout=20,

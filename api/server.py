@@ -19,9 +19,17 @@ from backend.ai.maintenance_ai import INSPECTION_POLICY, ranked_cases, tokens, k
 
 from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chicago_timestamp
 from backend.web_sso import register_web_sso
-from backend.core.case_snapshot import CaseSnapshot, DataUnavailable
+from backend.core.case_snapshot import CaseSnapshot, DataUnavailable, normalize as normalize_case
+from backend.storage import case_store, db as kurtex_db
 from flask import Flask, g, jsonify, render_template, request, session, redirect, Response, send_file
-from flask_sock import Sock
+try:
+    from flask_sock import Sock
+except ImportError:
+    class Sock:
+        def __init__(self, app):
+            self.app = app
+        def route(self, *_args, **_kwargs):
+            return lambda fn: fn
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 logger = logging.getLogger(__name__)
@@ -108,6 +116,9 @@ def load_cases():
     cases, stale = case_snapshot.read(DATA_DIR / "cases.json")
     g.case_data_stale = stale
     return cases
+
+
+_DEFAULT_LOAD_CASES = load_cases
 
 @app.after_request
 def api_headers(response):
@@ -490,59 +501,85 @@ def _ai_parts_matches(query,limit=8):
     return out
 
 
-# Reuse legacy persistent data when upgrading an existing Railway volume.
-NOTIFICATIONS_FILE = (DATA_DIR / "dashboard_notifications.json" if (DATA_DIR / "dashboard_notifications.json").exists()
-                      else DATA_DIR / "notifications.json")
-
 def _read_notifications():
     try:
-        if NOTIFICATIONS_FILE.exists():
-            data=json.loads(NOTIFICATIONS_FILE.read_text(encoding="utf-8")); return data if isinstance(data,list) else []
-    except Exception as e: logger.warning("Notification read failed: %s",e)
-    return []
+        with kurtex_db.read_conn(DATA_DIR) as conn:
+            rows = conn.execute("SELECT data_json FROM notifications ORDER BY created_at DESC LIMIT 1000").fetchall()
+        return [json.loads(r["data_json"]) for r in rows]
+    except Exception as e:
+        logger.warning("Notification read failed: %s", e)
+        return []
 
 def _write_notifications(items):
-    NOTIFICATIONS_FILE.parent.mkdir(parents=True,exist_ok=True); tmp=NOTIFICATIONS_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(items[-1000:],ensure_ascii=False,indent=2),encoding="utf-8"); tmp.replace(NOTIFICATIONS_FILE)
+    trimmed = list(items)[-1000:]
+    with kurtex_db.write_tx(DATA_DIR) as conn:
+        conn.execute("DELETE FROM notifications")
+        for item in trimmed:
+            if isinstance(item, dict) and item.get("id"):
+                conn.execute(
+                    "INSERT INTO notifications(id, user_key, created_at, seen, data_json) VALUES(?,?,?,?,?)",
+                    (
+                        str(item["id"]),
+                        str(item.get("user") or "user"),
+                        str(item.get("created_at") or ""),
+                        1 if item.get("seen") else 0,
+                        json.dumps(item, ensure_ascii=False, separators=(",", ":")),
+                    ),
+                )
 
 def _notify_user(kind,title,message,severity="info"):
     try:
-        items=_read_notifications(); now=datetime.now().astimezone().isoformat(timespec="seconds")
-        # de-dupe identical system failures within the latest entries
         key=_ai_user_key() if "_ai_user_key" in globals() else "user"
-        for n in reversed(items[-30:]):
-            if n.get("user")==key and n.get("title")==title and n.get("message")==message and not n.get("seen"):
-                return
-        items.append({"id":uuid.uuid4().hex,"user":key,"kind":kind,"title":title,"message":message,
-                      "severity":severity,"seen":False,"created_at":now})
-        _write_notifications(items)
+        now=datetime.now().astimezone().isoformat(timespec="seconds")
+        with kurtex_db.write_tx(DATA_DIR) as conn:
+            recent = conn.execute(
+                "SELECT data_json FROM notifications WHERE user_key=? ORDER BY created_at DESC LIMIT 30",
+                (key,),
+            ).fetchall()
+            for r in recent:
+                n = json.loads(r["data_json"])
+                if n.get("title")==title and n.get("message")==message and not n.get("seen"):
+                    return
+            item = {"id":uuid.uuid4().hex,"user":key,"kind":kind,"title":title,"message":message,
+                    "severity":severity,"seen":False,"created_at":now}
+            conn.execute(
+                "INSERT INTO notifications(id, user_key, created_at, seen, data_json) VALUES(?,?,?,?,?)",
+                (item["id"], key, now, 0, json.dumps(item, ensure_ascii=False, separators=(",", ":"))),
+            )
     except Exception as e: logger.warning("Notification write failed: %s",e)
 
 @app.route("/api/notifications")
 def api_notifications():
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
-    key=_ai_user_key(); items=[n for n in _read_notifications() if n.get("user")==key]
-    # Operational users only need actionable fleet notifications. AI/system diagnostics stay developer-only.
+    key=_ai_user_key()
+    with kurtex_db.read_conn(DATA_DIR) as conn:
+        rows=conn.execute("SELECT data_json FROM notifications WHERE user_key=? ORDER BY created_at DESC LIMIT 200",(key,)).fetchall()
+    items=[json.loads(r["data_json"]) for r in rows]
     if not _ai_is_trainer():
         items=[n for n in items if n.get("kind") not in ("ai","system","developer")]
-    items.sort(key=lambda x:x.get("created_at") or "",reverse=True)
     return jsonify({"items":items[:100],"unseen":sum(1 for n in items if not n.get("seen"))})
 
 @app.route("/api/notifications/<nid>/seen",methods=["POST"])
 def api_notification_seen(nid):
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
-    key=_ai_user_key(); items=_read_notifications()
-    for n in items:
-        if n.get("id")==nid and n.get("user")==key:n["seen"]=True
-    _write_notifications(items); return jsonify({"ok":True})
+    key=_ai_user_key()
+    with kurtex_db.write_tx(DATA_DIR) as conn:
+        row=conn.execute("SELECT data_json FROM notifications WHERE id=? AND user_key=?",(nid,key)).fetchone()
+        if row:
+            n=json.loads(row["data_json"]); n["seen"]=True
+            conn.execute("UPDATE notifications SET seen=1, data_json=? WHERE id=?",(json.dumps(n,ensure_ascii=False,separators=(",",":")),nid))
+    return jsonify({"ok":True})
 
 @app.route("/api/notifications/seen-all",methods=["POST"])
 def api_notifications_seen_all():
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
-    key=_ai_user_key(); items=_read_notifications()
-    for n in items:
-        if n.get("user")==key:n["seen"]=True
-    _write_notifications(items); return jsonify({"ok":True})
+    key=_ai_user_key()
+    with kurtex_db.write_tx(DATA_DIR) as conn:
+        rows=conn.execute("SELECT id,data_json FROM notifications WHERE user_key=? AND seen=0",(key,)).fetchall()
+        for r in rows:
+            n=json.loads(r["data_json"]); n["seen"]=True
+            conn.execute("UPDATE notifications SET seen=1, data_json=? WHERE id=?",(json.dumps(n,ensure_ascii=False,separators=(",",":")),r["id"]))
+    return jsonify({"ok":True})
 
 AI_KNOWLEDGE_FILE = DATA_DIR / "ai_maintenance_knowledge.json"
 
@@ -1226,39 +1263,65 @@ def api_home_grid_preferences():
 # ── Website role permissions ─────────────────────────────────────────────────
 ROLE_PERMISSION_DEFAULTS = {
     "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","my_profile"],
-    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","my_profile"],
-    "developer": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","users","developer","my_profile"],
+    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","shifts","bot_issues","my_profile"],
+    "developer": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues","users","developer","my_profile"],
 }
-ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents"]
-
-def _permissions_path():
-    return Path(os.getenv("DATA_DIR", "/app/data")) / "role_permissions.json"
+ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues"]
 
 def _load_role_permissions():
-    data = {k:list(v) for k,v in ROLE_PERMISSION_DEFAULTS.items()}
+    data = {k: list(v) for k, v in ROLE_PERMISSION_DEFAULTS.items()}
     try:
-        path=_permissions_path()
-        if path.exists():
-            raw=json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(raw,dict):
-                for role in ("agent","super_admin"):
-                    vals=raw.get(role)
-                    if isinstance(vals,list): data[role]=[x for x in vals if x in ROLE_PERMISSION_PAGES or x=="my_profile"]
+        with kurtex_db.read_conn(DATA_DIR) as conn:
+            rows = conn.execute("SELECT role, pages_json FROM role_permissions").fetchall()
+            seeded = conn.execute("SELECT value FROM meta WHERE key='shifts_perm_seeded'").fetchone()
+            fb_seeded = conn.execute("SELECT value FROM meta WHERE key='bot_issues_perm_seeded'").fetchone()
+            for r in rows:
+                role = r["role"]
+                if role in ("agent", "super_admin"):
+                    vals = json.loads(r["pages_json"])
+                    if isinstance(vals, list):
+                        data[role] = [x for x in vals if x in ROLE_PERMISSION_PAGES or x == "my_profile"]
+            if rows and not seeded and "shifts" not in data["super_admin"]:
+                data["super_admin"].append("shifts")
+            if rows and not fb_seeded and "bot_issues" not in data["super_admin"]:
+                data["super_admin"].append("bot_issues")
+        if rows and (not seeded or not fb_seeded):
+            with kurtex_db.write_tx(DATA_DIR) as wconn:
+                wconn.execute(
+                    "INSERT INTO role_permissions(role, pages_json) VALUES('super_admin', ?) "
+                    "ON CONFLICT(role) DO UPDATE SET pages_json=excluded.pages_json",
+                    (json.dumps(data["super_admin"]),),
+                )
+                for mkey in ("shifts_perm_seeded", "bot_issues_perm_seeded"):
+                    wconn.execute(
+                        "INSERT INTO meta(key, value) VALUES(?, '1') "
+                        "ON CONFLICT(key) DO UPDATE SET value='1'",
+                        (mkey,),
+                    )
     except Exception as e:
         logger.warning("Role permissions read failed: %s", e)
-    data["developer"]=list(ROLE_PERMISSION_DEFAULTS["developer"])
+    data["developer"] = list(ROLE_PERMISSION_DEFAULTS["developer"])
     for role in data:
-        if "overview" not in data[role]: data[role].insert(0,"overview")
+        if "overview" not in data[role]: data[role].insert(0, "overview")
         if "my_profile" not in data[role]: data[role].append("my_profile")
     return data
 
 def _save_role_permissions(data):
-    path=_permissions_path(); path.parent.mkdir(parents=True,exist_ok=True)
-    clean={}
-    for role in ("agent","super_admin"):
-        vals=data.get(role,[]); clean[role]=[x for x in ROLE_PERMISSION_PAGES if x in vals]
-        if "overview" not in clean[role]: clean[role].insert(0,"overview")
-    tmp=path.with_suffix('.tmp'); tmp.write_text(json.dumps(clean,indent=2),encoding='utf-8'); tmp.replace(path)
+    clean = {}
+    with kurtex_db.write_tx(DATA_DIR) as conn:
+        for role in ("agent", "super_admin"):
+            vals = data.get(role, [])
+            clean[role] = [x for x in ROLE_PERMISSION_PAGES if x in vals]
+            if "overview" not in clean[role]: clean[role].insert(0, "overview")
+            conn.execute(
+                "INSERT INTO role_permissions(role, pages_json) VALUES(?, ?) "
+                "ON CONFLICT(role) DO UPDATE SET pages_json=excluded.pages_json",
+                (role, json.dumps(clean[role])),
+            )
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES('shifts_perm_seeded', '1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'",
+        )
     return clean
 
 def _website_role(role):
@@ -1572,10 +1635,27 @@ def api_part_image():
         "configured": bool(os.getenv("SERPER_API_KEY", "").strip()),
     })
 
+_stats_cache_lock = Lock()
+_stats_cache = {"entry": None}
+
+
 @app.route("/api/stats")
 def api_stats():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
+        cache_key = None
+        if load_cases is _DEFAULT_LOAD_CASES and (DATA_DIR / "kurtex.sqlite3").exists():
+            try:
+                ver = kurtex_db.get_version("cases_version", DATA_DIR)
+                cache_key = (str(DATA_DIR.resolve()), ver, today_str())
+                with _stats_cache_lock:
+                    cached = _stats_cache.get("entry")
+                    if cached and cached[0] == cache_key:
+                        g.case_data_stale = cached[1]
+                        return jsonify(cached[2])
+            except Exception:
+                cache_key = None
+
         cases = load_cases()
         today = today_str(); wk = week_start_str(); mo = month_start_str()
         real = [c for c in cases if not is_testing(c)]
@@ -1691,7 +1771,7 @@ def api_stats():
         hashtags = re.findall(r'#\w+', " ".join(c.get("description","") for c in real).lower())
         rt = [c["response_secs"] for c in real if c.get("response_secs") is not None]
         avg = int(sum(rt)/len(rt)) if rt else 0
-        return jsonify({
+        payload = {
             "today": {"total":len(tc),"open":st.get("open",0),"assigned":st.get("assigned",0)+st.get("reported",0),"done":st.get("done",0),"missed":st.get("missed",0)},
             "week":  {"total":len(wc),"done":sum(1 for c in wc if c.get("status")=="done"),"missed":sum(1 for c in wc if c.get("status")=="missed")},
             "month": {"total":len(mc),"done":sum(1 for c in mc if c.get("status")=="done"),"missed":sum(1 for c in mc if c.get("status")=="missed")},
@@ -1712,7 +1792,15 @@ def api_stats():
             "top_words": [{"word":w,"count":v} for w,v in Counter(hashtags).most_common(15)],
             "home_periods": home_periods,
             "reassigned_count": sum(1 for c in cases if c.get("reassigned")),
-        })
+        }
+        if not getattr(g, "case_data_stale", False) and load_cases is _DEFAULT_LOAD_CASES and (DATA_DIR / "kurtex.sqlite3").exists():
+            try:
+                ver_after = kurtex_db.get_version("cases_version", DATA_DIR)
+                with _stats_cache_lock:
+                    _stats_cache["entry"] = ((str(DATA_DIR.resolve()), ver_after, today), False, payload)
+            except Exception:
+                pass
+        return jsonify(payload)
     except DataUnavailable:
         raise
     except Exception as e:
@@ -2351,12 +2439,12 @@ def _workspace_actor_read():
     return {**stored,"id":user["id"],"role":role},None
 
 def _workspace_board_version(actor):
-    """Cheap cross-process version check; no JSON parsing for unchanged boards."""
+    """Cheap O(1) SQLite version check; zero JSON parsing for unchanged boards."""
     try:
-        stat = (DATA_DIR / "cases.json").stat()
-        signature = f"{stat.st_ino}:{stat.st_size}:{stat.st_mtime_ns}:{actor['id']}:{actor['role']}"
+        ver = kurtex_db.get_version("cases_version", DATA_DIR)
+        signature = f"{ver}:{actor['id']}:{actor['role']}"
         return hashlib.blake2s(signature.encode(), digest_size=12).hexdigest()
-    except OSError:
+    except Exception:
         return None
 
 
@@ -2470,17 +2558,27 @@ def api_workspace_board():
     if since and version and hmac.compare_digest(since, version):
         return jsonify({"unchanged": True, "version": version})
     from backend.storage.case_store import is_maintenance_report
-    cases = load_cases()
+
+    def _read_board_cases():
+        if load_cases is _DEFAULT_LOAD_CASES and case_store._storage_dir().resolve() == DATA_DIR.resolve():
+            g.case_data_stale = False
+            rows = case_store.get_workspace_board_cases("2026-10-12")
+            return [normalize_case(c) for c in rows if not is_testing(c)]
+        cases = load_cases()
+        return [
+            c for c in cases if is_maintenance_report(c)
+            and c.get("status") == "reported" and not c.get("closed_at")
+            and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
+            and not is_testing(c)
+        ]
+
+    board = _read_board_cases()
     after = _workspace_board_version(actor)
     if after != version:
-        cases = load_cases()  # A writer completed while the snapshot was loading.
+        board = _read_board_cases()  # A writer completed while the snapshot was loading.
         version = _workspace_board_version(actor)
     else:
         version = after
-    board = [c for c in cases if is_maintenance_report(c)
-             and c.get("status") == "reported" and not c.get("closed_at")
-             and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
-             and not is_testing(c)]
     board.sort(key=lambda c: c.get("reported_at") or c.get("opened_at") or "", reverse=True)
     from backend.storage.case_store import workspace_revision
     summaries = []
@@ -2501,11 +2599,10 @@ _case_intelligence_lock = Lock()
 
 
 def _cached_case_intelligence_tags():
-    """Compute fleet intelligence once per case-file version, not per agent."""
+    """Compute fleet intelligence once per case version, not per agent/case."""
     try:
-        stat = (DATA_DIR / "cases.json").stat()
-        signature = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
-    except OSError:
+        signature = (str(DATA_DIR), kurtex_db.get_version("cases_version", DATA_DIR))
+    except Exception:
         signature = None
     with _case_intelligence_lock:
         if signature is not None and _case_intelligence_cache["signature"] == signature:
@@ -2817,18 +2914,25 @@ def api_case_detail():
     case_id = request.args.get("id","").strip()
     if not case_id: return jsonify({"error":"no id"}), 400
     try:
-        cases = load_cases()
-        matches = [c for c in cases if c["id"] == case_id]
-        if not matches: matches = [c for c in cases if c["id"].startswith(case_id)]
-        if len(matches) > 1: return jsonify({"error":"Ambiguous case ID. Use the full ID."}), 409
+        if load_cases is _DEFAULT_LOAD_CASES and case_store._storage_dir().resolve() == DATA_DIR.resolve():
+            raw_case, ambiguous = case_store.get_case_or_prefix(case_id)
+            if ambiguous:
+                return jsonify({"error":"Ambiguous case ID. Use the full ID."}), 409
+            g.case_data_stale = False
+            matches = [normalize_case(raw_case)] if raw_case else []
+        else:
+            cases = load_cases()
+            matches = [c for c in cases if c["id"] == case_id]
+            if not matches: matches = [c for c in cases if c["id"].startswith(case_id)]
+            if len(matches) > 1: return jsonify({"error":"Ambiguous case ID. Use the full ID."}), 409
         for c in matches:
             if c:
                 data = serialize_case(c)
                 try:
-                    _,ki_tags=build_kurtex_intelligence([x for x in load_cases() if not is_testing(x)])
-                    data["ki_tags"]=ki_tags.get(_ki_case_id(c),[])
+                    ki_tags = _cached_case_intelligence_tags()
+                    data["ki_tags"] = ki_tags.get(_ki_case_id(c), [])
                 except Exception:
-                    data["ki_tags"]=[]
+                    data["ki_tags"] = []
                 data.update({
                     "full_description": c.get("description",""),
                     "full_notes":       c.get("notes","") or "",
@@ -3641,49 +3745,87 @@ def index():
     return jsonify({"service": "kurtex-bot-api", "status": "running"})
 
 
+_api_worker_lock = Lock()
+_api_worker_proc = None
+_api_stopping = False
+
+
+def stop_api_server():
+    global _api_worker_proc, _api_stopping
+    _api_stopping = True
+    with _api_worker_lock:
+        proc = _api_worker_proc
+        _api_worker_proc = None
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+
 def _learning_sync_worker():
     from threading import Event
     try:
-        for owner,chats in chat_store.all_chats():
-            for chat in chats:learning_store.capture_chat(owner,chat)
-    except Exception:logger.exception("Initial chat-learning import failed")
-    signature=None
-    while True:
+        for owner, chats in chat_store.all_chats():
+            for chat in chats:
+                learning_store.capture_chat(owner, chat)
+    except Exception:
+        logger.exception("Initial chat-learning import failed")
+    signature = None
+    while not _api_stopping:
         try:
-            path=DATA_DIR / "cases.json";stat=path.stat();current=(stat.st_ino,stat.st_size,stat.st_mtime_ns)
-            if current!=signature:
-                cases,stale=case_snapshot.read(path)
+            current = kurtex_db.get_version("cases_version", DATA_DIR)
+            if current != signature:
+                cases, stale = case_snapshot.read(DATA_DIR / "cases.json")
                 if not stale:
                     fleet_knowledge_store.ingest_cases([c for c in cases if not is_testing(c)])
-                    signature=current
-        except Exception:logger.exception("Case-learning sync failed")
+                    signature = current
+        except Exception:
+            logger.exception("Case-learning sync failed")
         Event().wait(60)
 
-def run_api_server():
-    """Run a threaded production WSGI worker alongside Telegram polling.
 
-    WebSockets occupy one gthread while connected. 32 threads leave headroom
-    for ordinary API requests with approximately ten concurrent agents.
-    If the worker crashes, the supervisor restarts it; bot polling continues.
-    """
-    Thread(target=_learning_sync_worker,daemon=True,name="maintenance-learning-sync").start()
+def run_api_server():
+    """Run a threaded production WSGI worker alongside Telegram polling."""
+    global _api_worker_proc, _api_stopping
+    import atexit
+    atexit.register(stop_api_server)
+    _api_stopping = False
+    Thread(target=_learning_sync_worker, daemon=True, name="maintenance-learning-sync").start()
     if os.getenv("KURTEX_API_SERVER", "gunicorn").lower() == "werkzeug":
-        # Development-only fallback for local testing.
         logging.getLogger("werkzeug").setLevel(logging.ERROR)
         app.run(host="0.0.0.0", port=API_PORT, debug=False, use_reloader=False, threaded=True)
         return
     import subprocess, sys
-    command = [sys.executable, "-m", "gunicorn", "api.server:app", "--bind", f"0.0.0.0:{API_PORT}",
-               "--worker-class", "gthread", "--workers", "1", "--threads", "32",
-               "--timeout", "120", "--graceful-timeout", "25"]
-    while True:
+    command = [
+        sys.executable, "-m", "gunicorn", "api.server:app",
+        "--bind", f"0.0.0.0:{API_PORT}",
+        "--worker-class", "gthread", "--workers", "1", "--threads", "32",
+        "--timeout", "120", "--graceful-timeout", "25",
+    ]
+    while not _api_stopping:
         try:
-            worker = subprocess.Popen(command, cwd=str(Path(__file__).resolve().parents[1]))
+            with _api_worker_lock:
+                if _api_stopping:
+                    break
+                worker = subprocess.Popen(command, cwd=str(Path(__file__).resolve().parents[1]))
+                _api_worker_proc = worker
             status = worker.wait()
+            with _api_worker_lock:
+                if _api_worker_proc is worker:
+                    _api_worker_proc = None
+            if _api_stopping:
+                break
             logger.error("Kurtex API worker exited (%s); restarting shortly.", status)
         except OSError:
             logger.exception("Unable to launch Kurtex API worker")
-        time.sleep(3)
+        if not _api_stopping:
+            time.sleep(3)
+
 
 def start_api_thread():
     Thread(target=run_api_server, daemon=True, name="kurtex-api").start()
@@ -3826,6 +3968,353 @@ def api_video_transcript(chat_id,file_id):
     return jsonify(transcript=item.get('transcript',''),audio_status=item.get('audio_status'),audio_language=item.get('audio_language',''),warning=item.get('warning',''))
 
 register_learning_routes(app,learning_store,chat_store,_ai_user_key,_ai_is_trainer,load_cases,is_testing,ai_serialized)
+
+
+# ── Shifts management & operational bot APIs ─────────────────────────────────
+
+_SHIFT_TIMEZONES = [
+    "America/Chicago",
+    "America/New_York",
+    "America/Denver",
+    "America/Los_Angeles",
+    "Europe/Chisinau",
+    "UTC",
+]
+
+
+def _shifts_actor(*, write: bool = False):
+    from backend.storage.user_store import get_user
+    user = session.get("user")
+    if not user:
+        return None, (jsonify({"error": "Sign in required."}), 401)
+    if write:
+        token = session.get("workspace_csrf", "")
+        if not getattr(g, "mobile_authenticated", False) and (
+            not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", ""))
+        ):
+            return None, (jsonify({"error": "Reload the page before updating shifts."}), 403)
+    stored = get_user(user["id"])
+    if not stored:
+        return None, (jsonify({"error": "Access denied."}), 403)
+    role = _website_role(stored.get("role"))
+    perms = _load_role_permissions().get(role, [])
+    if write:
+        if role not in ("developer", "super_admin"):
+            return None, (jsonify({"error": "Only managers or developers can configure shifts."}), 403)
+    elif role not in ("developer", "super_admin") and not any(p in perms for p in ("shifts", "agents", "cases")):
+        return None, (jsonify({"error": "Access denied."}), 403)
+    return {**stored, "id": int(user["id"]), "role": role}, None
+
+
+def _shifts_payload(actor):
+    from backend.storage import shift_store, user_store
+    from backend.core import shift_manager
+    state = shift_store.get_on_shift_state()
+    on_duty_set = set(state["on_duty_user_ids"])
+    user_shift_map: dict[int, list[str]] = {}
+    for s in state["shifts"]:
+        for uid in s.get("user_ids") or []:
+            user_shift_map.setdefault(uid, []).append(s["id"])
+    users_out = []
+    for u in sorted(
+        user_store.get_all_user_dicts(),
+        key=lambda x: ((x.get("name") or "").casefold(), x["id"]),
+    ):
+        if u.get("role") not in ("agent", "super_admin"):
+            continue
+        users_out.append({
+            "id": u["id"],
+            "name": u["name"],
+            "username": u.get("username", ""),
+            "role": u["role"],
+            "shift_ids": user_shift_map.get(u["id"], []),
+            "on_duty": u["id"] in on_duty_set,
+        })
+    return {
+        "shifts": state["shifts"],
+        "users": users_out,
+        "active_shift_ids": [s["id"] for s in state["active_shifts"]],
+        "on_duty_user_ids": state["on_duty_user_ids"],
+        "current_shift_name": shift_manager.get_current_shift_name(),
+        "using_fallback": state["using_fallback"],
+        "has_configured_shifts": state["has_configured_shifts"],
+        "can_manage": actor["role"] in ("developer", "super_admin"),
+        "server_time_chicago": chicago_now().strftime("%Y-%m-%d %H:%M %Z"),
+        "timezones": _SHIFT_TIMEZONES,
+    }
+
+
+@app.route("/api/shifts", methods=["GET", "POST"])
+def api_shifts():
+    is_write = request.method == "POST"
+    actor, error = _shifts_actor(write=is_write)
+    if error:
+        return error
+    if not is_write:
+        return jsonify(_shifts_payload(actor))
+
+    from backend.storage import shift_store
+    data = request.get_json(silent=True) or {}
+    try:
+        created = shift_store.create_shift(
+            name=data.get("name", ""),
+            start_time=data.get("start_time", ""),
+            end_time=data.get("end_time", ""),
+            days=data.get("days", []),
+            timezone=data.get("timezone", "America/Chicago"),
+            enabled=bool(data.get("enabled", True)),
+            user_ids=data.get("user_ids"),
+        )
+        return jsonify({"ok": True, "shift": created, **_shifts_payload(actor)}), 201
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/shifts/<shift_id>", methods=["PATCH", "DELETE"])
+def api_shift_item(shift_id):
+    actor, error = _shifts_actor(write=True)
+    if error:
+        return error
+    from backend.storage import shift_store
+    if request.method == "DELETE":
+        if not shift_store.delete_shift(shift_id):
+            return jsonify({"error": "Shift not found."}), 404
+        return jsonify({"ok": True, **_shifts_payload(actor)})
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = shift_store.update_shift(
+            shift_id,
+            name=data["name"] if "name" in data else None,
+            start_time=data["start_time"] if "start_time" in data else None,
+            end_time=data["end_time"] if "end_time" in data else None,
+            days=data["days"] if "days" in data else None,
+            timezone=data["timezone"] if "timezone" in data else None,
+            enabled=data["enabled"] if "enabled" in data else None,
+            user_ids=data["user_ids"] if "user_ids" in data else None,
+        )
+        return jsonify({"ok": True, "shift": updated, **_shifts_payload(actor)})
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/shifts/users/<int:user_id>", methods=["PUT"])
+def api_shift_user_assignments(user_id):
+    actor, error = _shifts_actor(write=True)
+    if error:
+        return error
+    from backend.storage import shift_store
+    data = request.get_json(silent=True) or {}
+    shift_ids = data.get("shift_ids")
+    if not isinstance(shift_ids, list):
+        return jsonify({"error": "shift_ids must be a list."}), 400
+    try:
+        assigned = shift_store.set_user_shifts(user_id, shift_ids)
+        return jsonify({"ok": True, "user_id": user_id, "shift_ids": assigned, **_shifts_payload(actor)})
+    except LookupError as exc:
+        return jsonify({"error": str(exc)}), 404
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/shifts/on-duty")
+def api_shifts_on_duty():
+    actor, error = _shifts_actor(write=False)
+    if error:
+        return error
+    from backend.storage import shift_store
+    from backend.core import shift_manager
+    state = shift_store.get_on_shift_state()
+    return jsonify({
+        "current_shift_name": shift_manager.get_current_shift_name(),
+        "active_shifts": state["active_shifts"],
+        "on_duty_users": state["on_duty_users"],
+        "using_fallback": state["using_fallback"],
+        "server_time_chicago": chicago_now().strftime("%Y-%m-%d %H:%M %Z"),
+    })
+
+
+@app.route("/api/bot/health")
+def api_bot_health():
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    from backend.storage import shift_store
+    db_file = DATA_DIR / "kurtex.sqlite3"
+    db_bytes = db_file.stat().st_size if db_file.exists() else 0
+    with kurtex_db.read_conn(DATA_DIR) as conn:
+        status_rows = conn.execute("SELECT status, COUNT(*) AS cnt FROM cases GROUP BY status").fetchall()
+        alerts_cnt = conn.execute("SELECT COUNT(*) AS cnt FROM active_alerts").fetchone()["cnt"]
+        users_cnt = conn.execute("SELECT COUNT(*) AS cnt FROM users").fetchone()["cnt"]
+    counts = {r["status"]: int(r["cnt"]) for r in status_rows}
+    hb_path = DATA_DIR / "bot_runtime.json"
+    heartbeat = {}
+    try:
+        if hb_path.exists():
+            heartbeat = json.loads(hb_path.read_text(encoding="utf-8"))
+    except Exception:
+        heartbeat = {}
+    shift_state = shift_store.get_on_shift_state()
+    return jsonify({
+        "ok": True,
+        "storage": "sqlite-wal",
+        "db_bytes": db_bytes,
+        "cases_version": kurtex_db.get_version("cases_version", DATA_DIR),
+        "case_counts": counts,
+        "active_alerts": int(alerts_cnt),
+        "users_count": int(users_cnt),
+        "on_duty_count": len(shift_state["on_duty_user_ids"]),
+        "bot_runtime": heartbeat,
+    })
+
+
+@app.route("/api/agents/<int:agent_id>/cases")
+def api_agent_cases_fast(agent_id):
+    user = session.get("user")
+    if not user:
+        return jsonify({"error": "unauthorized"}), 401
+    role = _website_role(user.get("role"))
+    if role not in ("developer", "super_admin") and str(user.get("id")) != str(agent_id):
+        return jsonify({"error": "forbidden"}), 403
+    status_arg = (request.args.get("status") or "active").strip().lower()
+    try:
+        limit = max(1, min(int(request.args.get("limit", 100)), 500))
+    except (TypeError, ValueError):
+        limit = 100
+    with kurtex_db.read_conn(DATA_DIR) as conn:
+        if status_arg == "active":
+            rows = conn.execute(
+                "SELECT data_json FROM cases WHERE agent_id=? AND status IN ('assigned','reported') ORDER BY opened_at DESC LIMIT ?",
+                (agent_id, limit),
+            ).fetchall()
+        elif status_arg in ("assigned", "reported", "done"):
+            rows = conn.execute(
+                "SELECT data_json FROM cases WHERE agent_id=? AND status=? ORDER BY opened_at DESC LIMIT ?",
+                (agent_id, status_arg, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT data_json FROM cases WHERE agent_id=? ORDER BY opened_at DESC LIMIT ?",
+                (agent_id, limit),
+            ).fetchall()
+    items = [serialize_case(json.loads(r["data_json"])) for r in rows]
+    return jsonify({"agent_id": agent_id, "status": status_arg, "total": len(items), "cases": items})
+
+
+def _feedback_actor(write=False):
+    from backend.storage.user_store import get_user
+    user = session.get("user")
+    if not user:
+        return None, (jsonify({"error": "unauthorized"}), 401)
+    if write:
+        token = session.get("workspace_csrf", "")
+        if not getattr(g, "mobile_authenticated", False) and (
+            not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", ""))
+        ):
+            return None, (jsonify({"error": "Invalid workspace security token. Reload and try again."}), 403)
+    stored = get_user(user["id"])
+    if not stored:
+        return None, (jsonify({"error": "Access denied."}), 403)
+    role = _website_role(stored.get("role"))
+    if role == "developer":
+        return {**stored, "id": int(user["id"]), "role": role}, None
+    if role == "super_admin" and "bot_issues" in _current_allowed_pages():
+        return {**stored, "id": int(user["id"]), "role": role}, None
+    return None, (jsonify({"error": "Access denied."}), 403)
+
+
+def _notify_feedback_reporter(item: dict) -> bool:
+    if not BOT_TOKEN or not item or not item.get("user_id"):
+        return False
+    import asyncio
+    import html as _html
+    from telegram import Bot
+
+    status_label = {
+        "open": "🔵 Open",
+        "in_progress": "🟡 In Progress",
+        "resolved": "✅ Resolved",
+    }.get(item.get("status"), item.get("status") or "Updated")
+    lines = [
+        f"📩 <b>Bot Report Update</b> · <code>{_html.escape(str(item['id']), quote=False)}</code>",
+        f"<b>Status:</b> {_html.escape(status_label, quote=False)}",
+    ]
+    if item.get("resolved_by"):
+        lines.append(f"<b>Updated by:</b> {_html.escape(str(item['resolved_by']), quote=False)}")
+    if item.get("admin_note"):
+        lines.append(f"\n<b>Response:</b>\n{_html.escape(str(item['admin_note']), quote=False)}")
+    text = "\n".join(lines)
+
+    async def _send():
+        bot = Bot(BOT_TOKEN)
+        async with bot:
+            await bot.send_message(int(item["user_id"]), text, parse_mode="HTML")
+
+    try:
+        asyncio.run(_send())
+        return True
+    except Exception as exc:
+        logger.warning("Could not DM feedback update %s to user %s: %s", item.get("id"), item.get("user_id"), exc)
+        return False
+
+
+@app.route("/api/bot/feedback", methods=["GET"])
+def api_bot_feedback_list():
+    actor, error = _feedback_actor(write=False)
+    if error:
+        return error
+    from backend.storage import feedback_store
+    status_filter = (request.args.get("status") or "").strip().lower() or None
+    data = feedback_store.list_feedback(status=status_filter)
+    return jsonify({
+        **data,
+        "can_manage": actor["role"] in ("developer", "super_admin"),
+        "bot_token_configured": bool(BOT_TOKEN),
+    })
+
+
+@app.route("/api/bot/feedback/<feedback_id>", methods=["PATCH", "POST", "DELETE"])
+def api_bot_feedback_item(feedback_id):
+    actor, error = _feedback_actor(write=True)
+    if error:
+        return error
+    from backend.storage import feedback_store
+
+    if request.method == "DELETE":
+        if not feedback_store.delete_feedback(feedback_id):
+            return jsonify({"error": "Report not found."}), 404
+        return jsonify({"ok": True, **feedback_store.list_feedback()})
+
+    payload = request.get_json(silent=True) or {}
+    status = payload.get("status")
+    admin_note = payload.get("admin_note")
+    notify_user = bool(payload.get("notify_user"))
+    actor_name = (
+        actor.get("first_name")
+        or actor.get("name")
+        or actor.get("username")
+        or f"User {actor.get('id')}"
+    )
+    try:
+        updated = feedback_store.update_feedback(
+            feedback_id,
+            status=status,
+            admin_note=admin_note,
+            resolved_by=str(actor_name),
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not updated:
+        return jsonify({"error": "Report not found."}), 404
+
+    notified = _notify_feedback_reporter(updated) if notify_user else False
+    return jsonify({
+        "ok": True,
+        "item": updated,
+        "notified": notified,
+        **feedback_store.list_feedback(),
+    })
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
