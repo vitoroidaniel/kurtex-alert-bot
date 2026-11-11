@@ -2021,8 +2021,11 @@ def api_home_briefing():
         if "resolved" not in recorded and str(c.get("status") or "").lower() in {"done", "resolved", "closed"}:
             add_event("resolved", c.get("closed_at"), c.get("closed_by_name") or c.get("resolved_by"))
     events.sort(key=lambda entry: _home_timestamp(entry["at"]).timestamp(), reverse=True)
-    recent = sorted((c for c in cases if case_local_date(c) == today), key=lambda c: c.get("opened_at") or "", reverse=True)[:10]
-    return jsonify({"generated_at": now.isoformat(), "day": today.isoformat(),
+    today_iso = today.isoformat()
+    recent = sorted((c for c in cases if case_local_date(c) == today_iso), key=lambda c: c.get("opened_at") or "", reverse=True)[:10]
+    if not recent:
+        recent = sorted(cases, key=lambda c: str(c.get("opened_at") or ""), reverse=True)[:10]
+    return jsonify({"generated_at": now.isoformat(), "day": today_iso,
                     "metrics": {"reported": reported_today, "reported_previous": reported_yesterday,
                                 "active": sum(_home_case_active(c) and c.get("status") != "missed" for c in reports), "attention": len(attention),
                                 "resolved": resolved_today, "high_priority": high_priority, "unassigned": unassigned},
