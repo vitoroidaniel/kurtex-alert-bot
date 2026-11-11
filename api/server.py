@@ -196,10 +196,37 @@ def fmt_secs(secs):
     return f"{secs//3600}h {(secs%3600)//60}m"
 
 TESTING_GROUPS = {"testing", "test", "tests"}
+_TEST_GROUP_RE = re.compile(r"^(?:gr\s+)?tests?(?:\s+group)?$|\btesting\b", re.IGNORECASE)
+_TEST_VALUE_RE = re.compile(
+    r"^(?:\[?test(?:ing)?\]?(?:\s*#?\d+)?|test\s+(?:case|issue|report|unit|driver)|dummy|asdf|qwerty)$",
+    re.IGNORECASE,
+)
+
 
 def is_testing(c):
     # Testing tab/filter removed: cases from testing groups are no longer
     # excluded from stats — they now count as normal active cases.
+    return False
+
+
+def is_history_test_case(c):
+    """Identify testing-group or synthetic dummy test cases to omit from Case History."""
+    if not isinstance(c, dict):
+        return False
+    if c.get("is_test") or c.get("testing") or c.get("is_testing"):
+        return True
+    group = str(c.get("group_name") or c.get("group") or "").strip().lower()
+    if group in TESTING_GROUPS or _TEST_GROUP_RE.search(group):
+        return True
+    unit = str(c.get("unit_number") or c.get("unit") or "").strip()
+    driver = str(c.get("report_driver") or c.get("driver_name") or c.get("driver") or "").strip()
+    issue = str(c.get("issue_text") or c.get("description") or "").strip()
+    if _TEST_VALUE_RE.match(unit) or _TEST_VALUE_RE.match(driver) or _TEST_VALUE_RE.match(issue):
+        return True
+    u_low, d_low, i_low = unit.lower(), driver.lower(), issue.lower()
+    if u_low and u_low not in {"-", "—"} and u_low == d_low and (u_low == i_low or not i_low or len(i_low) <= 2):
+        if len(u_low) <= 3 or u_low.isdigit():
+            return True
     return False
 
 def build_phrase_pattern(q):
@@ -2715,6 +2742,8 @@ def api_cases():
                                                 -((_home_case_attention(c, now) or {}).get("age_hours") or 0)))
         elif not (search and request.args.get("smart") == "1"):
             cases = sorted(cases, key=lambda c: (c.get("reported_at") or c.get("opened_at", "")) if f == "workspace" else c.get("opened_at", ""), reverse=True)
+        if request.args.get("exclude_test") == "1":
+            cases = [c for c in cases if not is_history_test_case(c)]
         total = len(cases)
         page = cases[offset:offset+limit]
         # The active board does not need historical AI/analytics on every poll.
