@@ -400,7 +400,8 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         file_name TEXT NOT NULL DEFAULT '',
         mime_type TEXT NOT NULL DEFAULT '',
         pinned INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        edited_at TEXT NOT NULL DEFAULT ''
     )""")
     conn.execute("""CREATE TABLE IF NOT EXISTS feedback_note_reactions (
         note_id INTEGER NOT NULL REFERENCES feedback_private_notes(id) ON DELETE CASCADE,
@@ -408,6 +409,9 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         vote INTEGER NOT NULL CHECK(vote IN (-1,1)),
         PRIMARY KEY(note_id,user_id)
     )""")
+    note_cols={str(row["name"]) for row in conn.execute("PRAGMA table_info(feedback_private_notes)")}
+    if "edited_at" not in note_cols:
+        conn.execute("ALTER TABLE feedback_private_notes ADD COLUMN edited_at TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_private_notes_thread ON feedback_private_notes(feedback_id,pinned DESC,id DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_messages_thread ON bot_feedback_messages(feedback_id, id)")
     # Existing Telegram screenshot IDs remain readable; new website uploads are stored on the persistent volume.

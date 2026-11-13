@@ -340,8 +340,8 @@ def notify_feedback_users(user_ids, *, title: str, message: str, feedback_id: st
 
 def list_private_notes(feedback_id: str, user_id: str) -> list[dict]:
     with db.read_conn(_storage_dir()) as conn:
-        rows = conn.execute("""SELECT n.id,n.feedback_id,n.author_name,n.body,n.file_name,n.mime_type,
-            n.pinned,n.created_at,
+        rows = conn.execute("""SELECT n.id,n.feedback_id,n.author_id,n.author_name,n.body,n.file_name,n.mime_type,
+            n.pinned,n.created_at,n.edited_at,
             (SELECT COUNT(*) FROM feedback_note_reactions r WHERE r.note_id=n.id AND r.vote=1) likes,
             (SELECT COUNT(*) FROM feedback_note_reactions r WHERE r.note_id=n.id AND r.vote=-1) dislikes,
             (SELECT vote FROM feedback_note_reactions WHERE note_id=n.id AND user_id=?) my_vote
@@ -369,22 +369,42 @@ def create_private_note(feedback_id: str, *, author_id: str, author_name: str, b
 
 
 def change_private_note(feedback_id: str, note_id: int, *, user_id: str,
-                        pinned: Optional[bool] = None, vote: Optional[int] = None) -> None:
+                        pinned: Optional[bool] = None, vote: Optional[int] = None,
+                        body: Optional[str] = None) -> None:
+    """Only a note's author may edit its contents. Developers can pin/react to team notes."""
     with db.write_tx(_storage_dir()) as conn:
-        if not conn.execute("SELECT 1 FROM feedback_private_notes WHERE feedback_id=? AND id=?",
-                            (feedback_id,int(note_id))).fetchone():
+        row = conn.execute(
+            "SELECT author_id FROM feedback_private_notes WHERE feedback_id=? AND id=?",
+            (feedback_id, int(note_id)),
+        ).fetchone()
+        if not row:
             raise LookupError("Note not found.")
+        if body is not None:
+            if str(row["author_id"]) != str(user_id):
+                raise PermissionError("Only the note author can edit this note.")
+            clean = body.strip()
+            if not clean:
+                raise ValueError("Note text cannot be empty.")
+            if len(clean) > 3000:
+                raise ValueError("Note is too long (3000 characters maximum).")
+            conn.execute(
+                "UPDATE feedback_private_notes SET body=?, edited_at=? WHERE id=?",
+                (clean, utc_now().isoformat(), int(note_id)),
+            )
         if pinned is not None:
-            conn.execute("UPDATE feedback_private_notes SET pinned=? WHERE id=?",(int(pinned),int(note_id)))
+            conn.execute("UPDATE feedback_private_notes SET pinned=? WHERE id=?",
+                         (int(pinned), int(note_id)))
         if vote is not None:
-            if vote not in (-1,0,1):
+            if vote not in (-1, 0, 1):
                 raise ValueError("Unsupported reaction.")
             if vote == 0:
-                conn.execute("DELETE FROM feedback_note_reactions WHERE note_id=? AND user_id=?",(note_id,str(user_id)))
+                conn.execute("DELETE FROM feedback_note_reactions WHERE note_id=? AND user_id=?",
+                             (int(note_id), str(user_id)))
             else:
                 conn.execute("""INSERT INTO feedback_note_reactions(note_id,user_id,vote) VALUES(?,?,?)
-                    ON CONFLICT(note_id,user_id) DO UPDATE SET vote=excluded.vote""",(note_id,str(user_id),vote))
-        db.bump_version(conn,"feedback_version")
+                    ON CONFLICT(note_id,user_id) DO UPDATE SET vote=excluded.vote""",
+                             (int(note_id), str(user_id), vote))
+        db.bump_version(conn, "feedback_version")
 
 
 def get_private_note_file(feedback_id: str, note_id: int) -> Optional[dict]:

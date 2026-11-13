@@ -4569,10 +4569,15 @@ def api_support_private_note_update(feedback_id,note_id):
     try:
         pinned=data.get("pinned") if isinstance(data.get("pinned"),bool) else None
         vote=int(data["vote"]) if "vote" in data else None
-        if pinned is None and vote is None:
+        body=data.get("body") if "body" in data else None
+        if body is not None and not isinstance(body,str):
+            return jsonify({"error":"Note text must be a string."}),400
+        if pinned is None and vote is None and body is None:
             return jsonify({"error":"Choose a note action."}),400
         feedback_store.change_private_note(feedback_id,note_id,user_id=str(actor["id"]),
-                                           pinned=pinned,vote=vote)
+                                           pinned=pinned,vote=vote,body=body)
+    except PermissionError as exc:
+        return jsonify({"error":str(exc)}),403
     except (LookupError,ValueError) as exc:
         return jsonify({"error":str(exc)}),400
     return jsonify({"ok":True,"items":feedback_store.list_private_notes(feedback_id,str(actor["id"]))})
