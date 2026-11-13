@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS bot_feedback (
     message     TEXT NOT NULL,
     status      TEXT NOT NULL DEFAULT 'open',
     admin_note  TEXT NOT NULL DEFAULT '',
+    internal_note TEXT NOT NULL DEFAULT '',
+    resolution_reason TEXT NOT NULL DEFAULT '',
     resolved_by TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
@@ -355,6 +357,14 @@ def _migrate_legacy_json(conn: sqlite3.Connection, data_dir: Path) -> None:
         conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES(?, '1')", (ver_key,))
 
 
+def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
+    """Add private notes and resolution reason to existing volumes, without data loss."""
+    existing = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback)")}
+    for name in ("internal_note", "resolution_reason"):
+        if name not in existing:
+            conn.execute(f"ALTER TABLE bot_feedback ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
+
+
 def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connection, Path]:
     d = get_data_dir(data_dir)
     db_path = d / "kurtex.sqlite3"
@@ -377,6 +387,7 @@ def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connectio
                                 sql = stmt.strip()
                                 if sql:
                                     conn.execute(sql)
+                            _migrate_bot_feedback_columns(conn)
                             _migrate_legacy_json(conn, d)
                             conn.execute("COMMIT")
                         except BaseException:

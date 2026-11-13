@@ -36,6 +36,8 @@ def _row_to_dict(row) -> dict:
         "message": str(row["message"] or ""),
         "status": str(row["status"] or "open"),
         "admin_note": str(row["admin_note"] or ""),
+        "internal_note": str(row["internal_note"] or ""),
+        "resolution_reason": str(row["resolution_reason"] or ""),
         "resolved_by": str(row["resolved_by"] or ""),
         "created_at": str(row["created_at"] or ""),
         "updated_at": str(row["updated_at"] or ""),
@@ -71,6 +73,8 @@ def create_feedback(
         "message": clean_msg[:3000],
         "status": "open",
         "admin_note": "",
+        "internal_note": "",
+        "resolution_reason": "",
         "resolved_by": "",
         "created_at": now,
         "updated_at": now,
@@ -163,28 +167,37 @@ def update_feedback(
     *,
     status: Optional[str] = None,
     admin_note: Optional[str] = None,
+    internal_note: Optional[str] = None,
+    resolution_reason: Optional[str] = None,
     resolved_by: Optional[str] = None,
 ) -> Optional[dict]:
+    """Updates are atomic, and resolution permanently locks the report."""
     fid = (feedback_id or "").strip()
     if not fid:
         return None
     if status is not None and status not in VALID_STATUSES:
         raise ValueError(f"Invalid status: {status}")
-    sdir = _storage_dir()
     now = utc_now().isoformat()
-    with db.write_tx(sdir) as conn:
+    with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT * FROM bot_feedback WHERE id=?", (fid,)).fetchone()
-        if not row:
+        if row is None:
             return None
         current = _row_to_dict(row)
-        new_status = status if status is not None else current["status"]
-        new_note = current["admin_note"] if admin_note is None else str(admin_note).strip()[:3000]
-        new_resolver = current["resolved_by"] if resolved_by is None else str(resolved_by).strip()[:120]
+        if current["status"] == "resolved":
+            raise ValueError("This report is resolved and locked. It is view-only.")
+        new_status = current["status"] if status is None else status
+        public_message = current["admin_note"] if admin_note is None else str(admin_note).strip()[:3000]
+        private_notes = current["internal_note"] if internal_note is None else str(internal_note).strip()[:3000]
+        reason = current["resolution_reason"] if resolution_reason is None else str(resolution_reason).strip()[:1200]
+        if new_status == "resolved" and not reason:
+            raise ValueError("A resolution reason is required before closing the report.")
+        actor = current["resolved_by"] if resolved_by is None else str(resolved_by).strip()[:120]
+        resolver = actor if new_status == "resolved" else current["resolved_by"]
         conn.execute(
             """UPDATE bot_feedback
-               SET status=?, admin_note=?, resolved_by=?, updated_at=?
+               SET status=?, admin_note=?, internal_note=?, resolution_reason=?, resolved_by=?, updated_at=?
                WHERE id=?""",
-            (new_status, new_note, new_resolver, now, fid),
+            (new_status, public_message, private_notes, reason, resolver, now, fid),
         )
         db.bump_version(conn, "feedback_version")
         updated = conn.execute("SELECT * FROM bot_feedback WHERE id=?", (fid,)).fetchone()
@@ -196,12 +209,16 @@ def delete_feedback(feedback_id: str) -> bool:
     if not fid:
         return False
     with db.write_tx(_storage_dir()) as conn:
+        row = conn.execute("SELECT status FROM bot_feedback WHERE id=?", (fid,)).fetchone()
+        if row is None:
+            return False
+        if str(row["status"]) == "resolved":
+            raise ValueError("This report is resolved and locked. It cannot be deleted.")
         cur = conn.execute("DELETE FROM bot_feedback WHERE id=?", (fid,))
         if cur.rowcount == 0:
             return False
         db.bump_version(conn, "feedback_version")
         return True
-
 
 async def async_create_feedback(**kwargs) -> dict:
     return await asyncio.to_thread(create_feedback, **kwargs)

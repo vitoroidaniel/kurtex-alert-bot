@@ -4411,13 +4411,19 @@ def api_bot_feedback_item(feedback_id):
     from backend.storage import feedback_store
 
     if request.method == "DELETE":
-        if not feedback_store.delete_feedback(feedback_id):
+        try:
+            deleted = feedback_store.delete_feedback(feedback_id)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 409
+        if not deleted:
             return jsonify({"error": "Report not found."}), 404
         return jsonify({"ok": True, **feedback_store.list_feedback()})
 
     payload = request.get_json(silent=True) or {}
     status = payload.get("status")
     admin_note = payload.get("admin_note")
+    internal_note = payload.get("internal_note")
+    resolution_reason = payload.get("resolution_reason")
     notify_user = bool(payload.get("notify_user"))
     actor_name = (
         actor.get("first_name")
@@ -4430,13 +4436,18 @@ def api_bot_feedback_item(feedback_id):
             feedback_id,
             status=status,
             admin_note=admin_note,
+            internal_note=internal_note,
+            resolution_reason=resolution_reason,
             resolved_by=str(actor_name),
         )
     except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+        msg = str(exc)
+        return jsonify({"error": msg}), 409 if "locked" in msg else 400
     if not updated:
         return jsonify({"error": "Report not found."}), 404
 
+    # Internal notes and resolution reason are private; only the explicit public
+    # response (admin_note) can be included in outbound Telegram messages.
     notified = _notify_feedback_reporter(updated) if notify_user else False
     return jsonify({
         "ok": True,
@@ -4444,7 +4455,6 @@ def api_bot_feedback_item(feedback_id):
         "notified": notified,
         **feedback_store.list_feedback(),
     })
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
