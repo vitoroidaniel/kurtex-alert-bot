@@ -4683,7 +4683,10 @@ def api_bot_feedback_list():
         return error
     status_filter = (request.args.get("status") or "").strip().lower() or None
     data = feedback_store.list_feedback(status=status_filter)
-    return jsonify({**data, "can_manage": True})
+    from backend.storage.user_store import get_all_user_dicts
+    assignees = [{"id": str(u["id"]), "name": str(u.get("name") or u.get("first_name") or u.get("username") or u["id"])}
+                 for u in get_all_user_dicts() if u.get("role") in ("developer", "super_admin")]
+    return jsonify({**data, "can_manage": True, "assignees": assignees})
 
 
 @app.route("/api/bot/feedback/<feedback_id>", methods=["PATCH", "POST", "DELETE"])
@@ -4707,6 +4710,13 @@ def api_bot_feedback_item(feedback_id):
     admin_note = payload.get("admin_note")
     internal_note = payload.get("internal_note")
     resolution_reason = payload.get("resolution_reason")
+    assigned_to = payload.get("assigned_to")
+    if assigned_to is not None:
+        from backend.storage.user_store import get_all_user_dicts
+        valid = {str(u["id"]) for u in get_all_user_dicts()
+                 if u.get("role") in ("developer", "super_admin")}
+        if str(assigned_to) and str(assigned_to) not in valid:
+            return jsonify({"error": "Choose an active developer to assign this ticket."}), 400
     actor_name = (
         actor.get("first_name")
         or actor.get("name")
@@ -4720,6 +4730,7 @@ def api_bot_feedback_item(feedback_id):
             admin_note=admin_note,
             internal_note=internal_note,
             resolution_reason=resolution_reason,
+            assigned_to=assigned_to,
             resolved_by=str(actor_name),
         )
     except ValueError as exc:

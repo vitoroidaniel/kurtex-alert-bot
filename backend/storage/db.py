@@ -133,7 +133,8 @@ CREATE TABLE IF NOT EXISTS bot_feedback (
     resolved_by TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
-    diagnostics TEXT NOT NULL DEFAULT '{}'
+    diagnostics TEXT NOT NULL DEFAULT '{}',
+    assigned_to TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_bot_feedback_status ON bot_feedback(status, created_at DESC);
 """
@@ -361,7 +362,7 @@ def _migrate_legacy_json(conn: sqlite3.Connection, data_dir: Path) -> None:
 def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
     """Add private notes and resolution reason to existing volumes, without data loss."""
     existing = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback)")}
-    for name in ("internal_note", "resolution_reason", "diagnostics"):
+    for name in ("internal_note", "resolution_reason", "diagnostics", "assigned_to"):
         if name not in existing:
             default = "'{ }'".replace(" ", "") if name == "diagnostics" else "''"
             conn.execute(f"ALTER TABLE bot_feedback ADD COLUMN {name} TEXT NOT NULL DEFAULT {default}")

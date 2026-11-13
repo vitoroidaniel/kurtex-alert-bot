@@ -35,6 +35,7 @@ def _row_to_dict(row) -> dict:
         "category": str(row["category"] or "bug"),
         "message": str(row["message"] or ""),
         "diagnostics": json.loads(row["diagnostics"] or "{}"),
+        "assigned_to": str(row["assigned_to"] or ""),
         "status": str(row["status"] or "open"),
         "admin_note": str(row["admin_note"] or ""),
         "internal_note": str(row["internal_note"] or ""),
@@ -158,6 +159,7 @@ def update_feedback(
     admin_note: Optional[str] = None,
     internal_note: Optional[str] = None,
     resolution_reason: Optional[str] = None,
+    assigned_to: Optional[str] = None,
     resolved_by: Optional[str] = None,
 ) -> Optional[dict]:
     """Updates are atomic, and resolution permanently locks the report."""
@@ -178,15 +180,16 @@ def update_feedback(
         public_message = current["admin_note"] if admin_note is None else str(admin_note).strip()[:3000]
         private_notes = current["internal_note"] if internal_note is None else str(internal_note).strip()[:3000]
         reason = current["resolution_reason"] if resolution_reason is None else str(resolution_reason).strip()[:1200]
+        assignee = current["assigned_to"] if assigned_to is None else str(assigned_to).strip()[:30]
         if new_status == "resolved" and not reason:
             raise ValueError("A resolution reason is required before closing the report.")
         actor = current["resolved_by"] if resolved_by is None else str(resolved_by).strip()[:120]
         resolver = actor if new_status == "resolved" else current["resolved_by"]
         conn.execute(
             """UPDATE bot_feedback
-               SET status=?, admin_note=?, internal_note=?, resolution_reason=?, resolved_by=?, updated_at=?
+               SET status=?, admin_note=?, internal_note=?, resolution_reason=?, resolved_by=?, updated_at=?, assigned_to=?
                WHERE id=?""",
-            (new_status, public_message, private_notes, reason, resolver, now, fid),
+            (new_status, public_message, private_notes, reason, resolver, now, assignee, fid),
         )
         db.bump_version(conn, "feedback_version")
         updated = conn.execute("SELECT * FROM bot_feedback WHERE id=?", (fid,)).fetchone()
