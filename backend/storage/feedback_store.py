@@ -174,8 +174,8 @@ def update_feedback(
         if row is None:
             return None
         current = _row_to_dict(row)
-        if current["status"] == "resolved":
-            raise ValueError("This report is resolved and locked. It is view-only.")
+        if current["status"] == "resolved" and status not in ("open", "in_progress"):
+            raise ValueError("Closed tickets are read-only until reopened.")
         new_status = current["status"] if status is None else status
         public_message = current["admin_note"] if admin_note is None else str(admin_note).strip()[:3000]
         private_notes = current["internal_note"] if internal_note is None else str(internal_note).strip()[:3000]
@@ -184,7 +184,7 @@ def update_feedback(
         if new_status == "resolved" and not reason:
             raise ValueError("A resolution reason is required before closing the report.")
         actor = current["resolved_by"] if resolved_by is None else str(resolved_by).strip()[:120]
-        resolver = actor if new_status == "resolved" else current["resolved_by"]
+        resolver = actor if new_status == "resolved" else ("" if current["status"] == "resolved" else current["resolved_by"])
         conn.execute(
             """UPDATE bot_feedback
                SET status=?, admin_note=?, internal_note=?, resolution_reason=?, resolved_by=?, updated_at=?, assigned_to=?
