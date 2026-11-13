@@ -41,6 +41,7 @@ def _row_to_dict(row) -> dict:
         "internal_note": str(row["internal_note"] or ""),
         "resolution_reason": str(row["resolution_reason"] or ""),
         "resolved_by": str(row["resolved_by"] or ""),
+        "resolved_at": str(row["resolved_at"] or ""),
         "created_at": str(row["created_at"] or ""),
         "updated_at": str(row["updated_at"] or ""),
     }
@@ -185,11 +186,13 @@ def update_feedback(
             raise ValueError("A resolution reason is required before closing the report.")
         actor = current["resolved_by"] if resolved_by is None else str(resolved_by).strip()[:120]
         resolver = actor if new_status == "resolved" else ("" if current["status"] == "resolved" else current["resolved_by"])
+        resolved_at = (now if new_status == "resolved" and current["status"] != "resolved"
+                       else current["resolved_at"] if new_status == "resolved" else "")
         conn.execute(
             """UPDATE bot_feedback
-               SET status=?, admin_note=?, internal_note=?, resolution_reason=?, resolved_by=?, updated_at=?, assigned_to=?
+               SET status=?, admin_note=?, internal_note=?, resolution_reason=?, resolved_by=?, resolved_at=?, updated_at=?, assigned_to=?
                WHERE id=?""",
-            (new_status, public_message, private_notes, reason, resolver, now, assignee, fid),
+            (new_status, public_message, private_notes, reason, resolver, resolved_at, now, assignee, fid),
         )
         db.bump_version(conn, "feedback_version")
         updated = conn.execute("SELECT * FROM bot_feedback WHERE id=?", (fid,)).fetchone()
@@ -240,7 +243,7 @@ def list_my_feedback(user_id: int, limit: int = 12) -> list[dict]:
             "SELECT * FROM bot_feedback WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
             (int(user_id), min(max(int(limit), 1), 50)),
         ).fetchall()
-    return [{k: item[k] for k in ("id", "user_id", "user_name", "username", "category", "message", "status", "created_at", "updated_at", "admin_note", "resolution_reason", "resolved_by")}
+    return [{k: item[k] for k in ("id", "user_id", "user_name", "username", "category", "message", "status", "created_at", "updated_at", "admin_note", "resolution_reason", "resolved_by", "resolved_at", "diagnostics")}
             for item in (_row_to_dict(row) for row in rows)]
 
 
@@ -334,3 +337,59 @@ def notify_feedback_users(user_ids, *, title: str, message: str, feedback_id: st
                 "INSERT INTO notifications(id,user_key,created_at,seen,data_json) VALUES(?,?,?,?,?)",
                 (nid, uid, created, 0, json.dumps(data, ensure_ascii=False, separators=(",", ":"))),
             )
+
+def list_private_notes(feedback_id: str, user_id: str) -> list[dict]:
+    with db.read_conn(_storage_dir()) as conn:
+        rows = conn.execute("""SELECT n.id,n.feedback_id,n.author_name,n.body,n.file_name,n.mime_type,
+            n.pinned,n.created_at,
+            (SELECT COUNT(*) FROM feedback_note_reactions r WHERE r.note_id=n.id AND r.vote=1) likes,
+            (SELECT COUNT(*) FROM feedback_note_reactions r WHERE r.note_id=n.id AND r.vote=-1) dislikes,
+            (SELECT vote FROM feedback_note_reactions WHERE note_id=n.id AND user_id=?) my_vote
+            FROM feedback_private_notes n WHERE n.feedback_id=? ORDER BY n.pinned DESC,n.id DESC LIMIT 100""",
+            (str(user_id), str(feedback_id))).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_private_note(feedback_id: str, *, author_id: str, author_name: str, body: str,
+                        file_key: str = "", file_name: str = "", mime_type: str = "") -> dict:
+    text = (body or "").strip()
+    if not text and not file_key:
+        raise ValueError("Write a private note or attach a file.")
+    if len(text) > 3000:
+        raise ValueError("Private note is too long.")
+    with db.write_tx(_storage_dir()) as conn:
+        if not conn.execute("SELECT 1 FROM bot_feedback WHERE id=?", (feedback_id,)).fetchone():
+            raise LookupError("Report not found.")
+        cursor = conn.execute("""INSERT INTO feedback_private_notes
+            (feedback_id,author_id,author_name,body,file_key,file_name,mime_type,created_at)
+            VALUES(?,?,?,?,?,?,?,?)""",(feedback_id,str(author_id),str(author_name)[:120],text,file_key,
+                str(file_name)[:160],str(mime_type)[:100],utc_now().isoformat()))
+        db.bump_version(conn,"feedback_version")
+        return {"id": cursor.lastrowid}
+
+
+def change_private_note(feedback_id: str, note_id: int, *, user_id: str,
+                        pinned: Optional[bool] = None, vote: Optional[int] = None) -> None:
+    with db.write_tx(_storage_dir()) as conn:
+        if not conn.execute("SELECT 1 FROM feedback_private_notes WHERE feedback_id=? AND id=?",
+                            (feedback_id,int(note_id))).fetchone():
+            raise LookupError("Note not found.")
+        if pinned is not None:
+            conn.execute("UPDATE feedback_private_notes SET pinned=? WHERE id=?",(int(pinned),int(note_id)))
+        if vote is not None:
+            if vote not in (-1,0,1):
+                raise ValueError("Unsupported reaction.")
+            if vote == 0:
+                conn.execute("DELETE FROM feedback_note_reactions WHERE note_id=? AND user_id=?",(note_id,str(user_id)))
+            else:
+                conn.execute("""INSERT INTO feedback_note_reactions(note_id,user_id,vote) VALUES(?,?,?)
+                    ON CONFLICT(note_id,user_id) DO UPDATE SET vote=excluded.vote""",(note_id,str(user_id),vote))
+        db.bump_version(conn,"feedback_version")
+
+
+def get_private_note_file(feedback_id: str, note_id: int) -> Optional[dict]:
+    with db.read_conn(_storage_dir()) as conn:
+        row=conn.execute("""SELECT file_key,file_name,mime_type FROM feedback_private_notes
+            WHERE feedback_id=? AND id=? AND file_key!=''""",(feedback_id,int(note_id))).fetchone()
+        return dict(row) if row else None
+

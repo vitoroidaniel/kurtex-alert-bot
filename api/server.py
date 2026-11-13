@@ -4499,6 +4499,101 @@ def api_dashboard_release_notes():
     return jsonify({"items": [dict(row) for row in rows], "can_publish": is_dev})
 
 
+
+@app.route("/api/dashboard/support/<feedback_id>/private-notes", methods=["GET", "POST"])
+def api_support_private_notes(feedback_id):
+    """Developer-only notes, persisted separately from the reporter conversation."""
+    from backend.storage import feedback_store
+    from backend.storage.user_store import get_user
+    item, role, denied = _feedback_thread_access(feedback_id)
+    if denied:
+        return denied
+    if role != "manager":
+        return jsonify({"error": "Developer permission required."}), 403
+    actor = session.get("user") or {}
+    if request.method == "GET":
+        return jsonify({"items": feedback_store.list_private_notes(feedback_id,str(actor["id"]))})
+    csrf = _feedback_csrf_error()
+    if csrf:
+        return csrf
+    body = str(request.form.get("body") if request.mimetype == "multipart/form-data"
+               else (request.get_json(silent=True) or {}).get("body") or "").strip()
+    upload = request.files.get("file")
+    file_key = file_name = mime = ""
+    file_path = None
+    if upload:
+        from werkzeug.utils import secure_filename
+        mime = str(upload.mimetype or "").lower().split(";")[0]
+        ext = {"image/png":".png","image/jpeg":".jpg","image/webp":".webp",
+               "application/pdf":".pdf"}.get(mime)
+        if not ext:
+            return jsonify({"error": "Attach PNG, JPG, WebP or PDF files only."}), 415
+        content=upload.stream.read(10*1024*1024+1)
+        if len(content)>10*1024*1024:
+            return jsonify({"error": "Attachment exceeds 10 MB."}), 413
+        valid=(content.startswith(b"\x5cx89PNG\x5cr\x5cn\x5cx1a\x5cn") if mime=="image/png" else
+               content.startswith(b"\x5cxff\x5cxd8\x5cxff") if mime=="image/jpeg" else
+               content.startswith(b"RIFF") and content[8:12]==b"WEBP" if mime=="image/webp" else
+               content.startswith(b"%PDF-"))
+        if not valid:
+            return jsonify({"error": "File contents do not match the selected type."}), 415
+        file_name=secure_filename(upload.filename or "attachment")[:130] or "attachment"
+        file_key=secrets.token_hex(20)+ext
+        folder=DATA_DIR/"feedback_uploads"
+        folder.mkdir(parents=True,exist_ok=True)
+        file_path=folder/file_key
+        with file_path.open("xb") as dest:
+            dest.write(content)
+    user=get_user(int(actor["id"]))
+    author=str(user.get("name") or user.get("first_name") or user.get("username") or actor["id"])
+    try:
+        saved=feedback_store.create_private_note(feedback_id,author_id=str(actor["id"]),
+            author_name=author,body=body,file_key=file_key,file_name=file_name,mime_type=mime)
+    except (ValueError,LookupError) as exc:
+        if file_path: file_path.unlink(missing_ok=True)
+        return jsonify({"error":str(exc)}),400
+    return jsonify({"ok":True,"id":saved["id"],
+        "items":feedback_store.list_private_notes(feedback_id,str(actor["id"]))}),201
+
+
+@app.route("/api/dashboard/support/<feedback_id>/private-notes/<int:note_id>", methods=["PATCH"])
+def api_support_private_note_update(feedback_id,note_id):
+    from backend.storage import feedback_store
+    item,role,denied=_feedback_thread_access(feedback_id)
+    if denied:return denied
+    if role!="manager":return jsonify({"error":"Developer permission required."}),403
+    csrf=_feedback_csrf_error()
+    if csrf:return csrf
+    actor=session.get("user") or {}
+    data=request.get_json(silent=True) or {}
+    try:
+        pinned=data.get("pinned") if isinstance(data.get("pinned"),bool) else None
+        vote=int(data["vote"]) if "vote" in data else None
+        if pinned is None and vote is None:
+            return jsonify({"error":"Choose a note action."}),400
+        feedback_store.change_private_note(feedback_id,note_id,user_id=str(actor["id"]),
+                                           pinned=pinned,vote=vote)
+    except (LookupError,ValueError) as exc:
+        return jsonify({"error":str(exc)}),400
+    return jsonify({"ok":True,"items":feedback_store.list_private_notes(feedback_id,str(actor["id"]))})
+
+
+@app.route("/api/dashboard/support/<feedback_id>/private-notes/<int:note_id>/file",methods=["GET"])
+def api_support_private_note_file(feedback_id,note_id):
+    from backend.storage import feedback_store
+    item,role,denied=_feedback_thread_access(feedback_id)
+    if denied:return denied
+    if role!="manager":return jsonify({"error":"Developer permission required."}),403
+    media=feedback_store.get_private_note_file(feedback_id,note_id)
+    if not media or not re.fullmatch(r"[0-9a-f]{40}\.(?:png|jpg|webp|pdf)",media["file_key"]):
+        return jsonify({"error":"Attachment not found."}),404
+    file=DATA_DIR/"feedback_uploads"/media["file_key"]
+    if not file.is_file():return jsonify({"error":"Attachment is missing."}),404
+    from werkzeug.utils import secure_filename
+    return send_file(file,mimetype=media["mime_type"],as_attachment=True,
+        download_name=secure_filename(media["file_name"]) or "attachment",conditional=True)
+
+
 @app.route("/api/bot/feedback/mine", methods=["GET"])
 def api_bot_feedback_mine():
     from backend.storage import feedback_store

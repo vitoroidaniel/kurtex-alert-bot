@@ -134,7 +134,8 @@ CREATE TABLE IF NOT EXISTS bot_feedback (
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
     diagnostics TEXT NOT NULL DEFAULT '{}',
-    assigned_to TEXT NOT NULL DEFAULT ''
+    assigned_to TEXT NOT NULL DEFAULT '',
+    resolved_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_bot_feedback_status ON bot_feedback(status, created_at DESC);
 """
@@ -362,7 +363,7 @@ def _migrate_legacy_json(conn: sqlite3.Connection, data_dir: Path) -> None:
 def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
     """Add private notes and resolution reason to existing volumes, without data loss."""
     existing = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback)")}
-    for name in ("internal_note", "resolution_reason", "diagnostics", "assigned_to"):
+    for name in ("internal_note", "resolution_reason", "diagnostics", "assigned_to", "resolved_at"):
         if name not in existing:
             default = "'{ }'".replace(" ", "") if name == "diagnostics" else "''"
             conn.execute(f"ALTER TABLE bot_feedback ADD COLUMN {name} TEXT NOT NULL DEFAULT {default}")
@@ -389,6 +390,25 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         created_at TEXT NOT NULL
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_release_notes_recent ON dashboard_release_notes(id DESC)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS feedback_private_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        feedback_id TEXT NOT NULL REFERENCES bot_feedback(id) ON DELETE CASCADE,
+        author_id TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '',
+        file_key TEXT NOT NULL DEFAULT '',
+        file_name TEXT NOT NULL DEFAULT '',
+        mime_type TEXT NOT NULL DEFAULT '',
+        pinned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS feedback_note_reactions (
+        note_id INTEGER NOT NULL REFERENCES feedback_private_notes(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        vote INTEGER NOT NULL CHECK(vote IN (-1,1)),
+        PRIMARY KEY(note_id,user_id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_private_notes_thread ON feedback_private_notes(feedback_id,pinned DESC,id DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_messages_thread ON bot_feedback_messages(feedback_id, id)")
     # Existing Telegram screenshot IDs remain readable; new website uploads are stored on the persistent volume.
     message_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback_messages)")}
