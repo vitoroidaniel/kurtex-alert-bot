@@ -4516,8 +4516,8 @@ def api_support_private_notes(feedback_id):
     csrf = _feedback_csrf_error()
     if csrf:
         return csrf
-    body = str(request.form.get("body") if request.mimetype == "multipart/form-data"
-               else (request.get_json(silent=True) or {}).get("body") or "").strip()
+    body = str((request.form.get("body") if request.mimetype == "multipart/form-data"
+               else (request.get_json(silent=True) or {}).get("body")) or "").strip()
     upload = request.files.get("file")
     file_key = file_name = mime = ""
     file_path = None
@@ -4531,8 +4531,8 @@ def api_support_private_notes(feedback_id):
         content=upload.stream.read(10*1024*1024+1)
         if len(content)>10*1024*1024:
             return jsonify({"error": "Attachment exceeds 10 MB."}), 413
-        valid=(content.startswith(b"\x5cx89PNG\x5cr\x5cn\x5cx1a\x5cn") if mime=="image/png" else
-               content.startswith(b"\x5cxff\x5cxd8\x5cxff") if mime=="image/jpeg" else
+        valid=(content.startswith(b"\x89PNG\r\n\x1a\n") if mime=="image/png" else
+               content.startswith(b"\xff\xd8\xff") if mime=="image/jpeg" else
                content.startswith(b"RIFF") and content[8:12]==b"WEBP" if mime=="image/webp" else
                content.startswith(b"%PDF-"))
         if not valid:
