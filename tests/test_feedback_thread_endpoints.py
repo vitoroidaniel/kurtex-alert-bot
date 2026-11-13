@@ -1,45 +1,49 @@
-"""v198 conversation endpoints and lightweight briefing source regressions."""
+"""Dashboard-only issue reporting API and preserved case workflows."""
 from pathlib import Path
 import ast
 import unittest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[1]
 
 
-class FeedbackEndpointsTests(unittest.TestCase):
-    def test_thread_api_has_server_side_access_controls(self):
-        source = (ROOT/'api/server.py').read_text(encoding='utf-8')
+class IssueCenterAPITests(unittest.TestCase):
+    def test_dashboard_routes_and_permissions(self):
+        source=(ROOT/'api/server.py').read_text(encoding='utf-8')
+        ast.parse(source)
         for token in (
-            'def _feedback_thread_access(feedback_id: str):',
+            'def api_bot_feedback_list():',
+            '@app.route("/api/bot/feedback", methods=["GET", "POST"])',
             'def api_bot_feedback_mine():',
             'def api_bot_feedback_messages(feedback_id):',
             'def api_bot_feedback_media(feedback_id, message_id):',
+            'def _feedback_thread_access(feedback_id: str):',
             '_feedback_csrf_error()',
-            '"Telegram delivery failed. Nothing was saved."',
-            'get_feedback_media(feedback_id, message_id)',
-            'Resolved tickets cannot receive new messages.',
-            'Attachment captions are limited to 1024 characters.',
+            'feedback_store.get_feedback_by_user(feedback_id',
+            'file_key = secrets.token_hex(20)',
+            'DATA_DIR / "feedback_uploads"',
+            'Resolved reports are read-only.',
+            'def _cached_home_briefing(',
+            'request.args.get("lite") == "1"',
+            'if "report_issue" not in data[role]',
         ):
-            self.assertIn(token, source)
-        ast.parse(source)
+            self.assertIn(token,source)
+        self.assertNotIn('def _notify_feedback_reporter(',source)
+        self.assertNotIn('text="Reply from Kurtex support:',source)
 
-    def test_briefing_cache_and_fast_history_path(self):
-        source = (ROOT/'api/server.py').read_text(encoding='utf-8')
-        self.assertIn('@lru_cache(maxsize=64)', source)
-        self.assertIn('def _cached_home_briefing(', source)
-        self.assertIn('int(time.time() // 30)', source)
-        self.assertIn('request.args.get("lite") == "1"', source)
-
-    def test_bot_commands_registered(self):
-        source = (ROOT/'bot.py').read_text(encoding='utf-8')
-        handler = (ROOT/'bot_app/handlers/feedback_handler.py').read_text(encoding='utf-8')
-        self.assertIn('get_ticket_conversation()', source)
-        self.assertIn('CommandHandler("myreports"', handler)
-        self.assertIn('async def recv_ticket_update(', handler)
-        self.assertIn('filters.PHOTO', handler)
+    def test_telegram_bug_commands_removed_but_case_and_alert_commands_preserved(self):
+        bot=(ROOT/'bot.py').read_text(encoding='utf-8')
+        handler=(ROOT/'bot_app/handlers/feedback_handler.py').read_text(encoding='utf-8')
+        ast.parse(bot)
         ast.parse(handler)
-        ast.parse(source)
+        for forbidden in ('get_feedback_conversation()', 'get_ticket_conversation()',
+                          'CommandHandler("bug"', 'CommandHandler("support"',
+                          'CommandHandler("myreports"'):
+            self.assertNotIn(forbidden,bot+handler)
+        self.assertIn('app.add_handler(get_alert_broadcast_conversation())',bot)
+        self.assertIn('app.add_handler(get_report_conversation())',bot)
+        self.assertIn('def get_alert_broadcast_conversation()',handler)
+        self.assertIn('get_user(user.id)',handler)
 
 
-if __name__ == '__main__':
+if __name__=='__main__':
     unittest.main()

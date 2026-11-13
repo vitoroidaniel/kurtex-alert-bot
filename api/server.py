@@ -1304,11 +1304,11 @@ def api_home_grid_preferences():
 
 # в”Ђв”Ђ Website role permissions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 ROLE_PERMISSION_DEFAULTS = {
-    "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","my_profile"],
-    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","shifts","bot_issues","my_profile"],
-    "developer": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues","users","developer","my_profile"],
+    "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","report_issue","my_profile"],
+    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","shifts","bot_issues","report_issue","my_profile"],
+    "developer": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues","report_issue","users","developer","my_profile"],
 }
-ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues"]
+ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues","report_issue"]
 
 def _load_role_permissions():
     data = {k: list(v) for k, v in ROLE_PERMISSION_DEFAULTS.items()}
@@ -1346,6 +1346,7 @@ def _load_role_permissions():
     for role in data:
         if "overview" not in data[role]: data[role].insert(0, "overview")
         if "my_profile" not in data[role]: data[role].append("my_profile")
+        if "report_issue" not in data[role]: data[role].append("report_issue")
     return data
 
 def _save_role_permissions(data):
@@ -4381,58 +4382,22 @@ def _feedback_actor(write=False):
     return None, (jsonify({"error": "Access denied."}), 403)
 
 
-def _notify_feedback_reporter(item: dict) -> bool:
-    if not BOT_TOKEN or not item or not item.get("user_id"):
-        return False
-    import asyncio
-    import html as _html
-    from telegram import Bot
-
-    status_label = {
-        "open": "рџ”µ Open",
-        "in_progress": "рџџЎ In Progress",
-        "resolved": "вњ… Resolved",
-    }.get(item.get("status"), item.get("status") or "Updated")
-    lines = [
-        f"рџ“© <b>Bot Report Update</b> В· <code>{_html.escape(str(item['id']), quote=False)}</code>",
-        f"<b>Status:</b> {_html.escape(status_label, quote=False)}",
-    ]
-    if item.get("resolved_by"):
-        lines.append(f"<b>Updated by:</b> {_html.escape(str(item['resolved_by']), quote=False)}")
-    if item.get("admin_note"):
-        lines.append(f"\n<b>Response:</b>\n{_html.escape(str(item['admin_note']), quote=False)}")
-    text = "\n".join(lines)
-
-    async def _send():
-        bot = Bot(BOT_TOKEN)
-        async with bot:
-            await bot.send_message(int(item["user_id"]), text, parse_mode="HTML")
-
-    try:
-        asyncio.run(_send())
-        return True
-    except Exception as exc:
-        logger.warning("Could not DM feedback update %s to user %s: %s", item.get("id"), item.get("user_id"), exc)
-        return False
-
-
 def _feedback_thread_access(feedback_id: str):
-    """Reporter owns the ticket; only managers with Bot Reports permission see other tickets."""
+    """Reporter sees only their tickets; dev/managers see the triage queue."""
     from backend.storage import feedback_store
     from backend.storage.user_store import get_user
     logged_in = session.get("user") or {}
     if not logged_in.get("id"):
         return None, None, (jsonify({"error": "Sign in required."}), 401)
-    item = feedback_store.get_feedback(feedback_id)
+    user = get_user(int(logged_in["id"]))
+    if not user:
+        return None, None, (jsonify({"error": "Not authorized."}), 403)
+    role = _website_role(user.get("role"))
+    manager = role == "developer" or (role == "super_admin" and "bot_issues" in _current_allowed_pages())
+    item = (feedback_store.get_feedback(feedback_id) if manager
+            else feedback_store.get_feedback_by_user(feedback_id, int(logged_in["id"])))
     if not item:
         return None, None, (jsonify({"error": "Report not found."}), 404)
-    stored = get_user(logged_in["id"])
-    if not stored:
-        return None, None, (jsonify({"error": "Not authorized."}), 403)
-    role = _website_role(stored.get("role"))
-    manager = role == "developer" or (role == "super_admin" and "bot_issues" in _current_allowed_pages())
-    if not manager and int(logged_in["id"]) != int(item["user_id"]):
-        return None, None, (jsonify({"error": "Not authorized for this report."}), 403)
     return item, ("manager" if manager else "reporter"), None
 
 
@@ -4459,127 +4424,220 @@ def api_bot_feedback_mine():
 
 @app.route("/api/bot/feedback/<feedback_id>/messages", methods=["GET", "POST"])
 def api_bot_feedback_messages(feedback_id):
-    import asyncio
-    import io as _io
+    """Browser-only conversations; no Telegram delivery for new messages."""
     from backend.storage import feedback_store
+    from backend.storage.user_store import get_user
     item, role, denied = _feedback_thread_access(feedback_id)
     if denied:
         return denied
     if request.method == "GET":
         return jsonify({"items": feedback_store.list_feedback_messages(feedback_id),
                         "locked": item["status"] == "resolved"})
-    if role != "manager":
-        return jsonify({"error": "Send updates from Telegram to this report."}), 403
     csrf = _feedback_csrf_error()
     if csrf:
         return csrf
     if item["status"] == "resolved":
-        return jsonify({"error": "Resolved tickets cannot receive new messages."}), 409
-    message = str((request.form.get("message") or "") if request.mimetype == "multipart/form-data"
-                  else (request.get_json(silent=True) or {}).get("message") or "").strip()
-    attached = request.files.get("file")
-    if len(message) > 3000 or (not message and not attached):
-        return jsonify({"error": "Enter a message of at most 3000 characters or attach a file."}), 400
-    if attached and len(message) > 1024:
-        return jsonify({"error": "Attachment captions are limited to 1024 characters."}), 400
-    if not BOT_TOKEN:
-        return jsonify({"error": "Telegram bot is not configured."}), 503
-    media_type, file_id, file_name, mime_type = "", "", "", ""
-    upload = None
-    if attached:
-        mime_type = str(attached.mimetype or "").lower()
-        if mime_type not in ("image/png", "image/jpeg", "image/webp", "application/pdf"):
-            return jsonify({"error": "Upload a PNG, JPG, WebP, or PDF."}), 415
-        upload = attached.stream.read(10 * 1024 * 1024 + 1)
-        if len(upload) > 10 * 1024 * 1024:
-            return jsonify({"error": "File exceeds the 10 MB limit."}), 413
-        file_name = os.path.basename((attached.filename or "attachment").replace("\\", "/"))[:120]
-        media_type = "photo" if mime_type in ("image/png", "image/jpeg") else "document"
+        return jsonify({"error": "Resolved reports are read-only."}), 409
 
-    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("Reply to report", callback_data=f"fb_reply|{feedback_id}")
-    ]])
-    async def deliver():
-        async with Bot(BOT_TOKEN) as bot:
-            if upload is not None and media_type == "photo":
-                sent = await bot.send_photo(chat_id=int(item["user_id"]), photo=_io.BytesIO(upload),
-                                            caption=message[:1024] or None, reply_markup=kb)
-                return sent.photo[-1].file_id
-            if upload is not None:
-                sent = await bot.send_document(chat_id=int(item["user_id"]), document=_io.BytesIO(upload),
-                                               filename=file_name, caption=message[:1024] or None,
-                                               reply_markup=kb)
-                return sent.document.file_id
-            await bot.send_message(chat_id=int(item["user_id"]),
-                                   text="Reply from Kurtex support:\n" + message,
-                                   reply_markup=kb)
-            return ""
-    try:
-        file_id = asyncio.run(deliver())
-    except Exception:
-        logger.exception("Unable to deliver report thread message %s", feedback_id)
-        return jsonify({"error": "Telegram delivery failed. Nothing was saved."}), 502
-    actor = session.get("user") or {}
-    sender = actor.get("first_name") or actor.get("name") or actor.get("username") or "Manager"
-    try:
-        result = feedback_store.add_feedback_message(
-            feedback_id, author_id=str(actor["id"]), author_name=str(sender),
-            sender_role="manager", message=message, media_type=media_type,
-            telegram_file_id=file_id, file_name=file_name, mime_type=mime_type,
+    is_multipart = request.mimetype == "multipart/form-data"
+    form = request.form if is_multipart else (request.get_json(silent=True) or {})
+    if not isinstance(form, dict) and not is_multipart:
+        return jsonify({"error": "Invalid message."}), 400
+    message = str(form.get("message") or "").strip()
+    uploaded = request.files.get("file")
+    if len(message) > 3000 or (not message and not uploaded):
+        return jsonify({"error": "Write a message (up to 3000 characters) or attach a file."}), 400
+
+    file_name = mime = kind = file_key = ""
+    upload_path = None
+    if uploaded:
+        mime = str(uploaded.mimetype or "").lower().split(";")[0]
+        extensions = {
+            "image/png": ".png", "image/jpeg": ".jpg",
+            "image/webp": ".webp", "application/pdf": ".pdf",
+        }
+        if mime not in extensions:
+            return jsonify({"error": "Only PNG, JPG, WebP and PDF files are supported."}), 415
+        binary = uploaded.stream.read(10 * 1024 * 1024 + 1)
+        if len(binary) > 10 * 1024 * 1024:
+            return jsonify({"error": "Attachment must not exceed 10 MB."}), 413
+        valid = (
+            binary.startswith(b"\x89PNG\r\n\x1a\n") if mime == "image/png" else
+            binary.startswith(b"\xff\xd8\xff") if mime == "image/jpeg" else
+            binary.startswith(b"RIFF") and binary[8:12] == b"WEBP" if mime == "image/webp" else
+            binary.startswith(b"%PDF-")
         )
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 409
-    return jsonify({"ok": True, "item": result})
+        if not valid:
+            return jsonify({"error": "Attachment contents do not match its file type."}), 415
+        from werkzeug.utils import secure_filename
+        file_name = secure_filename(uploaded.filename or "attachment")[:130] or "attachment"
+        kind = "photo" if mime.startswith("image/") else "document"
+        # Existing Telegram images remain accessible by their old IDs;
+        # new dashboard files are private files under the persistent Railway volume.
+        file_key = secrets.token_hex(20) + extensions[mime]
+        directory = DATA_DIR / "feedback_uploads"
+        directory.mkdir(parents=True, exist_ok=True)
+        upload_path = directory / file_key
+        with upload_path.open("xb") as target:
+            target.write(binary)
+
+    actor = session.get("user") or {}
+    user = get_user(int(actor.get("id")))
+    if not user:
+        if upload_path:
+            upload_path.unlink(missing_ok=True)
+        return jsonify({"error": "Sign in required."}), 401
+    sender = str(user.get("name") or user.get("first_name") or user.get("username") or "Agent")
+    try:
+        saved = feedback_store.add_feedback_message(
+            feedback_id, author_id=str(actor["id"]), author_name=sender,
+            sender_role=role, message=message, media_type=kind,
+            local_file_key=file_key, file_name=file_name, mime_type=mime,
+        )
+    except (ValueError, LookupError, PermissionError) as exc:
+        if upload_path:
+            upload_path.unlink(missing_ok=True)
+        return jsonify({"error": str(exc)}), 409 if "resolved" in str(exc).lower() else 403
+    except Exception:
+        if upload_path:
+            upload_path.unlink(missing_ok=True)
+        raise
+    try:
+        if role == "manager":
+            targets = [item["user_id"]]
+        else:
+            from backend.storage.user_store import get_all_user_dicts
+            targets = [u["id"] for u in get_all_user_dicts()
+                       if u.get("role") in ("developer", "super_admin")
+                       and int(u.get("id") or 0) != int(actor["id"])]
+        feedback_store.notify_feedback_users(
+            targets, title="New issue conversation message",
+            message=f"{sender} replied to a report.",
+            feedback_id=feedback_id, kind="issue_reply",
+        )
+    except Exception:
+        logger.exception("Unable to publish issue conversation notification")
+    return jsonify({"ok": True, "item": saved})
 
 
 @app.route("/api/bot/feedback/<feedback_id>/media/<int:message_id>", methods=["GET"])
 def api_bot_feedback_media(feedback_id, message_id):
+    """Authorization-checked media. New files are local; old Telegram IDs remain supported."""
     import asyncio
     from backend.storage import feedback_store
-    from flask import Response
     item, role, denied = _feedback_thread_access(feedback_id)
     if denied:
         return denied
     media = feedback_store.get_feedback_media(feedback_id, message_id)
     if not media:
         return jsonify({"error": "Attachment not found."}), 404
-    if not BOT_TOKEN:
-        return jsonify({"error": "Telegram attachments temporarily unavailable."}), 503
-    from telegram import Bot
-    async def fetch_file():
-        async with Bot(BOT_TOKEN) as bot:
-            file = await bot.get_file(media["telegram_file_id"])
-            return bytes(await file.download_as_bytearray())
-    try:
-        binary = asyncio.run(fetch_file())
-    except Exception:
-        logger.exception("Unable to retrieve bot feedback attachment")
-        return jsonify({"error": "Attachment unavailable."}), 502
-    if len(binary) > 10 * 1024 * 1024:
-        return jsonify({"error": "Attachment exceeds display limit."}), 413
-    mime = media["mime_type"] if media["mime_type"] in ("image/png", "image/jpeg", "image/webp", "application/pdf") else "application/octet-stream"
-    filename = str(media["file_name"] or "attachment").replace('"', "").replace("\\", "_")
-    disposition = "inline" if mime.startswith("image/") else "attachment"
-    resp = Response(binary, content_type=mime)
-    resp.headers["Content-Disposition"] = f'{disposition}; filename="{filename}"'
-    resp.headers["Cache-Control"] = "private, max-age=60"
-    return resp
+
+    mime = media["mime_type"] if media["mime_type"] in (
+        "image/png", "image/jpeg", "image/webp", "application/pdf") else "application/octet-stream"
+    name = str(media["file_name"] or "attachment")
+    from werkzeug.utils import secure_filename
+    safe_name = secure_filename(name) or "attachment"
+    local_key = str(media.get("local_file_key") or "")
+    if local_key:
+        # A random basename, never a user-supplied file path.
+        if not re.fullmatch(r"[0-9a-f]{40}\.(?:png|jpg|webp|pdf)", local_key):
+            return jsonify({"error": "Invalid attachment reference."}), 404
+        path = DATA_DIR / "feedback_uploads" / local_key
+        if not path.is_file():
+            return jsonify({"error": "Attachment not found on storage volume."}), 404
+        response = send_file(
+            path, mimetype=mime, as_attachment=not mime.startswith("image/"),
+            download_name=safe_name, conditional=True,
+        )
+    else:
+        if not BOT_TOKEN:
+            return jsonify({"error": "Older Telegram attachment unavailable."}), 503
+        from telegram import Bot
+        async def legacy_fetch():
+            async with Bot(BOT_TOKEN) as bot:
+                file = await bot.get_file(media["telegram_file_id"])
+                return bytes(await file.download_as_bytearray())
+        try:
+            data = asyncio.run(legacy_fetch())
+        except Exception:
+            logger.exception("Unable to load legacy Telegram attachment")
+            return jsonify({"error": "Older attachment unavailable."}), 502
+        if len(data) > 10 * 1024 * 1024:
+            return jsonify({"error": "Attachment exceeds display limit."}), 413
+        response = send_file(
+            io.BytesIO(data), mimetype=mime,
+            as_attachment=not mime.startswith("image/"), download_name=safe_name,
+        )
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
-@app.route("/api/bot/feedback", methods=["GET"])
+@app.route("/api/bot/feedback", methods=["GET", "POST"])
 def api_bot_feedback_list():
+    """Manager queue GET, authenticated dashboard submission POST."""
+    from backend.storage import feedback_store
+    from backend.storage.user_store import get_user
+    if request.method == "POST":
+        csrf = _feedback_csrf_error()
+        if csrf:
+            return csrf
+        actor = session.get("user") or {}
+        if not actor.get("id"):
+            return jsonify({"error": "Sign in required."}), 401
+        user = get_user(int(actor["id"]))
+        if not user:
+            return jsonify({"error": "Not authorized."}), 403
+        payload = request.get_json(silent=True) or {}
+        category = str(payload.get("category") or "bug")
+        message = str(payload.get("message") or "").strip()
+        if category not in feedback_store.VALID_CATEGORIES:
+            return jsonify({"error": "Invalid report type."}), 400
+        if not 5 <= len(message) <= 3000:
+            return jsonify({"error": "Describe the issue in 5–3000 characters."}), 400
+        try:
+            # Prevent an accidental submit loop from flooding the shared queue.
+            with kurtex_db.read_conn(DATA_DIR) as conn:
+                recent = conn.execute(
+                    "SELECT COUNT(*) AS n FROM bot_feedback WHERE user_id=? "
+                    "AND created_at>=?",
+                    (int(actor["id"]), (datetime.now(timezone.utc)-timedelta(minutes=10)).isoformat()),
+                ).fetchone()["n"]
+            if int(recent) >= 8:
+                return jsonify({"error": "Too many new reports. Try again shortly."}), 429
+        except Exception:
+            logger.exception("Unable to check report rate limit")
+            return jsonify({"error": "Report submission temporarily unavailable."}), 503
+        try:
+            item = feedback_store.create_feedback(
+                user_id=int(actor["id"]),
+                user_name=str(user.get("name") or user.get("first_name") or user.get("username") or f"User {actor['id']}"),
+                username=str(user.get("username") or ""),
+                user_role=str(user.get("role") or "agent"),
+                category=category, message=message,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        try:
+            from backend.storage.user_store import get_all_user_dicts
+            targets = [u["id"] for u in get_all_user_dicts()
+                       if u.get("role") in ("developer", "super_admin")
+                       and int(u.get("id") or 0) != int(actor["id"])]
+            feedback_store.notify_feedback_users(
+                targets, title="New issue report",
+                message=f"{item['user_name']} reported an issue.",
+                feedback_id=item["id"], kind="issue_created",
+            )
+        except Exception:
+            logger.exception("Unable to notify developers of a new report")
+        return jsonify({"ok": True, "item": item}), 201
+
     actor, error = _feedback_actor(write=False)
     if error:
         return error
-    from backend.storage import feedback_store
     status_filter = (request.args.get("status") or "").strip().lower() or None
     data = feedback_store.list_feedback(status=status_filter)
-    return jsonify({
-        **data,
-        "can_manage": actor["role"] in ("developer", "super_admin"),
-        "bot_token_configured": bool(BOT_TOKEN),
-    })
+    return jsonify({**data, "can_manage": True})
 
 
 @app.route("/api/bot/feedback/<feedback_id>", methods=["PATCH", "POST", "DELETE"])
@@ -4603,7 +4661,6 @@ def api_bot_feedback_item(feedback_id):
     admin_note = payload.get("admin_note")
     internal_note = payload.get("internal_note")
     resolution_reason = payload.get("resolution_reason")
-    notify_user = bool(payload.get("notify_user"))
     actor_name = (
         actor.get("first_name")
         or actor.get("name")
@@ -4625,9 +4682,16 @@ def api_bot_feedback_item(feedback_id):
     if not updated:
         return jsonify({"error": "Report not found."}), 404
 
-    # Internal notes and resolution reason are private; only the explicit public
-    # response (admin_note) can be included in outbound Telegram messages.
-    notified = _notify_feedback_reporter(updated) if notify_user else False
+    # Dashboard-only reports: never send status updates through the Telegram bot.
+    notified = False
+    try:
+        feedback_store.notify_feedback_users(
+            [updated["user_id"]], title="Report status updated",
+            message=f"Your report is now {updated['status'].replace('_', ' ')}.",
+            feedback_id=feedback_id, kind="issue_status",
+        )
+    except Exception:
+        logger.exception("Unable to publish issue status notification")
     return jsonify({
         "ok": True,
         "item": updated,

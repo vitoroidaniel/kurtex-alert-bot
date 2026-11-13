@@ -84,11 +84,7 @@ from bot_app.handlers.agent_handler import (
     recv_close_parts_text,
 )
 from bot_app.handlers.alert_handler import AlertHandler, TRIGGER_WORDS
-from bot_app.handlers.feedback_handler import (
-    get_alert_broadcast_conversation,
-    get_feedback_conversation,
-    get_ticket_conversation,
-)
+from bot_app.handlers.feedback_handler import get_alert_broadcast_conversation
 from bot_app.handlers.report_handler import (
     cb_orphan_report_callback,
     get_report_conversation,
@@ -277,7 +273,6 @@ async def post_init(application: Application) -> None:
         ("done",        "Today's closed cases"),
         ("casehistory", "Full closed case history"),
         ("mystats",     "Your performance stats"),
-        ("bug",         "Report a bot error or ask for help"),
         ("help",        "Commands and help"),
     ]
     manager_commands = base_commands + [
@@ -427,8 +422,6 @@ async def cmd_help(update: Update, ctx):
         "/casehistory — Full history\n"
         "/mystats — Your stats\n"
         "/shifts — Shift roster\n"
-        "/bug — Report a bot bug, error, or ask for help\n"
-        "/myreports — Your submitted bot reports and conversation updates\n"
     )
     if is_super:
         text += (
@@ -453,10 +446,8 @@ async def cmd_help(update: Update, ctx):
             "/editrole — Change a user's role\n"
             "\n💡 <b>Tip:</b> Forward any message from a user to add them quickly.\n"
         )
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🐞 Report Bot Issue / Help", callback_data="bug_start"),
-    ]])
-    await safe_reply_text(update.message, text, reply_markup=kb)
+    text += "\n\nFor technical problems, use <b>Kurtex Dashboard → Report an Issue</b>."
+    await safe_reply_text(update.message, text)
 
 
 def _register_sigterm(application: Application):
@@ -605,9 +596,7 @@ def main():
     app.add_handler(MessageHandler(private & filters.FORWARDED, handle_forward))
     app.add_handler(CallbackQueryHandler(cb_addrole, pattern=r"^addrole\|"))
 
-    # ── Conversation handlers (support/feedback, team /alert, report) + recovery ──
-    app.add_handler(get_feedback_conversation())
-    app.add_handler(get_ticket_conversation())
+    # Driver reporting and team alerts stay in Telegram; app feedback is dashboard-only.
     app.add_handler(get_alert_broadcast_conversation())
     app.add_handler(get_report_conversation())
 

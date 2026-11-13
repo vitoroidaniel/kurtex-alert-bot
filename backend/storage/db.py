@@ -378,6 +378,11 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         FOREIGN KEY(feedback_id) REFERENCES bot_feedback(id) ON DELETE CASCADE
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_messages_thread ON bot_feedback_messages(feedback_id, id)")
+    # Existing Telegram screenshot IDs remain readable; new website uploads are stored on the persistent volume.
+    message_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback_messages)")}
+    if "local_file_key" not in message_cols:
+        conn.execute("ALTER TABLE bot_feedback_messages ADD COLUMN local_file_key TEXT NOT NULL DEFAULT ''")
+
 
 
 

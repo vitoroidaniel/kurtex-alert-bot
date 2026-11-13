@@ -1,4 +1,4 @@
-"""SQLite-backed storage for user bot bug reports, error reports, and help requests."""
+"""SQLite-backed Kurtex dashboard issues, feedback and developer conversations."""
 
 from __future__ import annotations
 
@@ -55,8 +55,10 @@ def create_feedback(
 ) -> dict:
     """Create a user error/help report and notify dashboard bell feed."""
     clean_msg = (message or "").strip()
-    if not clean_msg:
-        raise ValueError("Report message cannot be empty.")
+    if len(clean_msg) < 5:
+        raise ValueError("Describe the issue in at least five characters.")
+    if len(clean_msg) > 3000:
+        raise ValueError("Report description must be 3000 characters or fewer.")
     cat = category if category in VALID_CATEGORIES else "bug"
     now = utc_now().isoformat()
     fid = f"fb-{secrets.token_hex(4)}"
@@ -79,19 +81,6 @@ def create_feedback(
         "created_at": now,
         "updated_at": now,
     }
-    cat_label = {"bug": "Bot Error / Bug", "help": "Help Request", "suggestion": "Suggestion"}.get(cat, "Bot Report")
-    notif_id = f"notif-fb-{fid}"
-    notif_payload = {
-        "id": notif_id,
-        "user": "all",
-        "type": "bot_feedback",
-        "title": f"{cat_label} from {item['user_name']}",
-        "message": clean_msg[:180],
-        "case_id": "",
-        "created_at": now,
-        "seen": False,
-    }
-
     with db.write_tx(sdir) as conn:
         conn.execute(
             """INSERT INTO bot_feedback(
@@ -112,10 +101,6 @@ def create_feedback(
                 item["created_at"],
                 item["updated_at"],
             ),
-        )
-        conn.execute(
-            "INSERT OR IGNORE INTO notifications(id, user_key, created_at, seen, data_json) VALUES(?,?,?,?,?)",
-            (notif_id, "all", now, 0, json.dumps(notif_payload, ensure_ascii=False, separators=(",", ":"))),
         )
         db.bump_version(conn, "feedback_version")
     return item
@@ -205,20 +190,32 @@ def update_feedback(
 
 
 def delete_feedback(feedback_id: str) -> bool:
+    """Delete open tickets and their local files, keeping other tickets untouched."""
+    import re
     fid = (feedback_id or "").strip()
     if not fid:
         return False
+    files = []
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT status FROM bot_feedback WHERE id=?", (fid,)).fetchone()
         if row is None:
             return False
         if str(row["status"]) == "resolved":
             raise ValueError("This report is resolved and locked. It cannot be deleted.")
+        files = [str(r["local_file_key"]) for r in conn.execute(
+            "SELECT local_file_key FROM bot_feedback_messages WHERE feedback_id=?", (fid,)
+        ).fetchall()]
+        conn.execute("DELETE FROM bot_feedback_messages WHERE feedback_id=?", (fid,))
         cur = conn.execute("DELETE FROM bot_feedback WHERE id=?", (fid,))
         if cur.rowcount == 0:
             return False
         db.bump_version(conn, "feedback_version")
-        return True
+    path = _storage_dir() / "feedback_uploads"
+    for name in files:
+        if re.fullmatch(r"[0-9a-f]{40}\.(?:png|jpg|webp|pdf)", name):
+            (path / name).unlink(missing_ok=True)
+    return True
+
 
 async def async_create_feedback(**kwargs) -> dict:
     return await asyncio.to_thread(create_feedback, **kwargs)
@@ -236,7 +233,7 @@ def list_my_feedback(user_id: int, limit: int = 12) -> list[dict]:
             "SELECT * FROM bot_feedback WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
             (int(user_id), min(max(int(limit), 1), 50)),
         ).fetchall()
-    return [{k: item[k] for k in ("id", "category", "message", "status", "created_at", "updated_at", "admin_note", "resolution_reason", "resolved_by")}
+    return [{k: item[k] for k in ("id", "user_id", "user_name", "username", "category", "message", "status", "created_at", "updated_at", "admin_note", "resolution_reason", "resolved_by")}
             for item in (_row_to_dict(row) for row in rows)]
 
 
@@ -255,8 +252,8 @@ def get_feedback_media(feedback_id: str, message_id: int) -> Optional[dict]:
     """Only call after checking ownership/manager rights to the report."""
     with db.read_conn(_storage_dir()) as conn:
         row = conn.execute(
-            "SELECT telegram_file_id, media_type, file_name, mime_type FROM bot_feedback_messages "
-            "WHERE id=? AND feedback_id=? AND telegram_file_id!=''",
+            "SELECT telegram_file_id, local_file_key, media_type, file_name, mime_type FROM bot_feedback_messages "
+            "WHERE id=? AND feedback_id=? AND (telegram_file_id!='' OR local_file_key!='')",
             (int(message_id), feedback_id),
         ).fetchone()
         return dict(row) if row else None
@@ -265,14 +262,16 @@ def get_feedback_media(feedback_id: str, message_id: int) -> Optional[dict]:
 def add_feedback_message(
     feedback_id: str, *, author_id: str, author_name: str, sender_role: str,
     message: str = "", media_type: str = "", telegram_file_id: str = "",
-    file_name: str = "", mime_type: str = "",
+    file_name: str = "", mime_type: str = "", local_file_key: str = "",
 ) -> dict:
     if sender_role not in ("reporter", "manager"):
         raise ValueError("Unsupported message sender.")
     body = str(message or "").strip()[:3000]
     kind = str(media_type or "")
-    if kind not in ("", "photo", "document") or (kind and not telegram_file_id):
+    if kind not in ("", "photo", "document") or (kind and not (telegram_file_id or local_file_key)):
         raise ValueError("Unsupported attachment.")
+    if local_file_key and ("/" in local_file_key or "\\" in local_file_key or not local_file_key.isascii()):
+        raise ValueError("Invalid file key.")
     if not body and not kind:
         raise ValueError("Message or attachment is required.")
     with db.write_tx(_storage_dir()) as conn:
@@ -286,10 +285,10 @@ def add_feedback_message(
         ts = utc_now().isoformat()
         cursor = conn.execute(
             "INSERT INTO bot_feedback_messages(feedback_id,author_id,author_name,sender_role,message,"
-            "media_type,telegram_file_id,file_name,mime_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "media_type,telegram_file_id,file_name,mime_type,created_at,local_file_key) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (feedback_id, str(author_id), str(author_name or "")[:120], sender_role, body, kind,
              str(telegram_file_id or "")[:400], str(file_name or "")[:160],
-             str(mime_type or "")[:100], ts),
+             str(mime_type or "")[:100], ts, str(local_file_key or "")[:130]),
         )
         conn.execute("UPDATE bot_feedback SET updated_at=? WHERE id=?", (ts, feedback_id))
         db.bump_version(conn, "feedback_version")
@@ -297,3 +296,34 @@ def add_feedback_message(
                 "sender_role": sender_role, "message": body, "media_type": kind,
                 "file_name": str(file_name or "")[:160], "mime_type": str(mime_type or "")[:100], "created_at": ts}
 
+
+def get_feedback_by_user(feedback_id: str, user_id: int) -> Optional[dict]:
+    """Scoped lookup prevents reporters from reading another user's issue."""
+    with db.read_conn(_storage_dir()) as conn:
+        row = conn.execute(
+            "SELECT * FROM bot_feedback WHERE id=? AND user_id=?",
+            (str(feedback_id), int(user_id)),
+        ).fetchone()
+    return _row_to_dict(row) if row else None
+
+
+def notify_feedback_users(user_ids, *, title: str, message: str, feedback_id: str, kind: str) -> None:
+    """Publish private dashboard bell notifications, not Telegram messages."""
+    users = sorted({str(int(uid)) for uid in user_ids if str(uid).isdigit()})
+    if not users:
+        return
+    created = utc_now().isoformat()
+    with db.write_tx(_storage_dir()) as conn:
+        for uid in users:
+            nid = f"notification-issue-{secrets.token_hex(12)}"
+            data = {
+                "id": nid, "user": uid, "kind": "issue",
+                "type": kind, "title": str(title)[:120],
+                "message": str(message)[:180],
+                "report_id": str(feedback_id), "seen": False,
+                "created_at": created,
+            }
+            conn.execute(
+                "INSERT INTO notifications(id,user_key,created_at,seen,data_json) VALUES(?,?,?,?,?)",
+                (nid, uid, created, 0, json.dumps(data, ensure_ascii=False, separators=(",", ":"))),
+            )
