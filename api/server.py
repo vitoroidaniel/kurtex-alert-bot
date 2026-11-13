@@ -4410,6 +4410,49 @@ def _feedback_csrf_error():
     return None
 
 
+
+@app.route("/api/dashboard/releases", methods=["GET", "POST"])
+def api_dashboard_release_notes():
+    """Public-to-logged-in release feed; only developers publish updates."""
+    from backend.storage.user_store import get_user, get_all_user_dicts
+    actor = session.get("user") or {}
+    if not actor.get("id"):
+        return jsonify({"error": "Sign in required."}), 401
+    stored = get_user(int(actor["id"]))
+    if not stored:
+        return jsonify({"error": "Not authorized."}), 403
+    is_dev = _website_role(stored.get("role")) == "developer"
+    if request.method == "POST":
+        csrf = _feedback_csrf_error()
+        if csrf:
+            return csrf
+        if not is_dev:
+            return jsonify({"error": "Developer access required."}), 403
+        payload = request.get_json(silent=True) or {}
+        title = str(payload.get("title") or "").strip()
+        body = str(payload.get("body") or "").strip()
+        version = str(payload.get("version") or "").strip()
+        if not (5 <= len(title) <= 120 and 5 <= len(body) <= 4000 and len(version) <= 45):
+            return jsonify({"error": "Title must be 5–120 characters; notes 5–4000; version 45 max."}), 400
+        author = str(stored.get("name") or stored.get("first_name") or stored.get("username") or actor["id"])[:120]
+        with kurtex_db.write_tx(DATA_DIR) as conn:
+            cursor = conn.execute("INSERT INTO dashboard_release_notes(version,title,body,created_by,created_at) VALUES(?,?,?,?,?)",
+                (version, title, body, author, datetime.now(timezone.utc).isoformat()))
+            release_id = cursor.lastrowid
+        try:
+            from backend.storage import feedback_store
+            feedback_store.notify_feedback_users(
+                [u["id"] for u in get_all_user_dicts() if int(u.get("id") or 0) != int(actor["id"])],
+                title="Kurtex update: " + title[:75], message=body[:160],
+                feedback_id="", kind="release_update")
+        except Exception:
+            logger.exception("Unable to send release update notifications")
+        return jsonify({"ok": True, "id": release_id}), 201
+    with kurtex_db.read_conn(DATA_DIR) as conn:
+        rows = conn.execute("SELECT id,version,title,body,created_by,created_at FROM dashboard_release_notes ORDER BY id DESC LIMIT 30").fetchall()
+    return jsonify({"items": [dict(row) for row in rows], "can_publish": is_dev})
+
+
 @app.route("/api/bot/feedback/mine", methods=["GET"])
 def api_bot_feedback_mine():
     from backend.storage import feedback_store
@@ -4615,6 +4658,9 @@ def api_bot_feedback_list():
                 username=str(user.get("username") or ""),
                 user_role=str(user.get("role") or "agent"),
                 category=category, message=message,
+                diagnostics={key: str(value)[:300] for key, value in (payload.get("diagnostics") or {}).items()
+                             if key in ("page", "browser", "platform", "screen", "dashboard_version")}
+                if isinstance(payload.get("diagnostics"), dict) else {},
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400

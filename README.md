@@ -62,7 +62,7 @@ Built for busy 24/7 trucking operations where multiple agents manage stacked cas
 | `/casehistory` | Browse your full closed case archive with notes and replaced part numbers |
 | `/mystats` | View your personal assigned, active, weekly, and all-time metrics |
 | `/shifts` | Check who is currently on duty and view active shift schedules |
-| `/bug` *(or `/support`)* | Submit a bot error report, bug, or help request directly to developers & managers |
+| Dashboard → Report & Support | Submit bugs, suggestions and support requests directly to developers (not a Telegram command) |
 | `/help` | View available commands and quick-report button for your role |
 
 ### Manager & Developer Commands

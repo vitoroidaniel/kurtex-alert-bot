@@ -132,7 +132,8 @@ CREATE TABLE IF NOT EXISTS bot_feedback (
     resolution_reason TEXT NOT NULL DEFAULT '',
     resolved_by TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    updated_at  TEXT NOT NULL,
+    diagnostics TEXT NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_bot_feedback_status ON bot_feedback(status, created_at DESC);
 """
@@ -360,9 +361,10 @@ def _migrate_legacy_json(conn: sqlite3.Connection, data_dir: Path) -> None:
 def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
     """Add private notes and resolution reason to existing volumes, without data loss."""
     existing = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback)")}
-    for name in ("internal_note", "resolution_reason"):
+    for name in ("internal_note", "resolution_reason", "diagnostics"):
         if name not in existing:
-            conn.execute(f"ALTER TABLE bot_feedback ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
+            default = "'{ }'".replace(" ", "") if name == "diagnostics" else "''"
+            conn.execute(f"ALTER TABLE bot_feedback ADD COLUMN {name} TEXT NOT NULL DEFAULT {default}")
     conn.execute("""CREATE TABLE IF NOT EXISTS bot_feedback_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         feedback_id TEXT NOT NULL,
@@ -377,6 +379,15 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         created_at TEXT NOT NULL,
         FOREIGN KEY(feedback_id) REFERENCES bot_feedback(id) ON DELETE CASCADE
     )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS dashboard_release_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_release_notes_recent ON dashboard_release_notes(id DESC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_messages_thread ON bot_feedback_messages(feedback_id, id)")
     # Existing Telegram screenshot IDs remain readable; new website uploads are stored on the persistent volume.
     message_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(bot_feedback_messages)")}

@@ -12,7 +12,7 @@ from typing import Optional
 from backend.core.app_time import utc_now
 from backend.storage import db
 
-VALID_CATEGORIES = ("bug", "help", "suggestion")
+VALID_CATEGORIES = ("bug", "help", "suggestion", "ui", "performance")
 VALID_STATUSES = ("open", "in_progress", "resolved")
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
@@ -34,6 +34,7 @@ def _row_to_dict(row) -> dict:
         "user_role": str(row["user_role"] or "agent"),
         "category": str(row["category"] or "bug"),
         "message": str(row["message"] or ""),
+        "diagnostics": json.loads(row["diagnostics"] or "{}"),
         "status": str(row["status"] or "open"),
         "admin_note": str(row["admin_note"] or ""),
         "internal_note": str(row["internal_note"] or ""),
@@ -52,6 +53,7 @@ def create_feedback(
     user_role: str,
     category: str,
     message: str,
+    diagnostics: Optional[dict] = None,
 ) -> dict:
     """Create a user error/help report and notify dashboard bell feed."""
     clean_msg = (message or "").strip()
@@ -73,6 +75,7 @@ def create_feedback(
         "user_role": (user_role or "agent").strip()[:40],
         "category": cat,
         "message": clean_msg[:3000],
+        "diagnostics": diagnostics or {},
         "status": "open",
         "admin_note": "",
         "internal_note": "",
@@ -85,8 +88,8 @@ def create_feedback(
         conn.execute(
             """INSERT INTO bot_feedback(
                 id, user_id, user_name, username, user_role, category,
-                message, status, admin_note, resolved_by, created_at, updated_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                message, status, admin_note, resolved_by, created_at, updated_at, diagnostics
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 item["id"],
                 item["user_id"],
@@ -100,6 +103,7 @@ def create_feedback(
                 item["resolved_by"],
                 item["created_at"],
                 item["updated_at"],
+                json.dumps(item["diagnostics"], ensure_ascii=False),
             ),
         )
         db.bump_version(conn, "feedback_version")
