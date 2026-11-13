@@ -1,0 +1,25 @@
+name: Workspace presence tests
+on:
+  pull_request:
+    paths:
+      - 'backend/core/workspace_presence.py'
+      - 'api/server.py'
+      - 'tests/test_workspace_presence.py'
+      - '.github/workflows/workspace-presence-tests.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'backend/core/workspace_presence.py'
+      - 'tests/test_workspace_presence.py'
+jobs:
+  presence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile API and presence code
+        run: python -m py_compile api/server.py backend/core/workspace_presence.py
+      - name: Run presence unit tests
+        run: python -m unittest discover -s tests -p 'test_workspace_presence.py' -v
