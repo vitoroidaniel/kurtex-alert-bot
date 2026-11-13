@@ -47,13 +47,14 @@ class FeedbackResolutionLockTests(unittest.TestCase):
         )
         self.assertEqual(done["resolution_reason"], "Fixed an invalid parser")
         self.assertEqual(done["resolved_by"], "Manager")
-        with self.assertRaisesRegex(ValueError, "locked"):
-            feedback_store.update_feedback(item["id"], status="open")
-        with self.assertRaisesRegex(ValueError, "locked"):
+        with self.assertRaisesRegex(ValueError, "read-only"):
             feedback_store.update_feedback(item["id"], admin_note="Changed afterwards")
         with self.assertRaisesRegex(ValueError, "locked"):
             feedback_store.delete_feedback(item["id"])
-        self.assertEqual(feedback_store.get_feedback(item["id"])["status"], "resolved")
+        reopened = feedback_store.update_feedback(item["id"], status="open", resolved_by="Manager")
+        self.assertEqual(reopened["status"], "open")
+        self.assertEqual(reopened["resolved_by"], "")
+        self.assertEqual(reopened["resolution_reason"], "Fixed an invalid parser")
 
     def test_schema_migrates_existing_feedback_rows(self):
         db_path = Path(self.temp.name) / "kurtex.sqlite3"
