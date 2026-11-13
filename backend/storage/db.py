@@ -363,6 +363,22 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
     for name in ("internal_note", "resolution_reason"):
         if name not in existing:
             conn.execute(f"ALTER TABLE bot_feedback ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
+    conn.execute("""CREATE TABLE IF NOT EXISTS bot_feedback_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        feedback_id TEXT NOT NULL,
+        author_id TEXT NOT NULL,
+        author_name TEXT NOT NULL DEFAULT '',
+        sender_role TEXT NOT NULL,
+        message TEXT NOT NULL DEFAULT '',
+        media_type TEXT NOT NULL DEFAULT '',
+        telegram_file_id TEXT NOT NULL DEFAULT '',
+        file_name TEXT NOT NULL DEFAULT '',
+        mime_type TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(feedback_id) REFERENCES bot_feedback(id) ON DELETE CASCADE
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_messages_thread ON bot_feedback_messages(feedback_id, id)")
+
 
 
 def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connection, Path]:

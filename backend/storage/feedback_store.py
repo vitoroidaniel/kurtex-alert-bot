@@ -226,3 +226,74 @@ async def async_create_feedback(**kwargs) -> dict:
 
 async def async_list_feedback(status: Optional[str] = None, limit: int = 200) -> dict:
     return await asyncio.to_thread(list_feedback, status, limit)
+
+
+# Report conversations store only Telegram file identifiers. File bytes remain on
+# Telegram; browser access is through an authenticated, token-hiding proxy.
+def list_my_feedback(user_id: int, limit: int = 12) -> list[dict]:
+    with db.read_conn(_storage_dir()) as conn:
+        rows = conn.execute(
+            "SELECT * FROM bot_feedback WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
+            (int(user_id), min(max(int(limit), 1), 50)),
+        ).fetchall()
+    return [{k: item[k] for k in ("id", "category", "message", "status", "created_at", "updated_at", "admin_note", "resolution_reason", "resolved_by")}
+            for item in (_row_to_dict(row) for row in rows)]
+
+
+def list_feedback_messages(feedback_id: str, limit: int = 100) -> list[dict]:
+    """Only call after checking ownership or manager access."""
+    with db.read_conn(_storage_dir()) as conn:
+        rows = conn.execute(
+            "SELECT id, feedback_id, author_name, sender_role, message, media_type, file_name, mime_type, created_at "
+            "FROM bot_feedback_messages WHERE feedback_id=? ORDER BY id DESC LIMIT ?",
+            (feedback_id, min(max(int(limit), 1), 200)),
+        ).fetchall()
+        return [dict(row) for row in reversed(rows)]
+
+
+def get_feedback_media(feedback_id: str, message_id: int) -> Optional[dict]:
+    """Only call after checking ownership/manager rights to the report."""
+    with db.read_conn(_storage_dir()) as conn:
+        row = conn.execute(
+            "SELECT telegram_file_id, media_type, file_name, mime_type FROM bot_feedback_messages "
+            "WHERE id=? AND feedback_id=? AND telegram_file_id!=''",
+            (int(message_id), feedback_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def add_feedback_message(
+    feedback_id: str, *, author_id: str, author_name: str, sender_role: str,
+    message: str = "", media_type: str = "", telegram_file_id: str = "",
+    file_name: str = "", mime_type: str = "",
+) -> dict:
+    if sender_role not in ("reporter", "manager"):
+        raise ValueError("Unsupported message sender.")
+    body = str(message or "").strip()[:3000]
+    kind = str(media_type or "")
+    if kind not in ("", "photo", "document") or (kind and not telegram_file_id):
+        raise ValueError("Unsupported attachment.")
+    if not body and not kind:
+        raise ValueError("Message or attachment is required.")
+    with db.write_tx(_storage_dir()) as conn:
+        row = conn.execute("SELECT status, user_id FROM bot_feedback WHERE id=?", (feedback_id,)).fetchone()
+        if not row:
+            raise LookupError("Report not found.")
+        if str(row["status"]) == "resolved":
+            raise ValueError("Resolved reports are read-only.")
+        if sender_role == "reporter" and int(author_id) != int(row["user_id"]):
+            raise PermissionError("This report belongs to another user.")
+        ts = utc_now().isoformat()
+        cursor = conn.execute(
+            "INSERT INTO bot_feedback_messages(feedback_id,author_id,author_name,sender_role,message,"
+            "media_type,telegram_file_id,file_name,mime_type,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (feedback_id, str(author_id), str(author_name or "")[:120], sender_role, body, kind,
+             str(telegram_file_id or "")[:400], str(file_name or "")[:160],
+             str(mime_type or "")[:100], ts),
+        )
+        conn.execute("UPDATE bot_feedback SET updated_at=? WHERE id=?", (ts, feedback_id))
+        db.bump_version(conn, "feedback_version")
+        return {"id": cursor.lastrowid, "feedback_id": feedback_id, "author_name": author_name[:120],
+                "sender_role": sender_role, "message": body, "media_type": kind,
+                "file_name": str(file_name or "")[:160], "mime_type": str(mime_type or "")[:100], "created_at": ts}
+

@@ -3,16 +3,13 @@
 <title>Sign in · Kurtex Operations</title>
 <meta name="theme-color" content="#f4f6fb"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Kurtex">
 <link rel="stylesheet" href="{{ url_for('static',filename='css/auth/login.css') }}">
+<link rel="preconnect" href="https://telegram.org" crossorigin>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
 </head><body>
 <main class="login-shell">
   <div class="scene-slider" aria-hidden="true">
-    <div class="scene-slide active" style="--bg:url('/static/images/login-fleet-service.webp')"></div>
-    <div class="scene-slide" style="--bg:url('https://images.pexels.com/photos/7019372/pexels-photo-7019372.jpeg?auto=compress&dpr=1&h=1080&w=1920')"></div>
-    <div class="scene-slide" style="--bg:url('https://cdnmedia.endeavorsuite.com/images/ThumbGenerator/Thumb.aspx?img=http%3A%2F%2Fcdnmedia.endeavorsuite.com%2Fimages%2Forganizations%2F69697811-b34f-435b-913f-5f0aea1c02db%2FSEO+Images%2Ftksoutheast_trailerrepair_header.jpg&v=1648493416948%3Fv%3D20220516084723&w=1140')"></div>
-    <div class="scene-slide" style="--bg:url('https://images.pexels.com/photos/7541351/pexels-photo-7541351.jpeg?auto=compress&dpr=1&h=1080&w=1920')"></div>
-  </div><div class="scene-overlay" aria-hidden="true"></div><div class="scene-light" aria-hidden="true"></div>
+    <div class="scene-slide active" style="--bg:url('/static/images/login-fleet-service.webp')"></div>  </div><div class="scene-overlay" aria-hidden="true"></div><div class="scene-light" aria-hidden="true"></div>
   <header class="topbar">
     <a class="brand" href="/"><img src="{{ url_for('static',filename='images/kurtex-logo.png') }}" alt="Kurtex"><span>KURTEX<small>FLEET OPERATIONS</small></span></a>
   </header>
@@ -32,7 +29,7 @@
     <div class="login-card">
       <div class="card-kicker">YOUR OPERATIONS WORKSPACE</div>
       <h2>Welcome back.</h2>
-      <p class="intro">Sign in with your registered Telegram account to open Kurtex.</p>
+      <p class="intro">Continue securely with your registered Telegram account. Your session stays signed in across browser restarts.</p>
       {% if error %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>We couldn't verify your account. Please try again or contact your administrator.</span></div>{% endif %}
       {% if bot_username %}
       <div class="telegram-login" id="telegramLogin">
@@ -80,14 +77,7 @@
     retry.addEventListener('click', () => window.location.reload());
   }
 
-  const slides = [...document.querySelectorAll('.scene-slide')];
-  if (!slides.length) return;
-  let current = 0;
-  const show = (index) => {
-    current = (index + slides.length) % slides.length;
-    slides.forEach((el,i) => el.classList.toggle('active', i === current));
-  };
-  setInterval(() => show(current + 1), 8500);
+  // Local background only: no third-party image carousel during login.
 })();
 </script>
 </body></html>

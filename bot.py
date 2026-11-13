@@ -87,6 +87,7 @@ from bot_app.handlers.alert_handler import AlertHandler, TRIGGER_WORDS
 from bot_app.handlers.feedback_handler import (
     get_alert_broadcast_conversation,
     get_feedback_conversation,
+    get_ticket_conversation,
 )
 from bot_app.handlers.report_handler import (
     cb_orphan_report_callback,
@@ -427,6 +428,7 @@ async def cmd_help(update: Update, ctx):
         "/mystats — Your stats\n"
         "/shifts — Shift roster\n"
         "/bug — Report a bot bug, error, or ask for help\n"
+        "/myreports — Your submitted bot reports and conversation updates\n"
     )
     if is_super:
         text += (
@@ -605,6 +607,7 @@ def main():
 
     # ── Conversation handlers (support/feedback, team /alert, report) + recovery ──
     app.add_handler(get_feedback_conversation())
+    app.add_handler(get_ticket_conversation())
     app.add_handler(get_alert_broadcast_conversation())
     app.add_handler(get_report_conversation())
 

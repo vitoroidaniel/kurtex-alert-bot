@@ -297,3 +297,9 @@ html,body{width:100%!important;min-height:100%!important;overflow-x:hidden!impor
 .telegram-box,.tg-wrap,.help{display:none!important}
 @media(max-width:900px){.telegram-login{height:56px;margin-top:20px}.telegram-visual{grid-template-columns:34px 1fr 24px;padding:0 15px}.telegram-label{font-size:13.5px}.secure-access{justify-content:flex-start;color:rgba(255,255,255,.58)!important}.secure-access i{color:rgba(255,255,255,.72)!important}.secure-access b{color:rgba(255,255,255,.32)!important}.telegram-retry{border-color:rgba(255,90,95,.28);background:rgba(151,22,28,.22);color:#fff}}
 @media(prefers-reduced-motion:reduce){.telegram-login,.telegram-arrow{transition:none!important}.telegram-login.is-loading .telegram-visual:after{animation:none!important}}
+
+/* v198: reliable, lightweight single-image sign-in scene. */
+.scene-slider .scene-slide:not(.active){display:none!important}
+.scene-slider .scene-slide.active{transition:none!important;animation:none!important}
+.login-card .intro{font-size:14px;line-height:1.6}
+@media(prefers-reduced-motion:reduce){.scene-slider,.scene-slide{animation:none!important;transition:none!important}}

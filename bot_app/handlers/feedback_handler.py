@@ -93,10 +93,11 @@ async def _submit_feedback(target, ctx, user, category: str, message_text: str, 
         f"<b>Ticket:</b> <code>{esc_html(item['id'])}</code>\n"
         f"It is now visible in <b>Kurtex Desktop → Bot Reports</b> and our developers/managers have been notified."
     )
+    ticket_kb = InlineKeyboardMarkup([[InlineKeyboardButton("View ticket / Add screenshot", callback_data=f"fb_view|{item['id']}")]])
     if edit:
-        await safe_edit_message_text(target, confirmation, reply_markup=None)
+        await safe_edit_message_text(target, confirmation, reply_markup=ticket_kb)
     else:
-        await safe_reply_text(target, confirmation)
+        await safe_reply_text(target, confirmation, reply_markup=ticket_kb)
 
     bot = ctx.bot if ctx and getattr(ctx, "bot", None) else target.get_bot()
     all_users = await asyncio.to_thread(get_all_user_dicts)
@@ -387,4 +388,179 @@ def get_alert_broadcast_conversation() -> ConversationHandler:
         ],
         per_message=False,
         allow_reentry=True,
+    )
+
+
+# ── My bot reports / ticket conversations (private chat only) ────────────────
+ASK_TICKET_UPDATE = 21
+
+
+def _ticket_keyboard(ticket):
+    if ticket["status"] == "resolved":
+        return InlineKeyboardMarkup([[InlineKeyboardButton("Back to my reports", callback_data="fb_list|all")]])
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("Add information / Screenshot", callback_data=f"fb_reply|{ticket['id']}")],
+        [InlineKeyboardButton("Back to my reports", callback_data="fb_list|all")],
+    ])
+
+
+async def _show_my_reports(update, ctx):
+    from backend.storage.feedback_store import list_my_feedback
+    user = update.effective_user
+    reports = await asyncio.to_thread(list_my_feedback, user.id, 12)
+    if not reports:
+        content = "📋 <b>Your bot reports</b>\n\nNo reports yet. Send /bug or /support to open one."
+        keyboard = None
+    else:
+        content = "📋 <b>Your bot reports</b>\n\nSelect a ticket to read updates, ask questions, or add a screenshot."
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                f"{'✅' if item['status']=='resolved' else '🔴'} {str(item['message'] or 'Issue')[:32]}",
+                callback_data=f"fb_view|{item['id']}",
+            )] for item in reports
+        ])
+    if update.callback_query:
+        await safe_send_message(ctx.bot, user.id, content, reply_markup=keyboard)
+    else:
+        await safe_reply_text(update.message, content, reply_markup=keyboard)
+
+
+async def cmd_myreports(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await _show_my_reports(update, ctx)
+    return ConversationHandler.END
+
+
+async def cb_myreport(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    from backend.storage.feedback_store import get_feedback, list_feedback_messages
+    query = update.callback_query
+    async with concurrent_ack(query):
+        action, _, ticket_id = (query.data or "").partition("|")
+        if action == "fb_list":
+            ctx.user_data.pop("feedback_active_ticket", None)
+            await _show_my_reports(update, ctx)
+            return ConversationHandler.END
+        ticket = await asyncio.to_thread(get_feedback, ticket_id)
+        if not ticket or ticket["user_id"] != query.from_user.id:
+            await safe_send_message(ctx.bot, query.from_user.id, "This report is not available to your account.", parse_mode=None)
+            return ConversationHandler.END
+        if action == "fb_reply":
+            if ticket["status"] == "resolved":
+                await safe_send_message(ctx.bot, query.from_user.id, "This ticket is resolved and read-only.", parse_mode=None)
+                return ConversationHandler.END
+            ctx.user_data["feedback_active_ticket"] = ticket_id
+            await safe_send_message(ctx.bot, query.from_user.id,
+                "📎 <b>Add details to your report</b>\n\nSend a message, screenshot, or PDF (up to 10 MB). "
+                "You can send multiple updates. Use /cancel when done.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("Finish adding details", callback_data=f"fb_done|{ticket_id}")
+                ]]))
+            return ASK_TICKET_UPDATE
+        messages = await asyncio.to_thread(list_feedback_messages, ticket_id, 15)
+        preview = [
+            f"📋 <b>{esc_html(ticket['category'].title())} report</b> — "
+            f"{esc_html(ticket['status'].replace('_',' ').title())}",
+            f"\n<b>Your report:</b>\n{esc_html(ticket['message'][:1300])}",
+        ]
+        if ticket.get("admin_note"):
+            preview.append(f"\n<b>Latest staff response:</b>\n{esc_html(ticket['admin_note'][:900])}")
+        if messages:
+            preview.append("\n<b>Conversation:</b>")
+            for msg in messages[-7:]:
+                who = "Support" if msg["sender_role"] == "manager" else "You"
+                body = (msg["message"] or "")[:350] or ("📎 " + (msg["file_name"] or "Screenshot"))
+                preview.append(f"• <b>{who}:</b> {esc_html(body)}")
+        if ticket["status"] == "resolved":
+            preview.append("\n🔒 <i>This ticket is resolved. No further changes can be made.</i>")
+        await safe_send_message(ctx.bot, query.from_user.id,
+                                "\n".join(preview), reply_markup=_ticket_keyboard(ticket))
+        return ConversationHandler.END
+
+
+async def recv_ticket_update(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    from backend.storage.feedback_store import add_feedback_message, get_feedback
+    ticket_id = ctx.user_data.get("feedback_active_ticket")
+    if not ticket_id:
+        return ConversationHandler.END
+    user = update.effective_user
+    ticket = await asyncio.to_thread(get_feedback, ticket_id)
+    if not ticket or ticket["user_id"] != user.id or ticket["status"] == "resolved":
+        ctx.user_data.pop("feedback_active_ticket", None)
+        await safe_reply_text(update.message, "This ticket is unavailable or already resolved.", parse_mode=None)
+        return ConversationHandler.END
+    msg = update.message
+    body = (msg.text or msg.caption or "").strip()[:3000]
+    media_type = file_id = name = mime = ""
+    size = 0
+    if msg.photo:
+        image = msg.photo[-1]
+        media_type, file_id, name, mime, size = "photo", image.file_id, "Screenshot.jpg", "image/jpeg", image.file_size or 0
+    elif msg.document:
+        doc = msg.document
+        mime = str(doc.mime_type or "").lower()
+        if mime not in ("image/png", "image/jpeg", "image/webp", "application/pdf"):
+            await safe_reply_text(msg, "Send a PNG/JPG/WebP screenshot or a PDF, please.", parse_mode=None)
+            return ASK_TICKET_UPDATE
+        media_type, file_id, name, size = "document", doc.file_id, (doc.file_name or "attachment")[:120], doc.file_size or 0
+    if size > 10 * 1024 * 1024:
+        await safe_reply_text(msg, "Attachment is too large. The limit is 10 MB.", parse_mode=None)
+        return ASK_TICKET_UPDATE
+    if not body and not file_id:
+        await safe_reply_text(msg, "Send text or an image/document to continue.", parse_mode=None)
+        return ASK_TICKET_UPDATE
+    try:
+        await asyncio.to_thread(add_feedback_message, ticket_id,
+            author_id=str(user.id), author_name=user.full_name or str(user.id),
+            sender_role="reporter", message=body, media_type=media_type,
+            telegram_file_id=file_id, file_name=name, mime_type=mime)
+    except (LookupError, ValueError, PermissionError) as exc:
+        await safe_reply_text(msg, str(exc), parse_mode=None)
+        return ConversationHandler.END
+
+    await safe_reply_text(msg, "✅ Added to your report. Send more details, or tap Finish.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("Finish", callback_data=f"fb_done|{ticket_id}")
+        ]]))
+    recipients = await asyncio.to_thread(get_all_user_dicts)
+    staff_ids = [u["id"] for u in recipients if u.get("role") in ("developer", "super_admin") and u["id"] != user.id]
+    summary = f"💬 <b>New information on bot report</b>\n<b>From:</b> {esc_html(user.full_name)}\n"
+    summary += esc_html(body[:600] if body else "📎 Screenshot / attachment")
+    summary += "\n<i>Review in Kurtex Desktop → Bot Reports.</i>"
+    await asyncio.gather(*(safe_send_message(ctx.bot, uid, summary) for uid in staff_ids), return_exceptions=True)
+    return ASK_TICKET_UPDATE
+
+
+async def cb_ticket_finish(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    async with concurrent_ack(update.callback_query):
+        ctx.user_data.pop("feedback_active_ticket", None)
+        await safe_send_message(ctx.bot, update.effective_user.id,
+                                "✅ Details saved. Use /myreports to check the conversation.", parse_mode=None)
+    return ConversationHandler.END
+
+
+async def cmd_ticket_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.pop("feedback_active_ticket", None)
+    await safe_reply_text(update.message, "Stopped adding details. Your earlier messages are saved.", parse_mode=None)
+    return ConversationHandler.END
+
+
+def get_ticket_conversation() -> ConversationHandler:
+    allowed = filters.ChatType.PRIVATE
+    return ConversationHandler(
+        name="kurtex_ticket_thread_v1",
+        persistent=False,
+        entry_points=[
+            CommandHandler("myreports", cmd_myreports, filters=allowed),
+            CommandHandler("tickets", cmd_myreports, filters=allowed),
+            CallbackQueryHandler(cb_myreport, pattern=r"^fb_(view|reply|list)\|"),
+        ],
+        states={
+            ASK_TICKET_UPDATE: [
+                MessageHandler(allowed & (filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, recv_ticket_update),
+                CallbackQueryHandler(cb_ticket_finish, pattern=r"^fb_done\|"),
+                CallbackQueryHandler(cb_myreport, pattern=r"^fb_(view|reply|list)\|"),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cmd_ticket_cancel)],
+        allow_reentry=True,
+        per_message=False,
     )

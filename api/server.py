@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Thread, Lock
-from functools import wraps
+from functools import wraps, lru_cache
 from backend.ai.ai_chat_store import ChatStore
 from backend.ai.ai_learning import LearningStore
 from backend.ai.ai_learning_routes import register_learning_routes
@@ -133,6 +133,21 @@ def api_headers(response):
 @app.errorhandler(DataUnavailable)
 def data_unavailable(error):
     return jsonify({"error": str(error)}), 503
+
+@app.before_request
+def _start_dashboard_timer():
+    if request.path in ("/api/home/briefing", "/api/cases"):
+        g.kurtex_dashboard_started = time.perf_counter()
+
+
+@app.after_request
+def _dashboard_server_timing(response):
+    started = getattr(g, "kurtex_dashboard_started", None)
+    if started is not None:
+        duration_ms = max(0.0, (time.perf_counter() - started) * 1000.0)
+        response.headers["Server-Timing"] = f"kurtex;dur={duration_ms:.1f}"
+    return response
+
 
 def valid_date(value):
     try:
@@ -1971,11 +1986,24 @@ def _home_case_attention(case, now):
 
 @app.route("/api/home/briefing")
 def api_home_briefing():
-    """Read-only daily briefing, with bounded queues and recorded case events."""
-    if not session.get("user"):
+    """A version-aware briefing cache avoids replaying full case histories on every poll."""
+    actor = session.get("user")
+    if not actor:
         return jsonify({"error": "unauthorized"}), 401
     if "cases" not in _current_allowed_pages():
         return jsonify({"error": "You do not have access to cases."}), 403
+    from backend.storage.case_store import get_cases_version
+    try:
+        version = get_cases_version()
+    except Exception:
+        version = -1
+    return jsonify(_cached_home_briefing(int(actor.get("id") or 0),
+                                        str(actor.get("role") or ""), version,
+                                        int(time.time() // 30)))
+
+
+@lru_cache(maxsize=64)
+def _cached_home_briefing(_user_id, _role, _case_version, _time_bucket):
     from backend.storage.case_store import is_maintenance_report
     cases = [c for c in load_cases() if not is_testing(c)]
     now = chicago_now()
@@ -2052,12 +2080,12 @@ def api_home_briefing():
     recent = sorted((c for c in cases if case_local_date(c) == today_iso), key=lambda c: c.get("opened_at") or "", reverse=True)[:10]
     if not recent:
         recent = sorted(cases, key=lambda c: str(c.get("opened_at") or ""), reverse=True)[:10]
-    return jsonify({"generated_at": now.isoformat(), "day": today_iso,
+    return {"generated_at": now.isoformat(), "day": today_iso,
                     "metrics": {"reported": reported_today, "reported_previous": reported_yesterday,
                                 "active": sum(_home_case_active(c) and c.get("status") != "missed" for c in reports), "attention": len(attention),
                                 "resolved": resolved_today, "high_priority": high_priority, "unassigned": unassigned},
                     "attention": [row for _, row in attention[:6]], "activity": events[:8],
-                    "recent_cases": [serialize_case(c) for c in recent]})
+                    "recent_cases": [serialize_case(c) for c in recent]}
 
 
 @app.route("/api/home/agent-dashboard")
@@ -2747,7 +2775,7 @@ def api_cases():
         total = len(cases)
         page = cases[offset:offset+limit]
         # The active board does not need historical AI/analytics on every poll.
-        if f == "workspace" or (search and request.args.get("smart") == "1"):
+        if f == "workspace" or request.args.get("lite") == "1" or (search and request.args.get("smart") == "1"):
             ki_tags = {}
         else:
             try:
@@ -4386,6 +4414,157 @@ def _notify_feedback_reporter(item: dict) -> bool:
     except Exception as exc:
         logger.warning("Could not DM feedback update %s to user %s: %s", item.get("id"), item.get("user_id"), exc)
         return False
+
+
+def _feedback_thread_access(feedback_id: str):
+    """Reporter owns the ticket; only managers with Bot Reports permission see other tickets."""
+    from backend.storage import feedback_store
+    from backend.storage.user_store import get_user
+    logged_in = session.get("user") or {}
+    if not logged_in.get("id"):
+        return None, None, (jsonify({"error": "Sign in required."}), 401)
+    item = feedback_store.get_feedback(feedback_id)
+    if not item:
+        return None, None, (jsonify({"error": "Report not found."}), 404)
+    stored = get_user(logged_in["id"])
+    if not stored:
+        return None, None, (jsonify({"error": "Not authorized."}), 403)
+    role = _website_role(stored.get("role"))
+    manager = role == "developer" or (role == "super_admin" and "bot_issues" in _current_allowed_pages())
+    if not manager and int(logged_in["id"]) != int(item["user_id"]):
+        return None, None, (jsonify({"error": "Not authorized for this report."}), 403)
+    return item, ("manager" if manager else "reporter"), None
+
+
+def _feedback_csrf_error():
+    token = session.get("workspace_csrf", "")
+    if getattr(g, "mobile_authenticated", False):
+        return None
+    if not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", "")):
+        return jsonify({"error": "Invalid security token. Refresh and retry."}), 403
+    return None
+
+
+@app.route("/api/bot/feedback/mine", methods=["GET"])
+def api_bot_feedback_mine():
+    from backend.storage import feedback_store
+    from backend.storage.user_store import get_user
+    actor = session.get("user") or {}
+    if not actor.get("id"):
+        return jsonify({"error": "Sign in required."}), 401
+    if not get_user(actor["id"]):
+        return jsonify({"error": "Not authorized."}), 403
+    return jsonify({"items": feedback_store.list_my_feedback(int(actor["id"]), limit=30)})
+
+
+@app.route("/api/bot/feedback/<feedback_id>/messages", methods=["GET", "POST"])
+def api_bot_feedback_messages(feedback_id):
+    import asyncio
+    import io as _io
+    from backend.storage import feedback_store
+    item, role, denied = _feedback_thread_access(feedback_id)
+    if denied:
+        return denied
+    if request.method == "GET":
+        return jsonify({"items": feedback_store.list_feedback_messages(feedback_id),
+                        "locked": item["status"] == "resolved"})
+    if role != "manager":
+        return jsonify({"error": "Send updates from Telegram to this report."}), 403
+    csrf = _feedback_csrf_error()
+    if csrf:
+        return csrf
+    if item["status"] == "resolved":
+        return jsonify({"error": "Resolved tickets cannot receive new messages."}), 409
+    message = str((request.form.get("message") or "") if request.mimetype == "multipart/form-data"
+                  else (request.get_json(silent=True) or {}).get("message") or "").strip()
+    attached = request.files.get("file")
+    if len(message) > 3000 or (not message and not attached):
+        return jsonify({"error": "Enter a message of at most 3000 characters or attach a file."}), 400
+    if attached and len(message) > 1024:
+        return jsonify({"error": "Attachment captions are limited to 1024 characters."}), 400
+    if not BOT_TOKEN:
+        return jsonify({"error": "Telegram bot is not configured."}), 503
+    media_type, file_id, file_name, mime_type = "", "", "", ""
+    upload = None
+    if attached:
+        mime_type = str(attached.mimetype or "").lower()
+        if mime_type not in ("image/png", "image/jpeg", "image/webp", "application/pdf"):
+            return jsonify({"error": "Upload a PNG, JPG, WebP, or PDF."}), 415
+        upload = attached.stream.read(10 * 1024 * 1024 + 1)
+        if len(upload) > 10 * 1024 * 1024:
+            return jsonify({"error": "File exceeds the 10 MB limit."}), 413
+        file_name = os.path.basename((attached.filename or "attachment").replace("\\", "/"))[:120]
+        media_type = "photo" if mime_type.startswith("image/") else "document"
+
+    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("Reply to report", callback_data=f"fb_reply|{feedback_id}")
+    ]])
+    async def deliver():
+        async with Bot(BOT_TOKEN) as bot:
+            if upload is not None and media_type == "photo":
+                sent = await bot.send_photo(chat_id=int(item["user_id"]), photo=_io.BytesIO(upload),
+                                            caption=message[:1024] or None, reply_markup=kb)
+                return sent.photo[-1].file_id
+            if upload is not None:
+                sent = await bot.send_document(chat_id=int(item["user_id"]), document=_io.BytesIO(upload),
+                                               filename=file_name, caption=message[:1024] or None,
+                                               reply_markup=kb)
+                return sent.document.file_id
+            await bot.send_message(chat_id=int(item["user_id"]),
+                                   text="Reply from Kurtex support:\n" + message,
+                                   reply_markup=kb)
+            return ""
+    try:
+        file_id = asyncio.run(deliver())
+    except Exception:
+        logger.exception("Unable to deliver report thread message %s", feedback_id)
+        return jsonify({"error": "Telegram delivery failed. Nothing was saved."}), 502
+    actor = session.get("user") or {}
+    sender = actor.get("first_name") or actor.get("name") or actor.get("username") or "Manager"
+    try:
+        result = feedback_store.add_feedback_message(
+            feedback_id, author_id=str(actor["id"]), author_name=str(sender),
+            sender_role="manager", message=message, media_type=media_type,
+            telegram_file_id=file_id, file_name=file_name, mime_type=mime_type,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 409
+    return jsonify({"ok": True, "item": result})
+
+
+@app.route("/api/bot/feedback/<feedback_id>/media/<int:message_id>", methods=["GET"])
+def api_bot_feedback_media(feedback_id, message_id):
+    import asyncio
+    from backend.storage import feedback_store
+    from flask import Response
+    item, role, denied = _feedback_thread_access(feedback_id)
+    if denied:
+        return denied
+    media = feedback_store.get_feedback_media(feedback_id, message_id)
+    if not media:
+        return jsonify({"error": "Attachment not found."}), 404
+    if not BOT_TOKEN:
+        return jsonify({"error": "Telegram attachments temporarily unavailable."}), 503
+    from telegram import Bot
+    async def fetch_file():
+        async with Bot(BOT_TOKEN) as bot:
+            file = await bot.get_file(media["telegram_file_id"])
+            return bytes(await file.download_as_bytearray())
+    try:
+        binary = asyncio.run(fetch_file())
+    except Exception:
+        logger.exception("Unable to retrieve bot feedback attachment")
+        return jsonify({"error": "Attachment unavailable."}), 502
+    if len(binary) > 10 * 1024 * 1024:
+        return jsonify({"error": "Attachment exceeds display limit."}), 413
+    mime = media["mime_type"] if media["mime_type"] in ("image/png", "image/jpeg", "image/webp", "application/pdf") else "application/octet-stream"
+    filename = str(media["file_name"] or "attachment").replace('"', "").replace("\\", "_")
+    disposition = "inline" if mime.startswith("image/") else "attachment"
+    resp = Response(binary, content_type=mime)
+    resp.headers["Content-Disposition"] = f'{disposition}; filename="{filename}"'
+    resp.headers["Cache-Control"] = "private, max-age=60"
+    return resp
 
 
 @app.route("/api/bot/feedback", methods=["GET"])
