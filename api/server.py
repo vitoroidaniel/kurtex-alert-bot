@@ -4494,7 +4494,7 @@ def api_bot_feedback_messages(feedback_id):
         if len(upload) > 10 * 1024 * 1024:
             return jsonify({"error": "File exceeds the 10 MB limit."}), 413
         file_name = os.path.basename((attached.filename or "attachment").replace("\\", "/"))[:120]
-        media_type = "photo" if mime_type.startswith("image/") else "document"
+        media_type = "photo" if mime_type in ("image/png", "image/jpeg") else "document"
 
     from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
     kb = InlineKeyboardMarkup([[
