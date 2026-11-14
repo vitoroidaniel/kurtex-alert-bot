@@ -464,12 +464,19 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 if reply and not any(n.get("id", "legacy-" + str(i)) == reply and not n.get("deleted_at") for i,n in enumerate(notes) if isinstance(n, dict)):
                     raise ValueError("The replied-to comment is no longer available.")
                 note_id = uuid.uuid4().hex
-                # Resolve @usernames against the active roster in the same transaction.
+                # Resolve @usernames or @names against the active roster in the same transaction.
                 import re
-                found = {x.casefold() for x in re.findall(r"(?<!\w)@([\w]{2,40})", text)}
+                found = {x.casefold() for x in re.findall(r"(?<!\w)@([\w.-]{2,40})", text)}
                 users = conn.execute("SELECT id,name,username FROM users").fetchall() if found else []
-                mentions = [{"id": str(u["id"]), "name": u["name"]} for u in users
-                            if str(u["username"] or "").lstrip("@").casefold() in found]
+                mentions = []
+                for u in users:
+                    uname = str(u["username"] or "").lstrip("@").strip().casefold()
+                    name_raw = str(u["name"] or "").strip()
+                    name_fold = name_raw.casefold()
+                    name_slug = re.sub(r"\s+", "_", name_raw).casefold()
+                    first_token = name_raw.split()[0].casefold() if name_raw else ""
+                    if any(tok and tok in found for tok in (uname, name_fold, name_slug, first_token)):
+                        mentions.append({"id": str(u["id"]), "name": u["name"]})
                 notes.append({"id": note_id, "text": text, "author": actor["name"],
                               "author_id": str(actor["id"]), "created_at": now,
                               "reply_to_id": reply or None, "file_ids": list(file_ids),
@@ -977,19 +984,51 @@ async def ensure_indexes():
 
 # ── Workspace attachments & media ─────────────────────────────────────────────
 
-def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None):
+def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None, rename_id=None, new_name=None):
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
         case = json.loads(row["data_json"]) if row else None
         if not case or not is_maintenance_report(case):
             raise LookupError("Case not found.")
+        items = case.setdefault("workspace_attachments", [])
+        if rename_id:
+            target = next((x for x in items if x.get("id") == rename_id), None)
+            if not target:
+                raise LookupError("Attachment not found.")
+            if (
+                actor["role"] not in ("developer", "super_admin")
+                and str(target.get("uploaded_by_id")) != str(actor["id"])
+                and str(case.get("agent_id")) != str(actor["id"])
+            ):
+                raise PermissionError("Only the assigned agent, uploader, or a manager can rename this attachment.")
+            raw_name = str(new_name or "").strip()
+            if not raw_name:
+                raise ValueError("Provide a file name.")
+            import re
+            clean_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", raw_name).strip(" .")[:140]
+            if not clean_name:
+                raise ValueError("Provide a valid file name.")
+            ext = str(target.get("extension") or "").lower()
+            if ext and not clean_name.lower().endswith(ext):
+                clean_name = f"{clean_name}{ext}"
+            old_name = target.get("name", "")
+            target["name"] = clean_name
+            case["updated_at"] = now_iso()
+            case.setdefault("workspace_history", []).append({
+                "action": "attachment_renamed",
+                "author": actor.get("name") or "Team member",
+                "from": old_name,
+                "to": clean_name,
+                "created_at": now_iso(),
+            })
+            _upsert_case_row(conn, case)
+            return dict(target)
         if remove_id:
-            existing = next((x for x in case.get("workspace_attachments", []) if x.get("id") == remove_id), None)
+            existing = next((x for x in items if x.get("id") == remove_id), None)
             if existing and actor["role"] not in ("developer", "super_admin") and str(existing.get("uploaded_by_id")) != str(actor["id"]):
                 raise PermissionError("You can remove only your own attachments.")
         if not remove_id and (case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at")):
             raise ValueError("Cannot upload to a closed case.")
-        items = case.setdefault("workspace_attachments", [])
         removed = None
         if remove_id:
             removed = next((x for x in items if x.get("id") == remove_id), None)

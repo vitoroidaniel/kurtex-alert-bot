@@ -122,6 +122,7 @@ def register_workspace_routes(server):
         return jsonify({
             "agents": agents,
             "current_user_id": actor["id"],
+            "current_user_name": actor.get("name") or actor.get("first_name") or actor.get("username") or "",
             "can_reassign_any": actor["role"] in ("developer", "super_admin"),
         })
 
@@ -423,7 +424,11 @@ def register_workspace_routes(server):
             return jsonify({"error": "Select a file."}), 400
         name = secure_filename(file.filename)[:160]
         extension = Path(name).suffix.lower()
-        allowed = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".mp4", ".mov", ".webm"}
+        allowed = {
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+            ".pdf", ".txt", ".csv", ".tsv", ".json", ".log",
+            ".doc", ".docx", ".mp4", ".mov", ".webm",
+        }
         if extension not in allowed:
             return jsonify({"error": "Unsupported file type."}), 400
         category = str(request.form.get("category") or "attachment").strip().lower()
@@ -465,9 +470,27 @@ def register_workspace_routes(server):
             logger.exception("Attachment upload failed")
             return jsonify({"error": "Unable to save attachment."}), 503
 
-    @app.route("/api/workspace/cases/<case_id>/attachments/<attachment_id>", methods=["GET", "DELETE"])
+    _INLINE_MIMES = {
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".csv": "text/csv; charset=utf-8",
+        ".tsv": "text/tab-separated-values; charset=utf-8",
+        ".txt": "text/plain; charset=utf-8",
+        ".log": "text/plain; charset=utf-8",
+        ".json": "application/json; charset=utf-8",
+    }
+
+    @app.route("/api/workspace/cases/<case_id>/attachments/<attachment_id>", methods=["GET", "PATCH", "DELETE"])
     def api_workspace_attachment_file(case_id, attachment_id):
-        if request.method == "DELETE":
+        if request.method in ("DELETE", "PATCH"):
             actor, error = _workspace_actor()
             if error:
                 return error
@@ -476,6 +499,15 @@ def register_workspace_routes(server):
             if error:
                 return error
         try:
+            if request.method == "PATCH":
+                data = request.get_json(silent=True) or {}
+                updated = workspace_attachment_write(
+                    actor,
+                    case_id,
+                    rename_id=attachment_id,
+                    new_name=data.get("name"),
+                )
+                return jsonify({"ok": True, "attachment": updated})
             case, item = workspace_attachment_lookup(case_id, attachment_id)
             if (
                 request.method == "DELETE"
@@ -490,8 +522,15 @@ def register_workspace_routes(server):
                 return jsonify({"ok": True})
             if not path.is_file():
                 return jsonify({"error": "File unavailable."}), 404
-            return send_file(path, as_attachment=True, download_name=item["name"], mimetype="application/octet-stream")
-        except (LookupError, PermissionError, ValueError) as exc:
+            ext = str(item.get("extension") or "").lower()
+            inline = request.args.get("inline") == "1"
+            mime = _INLINE_MIMES.get(ext, "application/octet-stream") if inline else "application/octet-stream"
+            return send_file(path, as_attachment=not inline, download_name=item["name"], mimetype=mime)
+        except PermissionError as exc:
+            return jsonify({"error": str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except LookupError as exc:
             return jsonify({"error": str(exc)}), 404
 
     @app.route("/api/workspace/realtime-ticket", methods=["POST"])
