@@ -2623,6 +2623,60 @@ def workspace_socket(ws):
             return
 
 
+
+@app.route("/api/workspace/order", methods=["GET", "PUT"])
+def api_workspace_order():
+    """Shared manual card ordering with revision conflicts and role checking."""
+    from backend.storage.board_order import OrderConflict, read_order, save_order
+    if request.method == "GET":
+        actor, error = _workspace_actor_read()
+        if error: return error
+        return jsonify({"order": read_order(DATA_DIR)})
+    actor, error = _workspace_actor()  # Includes CSRF and role checks.
+    if error: return error
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Provide a card order."}), 400
+    try:
+        result = save_order(
+            data.get("group"), data.get("ids"), data.get("version"),
+            actor["id"], manager=actor["role"] in ("developer", "super_admin"),
+            data_dir=DATA_DIR,
+        )
+        return jsonify({"order": result})
+    except OrderConflict as exc:
+        return jsonify({"error": str(exc), "order": read_order(DATA_DIR)}), 409
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.route("/api/workspace/presence", methods=["GET", "POST"])
+def api_workspace_presence():
+    """Return live team members, or record a short-lived authenticated session."""
+    from backend.storage.board_presence import heartbeat, snapshot
+    if request.method == "GET":
+        actor, error = _workspace_actor_read()
+        if error: return error
+        return jsonify(snapshot(actor["id"], DATA_DIR))
+    actor, error = _workspace_actor()  # CSRF required for every presence write.
+    if error: return error
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid collaboration session."}), 400
+    try:
+        heartbeat(
+            data.get("session_id"), actor["id"],
+            actor.get("name") or actor.get("first_name") or "Team member",
+            data.get("action", "idle"), data.get("case_id", ""),
+            data.get("field", ""), DATA_DIR
+        )
+        return jsonify(snapshot(actor["id"], DATA_DIR))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @app.route("/api/workspace/board")
 def api_workspace_board():
     """Compact active board without expensive historical analytics.
