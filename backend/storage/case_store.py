@@ -435,6 +435,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 raise PermissionError("Only the assigned agent or a manager can update this case.")
             if payload["action"] == "close" and case.get("status") == "done":
                 return case
+            if payload["action"] == "reopen" and case.get("status") != "done" and not case.get("closed_at"):
+                return case
             if payload.get("revision") != workspace_revision(case):
                 # Allow field-level atomic merge when editing non-overlapping fields, or fractional rank updates.
                 can_merge = False
@@ -449,12 +451,34 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     )
                 if not can_merge:
                     raise ValueError("This report changed. Refresh its details before saving again.")
-            if case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at"):
+            if action != "reopen" and (case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at")):
                 raise ValueError("This report is already closed.")
             if payload["action"] == "close":
                 _close_record(case)
                 case.update({"closed_by_id": actor["id"], "closed_by_name": actor["name"]})
                 conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (case_id,))
+            elif action == "reopen":
+                prev_closed_by = str(case.get("closed_by_name") or "").strip()
+                case.update({
+                    "status": "reported",
+                    "reported_at": case.get("reported_at") or now,
+                    "closed_at": None,
+                    "closed_by_id": None,
+                    "closed_by_name": None,
+                    "resolution_secs": None,
+                    "reopened_at": now,
+                    "reopened_by_id": actor["id"],
+                    "reopened_by_name": actor["name"],
+                })
+                case.setdefault("workspace_history", []).append({
+                    "action": "reopen",
+                    "author": actor["name"],
+                    "author_id": str(actor["id"]),
+                    "created_at": now,
+                    "from": "done",
+                    "to": "reported",
+                    **({"closed_by": prev_closed_by} if prev_closed_by else {}),
+                })
             elif action == "rank":
                 case["board_rank"] = float(payload.get("board_rank") or 0.0)
             elif action == "note":
@@ -619,7 +643,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                         if report_key in case["report_data"]:
                             case["report_data"][report_key] = value
             case["updated_at"] = now
-            if action not in ("reassign", "stage", "move", "rank", "note", "note_edit", "note_delete", "note_pin"):
+            if action not in ("reassign", "stage", "move", "rank", "reopen", "note", "note_edit", "note_delete", "note_pin"):
                 history_entry = {
                     "action": action, "author": actor["name"], "created_at": now,
                     "fields": sorted(payload.get("fields", {})) if action == "edit" else [],

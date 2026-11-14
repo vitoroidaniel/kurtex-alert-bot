@@ -311,6 +311,7 @@ def register_workspace_routes(server):
                 action = data.get("action")
                 if action not in (
                     "close",
+                    "reopen",
                     "edit",
                     "note",
                     "note_edit",
@@ -1516,7 +1517,7 @@ def register_workspace_routes(server):
             return jsonify({"error": "Select at least one valid case."}), 400
 
         action = str(data.get("action") or "update").strip().lower()
-        if action not in ("update", "close"):
+        if action not in ("update", "close", "reopen"):
             return jsonify({"error": "Choose a valid bulk action."}), 400
 
         target = None
@@ -1562,6 +1563,12 @@ def register_workspace_routes(server):
                     workspace_write(
                         actor,
                         {"action": "close", "revision": workspace_revision(cur)},
+                        cid,
+                    )
+                elif action == "reopen":
+                    workspace_write(
+                        actor,
+                        {"action": "reopen", "revision": workspace_revision(cur)},
                         cid,
                     )
                 else:
