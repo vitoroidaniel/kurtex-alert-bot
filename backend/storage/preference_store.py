@@ -169,6 +169,7 @@ _WORKSPACE_BOARD_BOOL_DEFAULTS = {
     "ai_tab_badge": True,
     "hide_off_shift": True,
     "compact": False,
+    "focus_mode": False,
 }
 _WORKSPACE_BOARD_BOOL_FIELDS = tuple(_WORKSPACE_BOARD_BOOL_DEFAULTS.keys())
 
