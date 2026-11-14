@@ -162,7 +162,7 @@ def register_workspace_routes(server):
                     key: text(key, key in ("unit_number", "driver", "issue", "request_id"), maximum)
                     for key, maximum in limits.items()
                 }
-                if payload["load_type"] not in ("", "JBS Load", "Broker Load", "OpenDeck", "Empty"):
+                if payload["load_type"] not in ("", "JBS Load", "Meijer Load", "Broker Load", "OpenDeck", "Empty"):
                     raise ValueError("Choose a valid load type.")
                 if payload["temp_recorder"] not in ("", "Yes", "No"):
                     raise ValueError("Choose a valid temperature recorder value.")
@@ -176,6 +176,7 @@ def register_workspace_routes(server):
                     "low",
                     "medium",
                     "high",
+                    "critical",
                     "normal",
                 ):
                     raise ValueError("Choose equipment and priority.")
@@ -353,7 +354,7 @@ def register_workspace_routes(server):
                             and len(value.strip()) > 200
                         ):
                             raise ValueError("The " + key.replace("_", " ") + " field is too long.")
-                    if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "normal"):
+                    if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "critical", "normal"):
                         raise ValueError("Choose a valid priority.")
                     if "vehicle_type" in fields and fields["vehicle_type"] not in ("truck", "trailer", "reefer", ""):
                         raise ValueError("Choose valid equipment.")
