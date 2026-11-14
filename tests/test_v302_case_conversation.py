@@ -79,6 +79,19 @@ class CaseConversationTests(unittest.TestCase):
         with self.assertRaises(PermissionError):case_store.workspace_attachment_write(self.andrei,'case-101',remove_id='a'*32)
         case_store.workspace_attachment_write(self.daniel,'case-101',remove_id='a'*32)
 
+    def test_edit_records_structured_field_diffs(self):
+        edited = self.act(self.daniel, 'edit', fields={'priority': 'high', 'shop_info': 'TA Petro #42'})
+        last = edited['workspace_history'][-1]
+        self.assertEqual(last['action'], 'edit')
+        self.assertEqual(last['fields'], ['priority', 'shop_info'])
+        self.assertEqual(
+            last['changes'],
+            [
+                {'field': 'priority', 'from': 'normal', 'to': 'high'},
+                {'field': 'shop_info', 'from': '', 'to': 'TA Petro #42'},
+            ],
+        )
+
     def test_conflicts_do_not_overwrite_other_agent(self):
         before=case_store.get_case('case-101')
         revision=case_store.workspace_revision(before)

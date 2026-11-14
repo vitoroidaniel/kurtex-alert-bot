@@ -726,6 +726,16 @@ def register_workspace_routes(server):
             summary["revision"] = workspace_revision(c)
             summary["can_manage"] = _workspace_can_manage(c, actor)
             summary["can_reassign"] = summary["can_manage"]
+            summary["notes_search"] = " ".join(
+                str(n.get("text") or "").strip()
+                for n in (c.get("workspace_notes") or [])
+                if isinstance(n, dict) and not n.get("deleted_at") and n.get("text")
+            )[:800]
+            summary["files_search"] = " ".join(
+                str(f.get("name") or "").strip()
+                for f in (c.get("workspace_attachments") or [])
+                if isinstance(f, dict) and f.get("name")
+            )[:400]
             return summary
 
         cursor_raw = request.args.get("cursor", "").strip()

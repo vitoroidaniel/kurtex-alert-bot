@@ -582,6 +582,15 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     fields.update({key: "" for key in ("pickup", "delivery", "setpoint", "current_temp", "temp_recorder")})
                 elif new_load == "" or new_equipment != "reefer":
                     fields.update({key: "" for key in ("setpoint", "current_temp", "temp_recorder")})
+                edit_changes = []
+                for key, new_val in fields.items():
+                    old_raw = case.get(key)
+                    if old_raw is None and key == "load_type" and isinstance(case.get("report_data"), dict):
+                        old_raw = case["report_data"].get("load")
+                    old_str = str(old_raw or "").strip()
+                    new_str = str(new_val or "").strip()
+                    if old_str != new_str:
+                        edit_changes.append({"field": key, "from": old_str[:140], "to": new_str[:140]})
                 case.update(fields)
                 if isinstance(case.get("report_data"), dict):
                     for key, value in fields.items():
@@ -590,10 +599,13 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                             case["report_data"][report_key] = value
             case["updated_at"] = now
             if action not in ("reassign", "stage", "move", "rank", "note", "note_edit", "note_delete", "note_pin"):
-                case.setdefault("workspace_history", []).append({
+                history_entry = {
                     "action": action, "author": actor["name"], "created_at": now,
                     "fields": sorted(payload.get("fields", {})) if action == "edit" else [],
-                })
+                }
+                if action == "edit" and edit_changes:
+                    history_entry["changes"] = edit_changes
+                case.setdefault("workspace_history", []).append(history_entry)
         evt = "created" if case_id is None else str(payload.get("action") or "updated")
         _upsert_case_row(
             conn,
