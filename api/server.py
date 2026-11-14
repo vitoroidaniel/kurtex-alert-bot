@@ -2737,6 +2737,9 @@ def api_workspace_board():
             summary["agent"] = "Unknown agent"
         # Mobile drag-and-drop needs the same optimistic revision as Desktop.
         # The permission is checked again on the server for every write.
+        # Raw timestamps permit accurate board sorting without parsing formatted UI text.
+        summary["reported_at"] = c.get("reported_at") or c.get("opened_at") or ""
+        summary["opened_at"] = c.get("opened_at") or ""
         summary["revision"] = workspace_revision(c)
         summary["can_manage"] = _workspace_can_manage(c, actor)
         summary["can_reassign"] = summary["can_manage"]
