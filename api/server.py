@@ -2341,17 +2341,38 @@ def api_workspace_write(case_id=None):
                                 "username": target.get("username", "")}})
         else:
             action = data.get("action")
-            if action not in ("close", "edit", "note", "note_edit", "note_delete", "reassign", "stage", "move"):
+            if action not in ("close", "edit", "note", "note_edit", "note_delete", "note_pin", "reassign", "stage", "move"):
                 raise ValueError("Choose a valid report action.")
             payload = {"action": action, "revision": text("revision", True, 64)}
-            if action in ("note", "note_edit", "note_delete"):
-                if action != "note_delete":
-                    payload["text"] = text("text", True, 4000)
-                if action != "note":
-                    index = data.get("index")
-                    if type(index) is not int or index < 0:
-                        raise ValueError("Choose a valid note.")
-                    payload["index"] = index
+            if action in ("note", "note_edit", "note_delete", "note_pin"):
+                if action in ("note", "note_edit"):
+                    payload["text"] = text("text", False, 4000)
+                if action == "note":
+                    files = data.get("file_ids", [])
+                    if not isinstance(files, list) or len(files) > 12 or any(not isinstance(x, str) or not re.fullmatch(r"[0-9a-f]{32}", x) for x in files):
+                        raise ValueError("Choose valid conversation attachments.")
+                    payload["file_ids"] = list(dict.fromkeys(files))
+                    reply = data.get("reply_to_id", "")
+                    if not isinstance(reply, str) or len(reply) > 80 or (reply and not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", reply)):
+                        raise ValueError("Choose a valid message to reply to.")
+                    payload["reply_to_id"] = reply
+                    if not payload["text"] and not payload["file_ids"]:
+                        raise ValueError("Enter a message or attach a file.")
+                else:
+                    note_id = data.get("note_id", "")
+                    if note_id:
+                        if not isinstance(note_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", note_id):
+                            raise ValueError("Choose a valid comment.")
+                        payload["note_id"] = note_id
+                    else:
+                        index = data.get("index")
+                        if type(index) is not int or index < 0:
+                            raise ValueError("Choose a valid comment.")
+                        payload["index"] = index
+                    if action == "note_pin":
+                        if type(data.get("pinned")) is not bool:
+                            raise ValueError("Choose a pin state.")
+                        payload["pinned"] = data["pinned"]
             elif action in ("reassign", "move"):
                 # Resolve identity from the authoritative roster, never from client-provided names.
                 from backend.storage.user_store import get_all_user_dicts
@@ -2449,7 +2470,7 @@ def api_workspace_attachment_upload(case_id):
     try:
         path.write_bytes(content)
         metadata = {"id":attachment_id,"name":name,"size":len(content),"extension":extension,
-                    "category":category,"created_at":_now_iso(),"uploaded_by":actor.get("name", "")}
+                    "category":category,"created_at":_now_iso(),"uploaded_by":actor.get("name", ""), "uploaded_by_id":str(actor["id"])}
         if category == "proof":
             metadata.update({"proof_type":proof_type,"description":description})
         workspace_attachment_write(actor,case_id,attachment=metadata)
@@ -2473,8 +2494,8 @@ def api_workspace_attachment_file(case_id,attachment_id):
     from backend.storage.case_store import workspace_attachment_lookup, workspace_attachment_write
     try:
         case,item=workspace_attachment_lookup(case_id,attachment_id)
-        if request.method == "DELETE" and actor["role"] not in ("developer","super_admin") and str(case.get("agent_id"))!=str(actor["id"]):
-            return jsonify({"error":"Access denied."}),403
+        if request.method == "DELETE" and actor["role"] not in ("developer","super_admin") and str(item.get("uploaded_by_id"))!=str(actor["id"]):
+            return jsonify({"error":"Only the uploading agent may delete this attachment."}),403
         path=DATA_DIR/"workspace_uploads"/case_id/(attachment_id+item["extension"])
         if request.method=="DELETE":
             workspace_attachment_write(actor,case_id,remove_id=attachment_id)
@@ -3123,6 +3144,9 @@ def api_case_detail():
                     "workspace_attachments": c.get("workspace_attachments") or [],
                     "workspace_history": c.get("workspace_history") or [],
                     "can_manage": _workspace_can_manage(c, session["user"]),
+                    "can_comment": True,
+                    "can_pin": _workspace_can_manage(c, session["user"]),
+                    "viewer_id": str(session["user"]["id"]),
                 })
                 from backend.storage.case_store import workspace_revision
                 data["revision"] = workspace_revision(c)
