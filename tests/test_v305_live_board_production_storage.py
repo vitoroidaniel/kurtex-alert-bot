@@ -131,6 +131,41 @@ class LiveBoardProductionStorageTests(unittest.TestCase):
                 "CASE-8501",
             )
 
+    def test_presence_draft_preview_and_modular_workspace_routes(self):
+        import uuid
+        from backend.storage.board_presence import heartbeat, snapshot
+        from api import server
+
+        heartbeat(
+            str(uuid.uuid4()),
+            22,
+            "Max R.",
+            "editing",
+            "CASE-8501",
+            "issue",
+            self.data_dir,
+            draft="Fuel pump pressure loss",
+        )
+        heartbeat(
+            str(uuid.uuid4()),
+            33,
+            "Andrei P.",
+            "editing",
+            "CASE-8472",
+            "note",
+            self.data_dir,
+            draft="Adding Thermo King dispatch...",
+        )
+        snap = snapshot(11, self.data_dir)
+        self.assertEqual(snap["online"], 2)
+        self.assertEqual(snap["editing"], 2)
+        self.assertEqual(len(snap["peers"]), 2)
+        drafts = {p["name"]: p["draft"] for p in snap["peers"]}
+        self.assertEqual(drafts["Max R."], "Fuel pump pressure loss")
+        self.assertEqual(drafts["Andrei P."], "Adding Thermo King dispatch...")
+        self.assertTrue(callable(getattr(server, "api_workspace_board", None)))
+        self.assertTrue(callable(getattr(server, "api_workspace_write", None)))
+
 
 if __name__ == "__main__":
     unittest.main()
