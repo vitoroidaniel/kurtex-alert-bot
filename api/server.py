@@ -264,6 +264,9 @@ def serialize_case(c):
             "can_reassign": _workspace_can_manage(c, session.get("user") or {}) if session.get("user") else False,
             "load_type":   c.get("load_type") or (c.get("report_data") or {}).get("load") or "",
             "board_stage": c.get("board_stage") or "",
+            "board_rank":  float(c.get("board_rank") or 0.0),
+            "pickup":      c.get("pickup") or "",
+            "delivery":    c.get("delivery") or "",
             "shop_info":   c.get("shop_info") or "",
             "part_number": c.get("part_number") or "",
             "amount":      c.get("amount") or "",
@@ -2341,10 +2344,26 @@ def api_workspace_write(case_id=None):
                                 "username": target.get("username", "")}})
         else:
             action = data.get("action")
-            if action not in ("close", "edit", "note", "note_edit", "note_delete", "note_pin", "reassign", "stage", "move"):
+            if action not in ("close", "edit", "note", "note_edit", "note_delete", "note_pin", "reassign", "stage", "move", "rank"):
                 raise ValueError("Choose a valid report action.")
-            payload = {"action": action, "revision": text("revision", True, 64)}
-            if action in ("note", "note_edit", "note_delete", "note_pin"):
+            payload = {"action": action, "revision": text("revision", action != "rank", 64)}
+            def _opt_rank():
+                raw_rank = data.get("board_rank")
+                if raw_rank is None:
+                    return None
+                if isinstance(raw_rank, bool) or not isinstance(raw_rank, (int, float)):
+                    raise ValueError("Choose a valid card position.")
+                rank_val = float(raw_rank)
+                if not (-1e12 <= rank_val <= 1e12):
+                    raise ValueError("Choose a valid card position.")
+                return rank_val
+
+            if action == "rank":
+                rank_val = _opt_rank()
+                if rank_val is None:
+                    raise ValueError("Choose a valid card position.")
+                payload["board_rank"] = rank_val
+            elif action in ("note", "note_edit", "note_delete", "note_pin"):
                 if action in ("note", "note_edit"):
                     payload["text"] = text("text", False, 4000)
                 if action == "note":
@@ -2386,11 +2405,21 @@ def api_workspace_write(case_id=None):
                     if data.get("stage") not in ("", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"):
                         raise ValueError("Choose a valid workflow stage.")
                     payload["stage"] = data["stage"]
+                rank_val = _opt_rank()
+                if rank_val is not None:
+                    payload["board_rank"] = rank_val
+                if data.get("allow_concurrent_move") is True:
+                    payload["allow_concurrent_move"] = True
             elif action == "stage":
                 allowed_stages = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"}
                 if data.get("stage") not in allowed_stages:
                     raise ValueError("Choose a valid workflow stage.")
                 payload["stage"] = data["stage"]
+                rank_val = _opt_rank()
+                if rank_val is not None:
+                    payload["board_rank"] = rank_val
+                if data.get("allow_concurrent_move") is True:
+                    payload["allow_concurrent_move"] = True
             elif action == "edit":
                 fields = data.get("fields")
                 allowed = {"priority", "location", "description", "issue_text", "shop_info", "amount",
@@ -2425,6 +2454,12 @@ def api_workspace_write(case_id=None):
                 if "temp_recorder" in fields and fields["temp_recorder"] not in ("", "Yes", "No"):
                     raise ValueError("Choose a valid temperature recorder value.")
                 payload["fields"] = {k: v.strip() for k, v in fields.items()}
+                base_fields = data.get("base_fields")
+                if isinstance(base_fields, dict):
+                    payload["base_fields"] = {
+                        k: str(v).strip() for k, v in base_fields.items()
+                        if k in allowed and isinstance(v, (str, int, float))
+                    }
         case = workspace_write(actor, payload, case_id)
         return jsonify({"ok": True, "case": serialize_case(case), "revision": workspace_revision(case)})
     except PermissionError as exc:
@@ -2588,7 +2623,8 @@ def workspace_socket(ws):
         ws.close()
         return
     version = _workspace_board_version(actor)
-    ws.send(json.dumps({"type": "ready", "version": version}))
+    cursor = kurtex_db.get_latest_event_cursor(DATA_DIR)
+    ws.send(json.dumps({"type": "ready", "version": version, "cursor": cursor}))
     last_heartbeat = last_auth_check = connected_at = time.monotonic()
     while True:
         try:
@@ -2613,7 +2649,12 @@ def workspace_socket(ws):
             next_version = _workspace_board_version(actor)
             if next_version != version:
                 version = next_version
-                ws.send(json.dumps({"type": "changed", "version": version}))
+                events = kurtex_db.get_events_since(cursor, limit=50, data_dir=DATA_DIR)
+                if events:
+                    cursor = events[-1]["cursor"]
+                else:
+                    cursor = kurtex_db.get_latest_event_cursor(DATA_DIR)
+                ws.send(json.dumps({"type": "changed", "version": version, "cursor": cursor, "events": events}))
             if now - last_heartbeat >= 20:
                 ws.send(json.dumps({"type": "heartbeat"}))
                 last_heartbeat = now
@@ -2679,19 +2720,83 @@ def api_workspace_presence():
 
 @app.route("/api/workspace/board")
 def api_workspace_board():
-    """Compact active board without expensive historical analytics.
+    """Compact active board with incremental cursor delta sync.
 
-    Returns an unchanged marker when the on-disk version is identical. This
-    avoids transferring/re-rendering the board for each 15-second poll.
+    Returns an unchanged marker when the on-disk version is identical, or an
+    O(k) delta payload (`upserted` + `removed_ids`) when `cursor` is supplied
+    and only a small batch of cases changed since that cursor.
     """
     actor, error = _workspace_actor_read()
     if error:
         return error
     since = request.args.get("since", "")[:64]
     version = _workspace_board_version(actor)
+    latest_cursor = kurtex_db.get_latest_event_cursor(DATA_DIR)
     if since and version and hmac.compare_digest(since, version):
-        return jsonify({"unchanged": True, "version": version})
-    from backend.storage.case_store import is_maintenance_report
+        return jsonify({"unchanged": True, "version": version, "cursor": latest_cursor})
+    from backend.storage.case_store import is_maintenance_report, workspace_revision
+    from backend.storage.user_store import get_all_user_dicts
+
+    def _agent_key(value):
+        raw = str(value or "").strip()
+        return str(int(raw)) if raw.isdecimal() else raw
+
+    def _summarize_board_case(c, roster_by_id):
+        summary = serialize_case(c)
+        assigned = roster_by_id.get(_agent_key(c.get("agent_id")))
+        if assigned:
+            name = str(assigned.get("name") or "").strip()
+            if name and not name.isdecimal():
+                summary["agent"] = name
+            username = str(assigned.get("username") or "").strip().lstrip("@")
+            if username and not username.isdecimal():
+                summary["agent_username"] = username
+        elif str(summary.get("agent") or "").strip().isdecimal():
+            summary["agent"] = "Unknown agent"
+        summary["reported_at"] = c.get("reported_at") or c.get("opened_at") or ""
+        summary["opened_at"] = c.get("opened_at") or ""
+        summary["board_rank"] = float(c.get("board_rank") or 0.0)
+        summary["revision"] = workspace_revision(c)
+        summary["can_manage"] = _workspace_can_manage(c, actor)
+        summary["can_reassign"] = summary["can_manage"]
+        return summary
+
+    cursor_raw = request.args.get("cursor", "").strip()
+    if cursor_raw.isdecimal():
+        req_cursor = int(cursor_raw)
+        if 0 < req_cursor <= latest_cursor and load_cases is _DEFAULT_LOAD_CASES:
+            events = kurtex_db.get_events_since(req_cursor, limit=85, data_dir=DATA_DIR)
+            if 0 < len(events) <= 80:
+                changed_ids = list(dict.fromkeys(e["case_id"] for e in events if e.get("case_id")))
+                roster_by_id = {_agent_key(u.get("id")): u for u in get_all_user_dicts()
+                                if isinstance(u, dict) and u.get("id") is not None}
+                upserted = []
+                removed_ids = []
+                for cid in changed_ids:
+                    raw_case = case_store.get_case(cid)
+                    if not raw_case:
+                        removed_ids.append(cid)
+                        continue
+                    c = normalize_case(raw_case)
+                    active_board_item = (
+                        is_maintenance_report(c)
+                        and c.get("status") == "reported"
+                        and not c.get("closed_at")
+                        and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
+                        and not is_testing(c)
+                    )
+                    if active_board_item:
+                        upserted.append(_summarize_board_case(c, roster_by_id))
+                    else:
+                        removed_ids.append(cid)
+                return jsonify({
+                    "unchanged": False,
+                    "delta": True,
+                    "cursor": events[-1]["cursor"],
+                    "version": version,
+                    "upserted": upserted,
+                    "removed_ids": removed_ids,
+                })
 
     def _read_board_cases():
         if load_cases is _DEFAULT_LOAD_CASES and case_store._storage_dir().resolve() == DATA_DIR.resolve():
@@ -2711,41 +2816,15 @@ def api_workspace_board():
     if after != version:
         board = _read_board_cases()  # A writer completed while the snapshot was loading.
         version = _workspace_board_version(actor)
+        latest_cursor = kurtex_db.get_latest_event_cursor(DATA_DIR)
     else:
         version = after
     board.sort(key=lambda c: c.get("reported_at") or c.get("opened_at") or "", reverse=True)
-    from backend.storage.case_store import workspace_revision
-    from backend.storage.user_store import get_all_user_dicts
-    # Resolve stored Telegram identities for board display; IDs remain internal.
-    def _agent_key(value):
-        raw = str(value or "").strip()
-        return str(int(raw)) if raw.isdecimal() else raw
     roster_by_id = {_agent_key(u.get("id")): u for u in get_all_user_dicts()
                     if isinstance(u, dict) and u.get("id") is not None}
-    summaries = []
-    for c in board:
-        summary = serialize_case(c)
-        assigned = roster_by_id.get(_agent_key(c.get("agent_id")))
-        if assigned:
-            name = str(assigned.get("name") or "").strip()
-            if name and not name.isdecimal():
-                summary["agent"] = name
-            username = str(assigned.get("username") or "").strip().lstrip("@")
-            if username and not username.isdecimal():
-                summary["agent_username"] = username
-        elif str(summary.get("agent") or "").strip().isdecimal():
-            summary["agent"] = "Unknown agent"
-        # Mobile drag-and-drop needs the same optimistic revision as Desktop.
-        # The permission is checked again on the server for every write.
-        # Raw timestamps permit accurate board sorting without parsing formatted UI text.
-        summary["reported_at"] = c.get("reported_at") or c.get("opened_at") or ""
-        summary["opened_at"] = c.get("opened_at") or ""
-        summary["revision"] = workspace_revision(c)
-        summary["can_manage"] = _workspace_can_manage(c, actor)
-        summary["can_reassign"] = summary["can_manage"]
-        summaries.append(summary)
+    summaries = [_summarize_board_case(c, roster_by_id) for c in board]
     return jsonify({"cases": summaries, "total": len(board),
-                    "has_more": False, "version": version, "unchanged": False})
+                    "has_more": False, "version": version, "cursor": latest_cursor, "unchanged": False})
 
 
 _case_intelligence_cache = {"signature": None, "tags": {}}

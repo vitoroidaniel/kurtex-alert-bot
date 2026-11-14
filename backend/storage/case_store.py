@@ -49,7 +49,14 @@ def _storage_dir() -> Path:
     return DATA_DIR
 
 
-def _upsert_case_row(conn: sqlite3.Connection, case: dict) -> None:
+def _upsert_case_row(
+    conn: sqlite3.Connection,
+    case: dict,
+    *,
+    event_type: str = "updated",
+    actor_id: str = "",
+    actor_name: str = "",
+) -> None:
     cols = db._extract_case_columns(case)
     conn.execute(
         """INSERT INTO cases(
@@ -75,6 +82,23 @@ def _upsert_case_row(conn: sqlite3.Connection, case: dict) -> None:
             created_by_id=excluded.created_by_id,
             data_json=excluded.data_json""",
         cols,
+    )
+    db.sync_normalized_case_row(conn, case)
+    db.append_case_event(
+        conn,
+        str(case.get("id") or ""),
+        event_type,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        summary={
+            "status": str(case.get("status") or ""),
+            "agent_id": case.get("agent_id"),
+            "board_stage": str(case.get("board_stage") or ""),
+            "board_rank": float(case.get("board_rank") or 0.0),
+            "priority": str(case.get("priority") or "normal"),
+            "unit_number": str(case.get("unit_number") or ""),
+        },
+        created_at=str(case.get("updated_at") or case.get("opened_at") or ""),
     )
     db.bump_version(conn, "cases_version")
 
@@ -398,7 +422,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             if not row:
                 raise LookupError("Case not found.")
             case = json.loads(row["data_json"])
-            if payload["action"] not in ("reassign", "stage", "move") and not is_maintenance_report(case):
+            if payload["action"] not in ("reassign", "stage", "move", "rank") and not is_maintenance_report(case):
                 raise LookupError("Maintenance report not found. Awaiting Telegram report.")
             action = payload["action"]
             collaboration = action in ("note", "note_edit", "note_delete", "note_pin")
@@ -407,13 +431,27 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             if payload["action"] == "close" and case.get("status") == "done":
                 return case
             if payload.get("revision") != workspace_revision(case):
-                raise ValueError("This report changed. Refresh its details before saving again.")
+                # Allow field-level atomic merge when editing non-overlapping fields, or fractional rank updates.
+                can_merge = False
+                if action == "rank" or payload.get("allow_concurrent_move"):
+                    can_merge = True
+                elif action == "edit" and isinstance(payload.get("base_fields"), dict):
+                    base_fields = payload["base_fields"]
+                    fields_to_write = payload.get("fields") or {}
+                    can_merge = bool(fields_to_write) and all(
+                        str(case.get(k) or "") == str(base_fields.get(k) or "")
+                        for k in fields_to_write
+                    )
+                if not can_merge:
+                    raise ValueError("This report changed. Refresh its details before saving again.")
             if case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at"):
                 raise ValueError("This report is already closed.")
             if payload["action"] == "close":
                 _close_record(case)
                 case.update({"closed_by_id": actor["id"], "closed_by_name": actor["name"]})
                 conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (case_id,))
+            elif action == "rank":
+                case["board_rank"] = float(payload.get("board_rank") or 0.0)
             elif action == "note":
                 import uuid
                 text = payload.get("text", "")
@@ -485,10 +523,13 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     **({"pinned":bool(note["pinned"])} if action=="note_pin" else {})})
             elif payload["action"] in ("reassign", "move"):
                 target = payload["target"]
+                has_rank = payload.get("board_rank") is not None
                 if str(case.get("agent_id")) == str(target["id"]) and (
                     payload["action"] != "move" or (case.get("board_stage") or "") == payload["stage"]
-                ):
+                ) and not has_rank:
                     return dict(case)
+                if has_rank:
+                    case["board_rank"] = float(payload["board_rank"])
                 previous = case.get("agent_name") or "Unassigned"
                 owner_changed = str(case.get("agent_id")) != str(target["id"])
                 if owner_changed:
@@ -514,11 +555,14 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     })
             elif payload["action"] == "stage":
                 previous = case.get("board_stage") or ""
+                if payload.get("board_rank") is not None:
+                    case["board_rank"] = float(payload["board_rank"])
                 case["board_stage"] = payload["stage"]
-                case.setdefault("workspace_history", []).append({
-                    "action": "stage", "author": actor["name"],
-                    "from": previous, "to": payload["stage"], "created_at": now,
-                })
+                if previous != payload["stage"]:
+                    case.setdefault("workspace_history", []).append({
+                        "action": "stage", "author": actor["name"],
+                        "from": previous, "to": payload["stage"], "created_at": now,
+                    })
             elif payload["action"] == "edit":
                 fields = dict(payload["fields"])
                 new_load = fields.get(
@@ -537,12 +581,19 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                         if report_key in case["report_data"]:
                             case["report_data"][report_key] = value
             case["updated_at"] = now
-            if action not in ("reassign", "stage", "move", "note", "note_edit", "note_delete", "note_pin"):
+            if action not in ("reassign", "stage", "move", "rank", "note", "note_edit", "note_delete", "note_pin"):
                 case.setdefault("workspace_history", []).append({
                     "action": action, "author": actor["name"], "created_at": now,
                     "fields": sorted(payload.get("fields", {})) if action == "edit" else [],
                 })
-        _upsert_case_row(conn, case)
+        evt = "created" if case_id is None else str(payload.get("action") or "updated")
+        _upsert_case_row(
+            conn,
+            case,
+            event_type=evt,
+            actor_id=str(actor.get("id") or ""),
+            actor_name=str(actor.get("name") or ""),
+        )
         return dict(case)
 
 

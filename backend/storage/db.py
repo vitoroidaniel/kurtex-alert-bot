@@ -174,6 +174,8 @@ def close_thread_connections() -> None:
 
 
 def close_all_connections() -> None:
+    import gc
+    gc.collect()
     return None
 
 
@@ -420,6 +422,263 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bot_feedback_messages ADD COLUMN local_file_key TEXT NOT NULL DEFAULT ''")
 
 
+def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
+    """Create normalized Live Board tables, fractional ranking columns, and delta event log."""
+    case_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(cases)")}
+    additions = (
+        ("board_stage", "TEXT NOT NULL DEFAULT ''"),
+        ("board_rank", "REAL NOT NULL DEFAULT 0"),
+        ("priority", "TEXT NOT NULL DEFAULT 'normal'"),
+        ("vehicle_type", "TEXT NOT NULL DEFAULT ''"),
+        ("issue_text", "TEXT NOT NULL DEFAULT ''"),
+        ("shop_info", "TEXT NOT NULL DEFAULT ''"),
+        ("amount", "TEXT NOT NULL DEFAULT ''"),
+        ("load_type", "TEXT NOT NULL DEFAULT ''"),
+        ("pickup", "TEXT NOT NULL DEFAULT ''"),
+        ("delivery", "TEXT NOT NULL DEFAULT ''"),
+        ("notes_count", "INTEGER NOT NULL DEFAULT 0"),
+        ("attachment_count", "INTEGER NOT NULL DEFAULT 0"),
+    )
+    for col_name, col_def in additions:
+        if col_name not in case_cols:
+            conn.execute(f"ALTER TABLE cases ADD COLUMN {col_name} {col_def}")
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cases_live_board ON cases(status, closed_at, board_stage, agent_id, board_rank ASC, reported_at DESC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cases_unit_search ON cases(unit_number, driver_name, priority)")
+
+    conn.execute("""CREATE TABLE IF NOT EXISTS case_notes (
+        id            TEXT PRIMARY KEY,
+        case_id       TEXT NOT NULL,
+        author_id     TEXT NOT NULL DEFAULT '',
+        author_name   TEXT NOT NULL DEFAULT '',
+        body          TEXT NOT NULL DEFAULT '',
+        reply_to_id   TEXT,
+        file_ids_json TEXT NOT NULL DEFAULT '[]',
+        mentions_json TEXT NOT NULL DEFAULT '[]',
+        pinned        INTEGER NOT NULL DEFAULT 0,
+        created_at    TEXT NOT NULL DEFAULT '',
+        edited_at     TEXT NOT NULL DEFAULT '',
+        deleted_at    TEXT NOT NULL DEFAULT ''
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_notes_case ON case_notes(case_id, pinned DESC, created_at ASC)")
+
+    conn.execute("""CREATE TABLE IF NOT EXISTS case_attachments (
+        id             TEXT PRIMARY KEY,
+        case_id        TEXT NOT NULL,
+        name           TEXT NOT NULL DEFAULT '',
+        size           INTEGER NOT NULL DEFAULT 0,
+        extension      TEXT NOT NULL DEFAULT '',
+        category       TEXT NOT NULL DEFAULT 'attachment',
+        proof_type     TEXT NOT NULL DEFAULT '',
+        description    TEXT NOT NULL DEFAULT '',
+        uploaded_by    TEXT NOT NULL DEFAULT '',
+        uploaded_by_id TEXT NOT NULL DEFAULT '',
+        created_at     TEXT NOT NULL DEFAULT ''
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_attachments_case ON case_attachments(case_id, created_at DESC)")
+
+    conn.execute("""CREATE TABLE IF NOT EXISTS case_events (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id      TEXT NOT NULL,
+        event_type   TEXT NOT NULL,
+        actor_id     TEXT NOT NULL DEFAULT '',
+        actor_name   TEXT NOT NULL DEFAULT '',
+        summary_json TEXT NOT NULL DEFAULT '{}',
+        created_at   TEXT NOT NULL DEFAULT ''
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_events_cursor ON case_events(id ASC)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_case_events_case ON case_events(case_id, id DESC)")
+
+    done_row = conn.execute("SELECT value FROM meta WHERE key='live_board_normalized_v1'").fetchone()
+    if not (done_row and done_row["value"] == "1"):
+        rows = conn.execute("SELECT id, data_json FROM cases").fetchall()
+        for r in rows:
+            try:
+                c = json.loads(r["data_json"])
+                if isinstance(c, dict):
+                    c.setdefault("id", r["id"])
+                    sync_normalized_case_row(conn, c)
+            except Exception:
+                continue
+        conn.execute(
+            "INSERT INTO meta(key,value) VALUES('live_board_normalized_v1','1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'"
+        )
+
+
+def sync_normalized_case_row(conn: sqlite3.Connection, case: dict) -> None:
+    """Synchronize normalized columns and relational child tables from a case record."""
+    cid = str(case.get("id") or "")
+    if not cid:
+        return
+    try:
+        rank_val = float(case.get("board_rank") or 0.0)
+    except (TypeError, ValueError):
+        rank_val = 0.0
+    notes = [n for n in (case.get("workspace_notes") or []) if isinstance(n, dict)]
+    active_notes_count = sum(1 for n in notes if not n.get("deleted_at"))
+    ws_attachments = [a for a in (case.get("workspace_attachments") or []) if isinstance(a, dict) and a.get("id")]
+    tg_media = case.get("media") if isinstance(case.get("media"), list) else []
+    total_attachments = len(ws_attachments) + len(tg_media)
+
+    conn.execute(
+        """UPDATE cases SET
+            board_stage=?,
+            board_rank=?,
+            priority=?,
+            vehicle_type=?,
+            issue_text=?,
+            shop_info=?,
+            amount=?,
+            load_type=?,
+            pickup=?,
+            delivery=?,
+            notes_count=?,
+            attachment_count=?
+           WHERE id=?""",
+        (
+            str(case.get("board_stage") or ""),
+            rank_val,
+            str(case.get("priority") or "normal"),
+            str(case.get("vehicle_type") or ""),
+            str(case.get("issue_text") or case.get("description") or ""),
+            str(case.get("shop_info") or ""),
+            str(case.get("amount") or ""),
+            str(case.get("load_type") or ""),
+            str(case.get("pickup") or ""),
+            str(case.get("delivery") or ""),
+            active_notes_count,
+            total_attachments,
+            cid,
+        ),
+    )
+
+    for idx, n in enumerate(notes):
+        nid = str(n.get("id") or f"legacy-{cid}-{idx}")
+        conn.execute(
+            """INSERT INTO case_notes(
+                id, case_id, author_id, author_name, body, reply_to_id,
+                file_ids_json, mentions_json, pinned, created_at, edited_at, deleted_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                body=excluded.body,
+                file_ids_json=excluded.file_ids_json,
+                pinned=excluded.pinned,
+                edited_at=excluded.edited_at,
+                deleted_at=excluded.deleted_at""",
+            (
+                nid,
+                cid,
+                str(n.get("author_id") or ""),
+                str(n.get("author") or "Agent"),
+                str(n.get("text") or ""),
+                str(n["reply_to_id"]) if n.get("reply_to_id") else None,
+                json.dumps(n.get("file_ids") or [], separators=(",", ":")),
+                json.dumps(n.get("mentions") or [], separators=(",", ":")),
+                1 if n.get("pinned") else 0,
+                str(n.get("created_at") or ""),
+                str(n.get("edited_at") or ""),
+                str(n.get("deleted_at") or ""),
+            ),
+        )
+
+    keep_att_ids = []
+    for a in ws_attachments:
+        aid = str(a["id"])
+        keep_att_ids.append(aid)
+        conn.execute(
+            """INSERT INTO case_attachments(
+                id, case_id, name, size, extension, category, proof_type,
+                description, uploaded_by, uploaded_by_id, created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                name=excluded.name,
+                category=excluded.category,
+                proof_type=excluded.proof_type,
+                description=excluded.description""",
+            (
+                aid,
+                cid,
+                str(a.get("name") or ""),
+                int(a.get("size") or 0),
+                str(a.get("extension") or ""),
+                str(a.get("category") or "attachment"),
+                str(a.get("proof_type") or ""),
+                str(a.get("description") or ""),
+                str(a.get("uploaded_by") or ""),
+                str(a.get("uploaded_by_id") or ""),
+                str(a.get("created_at") or ""),
+            ),
+        )
+    if keep_att_ids:
+        placeholders = ",".join("?" for _ in keep_att_ids)
+        conn.execute(
+            f"DELETE FROM case_attachments WHERE case_id=? AND id NOT IN ({placeholders})",
+            [cid, *keep_att_ids],
+        )
+    else:
+        conn.execute("DELETE FROM case_attachments WHERE case_id=?", (cid,))
+
+
+def append_case_event(
+    conn: sqlite3.Connection,
+    case_id: str,
+    event_type: str,
+    actor_id: str = "",
+    actor_name: str = "",
+    summary: dict | None = None,
+    created_at: str = "",
+) -> int:
+    """Append an immutable event to the delta stream and return the new cursor ID."""
+    cur = conn.execute(
+        """INSERT INTO case_events(case_id, event_type, actor_id, actor_name, summary_json, created_at)
+           VALUES(?,?,?,?,?,?)""",
+        (
+            str(case_id or ""),
+            str(event_type or "updated"),
+            str(actor_id or ""),
+            str(actor_name or ""),
+            json.dumps(summary or {}, separators=(",", ":"), default=str),
+            str(created_at or ""),
+        ),
+    )
+    return int(cur.lastrowid or 0)
+
+
+def get_latest_event_cursor(data_dir: Path | str | None = None) -> int:
+    with read_conn(data_dir) as conn:
+        row = conn.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM case_events").fetchone()
+        return int(row["max_id"]) if row else 0
+
+
+def get_events_since(cursor: int, limit: int = 120, data_dir: Path | str | None = None) -> list[dict]:
+    with read_conn(data_dir) as conn:
+        rows = conn.execute(
+            """SELECT id, case_id, event_type, actor_id, actor_name, summary_json, created_at
+               FROM case_events
+               WHERE id > ?
+               ORDER BY id ASC
+               LIMIT ?""",
+            (max(0, int(cursor)), max(1, min(int(limit), 500))),
+        ).fetchall()
+    result = []
+    for r in rows:
+        try:
+            summary = json.loads(r["summary_json"])
+        except Exception:
+            summary = {}
+        result.append({
+            "cursor": int(r["id"]),
+            "case_id": r["case_id"],
+            "event_type": r["event_type"],
+            "actor_id": r["actor_id"],
+            "actor_name": r["actor_name"],
+            "summary": summary,
+            "created_at": r["created_at"],
+        })
+    return result
+
+
 
 
 def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connection, Path]:
@@ -446,6 +705,7 @@ def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connectio
                                     conn.execute(sql)
                             _migrate_bot_feedback_columns(conn)
                             _migrate_legacy_json(conn, d)
+                            _migrate_live_board_schema(conn)
                             conn.execute("COMMIT")
                         except BaseException:
                             try:
