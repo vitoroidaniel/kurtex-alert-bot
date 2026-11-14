@@ -3146,6 +3146,7 @@ def api_case_detail():
                     "can_manage": _workspace_can_manage(c, session["user"]),
                     "can_comment": True,
                     "can_pin": _workspace_can_manage(c, session["user"]),
+                    "can_moderate": _website_role(session["user"].get("role")) in ("developer", "super_admin"),
                     "viewer_id": str(session["user"]["id"]),
                 })
                 from backend.storage.case_store import workspace_revision
