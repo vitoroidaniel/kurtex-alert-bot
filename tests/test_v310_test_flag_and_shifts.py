@@ -243,8 +243,37 @@ class LiveBoardV310Tests(unittest.TestCase):
             self.assertFalse(payload["using_shift_fallback"])
             by_id = {str(a["id"]): a for a in payload["agents"]}
             self.assertTrue(by_id[str(self.alex["id"])]["on_duty"])
+            self.assertTrue(by_id[str(self.alex["id"])]["shift_managed"])
             self.assertEqual(by_id[str(self.alex["id"])]["shift_names"], ["Day Shift"])
             self.assertFalse(by_id[str(self.sam["id"])]["on_duty"])
+            self.assertTrue(by_id[str(self.sam["id"])]["shift_managed"])
+            self.assertTrue(by_id[str(self.manager["id"])]["shift_managed"])
+            self.assertFalse(by_id[str(self.dev["id"])]["shift_managed"])
+
+    def test_workspace_note_write_returns_normalized_note(self):
+        client = server.app.test_client()
+        headers = {"X-Workspace-CSRF": "test-csrf"}
+        self._auth_session(client, self.alex)
+        with patch.object(workspace_board, "get_user", return_value=self.alex):
+            detail = client.get("/api/case?id=CASE-V310-1").get_json()
+            res = client.patch(
+                "/api/workspace/cases/CASE-V310-1",
+                headers=headers,
+                json={
+                    "action": "note",
+                    "revision": detail["revision"],
+                    "text": "Called shop — waiting on ETA",
+                },
+            )
+            self.assertEqual(res.status_code, 200)
+            body = res.get_json()
+            self.assertIsInstance(body.get("note"), dict)
+            self.assertEqual(body["note"].get("text"), "Called shop — waiting on ETA")
+            self.assertTrue(body["note"].get("id"))
+            self.assertTrue(body["note"].get("created_at"))
+            refetched = client.get("/api/case?id=CASE-V310-1").get_json()
+            self.assertEqual(refetched["workspace_notes"][-1]["id"], body["note"]["id"])
+            self.assertEqual(refetched["workspace_notes"][-1]["text"], "Called shop — waiting on ETA")
 
 
 if __name__ == "__main__":

@@ -181,6 +181,12 @@ def register_workspace_routes(server):
         actor, error = _workspace_actor_read()
         if error:
             return error
+        all_users = get_all_user_dicts()
+        shift_managed_ids = {
+            str(u["id"])
+            for u in all_users
+            if isinstance(u, dict) and u.get("id") is not None and u.get("role") in ("agent", "super_admin")
+        }
         agents = sorted(
             (
                 {
@@ -189,7 +195,7 @@ def register_workspace_routes(server):
                     "username": u.get("username", ""),
                     "role": server._website_role(u.get("role")),
                 }
-                for u in get_all_user_dicts()
+                for u in all_users
                 if u.get("role") in ("agent", "super_admin", "developer", "manager", "admin") and u.get("name")
             ),
             key=lambda a: a["name"].casefold(),
@@ -226,6 +232,7 @@ def register_workspace_routes(server):
         for a in agents:
             uid = str(a.get("id") or "")
             a["on_duty"] = uid in on_duty_set
+            a["shift_managed"] = uid in shift_managed_ids
             a["shift_names"] = user_shift_names.get(uid, [])
         return jsonify({
             "agents": agents,
@@ -548,7 +555,10 @@ def register_workspace_routes(server):
                             if k in allowed and isinstance(v, (str, int, float))
                         }
             case = workspace_write(actor, payload, case_id)
-            return jsonify({"ok": True, "case": server.serialize_case(case), "revision": workspace_revision(case)})
+            resp = {"ok": True, "case": server.serialize_case(case), "revision": workspace_revision(case)}
+            if payload.get("action") == "note" and isinstance(case.get("workspace_notes"), list) and case["workspace_notes"]:
+                resp["note"] = server._normalize_case_notes([case["workspace_notes"][-1]])[0]
+            return jsonify(resp)
         except PermissionError as exc:
             return jsonify({"error": str(exc)}), 403
         except LookupError as exc:
