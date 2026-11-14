@@ -376,11 +376,14 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             ).fetchone()
             if existing_row:
                 return json.loads(existing_row["data_json"])
-            target = payload.get("target_agent") or {
-                "id": actor["id"],
-                "name": actor["name"],
-                "username": actor.get("username", ""),
-            }
+            if payload.get("unassigned"):
+                target = {"id": None, "name": "", "username": ""}
+            else:
+                target = payload.get("target_agent") or {
+                    "id": actor["id"],
+                    "name": actor["name"],
+                    "username": actor.get("username", ""),
+                }
             case = {
                 "id":                   payload["id"],
                 "driver_name":          payload["driver"],
@@ -390,11 +393,12 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 "opened_at":            now,
                 "reported_at":          now,
                 "updated_at":           now,
-                "assigned_at":          now,
+                "assigned_at":          now if target["id"] is not None else None,
                 "closed_at":            None,
                 "agent_id":             target["id"],
                 "agent_name":           target["name"],
                 "agent_username":       target.get("username", ""),
+                "board_stage":          str(payload.get("board_stage") or ""),
                 "status":               "reported",
                 "vehicle_type":         payload["vehicle_type"],
                 "unit_number":          payload["unit_number"],
@@ -426,7 +430,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 raise LookupError("Maintenance report not found. Awaiting Telegram report.")
             action = payload["action"]
             collaboration = action in ("note", "note_edit", "note_delete", "note_pin")
-            if not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
+            owns_unassigned = (not case.get("agent_id")) and str(case.get("created_by_id") or "") == str(actor["id"])
+            if not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]) and not owns_unassigned:
                 raise PermissionError("Only the assigned agent or a manager can update this case.")
             if payload["action"] == "close" and case.get("status") == "done":
                 return case

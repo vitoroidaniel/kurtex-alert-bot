@@ -2671,6 +2671,34 @@ def api_case_summary():
         return jsonify({"error": "summary unavailable"}), 500
 
 
+def _current_viewer_role(session_user):
+    from backend.storage.user_store import get_user
+    uid = (session_user or {}).get("id")
+    stored = get_user(uid) if uid is not None else None
+    return _website_role((stored or session_user or {}).get("role"))
+
+
+def _normalize_case_notes(notes):
+    from backend.storage.user_store import get_all_user_dicts
+    users_by_id = {
+        str(u["id"]): _website_role(u.get("role"))
+        for u in get_all_user_dicts()
+        if isinstance(u, dict) and u.get("id") is not None
+    }
+    normalized = []
+    for raw in (notes or []):
+        if not isinstance(raw, dict):
+            continue
+        item = dict(raw)
+        aid = str(item.get("author_id") or "").strip()
+        if aid and aid in users_by_id:
+            item["author_role"] = users_by_id[aid]
+        elif item.get("author_role"):
+            item["author_role"] = _website_role(item.get("author_role"))
+        normalized.append(item)
+    return normalized
+
+
 @app.route("/api/case")
 def api_case_detail():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
@@ -2723,13 +2751,14 @@ def api_case_detail():
                     "temp_recorder":    c.get("temp_recorder",""),
                     "attachments": _case_telegram_media(c),
                     "updated": fmt_dt(c.get("updated_at") or c.get("closed_at") or c.get("reported_at") or c.get("assigned_at") or c.get("opened_at")),
-                    "workspace_notes": c.get("workspace_notes") or [],
+                    "workspace_notes": _normalize_case_notes(c.get("workspace_notes") or []),
                     "workspace_attachments": c.get("workspace_attachments") or [],
                     "workspace_history": c.get("workspace_history") or [],
                     "can_manage": _workspace_can_manage(c, session["user"]),
                     "can_comment": True,
                     "can_pin": _workspace_can_manage(c, session["user"]),
-                    "can_moderate": _website_role(session["user"].get("role")) in ("developer", "super_admin"),
+                    "can_moderate": _current_viewer_role(session["user"]) in ("developer", "super_admin"),
+                    "viewer_role": _current_viewer_role(session["user"]),
                     "viewer_id": str(session["user"]["id"]),
                 })
                 from backend.storage.case_store import workspace_revision

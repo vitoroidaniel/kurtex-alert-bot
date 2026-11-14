@@ -60,6 +60,11 @@ def register_workspace_routes(server):
         return (
             server._website_role(user.get("role")) in ("developer", "super_admin")
             or bool(user.get("id") and str(case.get("agent_id")) == str(user["id"]))
+            or bool(
+                user.get("id")
+                and not case.get("agent_id")
+                and str(case.get("created_by_id") or "") == str(user["id"])
+            )
         )
 
     def _workspace_actor():
@@ -187,31 +192,51 @@ def register_workspace_routes(server):
                     "normal",
                 ):
                     raise ValueError("Choose equipment and priority.")
-                requested_agent_id = str(data.get("agent_id") or actor["id"]).strip()
-                target = next(
-                    (
-                        u
-                        for u in get_all_user_dicts()
-                        if str(u["id"]) == requested_agent_id
-                        and u.get("role") in ("agent", "super_admin")
-                        and u.get("name")
-                    ),
-                    None,
-                )
-                if target is None:
-                    raise ValueError("Choose a valid active agent for this case.")
-                if str(target["id"]) != str(actor["id"]) and actor["role"] not in ("developer", "super_admin"):
-                    raise PermissionError("Only a manager can create cases for another agent.")
-                payload.update({
-                    "id": str(uuid.uuid4()),
-                    "vehicle_type": data["vehicle_type"],
-                    "priority": data["priority"],
-                    "target_agent": {
-                        "id": target["id"],
-                        "name": target["name"],
-                        "username": target.get("username", ""),
-                    },
-                })
+                board_stage = str(data.get("board_stage") or "").strip()
+                if board_stage not in ("", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"):
+                    raise ValueError("Choose a valid workflow stage.")
+                if "agent_id" in data:
+                    requested_agent_id = str(data.get("agent_id") or "").strip()
+                elif board_stage:
+                    requested_agent_id = ""
+                else:
+                    requested_agent_id = str(actor["id"]).strip()
+
+                if requested_agent_id.lower() in ("", "unassigned", "none"):
+                    payload.update({
+                        "id": str(uuid.uuid4()),
+                        "vehicle_type": data["vehicle_type"],
+                        "priority": data["priority"],
+                        "board_stage": board_stage,
+                        "unassigned": True,
+                        "target_agent": None,
+                    })
+                else:
+                    target = next(
+                        (
+                            u
+                            for u in get_all_user_dicts()
+                            if str(u["id"]) == requested_agent_id
+                            and u.get("role") in ("agent", "super_admin", "developer", "manager", "admin")
+                            and u.get("name")
+                        ),
+                        None,
+                    )
+                    if target is None:
+                        raise ValueError("Choose a valid active agent for this case.")
+                    if str(target["id"]) != str(actor["id"]) and actor["role"] not in ("developer", "super_admin"):
+                        raise PermissionError("Only a manager can create cases for another agent.")
+                    payload.update({
+                        "id": str(uuid.uuid4()),
+                        "vehicle_type": data["vehicle_type"],
+                        "priority": data["priority"],
+                        "board_stage": board_stage,
+                        "target_agent": {
+                            "id": target["id"],
+                            "name": target["name"],
+                            "username": target.get("username", ""),
+                        },
+                    })
             else:
                 action = data.get("action")
                 if action not in (
@@ -288,7 +313,8 @@ def register_workspace_routes(server):
                         (
                             u
                             for u in get_all_user_dicts()
-                            if str(u["id"]) == target_id and u.get("role") in ("agent", "super_admin")
+                            if str(u["id"]) == target_id
+                            and u.get("role") in ("agent", "super_admin", "developer", "manager", "admin")
                         ),
                         None,
                     )
@@ -718,6 +744,8 @@ def register_workspace_routes(server):
                 username = str(assigned.get("username") or "").strip().lstrip("@")
                 if username and not username.isdecimal():
                     summary["agent_username"] = username
+            elif c.get("agent_id") is None or str(c.get("agent_id") or "").strip() == "":
+                summary["agent"] = "Unassigned"
             elif str(summary.get("agent") or "").strip().isdecimal():
                 summary["agent"] = "Unknown agent"
             summary["reported_at"] = c.get("reported_at") or c.get("opened_at") or ""

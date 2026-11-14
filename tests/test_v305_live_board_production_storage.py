@@ -166,6 +166,50 @@ class LiveBoardProductionStorageTests(unittest.TestCase):
         self.assertTrue(callable(getattr(server, "api_workspace_board", None)))
         self.assertTrue(callable(getattr(server, "api_workspace_write", None)))
 
+    def test_unassigned_jbs_plant_case_and_strict_id_note_role_resolution(self):
+        from backend.storage import user_store
+        from api import server
+
+        jbs_case = case_store.workspace_write(
+            self.daniel,
+            {
+                "id": "CASE-8601",
+                "request_id": "req-8601",
+                "driver": "JBS Driver",
+                "unit_number": "R701",
+                "issue": "Reefer alarm A12 at dock",
+                "vehicle_type": "reefer",
+                "priority": "high",
+                "load_type": "JBS Load",
+                "board_stage": "jbs_plant",
+                "unassigned": True,
+                "target_agent": None,
+            },
+        )
+        self.assertIsNone(jbs_case["agent_id"])
+        self.assertEqual(jbs_case["board_stage"], "jbs_plant")
+
+        # Duplicate first names ("Daniel") with different Telegram IDs and roles
+        with db.write_tx(self.data_dir) as conn:
+            conn.execute(
+                "INSERT INTO users(id,name,username,role) VALUES (?,?,?,?)",
+                (201, "Daniel", "dan_dev", "developer"),
+            )
+            conn.execute(
+                "INSERT INTO users(id,name,username,role) VALUES (?,?,?,?)",
+                (202, "Daniel", "dan_agent", "agent"),
+            )
+        patch_user_dir = patch.object(user_store, "_storage_dir", return_value=self.data_dir)
+        patch_user_dir.start()
+        self.addCleanup(patch_user_dir.stop)
+
+        normalized = server._normalize_case_notes([
+            {"id": "n1", "author": "Daniel", "author_id": "201", "author_role": "agent", "text": "Dev note"},
+            {"id": "n2", "author": "Daniel", "author_id": "202", "text": "Agent note"},
+        ])
+        self.assertEqual(normalized[0]["author_role"], "developer")
+        self.assertEqual(normalized[1]["author_role"], "agent")
+
 
 if __name__ == "__main__":
     unittest.main()
