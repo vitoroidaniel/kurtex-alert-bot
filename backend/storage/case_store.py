@@ -497,8 +497,17 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                                     "case_id": case_id, "seen": False, "created_at": now}
                     conn.execute("INSERT INTO notifications(id,user_key,created_at,seen,data_json) VALUES(?,?,?,?,?)",
                                  (nid, mentioned["id"], now, 0, json.dumps(notification, ensure_ascii=False)))
-                case.setdefault("workspace_history", []).append({"action":"note", "author":actor["name"],
-                                  "author_id": str(actor["id"]), "note_id": note_id, "created_at":now})
+                history_note = {
+                    "action": "note",
+                    "author": actor["name"],
+                    "author_id": str(actor["id"]),
+                    "note_id": note_id,
+                    "created_at": now,
+                    "preview": (text or "").strip()[:140],
+                }
+                if file_ids:
+                    history_note["file_count"] = len(file_ids)
+                case.setdefault("workspace_history", []).append(history_note)
             elif action in ("note_edit", "note_delete", "note_pin"):
                 notes = case.setdefault("workspace_notes", [])
                 note_id = payload.get("note_id", "")
@@ -517,11 +526,13 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     raise PermissionError("You can edit or delete only your own comments.")
                 if action == "note_pin" and not (manager or str(case.get("agent_id")) == str(actor["id"])):
                     raise PermissionError("Only the assigned agent or a manager can pin comments.")
+                note_preview = str(note.get("text") or "").strip()[:140]
                 if action == "note_edit":
                     if not payload.get("text", "").strip() and not note.get("file_ids"):
                         raise ValueError("A comment must contain text or an attachment.")
                     note["text"] = payload["text"]
                     note["edited_at"] = now
+                    note_preview = str(payload["text"] or "").strip()[:140]
                 elif action == "note_delete":
                     note["text"] = ""
                     note["file_ids"] = []
@@ -531,9 +542,14 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 else:
                     note["pinned"] = bool(payload["pinned"])
                 case.setdefault("workspace_history", []).append({
-                    "action":action, "author":actor["name"], "author_id":str(actor["id"]),
-                    "note_id":note.get("id", "legacy-" + str(index)), "created_at":now,
-                    **({"pinned":bool(note["pinned"])} if action=="note_pin" else {})})
+                    "action": action,
+                    "author": actor["name"],
+                    "author_id": str(actor["id"]),
+                    "note_id": note.get("id", "legacy-" + str(index)),
+                    "created_at": now,
+                    "preview": note_preview,
+                    **({"pinned": bool(note["pinned"])} if action == "note_pin" else {}),
+                })
             elif payload["action"] in ("reassign", "move"):
                 target = payload["target"]
                 has_rank = payload.get("board_rank") is not None
@@ -1064,7 +1080,11 @@ def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None, 
             else ("attachment_removed" if remove_id else "attachment_added")
         )
         case.setdefault("workspace_history", []).append({
-            "action": action, "author": actor["name"], "created_at": now_iso(),
+            "action": action,
+            "author": actor["name"],
+            "created_at": now_iso(),
+            "file_name": str((kind or {}).get("name") or "")[:140],
+            "category": str((kind or {}).get("category") or "")[:32],
         })
         _upsert_case_row(conn, case)
         return removed

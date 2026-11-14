@@ -16,7 +16,7 @@ from flask import g, jsonify, request, send_file, session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 
-from backend.core.app_time import chicago_date_str
+from backend.core.app_time import chicago_date_str, chicago_now, chicago_timestamp
 from backend.core.case_snapshot import normalize as normalize_case
 from backend.storage import case_store, db as kurtex_db
 from backend.storage.board_order import OrderConflict, read_order, save_order
@@ -849,6 +849,327 @@ def register_workspace_routes(server):
             "unchanged": False,
         })
 
+    _IGNORED_SHOP_VALUES = {"", "-", "--", "n/a", "na", "none", "tbd", "unknown", "test", "yard"}
+
+    def _clean_shop(value):
+        raw = re.sub(r"\s+", " ", str(value or "").strip())
+        if raw.lower() in _IGNORED_SHOP_VALUES or len(raw) < 2:
+            return ""
+        return raw[:140]
+
+    def _parse_amount(value):
+        raw = re.sub(r"[^0-9.]", "", str(value or "").strip())
+        if not raw:
+            return None
+        try:
+            num = float(raw)
+        except ValueError:
+            return None
+        return round(num, 2) if 0 < num <= 250000 else None
+
+    def _resolution_note(c):
+        notes = [n for n in (c.get("workspace_notes") or []) if isinstance(n, dict) and not n.get("deleted_at") and str(n.get("text") or "").strip()]
+        if notes:
+            return re.sub(r"\s+", " ", str(notes[-1]["text"])).strip()[:160]
+        for key in ("notes", "comments"):
+            txt = re.sub(r"\s+", " ", str(c.get(key) or "").strip())
+            if txt and txt.lower() not in _IGNORED_SHOP_VALUES:
+                return txt[:160]
+        return ""
+
+    @app.route("/api/workspace/cases/<case_id>/ai-insights")
+    def api_workspace_case_ai_insights(case_id):
+        """Return AI-ready historical shop suggestions, cost band, unit repeat alerts, and similar cases."""
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        raw_id = str(case_id or "").strip()
+        if not raw_id:
+            return jsonify({"error": "Missing case ID."}), 400
+        try:
+            if (
+                server.load_cases is server._DEFAULT_LOAD_CASES
+                and case_store._storage_dir().resolve() == _data_dir().resolve()
+            ):
+                raw_case, ambiguous = case_store.get_case_or_prefix(raw_id)
+                if ambiguous:
+                    return jsonify({"error": "Ambiguous case ID."}), 409
+                target = normalize_case(raw_case) if raw_case else None
+            else:
+                matches = [
+                    c for c in server.load_cases()
+                    if str(c.get("id") or "") == raw_id or str(c.get("id") or "").startswith(raw_id)
+                ]
+                if len(matches) > 1:
+                    return jsonify({"error": "Ambiguous case ID."}), 409
+                target = matches[0] if matches else None
+            if not target or not is_maintenance_report(target):
+                return jsonify({"error": "Case not found."}), 404
+
+            target_id = str(target.get("id") or "")
+            unit = str(target.get("unit_number") or "").strip()
+            unit_norm = unit.lower()
+            vtype = str(target.get("vehicle_type") or "").strip().lower()
+            resolved_statuses = {"done", "resolved", "closed"}
+            now_ct = chicago_now()
+
+            q_text = " ".join([
+                server._case_search_text(target),
+                str(target.get("location") or ""),
+                str(target.get("part_number") or ""),
+            ])
+            q_terms = server._terms(q_text)
+
+            all_cases = [c for c in server.load_cases() if isinstance(c, dict) and not server.is_testing(c)]
+            unit_cases = []
+            scored = []
+
+            for c in all_cases:
+                cid = str(c.get("id") or "")
+                if cid == target_id:
+                    continue
+                c_unit = str(c.get("unit_number") or "").strip()
+                same_unit = bool(unit_norm and c_unit.lower() == unit_norm)
+                if same_unit:
+                    unit_cases.append(c)
+
+                c_status = str(c.get("status") or "").strip().lower()
+                is_resolved = c_status in resolved_statuses or bool(c.get("closed_at"))
+                c_vtype = str(c.get("vehicle_type") or "").strip().lower()
+                c_terms = server._terms(server._case_search_text(c))
+                overlap = q_terms & c_terms if q_terms else set()
+                if not overlap and not (same_unit and c_terms):
+                    continue
+
+                base_sim = len(overlap) / (max(1, len(q_terms | c_terms)) ** 0.5) if (q_terms or c_terms) else 0.0
+                score = base_sim
+                if is_resolved:
+                    score += 0.28
+                if same_unit:
+                    score += 0.35
+                if vtype and c_vtype == vtype:
+                    score += 0.14
+                shop = _clean_shop(c.get("shop_info"))
+                if shop:
+                    score += 0.12
+
+                pct = (
+                    min(99, max(18, int(round((len(overlap) / max(1, min(len(q_terms), 5))) * 100))))
+                    if overlap
+                    else 38
+                )
+                scored.append((score, is_resolved, same_unit, pct, sorted(overlap)[:6], c, shop))
+
+            scored.sort(key=lambda x: (x[1], x[0]), reverse=True)
+
+            # Aggregate shop recommendations from matched fleet repairs and unit history
+            shop_buckets = {}
+            all_amounts = []
+            seen_shop_cases = set()
+            for sc, is_res, same_u, _pct, _m, c, shop in scored[:45]:
+                cid = str(c.get("id") or "")
+                amt = _parse_amount(c.get("amount"))
+                if amt is not None and is_res:
+                    all_amounts.append(amt)
+                if not shop or cid in seen_shop_cases:
+                    continue
+                seen_shop_cases.add(cid)
+                key = shop.lower()
+                bucket = shop_buckets.setdefault(key, {
+                    "shop_name": shop,
+                    "count": 0,
+                    "resolved_count": 0,
+                    "unit_count": 0,
+                    "score_sum": 0.0,
+                    "amounts": [],
+                    "last_date": "",
+                    "sample_issue": "",
+                })
+                bucket["count"] += 1
+                if is_res:
+                    bucket["resolved_count"] += 1
+                if same_u:
+                    bucket["unit_count"] += 1
+                bucket["score_sum"] += sc
+                if amt is not None:
+                    bucket["amounts"].append(amt)
+                when = str(c.get("closed_at") or c.get("reported_at") or c.get("opened_at") or "")
+                if when > bucket["last_date"]:
+                    bucket["last_date"] = when
+                    bucket["sample_issue"] = str(c.get("issue_text") or c.get("description") or "")[:90]
+
+            suggested_shops = []
+            for item in sorted(
+                shop_buckets.values(),
+                key=lambda s: (-s["unit_count"], -s["resolved_count"], -round(s["score_sum"], 2), -s["count"]),
+            )[:4]:
+                amts = item["amounts"]
+                reason_bits = []
+                if item["unit_count"]:
+                    reason_bits.append(f"serviced Unit #{unit} before" if unit else "same-unit repair")
+                if item["resolved_count"]:
+                    reason_bits.append(f"{item['resolved_count']} resolved match{'es' if item['resolved_count'] != 1 else ''}")
+                suggested_shops.append({
+                    "shop_name": item["shop_name"],
+                    "count": item["count"],
+                    "resolved_count": item["resolved_count"],
+                    "unit_count": item["unit_count"],
+                    "avg_amount": round(sum(amts) / len(amts), 2) if amts else None,
+                    "min_amount": round(min(amts), 2) if amts else None,
+                    "max_amount": round(max(amts), 2) if amts else None,
+                    "last_used": server.fmt_dt(item["last_date"]),
+                    "sample_issue": item["sample_issue"],
+                    "reason": " · ".join(reason_bits) if reason_bits else "matched fleet repair",
+                })
+
+            unit_cases.sort(key=lambda c: str(c.get("reported_at") or c.get("opened_at") or ""), reverse=True)
+            recent_30d = 0
+            unit_resolved = 0
+            recent_unit_summaries = []
+            for uc in unit_cases:
+                st = str(uc.get("status") or "").strip().lower()
+                is_res = st in resolved_statuses or bool(uc.get("closed_at"))
+                if is_res:
+                    unit_resolved += 1
+                dt = chicago_timestamp(uc.get("reported_at") or uc.get("opened_at"))
+                if dt and 0 <= (now_ct - dt).days <= 30:
+                    recent_30d += 1
+                if len(recent_unit_summaries) < 4:
+                    amt = _parse_amount(uc.get("amount"))
+                    recent_unit_summaries.append({
+                        "id": str(uc.get("id") or ""),
+                        "issue_text": str(uc.get("issue_text") or uc.get("description") or "Maintenance issue")[:110],
+                        "status": str(uc.get("status") or "reported"),
+                        "is_resolved": is_res,
+                        "shop_info": _clean_shop(uc.get("shop_info")),
+                        "amount": amt,
+                        "date": server.fmt_dt(uc.get("closed_at") or uc.get("reported_at") or uc.get("opened_at")),
+                    })
+
+            unit_insights = {
+                "unit_number": unit,
+                "total": len(unit_cases),
+                "resolved": unit_resolved,
+                "active": max(0, len(unit_cases) - unit_resolved),
+                "recent_30d": recent_30d,
+                "repeat_warning": recent_30d >= 1 or len(unit_cases) >= 3,
+                "recent_cases": recent_unit_summaries,
+            }
+
+            similar_cases = []
+            for sc, is_res, same_u, pct, matched, c, shop in scored[:6]:
+                amt = _parse_amount(c.get("amount"))
+                similar_cases.append({
+                    "id": str(c.get("id") or ""),
+                    "unit_number": str(c.get("unit_number") or ""),
+                    "vehicle_type": str(c.get("vehicle_type") or ""),
+                    "issue_text": str(c.get("issue_text") or c.get("description") or "Maintenance issue")[:130],
+                    "status": str(c.get("status") or "reported"),
+                    "is_resolved": is_res,
+                    "shop_info": shop,
+                    "amount": amt,
+                    "reported_at": server.fmt_dt(c.get("reported_at") or c.get("opened_at")),
+                    "closed_at": server.fmt_dt(c.get("closed_at")),
+                    "agent": str(c.get("agent_name") or c.get("agent") or "Unassigned"),
+                    "matched": matched,
+                    "match_pct": pct,
+                    "same_unit": same_u,
+                    "resolution_note": _resolution_note(c),
+                })
+
+            cost_estimate = None
+            if all_amounts:
+                cost_estimate = {
+                    "count": len(all_amounts),
+                    "avg": round(sum(all_amounts) / len(all_amounts), 2),
+                    "min": round(min(all_amounts), 2),
+                    "max": round(max(all_amounts), 2),
+                }
+
+            bullets = []
+            if suggested_shops:
+                top = suggested_shops[0]
+                bullets.append(
+                    f"Best historical shop candidate: {top['shop_name']} ({top['reason']})."
+                )
+            else:
+                bullets.append("No previous shop matched these exact symptoms yet — check nearby preferred vendor.")
+            if cost_estimate:
+                bullets.append(
+                    f"Typical repair spend across {cost_estimate['count']} resolved match{'es' if cost_estimate['count'] != 1 else ''}: avg ${cost_estimate['avg']:,.0f} (${cost_estimate['min']:,.0f}–${cost_estimate['max']:,.0f})."
+                )
+            if unit_insights["recent_30d"] >= 1:
+                bullets.append(
+                    f"Repeat alert: Unit #{unit or '?'} had {unit_insights['recent_30d']} other breakdown(s) in the last 30 days — verify prior repair warranty."
+                )
+            elif similar_cases:
+                res_cnt = sum(1 for x in similar_cases if x["is_resolved"])
+                bullets.append(f"Found {len(similar_cases)} similar fleet case(s) ({res_cnt} resolved) to guide troubleshooting.")
+
+            triage = {
+                "headline": (
+                    f"Top match: {suggested_shops[0]['shop_name']}"
+                    if suggested_shops
+                    else f"{len(similar_cases)} similar fleet case(s) analyzed" if similar_cases else "Ready for triage"
+                ),
+                "bullets": bullets,
+            }
+
+            llm_advice = None
+            llm_error = ""
+            if request.args.get("llm") == "1":
+                try:
+                    context_payload = {
+                        "unit": unit,
+                        "equipment": vtype or "truck",
+                        "issue": str(target.get("issue_text") or target.get("description") or "")[:350],
+                        "location": str(target.get("location") or "")[:120],
+                        "suggested_shops": suggested_shops[:3],
+                        "cost_estimate": cost_estimate,
+                        "unit_recent_30d": unit_insights["recent_30d"],
+                        "similar_resolved": [
+                            {
+                                "unit": s["unit_number"],
+                                "issue": s["issue_text"],
+                                "shop": s["shop_info"],
+                                "amount": s["amount"],
+                                "note": s["resolution_note"],
+                            }
+                            for s in similar_cases[:4]
+                        ],
+                    }
+                    raw_llm = server._cf_ai([
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a senior fleet maintenance dispatcher assistant. Based strictly on the provided case and "
+                                "verified historical matches, give 3 concise actionable bullets (1: likely root cause/check, "
+                                "2: best shop/bay routing using suggested_shops if present, 3: cost/warranty watchout). Plain text bullets starting with '• '."
+                            ),
+                        },
+                        {"role": "user", "content": json.dumps(context_payload, ensure_ascii=False)},
+                    ], max_tokens=220, temperature=0.15)
+                    llm_advice = str(raw_llm or "").strip()
+                except Exception as exc:
+                    llm_error = str(exc) or "AI advisor is currently unavailable."
+
+            return jsonify({
+                "ok": True,
+                "case_id": target_id,
+                "unit_number": unit,
+                "vehicle_type": vtype,
+                "unit_insights": unit_insights,
+                "suggested_shops": suggested_shops,
+                "cost_estimate": cost_estimate,
+                "similar_cases": similar_cases,
+                "triage": triage,
+                "llm_advice": llm_advice,
+                "llm_error": llm_error,
+            })
+        except Exception:
+            logger.exception("Workspace AI insights failed for %s", raw_id)
+            return jsonify({"error": "Unable to load AI insights for this case."}), 503
+
     # Expose functions on `server` for backwards compatibility with callers/tests
     server._workspace_can_manage = _workspace_can_manage
     server._workspace_actor = _workspace_actor
@@ -864,3 +1185,4 @@ def register_workspace_routes(server):
     server.api_workspace_order = api_workspace_order
     server.api_workspace_presence = api_workspace_presence
     server.api_workspace_board = api_workspace_board
+    server.api_workspace_case_ai_insights = api_workspace_case_ai_insights
