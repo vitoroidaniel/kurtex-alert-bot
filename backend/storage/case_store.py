@@ -400,7 +400,9 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             case = json.loads(row["data_json"])
             if payload["action"] not in ("reassign", "stage", "move") and not is_maintenance_report(case):
                 raise LookupError("Maintenance report not found. Awaiting Telegram report.")
-            if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
+            action = payload["action"]
+            collaboration = action in ("note", "note_edit", "note_delete", "note_pin")
+            if not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
                 raise PermissionError("Only the assigned agent or a manager can update this case.")
             if payload["action"] == "close" and case.get("status") == "done":
                 return case
@@ -412,20 +414,75 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 _close_record(case)
                 case.update({"closed_by_id": actor["id"], "closed_by_name": actor["name"]})
                 conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (case_id,))
-            elif payload["action"] == "note":
-                case.setdefault("workspace_notes", []).append({
-                    "text": payload["text"], "author": actor["name"], "created_at": now,
-                })
-            elif payload["action"] in ("note_edit", "note_delete"):
+            elif action == "note":
+                import uuid
+                text = payload.get("text", "")
+                file_ids = payload.get("file_ids", [])
+                existing_files = {str(f.get("id")) for f in case.get("workspace_attachments", []) if isinstance(f, dict)}
+                if not set(file_ids).issubset(existing_files):
+                    raise ValueError("An attachment is no longer available. Refresh the case.")
                 notes = case.setdefault("workspace_notes", [])
-                index = payload["index"]
-                if index < 0 or index >= len(notes):
-                    raise ValueError("Note no longer exists. Refresh the case.")
-                if payload["action"] == "note_edit":
-                    notes[index]["text"] = payload["text"]
-                    notes[index]["edited_at"] = now
+                reply = payload.get("reply_to_id", "")
+                if reply and not any(n.get("id", "legacy-" + str(i)) == reply and not n.get("deleted_at") for i,n in enumerate(notes) if isinstance(n, dict)):
+                    raise ValueError("The replied-to comment is no longer available.")
+                note_id = uuid.uuid4().hex
+                # Resolve @usernames against the active roster in the same transaction.
+                import re
+                found = {x.casefold() for x in re.findall(r"(?<!\w)@([\w]{2,40})", text)}
+                users = conn.execute("SELECT id,name,username FROM users").fetchall() if found else []
+                mentions = [{"id": str(u["id"]), "name": u["name"]} for u in users
+                            if str(u["username"] or "").lstrip("@").casefold() in found]
+                notes.append({"id": note_id, "text": text, "author": actor["name"],
+                              "author_id": str(actor["id"]), "created_at": now,
+                              "reply_to_id": reply or None, "file_ids": list(file_ids),
+                              "mentions": mentions, "pinned": False})
+                for mentioned in mentions:
+                    if mentioned["id"] == str(actor["id"]):
+                        continue
+                    nid = "mention-" + uuid.uuid4().hex
+                    notification = {"id": nid, "user": mentioned["id"], "kind": "mention",
+                                    "title": actor["name"] + " mentioned you",
+                                    "message": "In a Live Board case for unit " + str(case.get("unit_number") or "Unknown")[:70],
+                                    "case_id": case_id, "seen": False, "created_at": now}
+                    conn.execute("INSERT INTO notifications(id,user_key,created_at,seen,data_json) VALUES(?,?,?,?,?)",
+                                 (nid, mentioned["id"], now, 0, json.dumps(notification, ensure_ascii=False)))
+                case.setdefault("workspace_history", []).append({"action":"note", "author":actor["name"],
+                                  "author_id": str(actor["id"]), "note_id": note_id, "created_at":now})
+            elif action in ("note_edit", "note_delete", "note_pin"):
+                notes = case.setdefault("workspace_notes", [])
+                note_id = payload.get("note_id", "")
+                index = payload.get("index", -1)
+                if note_id:
+                    index = next((i for i,n in enumerate(notes) if isinstance(n, dict) and
+                                  n.get("id", "legacy-" + str(i)) == note_id), -1)
+                if not isinstance(index, int) or not 0 <= index < len(notes) or not isinstance(notes[index], dict):
+                    raise ValueError("Comment no longer exists. Refresh the case.")
+                note = notes[index]
+                if note.get("deleted_at"):
+                    raise ValueError("This comment was already deleted.")
+                manager = actor["role"] in ("developer", "super_admin")
+                own = bool(note.get("author_id")) and str(note["author_id"]) == str(actor["id"])
+                if action in ("note_edit", "note_delete") and not (own or manager):
+                    raise PermissionError("You can edit or delete only your own comments.")
+                if action == "note_pin" and not (manager or str(case.get("agent_id")) == str(actor["id"])):
+                    raise PermissionError("Only the assigned agent or a manager can pin comments.")
+                if action == "note_edit":
+                    if not payload.get("text", "").strip() and not note.get("file_ids"):
+                        raise ValueError("A comment must contain text or an attachment.")
+                    note["text"] = payload["text"]
+                    note["edited_at"] = now
+                elif action == "note_delete":
+                    note["text"] = ""
+                    note["file_ids"] = []
+                    note["deleted_at"] = now
+                    note["deleted_by"] = actor["name"]
+                    note["pinned"] = False
                 else:
-                    notes.pop(index)
+                    note["pinned"] = bool(payload["pinned"])
+                case.setdefault("workspace_history", []).append({
+                    "action":action, "author":actor["name"], "author_id":str(actor["id"]),
+                    "note_id":note.get("id", "legacy-" + str(index)), "created_at":now,
+                    **({"pinned":bool(note["pinned"])} if action=="note_pin" else {})})
             elif payload["action"] in ("reassign", "move"):
                 target = payload["target"]
                 if str(case.get("agent_id")) == str(target["id"]) and (
@@ -480,9 +537,10 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                         if report_key in case["report_data"]:
                             case["report_data"][report_key] = value
             case["updated_at"] = now
-            if payload["action"] not in ("reassign", "stage", "move"):
+            if action not in ("reassign", "stage", "move", "note", "note_edit", "note_delete", "note_pin"):
                 case.setdefault("workspace_history", []).append({
-                    "action": payload["action"], "author": actor["name"], "created_at": now,
+                    "action": action, "author": actor["name"], "created_at": now,
+                    "fields": sorted(payload.get("fields", {})) if action == "edit" else [],
                 })
         _upsert_case_row(conn, case)
         return dict(case)
@@ -874,8 +932,10 @@ def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None):
         case = json.loads(row["data_json"]) if row else None
         if not case or not is_maintenance_report(case):
             raise LookupError("Case not found.")
-        if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
-            raise PermissionError("You cannot manage this case.")
+        if remove_id:
+            existing = next((x for x in case.get("workspace_attachments", []) if x.get("id") == remove_id), None)
+            if existing and actor["role"] not in ("developer", "super_admin") and str(existing.get("uploaded_by_id")) != str(actor["id"]):
+                raise PermissionError("You can remove only your own attachments.")
         if not remove_id and (case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at")):
             raise ValueError("Cannot upload to a closed case.")
         items = case.setdefault("workspace_attachments", [])
