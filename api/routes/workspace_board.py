@@ -549,10 +549,10 @@ def register_workspace_routes(server):
         cursor = kurtex_db.get_latest_event_cursor(_data_dir())
         pres_seq = _get_presence_seq()
         ws.send(json.dumps({"type": "ready", "version": version, "cursor": cursor}))
-        last_heartbeat = last_auth_check = connected_at = time.monotonic()
+        last_heartbeat = last_auth_check = last_version_check = connected_at = time.monotonic()
         while True:
             try:
-                incoming = ws.receive(timeout=0.25)
+                incoming = ws.receive(timeout=0.35)
                 if incoming:
                     pass
                 now = time.monotonic()
@@ -565,15 +565,17 @@ def register_workspace_routes(server):
                         ws.close()
                         return
                     last_auth_check = now
-                next_version = _workspace_board_version(actor)
-                if next_version != version:
-                    version = next_version
-                    events = kurtex_db.get_events_since(cursor, limit=50, data_dir=_data_dir())
-                    if events:
-                        cursor = events[-1]["cursor"]
-                    else:
-                        cursor = kurtex_db.get_latest_event_cursor(_data_dir())
-                    ws.send(json.dumps({"type": "changed", "version": version, "cursor": cursor, "events": events}))
+                if now - last_version_check >= 1.0:
+                    last_version_check = now
+                    next_version = _workspace_board_version(actor)
+                    if next_version != version:
+                        version = next_version
+                        events = kurtex_db.get_events_since(cursor, limit=50, data_dir=_data_dir())
+                        if events:
+                            cursor = events[-1]["cursor"]
+                        else:
+                            cursor = kurtex_db.get_latest_event_cursor(_data_dir())
+                        ws.send(json.dumps({"type": "changed", "version": version, "cursor": cursor, "events": events}))
                 next_pres_seq = _get_presence_seq()
                 if next_pres_seq != pres_seq:
                     pres_seq = next_pres_seq

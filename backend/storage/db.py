@@ -489,9 +489,28 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_case_events_cursor ON case_events(id ASC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_case_events_case ON case_events(case_id, id DESC)")
 
+    conn.execute("""CREATE TABLE IF NOT EXISTS workspace_presence (
+        session_id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        user_name TEXT NOT NULL,
+        action TEXT NOT NULL,
+        case_id TEXT NOT NULL DEFAULT '',
+        field TEXT NOT NULL DEFAULT '',
+        draft TEXT NOT NULL DEFAULT '',
+        updated_at REAL NOT NULL,
+        expires_at REAL NOT NULL
+    )""")
+    pres_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(workspace_presence)")}
+    if "draft" not in pres_cols:
+        conn.execute("ALTER TABLE workspace_presence ADD COLUMN draft TEXT NOT NULL DEFAULT ''")
+
     done_row = conn.execute("SELECT value FROM meta WHERE key='live_board_normalized_v1'").fetchone()
     if not (done_row and done_row["value"] == "1"):
-        rows = conn.execute("SELECT id, data_json FROM cases").fetchall()
+        # Only normalize active reported cases (typically ~20-50 rows) during startup
+        # so 6,000+ historical closed cases never lock SQLite inside BEGIN IMMEDIATE.
+        rows = conn.execute(
+            "SELECT id, data_json FROM cases WHERE status='reported' AND (closed_at IS NULL OR closed_at='') LIMIT 250"
+        ).fetchall()
         for r in rows:
             try:
                 c = json.loads(r["data_json"])
@@ -694,6 +713,16 @@ def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connectio
     if resolved not in _INITIALIZED_DBS or not marker.exists():
         with _INIT_LOCK:
             if resolved not in _INITIALIZED_DBS or not marker.exists():
+                if db_path.exists() and marker.exists():
+                    try:
+                        ready_row = conn.execute(
+                            "SELECT value FROM meta WHERE key='live_board_normalized_v1'"
+                        ).fetchone()
+                        if ready_row and ready_row["value"] == "1":
+                            _INITIALIZED_DBS.add(resolved)
+                            return conn, d
+                    except sqlite3.Error:
+                        pass
                 for attempt in range(8):
                     try:
                         conn.execute("PRAGMA journal_mode=WAL")
