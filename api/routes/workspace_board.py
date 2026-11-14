@@ -17,6 +17,7 @@ from flask import g, jsonify, request, send_file, session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 
+from backend.ai.live_shop_search import search_live_repair_shops
 from backend.core.app_time import chicago_date_str, chicago_now, chicago_timestamp, utc_now
 from backend.core.case_snapshot import normalize as normalize_case
 from backend.storage import case_store, db as kurtex_db, shift_store
@@ -1344,7 +1345,110 @@ def register_workspace_routes(server):
                     "last_used": server.fmt_dt(item["last_date"]),
                     "sample_issue": item["sample_issue"],
                     "reason": " · ".join(reason_bits) if reason_bits else "matched fleet repair",
+                    "source_type": "fleet_history",
+                    "live": False,
                 })
+
+            is_preload = request.args.get("preload") == "1"
+            force_live = request.args.get("force_live") == "1"
+            route_shop_search = {
+                "status": "skipped_test" if target_is_test else ("skipped_preload" if is_preload else "no_route"),
+                "provider": "",
+                "anchors": [],
+                "shops": [],
+                "note": "",
+            }
+            if not target_is_test and not is_preload:
+                live_fn = getattr(server, "_search_live_route_shops", search_live_repair_shops)
+                try:
+                    route_res = live_fn(
+                        pickup=str(target.get("pickup") or ""),
+                        delivery=str(target.get("delivery") or ""),
+                        location=str(target.get("location") or ""),
+                        vehicle_type=vtype,
+                        systems=q_sig["systems"],
+                        force=force_live,
+                    )
+                except Exception:
+                    route_res = {
+                        "status": "unavailable",
+                        "provider": "",
+                        "anchors": [],
+                        "shops": [],
+                        "note": "Live repair shop search could not reach external map services right now.",
+                    }
+                if isinstance(route_res, dict):
+                    route_shop_search = {
+                        "status": str(route_res.get("status") or "unavailable"),
+                        "provider": str(route_res.get("provider") or ""),
+                        "anchors": route_res.get("anchors") if isinstance(route_res.get("anchors"), list) else [],
+                        "shops": route_res.get("shops") if isinstance(route_res.get("shops"), list) else [],
+                        "note": str(route_res.get("note") or ""),
+                        "searched_at": str(route_res.get("searched_at") or ""),
+                    }
+                existing_norm = []
+                for idx, s in enumerate(suggested_shops):
+                    norm = re.sub(r"[^a-z0-9]+", "", str(s.get("shop_name") or "").lower())
+                    existing_norm.append((idx, norm))
+                for ls in route_shop_search.get("shops", [])[:8]:
+                    if not isinstance(ls, dict):
+                        continue
+                    ls_name = str(ls.get("shop") or ls.get("shop_name") or "").strip()
+                    if not ls_name:
+                        continue
+                    ls_norm = re.sub(r"[^a-z0-9]+", "", ls_name.lower())
+                    match_idx = None
+                    for idx, ex_norm in existing_norm:
+                        if ex_norm and ls_norm and (ex_norm == ls_norm or (len(ex_norm) >= 6 and len(ls_norm) >= 6 and (ex_norm in ls_norm or ls_norm in ex_norm))):
+                            match_idx = idx
+                            break
+                    dist_val = ls.get("distance_miles")
+                    reason_bits = [
+                        bit for bit in (
+                            str(ls.get("anchor_label") or "").strip(),
+                            f"{dist_val:.1f} mi" if isinstance(dist_val, (int, float)) else "",
+                            str(ls.get("category") or "").strip(),
+                        ) if bit
+                    ]
+                    live_meta = {
+                        "live": True,
+                        "address": str(ls.get("address") or ""),
+                        "phone": str(ls.get("phone") or ""),
+                        "website": str(ls.get("website") or ""),
+                        "opening_hours": str(ls.get("opening_hours") or ""),
+                        "rating": ls.get("rating"),
+                        "rating_count": int(ls.get("rating_count") or 0),
+                        "category": str(ls.get("category") or ""),
+                        "anchor_key": str(ls.get("anchor_key") or ""),
+                        "anchor_label": str(ls.get("anchor_label") or ""),
+                        "anchor_query": str(ls.get("anchor_query") or ""),
+                        "distance_miles": dist_val,
+                        "map_url": str(ls.get("map_url") or ""),
+                        "provider": str(ls.get("provider") or route_shop_search.get("provider") or ""),
+                    }
+                    if match_idx is not None:
+                        target_entry = suggested_shops[match_idx]
+                        target_entry["source_type"] = "fleet_and_live"
+                        target_entry.update(live_meta)
+                        if reason_bits:
+                            target_entry["reason"] = f"{target_entry['reason']} · {' · '.join(reason_bits[:2])}"
+                    else:
+                        new_entry = {
+                            "shop_name": ls_name,
+                            "count": 0,
+                            "resolved_count": 0,
+                            "unit_count": 0,
+                            "avg_amount": None,
+                            "min_amount": None,
+                            "max_amount": None,
+                            "last_used": "",
+                            "sample_issue": "",
+                            "reason": " · ".join(reason_bits) if reason_bits else "Live route shop",
+                            "source_type": "live_route",
+                            **live_meta,
+                        }
+                        suggested_shops.append(new_entry)
+                        existing_norm.append((len(suggested_shops) - 1, ls_norm))
 
             unit_cases.sort(key=lambda c: str(c.get("reported_at") or c.get("opened_at") or ""), reverse=True)
             recent_30d = 0
@@ -1423,9 +1527,19 @@ def register_workspace_routes(server):
                         bullets.append("Detected triage signals — " + " · ".join(tags) + ".")
                 if suggested_shops:
                     top = suggested_shops[0]
-                    bullets.append(
-                        f"Best historical shop candidate: {top['shop_name']} ({top['reason']})."
-                    )
+                    if top.get("source_type") == "live_route":
+                        bullets.append(
+                            f"Live route shop found: {top['shop_name']} ({top['reason']})."
+                        )
+                    else:
+                        bullets.append(
+                            f"Best historical shop candidate: {top['shop_name']} ({top['reason']})."
+                        )
+                        live_extra = next((s for s in suggested_shops if s.get("source_type") == "live_route"), None)
+                        if live_extra:
+                            bullets.append(
+                                f"Live route option: {live_extra['shop_name']} ({live_extra['reason']})."
+                            )
                 else:
                     bullets.append("No previous shop matched these exact symptoms yet — check nearby preferred vendor.")
                 if cost_estimate:
@@ -1440,10 +1554,17 @@ def register_workspace_routes(server):
                     res_cnt = sum(1 for x in similar_cases if x["is_resolved"])
                     bullets.append(f"Found {len(similar_cases)} verified fleet match{'es' if len(similar_cases) != 1 else ''} ({res_cnt} resolved) to guide troubleshooting.")
 
+            if not has_signal and not target_is_test and route_shop_search.get("shops"):
+                top_live = route_shop_search["shops"][0]
+                bullets.append(
+                    f"Live route shop near {top_live.get('anchor_query') or 'route'}: {top_live.get('shop')}."
+                )
+
             triage = {
                 "headline": (
-                    "Low-detail / test case" if not has_signal
+                    "Test / non-fleet case" if target_is_test
                     else f"Top match: {suggested_shops[0]['shop_name']}" if suggested_shops
+                    else "Low-detail / test case" if not has_signal
                     else f"{len(similar_cases)} verified fleet match{'es' if len(similar_cases) != 1 else ''}" if similar_cases
                     else "No similar past cases yet"
                 ),
@@ -1500,6 +1621,7 @@ def register_workspace_routes(server):
                 "vehicle_type": vtype,
                 "unit_insights": unit_insights,
                 "suggested_shops": suggested_shops,
+                "route_shop_search": route_shop_search,
                 "cost_estimate": cost_estimate,
                 "similar_cases": similar_cases,
                 "triage": triage,
@@ -1828,5 +1950,6 @@ def register_workspace_routes(server):
     server.api_workspace_presence = api_workspace_presence
     server.api_workspace_board = api_workspace_board
     server.api_workspace_case_ai_insights = api_workspace_case_ai_insights
+    server._search_live_route_shops = search_live_repair_shops
     server.api_workspace_preferences = api_workspace_preferences
     server.api_workspace_shops = api_workspace_shops

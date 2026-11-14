@@ -162,24 +162,48 @@ def save_case_reads(user_id, updates: dict[str, str], data_dir: Path | None = No
     return _mutate_user_prefs(user_id, _apply, data_dir=data_dir)
 
 
-_WORKSPACE_BOARD_BOOL_FIELDS = (
-    "background_alerts",
-    "alert_sound",
-    "ai_autocomplete",
-    "ai_tab_badge",
-)
+_WORKSPACE_BOARD_BOOL_DEFAULTS = {
+    "background_alerts": True,
+    "alert_sound": True,
+    "ai_autocomplete": True,
+    "ai_tab_badge": True,
+    "hide_off_shift": True,
+    "compact": False,
+}
+_WORKSPACE_BOARD_BOOL_FIELDS = tuple(_WORKSPACE_BOARD_BOOL_DEFAULTS.keys())
 
 _WORKSPACE_TOOLBAR_KEYS = (
     "priorities",
+    "presets",
     "agent_filter",
     "my_cases",
+    "watchlist",
     "has_shop",
     "unassigned",
     "off_shift",
     "export_csv",
+    "shift_summary",
     "compact",
     "refresh",
 )
+
+
+def _sanitize_key_list(raw, *, allow_colon: bool = True, max_items: int = 80, max_len: int = 64) -> list[str]:
+    """Return bounded deduplicated list of safe identifier keys."""
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    allowed_extra = {"-", "_", ":"} if allow_colon else {"-", "_"}
+    for item in raw:
+        key = "".join(ch for ch in str(item or "").strip()[:max_len] if ch.isalnum() or ch in allowed_extra)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+        if len(out) >= max_items:
+            break
+    return out
 
 
 def _sanitize_saved_view_filters(raw_filters) -> dict:
@@ -194,6 +218,7 @@ def _sanitize_saved_view_filters(raw_filters) -> dict:
         "priority": prio,
         "agent": str(f.get("agent") or "all").strip()[:64] or "all",
         "my_cases": bool(f.get("my_cases", False)),
+        "watchlist_only": bool(f.get("watchlist_only", False)),
         "has_shop": bool(f.get("has_shop", False)),
         "unassigned": bool(f.get("unassigned", False)),
         "hide_off_shift": bool(f.get("hide_off_shift", True)),
@@ -206,9 +231,20 @@ def _sanitize_saved_view_filters(raw_filters) -> dict:
 def _sanitize_workspace_board_prefs(raw) -> dict:
     src = raw if isinstance(raw, dict) else {}
     prefs = {
-        key: bool(src.get(key, True))
-        for key in _WORKSPACE_BOARD_BOOL_FIELDS
+        key: bool(src.get(key, default_val))
+        for key, default_val in _WORKSPACE_BOARD_BOOL_DEFAULTS.items()
     }
+    raw_view = str(src.get("board_view") or "board").strip().lower()
+    prefs["board_view"] = "grid" if raw_view in ("grid", "table") else "board"
+    collapsed_lanes = _sanitize_key_list(src.get("collapsed_lanes"), allow_colon=True, max_items=80, max_len=64)
+    collapsed_set = set(collapsed_lanes)
+    expanded_lanes = [
+        k for k in _sanitize_key_list(src.get("expanded_lanes"), allow_colon=True, max_items=80, max_len=64)
+        if k not in collapsed_set
+    ]
+    prefs["collapsed_lanes"] = collapsed_lanes
+    prefs["expanded_lanes"] = expanded_lanes
+    prefs["watchlist_ids"] = _sanitize_key_list(src.get("watchlist_ids"), allow_colon=True, max_items=200, max_len=48)
     raw_tb = src.get("toolbar_visibility")
     tb = raw_tb if isinstance(raw_tb, dict) else {}
     prefs["toolbar_visibility"] = {
@@ -231,6 +267,7 @@ def _sanitize_workspace_board_prefs(raw) -> dict:
                 "id": vid,
                 "name": name,
                 "filters": _sanitize_saved_view_filters(item.get("filters")),
+                "pin_to_toolbar": bool(item.get("pin_to_toolbar", False)),
             }
             created_at = str(item.get("created_at") or "").strip()[:40]
             if created_at:
@@ -262,6 +299,14 @@ def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = N
         for key in _WORKSPACE_BOARD_BOOL_FIELDS:
             if key in updates:
                 merged[key] = bool(updates[key])
+        if "board_view" in updates:
+            merged["board_view"] = str(updates.get("board_view") or "board").strip().lower()
+        if "collapsed_lanes" in updates:
+            merged["collapsed_lanes"] = updates.get("collapsed_lanes")
+        if "expanded_lanes" in updates:
+            merged["expanded_lanes"] = updates.get("expanded_lanes")
+        if "watchlist_ids" in updates:
+            merged["watchlist_ids"] = updates.get("watchlist_ids")
         if isinstance(updates.get("toolbar_visibility"), dict):
             tb_patch = updates["toolbar_visibility"]
             for tk in _WORKSPACE_TOOLBAR_KEYS:
