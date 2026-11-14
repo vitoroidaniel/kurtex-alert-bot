@@ -181,11 +181,28 @@ _WORKSPACE_TOOLBAR_KEYS = (
     "has_shop",
     "unassigned",
     "off_shift",
+    "zoom",
     "export_csv",
     "shift_summary",
     "compact",
     "refresh",
 )
+
+WORKSPACE_ZOOM_MIN = 70
+WORKSPACE_ZOOM_MAX = 130
+WORKSPACE_ZOOM_DEFAULT = 100
+
+
+def _sanitize_board_zoom(raw) -> int:
+    try:
+        val = int(round(float(raw)))
+    except (TypeError, ValueError):
+        return WORKSPACE_ZOOM_DEFAULT
+    if val < WORKSPACE_ZOOM_MIN:
+        return WORKSPACE_ZOOM_MIN
+    if val > WORKSPACE_ZOOM_MAX:
+        return WORKSPACE_ZOOM_MAX
+    return val
 
 
 def _sanitize_key_list(raw, *, allow_colon: bool = True, max_items: int = 80, max_len: int = 64) -> list[str]:
@@ -236,6 +253,7 @@ def _sanitize_workspace_board_prefs(raw) -> dict:
     }
     raw_view = str(src.get("board_view") or "board").strip().lower()
     prefs["board_view"] = "grid" if raw_view in ("grid", "table") else "board"
+    prefs["board_zoom"] = _sanitize_board_zoom(src.get("board_zoom", WORKSPACE_ZOOM_DEFAULT))
     collapsed_lanes = _sanitize_key_list(src.get("collapsed_lanes"), allow_colon=True, max_items=80, max_len=64)
     collapsed_set = set(collapsed_lanes)
     expanded_lanes = [
@@ -301,6 +319,8 @@ def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = N
                 merged[key] = bool(updates[key])
         if "board_view" in updates:
             merged["board_view"] = str(updates.get("board_view") or "board").strip().lower()
+        if "board_zoom" in updates:
+            merged["board_zoom"] = _sanitize_board_zoom(updates.get("board_zoom"))
         if "collapsed_lanes" in updates:
             merged["collapsed_lanes"] = updates.get("collapsed_lanes")
         if "expanded_lanes" in updates:

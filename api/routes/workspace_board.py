@@ -1049,13 +1049,46 @@ def register_workspace_routes(server):
         ("air", "Air / Suspension", {"airbag", "airline", "compressor", "governor", "leveling", "suspension", "leaf", "spring", "bushing", "shock", "dryer", "purge"}),
         ("electrical", "Electrical", {"battery", "alternator", "starter", "voltage", "volt", "crank", "solenoid", "wiring", "harness", "fuse", "relay", "dead", "ecm"}),
         ("emissions", "DEF / Aftertreatment", {"def", "dpf", "regen", "scr", "nox", "egr", "aftertreatment", "soot", "derate", "doc", "dosing", "exhaust"}),
-        ("tires", "Tires & Wheels", {"tire", "steer", "blowout", "flat", "rim", "lug", "stud", "hub", "wheel", "seal", "bearing", "spindle", "align", "tread", "valve"}),
+        ("tires", "Tires & Wheels", {"tire", "steer", "blowout", "flat", "rim", "lug", "stud", "hub", "wheel", "seal", "bearing", "spindle", "align", "tread", "valve", "autoinflation", "inflation", "atis"}),
         ("reefer", "Reefer Unit", {"thermoking", "carrier", "shutdown", "defrost", "freon", "refriger", "condenser", "evaporator", "micro", "temp"}),
         ("fuel", "Fuel System", {"fuel", "injector", "primer", "priming", "separator", "gel"}),
         ("drivetrain", "Drivetrain / Axles", {"transmission", "clutch", "driveshaft", "ujoint", "differential", "axle", "yoke", "flywheel", "pto", "gearbox"}),
         ("body", "Body / Lights / DOT", {"windshield", "mirror", "headlight", "taillight", "marker", "clearance", "bumper", "door", "hinge", "latch", "mudflap", "wiper", "dot"}),
         ("towing", "Towing / Roadside", {"tow", "wrecker", "winch", "lockout", "roadside"}),
     )
+
+    _AI_GENERIC_SYMPTOM_TOKENS = {
+        "leak", "leaking", "leaks", "hose", "line", "lines", "light", "lights", "sensor", "switch",
+        "valve", "clamp", "cap", "seal", "wire", "wiring", "pipe", "tube", "low", "high", "damage",
+        "damaged", "loose", "missing", "worn", "bad", "old", "new", "front", "rear", "left", "right",
+        "side", "driver", "passenger", "upper", "lower", "small", "big", "noise", "sound", "smell",
+    }
+    _SHARED_SHOP_SYSTEMS = {"brakes", "tires", "air", "electrical", "body", "towing"}
+    _SHOP_STATE_RE = re.compile(
+        r"(?:,\s*|\s+)(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|"
+        r"MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|"
+        r"AB|BC|MB|NB|NL|NS|ON|PE|QC|SK)\b"
+    )
+
+    def _equipment_family(vtype: str) -> str:
+        v = str(vtype or "").strip().lower()
+        if not v:
+            return ""
+        if v in ("truck", "tractor", "semi", "daycab", "sleeper", "cab"):
+            return "truck"
+        if v in ("reefer", "trailer", "dry_van", "dryvan", "van", "flatbed", "chassis"):
+            return "trailer"
+        return v
+
+    def _extract_state_codes(*texts: str) -> set[str]:
+        states: set[str] = set()
+        for t in texts:
+            s = str(t or "").strip()
+            if not s:
+                continue
+            for m in _SHOP_STATE_RE.finditer(s):
+                states.add(m.group(1).upper())
+        return states
 
     _AI_CODE_RE = re.compile(r"\b(?:spn\s*[-]?\s*\d{2,5}|fmi\s*[-]?\s*\d{1,2}|[pbuc]\d{4}|[a-z]\d{2,3}|\d{3,5}-\d{1,3})\b", re.IGNORECASE)
 
@@ -1230,17 +1263,40 @@ def register_workspace_routes(server):
             q_norm = math.sqrt(sum(w * w for w in q_weights.values())) or 1.0
 
             scored = []
+            q_family = _equipment_family(vtype)
             for c, same_unit, c_sig in candidates:
                 overlap_tok = q_sig["all_tokens"] & c_sig["all_tokens"]
                 overlap_primary = q_sig["primary_tokens"] & c_sig["primary_tokens"]
                 overlap_codes = q_sig["codes"] & c_sig["codes"]
                 overlap_systems = q_sig["systems"] & c_sig["systems"]
+                specific_overlap = {t for t in overlap_tok if t not in _AI_GENERIC_SYMPTOM_TOKENS}
+                c_vtype = str(c.get("vehicle_type") or "").strip().lower()
+                c_family = _equipment_family(c_vtype)
+                equip_conflict = bool(q_family and c_family and q_family != c_family)
+
+                # Never match cases across disjoint repair systems or incompatible truck/reefer equipment on generic words (e.g. "hose" + "leak").
+                if (
+                    q_sig["systems"]
+                    and c_sig["systems"]
+                    and not overlap_systems
+                    and not overlap_codes
+                    and not same_unit
+                ):
+                    continue
+                if (
+                    equip_conflict
+                    and not same_unit
+                    and not overlap_codes
+                    and not (overlap_systems & _SHARED_SHOP_SYSTEMS)
+                ):
+                    continue
 
                 passes_gate = bool(
                     overlap_codes
-                    or len(overlap_tok) >= 2
                     or (overlap_primary and overlap_systems)
-                    or (overlap_primary and len(q_sig["all_tokens"]) <= 2)
+                    or len(specific_overlap) >= 2
+                    or (len(specific_overlap) >= 1 and len(overlap_tok) >= 2 and not equip_conflict)
+                    or (overlap_primary and len(q_sig["all_tokens"]) <= 2 and not equip_conflict)
                     or (same_unit and (overlap_tok or overlap_systems))
                 )
                 if not passes_gate:
@@ -1306,6 +1362,9 @@ def register_workspace_routes(server):
                     "resolved_count": 0,
                     "unit_count": 0,
                     "score_sum": 0.0,
+                    "max_score": 0.0,
+                    "matched_systems": set(),
+                    "vehicle_types": set(),
                     "amounts": [],
                     "last_date": "",
                     "sample_issue": "",
@@ -1316,6 +1375,11 @@ def register_workspace_routes(server):
                 if same_u:
                     bucket["unit_count"] += 1
                 bucket["score_sum"] += sc
+                bucket["max_score"] = max(bucket["max_score"], sc)
+                bucket["matched_systems"].update(_sys)
+                cv = str(c.get("vehicle_type") or "").strip().lower()
+                if cv:
+                    bucket["vehicle_types"].add(cv)
                 if amt is not None:
                     bucket["amounts"].append(amt)
                 when = str(c.get("closed_at") or c.get("reported_at") or c.get("opened_at") or "")
@@ -1328,17 +1392,24 @@ def register_workspace_routes(server):
                 shop_buckets.values(),
                 key=lambda s: (-s["unit_count"], -s["resolved_count"], -round(s["score_sum"], 2), -s["count"]),
             )[:4]:
+                if item["unit_count"] == 0 and item["max_score"] < 0.28 and not item["matched_systems"]:
+                    continue
                 amts = item["amounts"]
                 reason_bits = []
                 if item["unit_count"]:
                     reason_bits.append(f"serviced Unit #{unit} before" if unit else "same-unit repair")
                 if item["resolved_count"]:
                     reason_bits.append(f"{item['resolved_count']} resolved match{'es' if item['resolved_count'] != 1 else ''}")
+                sys_list = sorted(item["matched_systems"])[:2]
+                if sys_list and not item["unit_count"]:
+                    reason_bits.append(" · ".join(sys_list))
                 suggested_shops.append({
                     "shop_name": item["shop_name"],
                     "count": item["count"],
                     "resolved_count": item["resolved_count"],
                     "unit_count": item["unit_count"],
+                    "vehicle_types": sorted(item["vehicle_types"]),
+                    "matched_systems": sorted(item["matched_systems"]),
                     "avg_amount": round(sum(amts) / len(amts), 2) if amts else None,
                     "min_amount": round(min(amts), 2) if amts else None,
                     "max_amount": round(max(amts), 2) if amts else None,
@@ -1840,7 +1911,7 @@ def register_workspace_routes(server):
 
     @app.route("/api/workspace/shops", methods=["GET"])
     def api_workspace_shops():
-        """Return deduplicated repair shop directory from historical & active maintenance cases."""
+        """Return deduplicated repair shop directory, optionally scored & filtered for a target case."""
         actor, error = _workspace_actor_read()
         if error:
             return error
@@ -1852,9 +1923,38 @@ def register_workspace_routes(server):
             limit = 80
         limit = max(1, min(limit, 150))
 
+        target_case_id = str(request.args.get("case_id") or "").strip()
+        context_only = str(request.args.get("context_only") or "").strip().lower() in ("1", "true", "yes")
+
+        target_case = None
+        all_cases = [normalize_case(raw_case) for raw_case in server.load_cases()]
+        if target_case_id:
+            for c in all_cases:
+                if str(c.get("id") or "") == target_case_id or str(c.get("request_id") or "") == target_case_id:
+                    target_case = c
+                    break
+
+        target_unit = str(request.args.get("unit_number") or (target_case or {}).get("unit_number") or "").strip().lower()
+        target_vtype = str(request.args.get("vehicle_type") or (target_case or {}).get("vehicle_type") or "").strip().lower()
+        target_family = _equipment_family(target_vtype)
+        target_issue = " ".join(filter(None, [
+            str(request.args.get("issue_text") or ""),
+            str((target_case or {}).get("issue_text") or ""),
+            str((target_case or {}).get("description") or ""),
+            str((target_case or {}).get("part_number") or ""),
+        ])).strip()
+        target_pickup = str(request.args.get("pickup") or (target_case or {}).get("pickup") or "").strip()
+        target_delivery = str(request.args.get("delivery") or (target_case or {}).get("delivery") or "").strip()
+        target_location = str(request.args.get("location") or (target_case or {}).get("location") or "").strip()
+        has_case_context = bool(target_case_id or target_case or target_unit or target_vtype or target_issue or target_pickup or target_delivery or target_location)
+
+        target_tokens = _ai_tokenize(target_issue) if target_issue else set()
+        target_systems, _ = _ai_detect_systems(target_issue, target_tokens) if target_issue else (set(), {})
+        target_codes = _ai_extract_codes(target_issue) if target_issue else set()
+        target_states = _extract_state_codes(target_pickup, target_delivery, target_location)
+
         buckets: dict[str, dict] = {}
-        for raw_case in server.load_cases():
-            c = normalize_case(raw_case)
+        for c in all_cases:
             if not is_maintenance_report(c) or server.is_history_test_case(c):
                 continue
             shop = _clean_shop(c.get("shop_info") or c.get("dealer_shop"))
@@ -1874,21 +1974,27 @@ def register_workspace_routes(server):
                     "vehicle_types": [],
                     "sample_units": [],
                     "sample_issue": "",
+                    "states": set(),
+                    "systems": set(),
+                    "tokens": set(),
+                    "codes": set(),
+                    "records": [],
                 },
             )
             bucket["count"] += 1
             if len(shop) > len(bucket["shop_name"]):
                 bucket["shop_name"] = shop
             status = str(c.get("status") or "").strip().lower()
-            if status in ("done", "closed", "resolved"):
+            is_res = status in ("done", "closed", "resolved")
+            if is_res:
                 bucket["resolved_count"] += 1
             amt = _parse_amount(c.get("amount"))
             if amt is not None:
                 bucket["amounts"].append(amt)
             ts = str(c.get("closed_at") or c.get("updated_at") or c.get("reported_at") or c.get("opened_at") or "").strip()
+            issue_txt = re.sub(r"\s+", " ", str(c.get("issue_text") or c.get("description") or "").strip())
             if ts > bucket["last_used"]:
                 bucket["last_used"] = ts
-                issue_txt = re.sub(r"\s+", " ", str(c.get("issue_text") or c.get("description") or "").strip())
                 if issue_txt:
                     bucket["sample_issue"] = issue_txt[:80]
             vtype = str(c.get("vehicle_type") or "").strip().lower()
@@ -1897,21 +2003,100 @@ def register_workspace_routes(server):
             unit_num = str(c.get("unit_number") or "").strip()
             if unit_num and unit_num not in bucket["sample_units"] and len(bucket["sample_units"]) < 3:
                 bucket["sample_units"].append(unit_num)
-            if not bucket["sample_issue"]:
-                issue_txt = re.sub(r"\s+", " ", str(c.get("issue_text") or c.get("description") or "").strip())
-                if issue_txt:
-                    bucket["sample_issue"] = issue_txt[:80]
+            if not bucket["sample_issue"] and issue_txt:
+                bucket["sample_issue"] = issue_txt[:80]
+
+            c_sig = _ai_extract_signals(c)
+            bucket["states"].update(_extract_state_codes(shop, c.get("location"), c.get("pickup"), c.get("delivery")))
+            bucket["systems"].update(c_sig["systems"])
+            bucket["tokens"].update(c_sig["all_tokens"])
+            bucket["codes"].update(c_sig["codes"])
+            if len(bucket["records"]) < 8:
+                bucket["records"].append({
+                    "unit": unit_num,
+                    "vehicle_type": vtype,
+                    "issue": issue_txt[:80],
+                    "systems": sorted(c_sig["systems"]),
+                    "resolved": is_res,
+                    "ts": ts,
+                })
 
         results = []
         for b in buckets.values():
             hay = " ".join([
                 b["shop_name"].lower(),
-                b["sample_issue"].lower(),
                 " ".join(b["vehicle_types"]),
+                " ".join(sorted(b["states"])).lower(),
+                " ".join(sorted(b["systems"])).lower(),
                 " ".join(b["sample_units"]).lower(),
+                b["sample_issue"].lower(),
             ])
             if q_terms and not all(term in hay for term in q_terms):
                 continue
+
+            relevance_score = 0
+            match_reasons: list[str] = []
+            matched_unit = ""
+            matched_issue = ""
+
+            if has_case_context:
+                same_unit_rec = None
+                if target_unit:
+                    same_unit_rec = next((r for r in b["records"] if r["unit"].lower() == target_unit), None)
+                    if same_unit_rec or any(u.lower() == target_unit for u in b["sample_units"]):
+                        relevance_score += 12
+                        matched_unit = target_unit.upper()
+                        matched_issue = (same_unit_rec or {}).get("issue", "")
+                        match_reasons.append(f"Serviced Unit {matched_unit}")
+
+                overlap_states = sorted(target_states & b["states"])
+                if overlap_states:
+                    relevance_score += 6
+                    match_reasons.append(f"Route state {', '.join(overlap_states[:2])}")
+
+                b_families = {_equipment_family(v) for v in b["vehicle_types"] if _equipment_family(v)}
+                same_family = bool(target_family and target_family in b_families)
+                family_conflict = bool(target_family and b_families and target_family not in b_families)
+
+                overlap_codes = sorted(target_codes & b["codes"])
+                if overlap_codes:
+                    relevance_score += 8
+                    match_reasons.append(f"Code {', '.join(overlap_codes[:2])}")
+
+                overlap_sys = sorted(target_systems & b["systems"])
+                specific_tok = {t for t in (target_tokens & b["tokens"]) if t not in _AI_GENERIC_SYMPTOM_TOKENS}
+
+                if not (
+                    family_conflict
+                    and not same_unit_rec
+                    and not overlap_codes
+                    and not (set(overlap_sys) & _SHARED_SHOP_SYSTEMS)
+                    and not overlap_states
+                ):
+                    if overlap_sys:
+                        relevance_score += 4 * len(overlap_sys)
+                        if same_family:
+                            relevance_score += 2
+                        match_reasons.append("Matched " + ", ".join(overlap_sys[:2]))
+                    if len(specific_tok) >= 2:
+                        relevance_score += 3 + len(specific_tok)
+                    elif same_family and len(specific_tok) >= 1 and (not target_systems or not b["systems"] or overlap_sys):
+                        relevance_score += 3
+
+                    if not matched_issue and (overlap_sys or overlap_codes or len(specific_tok) >= 2):
+                        best_rec = next(
+                            (r for r in b["records"] if (not target_family or _equipment_family(r["vehicle_type"]) == target_family) and (set(r["systems"]) & set(overlap_sys))),
+                            None,
+                        )
+                        if best_rec:
+                            matched_issue = best_rec["issue"]
+
+                # When opening autocomplete without typing a search query (`not q_terms`) inside a specific case,
+                # NEVER push unrelated historical shops (like another unit's Reefer job on a Truck case).
+                if not q_terms and (bool(target_case_id) or context_only):
+                    if relevance_score < 5:
+                        continue
+
             amts = b["amounts"]
             results.append({
                 "shop_name": b["shop_name"],
@@ -1922,10 +2107,17 @@ def register_workspace_routes(server):
                 "vehicle_types": b["vehicle_types"],
                 "sample_units": b["sample_units"],
                 "sample_issue": b["sample_issue"],
+                "states": sorted(b["states"]),
+                "systems": sorted(b["systems"]),
+                "records": b["records"][:5],
+                "relevance_score": relevance_score,
+                "match_reasons": match_reasons,
+                "matched_unit": matched_unit,
+                "matched_issue": matched_issue,
             })
 
         results.sort(
-            key=lambda x: (x["resolved_count"] * 2 + x["count"], x["last_used"], len(x["shop_name"])),
+            key=lambda x: (x["relevance_score"], x["resolved_count"] * 2 + x["count"], x["last_used"], len(x["shop_name"])),
             reverse=True,
         )
         return jsonify({
