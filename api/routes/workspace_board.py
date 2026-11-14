@@ -113,9 +113,14 @@ def register_workspace_routes(server):
             return error
         agents = sorted(
             (
-                {"id": u["id"], "name": u["name"], "username": u.get("username", "")}
+                {
+                    "id": u["id"],
+                    "name": u["name"],
+                    "username": u.get("username", ""),
+                    "role": server._website_role(u.get("role")),
+                }
                 for u in get_all_user_dicts()
-                if u.get("role") in ("agent", "super_admin") and u.get("name")
+                if u.get("role") in ("agent", "super_admin", "developer", "manager", "admin") and u.get("name")
             ),
             key=lambda a: a["name"].casefold(),
         )
@@ -123,6 +128,7 @@ def register_workspace_routes(server):
             "agents": agents,
             "current_user_id": actor["id"],
             "current_user_name": actor.get("name") or actor.get("first_name") or actor.get("username") or "",
+            "current_user_role": actor.get("role", "agent"),
             "can_reassign_any": actor["role"] in ("developer", "super_admin"),
         })
 

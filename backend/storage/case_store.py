@@ -478,7 +478,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     if any(tok and tok in found for tok in (uname, name_fold, name_slug, first_token)):
                         mentions.append({"id": str(u["id"]), "name": u["name"]})
                 notes.append({"id": note_id, "text": text, "author": actor["name"],
-                              "author_id": str(actor["id"]), "created_at": now,
+                              "author_id": str(actor["id"]), "author_role": actor.get("role", "agent"),
+                              "created_at": now,
                               "reply_to_id": reply or None, "file_ids": list(file_ids),
                               "mentions": mentions, "pinned": False})
                 for mentioned in mentions:
