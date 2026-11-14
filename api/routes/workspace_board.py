@@ -16,7 +16,7 @@ from flask import g, jsonify, request, send_file, session
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 
-from backend.core.app_time import chicago_date_str, chicago_now, chicago_timestamp
+from backend.core.app_time import chicago_date_str, chicago_now, chicago_timestamp, utc_now
 from backend.core.case_snapshot import normalize as normalize_case
 from backend.storage import case_store, db as kurtex_db
 from backend.storage.board_order import OrderConflict, read_order, save_order
@@ -27,6 +27,12 @@ from backend.storage.case_store import (
     workspace_attachment_write,
     workspace_revision,
     workspace_write,
+)
+from backend.storage.preference_store import (
+    get_case_reads,
+    get_quick_replies,
+    save_case_reads,
+    save_quick_replies,
 )
 from backend.storage.user_store import get_all_user_dicts, get_user
 
@@ -110,6 +116,61 @@ def register_workspace_routes(server):
     def _realtime_signer():
         return URLSafeTimedSerializer(app.secret_key, salt=_REALTIME_SALT)
 
+    _ALLOWED_STAGES = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"}
+    _ALLOWED_PRIORITIES = {"low", "medium", "high", "normal"}
+    _ALLOWED_QUICK_REPLY_ICONS = {
+        "ph-phone-outgoing", "ph-wrench", "ph-package", "ph-receipt", "ph-check-circle",
+        "ph-road-horizon", "ph-map-pin", "ph-truck", "ph-shield-check", "ph-chat-dots",
+        "ph-lightning", "ph-clock", "ph-warning", "ph-note", "ph-currency-dollar",
+        "ph-snowflake", "ph-thermometer",
+    }
+
+    def _resolve_active_agent(agent_id: str):
+        target_id = str(agent_id or "").strip()
+        return next(
+            (
+                u
+                for u in get_all_user_dicts()
+                if str(u["id"]) == target_id
+                and u.get("role") in ("agent", "super_admin", "developer", "manager", "admin")
+            ),
+            None,
+        )
+
+    def _normalize_quick_replies(items) -> list[dict]:
+        if not isinstance(items, list) or len(items) > 40:
+            raise ValueError("Quick replies must be a list of up to 40 templates.")
+        cleaned = []
+        seen_slashes = set()
+        for idx, raw in enumerate(items):
+            if not isinstance(raw, dict):
+                raise ValueError("Invalid quick reply entry.")
+            label = re.sub(r"\s+", " ", str(raw.get("label") or "").strip())[:48]
+            text_body = str(raw.get("text") or "").strip()[:600]
+            if not label or not text_body:
+                raise ValueError("Each quick reply needs a title and message.")
+            raw_slash = str(raw.get("slash") or raw.get("command") or label).lstrip("/").strip().lower()
+            slash = re.sub(r"[^a-z0-9_-]+", "", raw_slash)[:24] or f"reply{idx + 1}"
+            base_slash = slash
+            suffix = 2
+            while slash in seen_slashes:
+                slash = f"{base_slash[:20]}{suffix}"
+                suffix += 1
+            seen_slashes.add(slash)
+            icon = str(raw.get("icon") or "ph-lightning").strip()
+            if icon not in _ALLOWED_QUICK_REPLY_ICONS:
+                icon = "ph-lightning"
+            raw_id = re.sub(r"[^a-zA-Z0-9_-]+", "", str(raw.get("id") or ""))[:40]
+            cleaned.append({
+                "id": raw_id or f"qr-{slash}",
+                "slash": slash,
+                "label": label,
+                "icon": icon,
+                "text": text_body,
+                "custom": bool(raw.get("custom", True)),
+            })
+        return cleaned
+
     @app.route("/api/workspace/agents")
     def api_workspace_agents():
         """Small, authenticated assignment roster; no role administration data."""
@@ -129,12 +190,20 @@ def register_workspace_routes(server):
             ),
             key=lambda a: a["name"].casefold(),
         )
+        try:
+            case_reads = get_case_reads(actor["id"], data_dir=_data_dir())
+            quick_replies = get_quick_replies(actor["id"], data_dir=_data_dir())
+        except Exception:
+            case_reads = {}
+            quick_replies = None
         return jsonify({
             "agents": agents,
             "current_user_id": actor["id"],
             "current_user_name": actor.get("name") or actor.get("first_name") or actor.get("username") or "",
             "current_user_role": actor.get("role", "agent"),
             "can_reassign_any": actor["role"] in ("developer", "super_admin"),
+            "case_reads": case_reads,
+            "quick_replies": quick_replies,
         })
 
     @app.route("/api/workspace/cases", methods=["POST"])
@@ -754,10 +823,31 @@ def register_workspace_routes(server):
             summary["revision"] = workspace_revision(c)
             summary["can_manage"] = _workspace_can_manage(c, actor)
             summary["can_reassign"] = summary["can_manage"]
+            active_notes = [
+                n
+                for n in (c.get("workspace_notes") or [])
+                if isinstance(n, dict) and not n.get("deleted_at")
+            ]
+            summary["notes_count"] = int(
+                bool(c.get("comments") or (c.get("notes") and c.get("notes") != "case reported"))
+            ) + len(active_notes)
+            summary["note_markers"] = [
+                {"at": str(n.get("created_at") or ""), "aid": str(n.get("author_id") or "")}
+                for n in active_notes[-20:]
+                if n.get("created_at")
+            ]
+            if active_notes:
+                summary["last_note_at"] = str(active_notes[-1].get("created_at") or "")
+                summary["last_note_author_id"] = str(active_notes[-1].get("author_id") or "")
+                summary["last_note_author"] = str(active_notes[-1].get("author") or "")
+            else:
+                summary["last_note_at"] = ""
+                summary["last_note_author_id"] = ""
+                summary["last_note_author"] = ""
             summary["notes_search"] = " ".join(
                 str(n.get("text") or "").strip()
-                for n in (c.get("workspace_notes") or [])
-                if isinstance(n, dict) and not n.get("deleted_at") and n.get("text")
+                for n in active_notes
+                if n.get("text")
             )[:800]
             summary["files_search"] = " ".join(
                 str(f.get("name") or "").strip()
@@ -1169,6 +1259,183 @@ def register_workspace_routes(server):
         except Exception:
             logger.exception("Workspace AI insights failed for %s", raw_id)
             return jsonify({"error": "Unable to load AI insights for this case."}), 503
+
+    @app.route("/api/workspace/quick-replies", methods=["GET", "PUT"])
+    def api_workspace_quick_replies():
+        if request.method == "GET":
+            actor, error = _workspace_actor_read()
+            if error:
+                return error
+            return jsonify({
+                "ok": True,
+                "quick_replies": get_quick_replies(actor["id"], data_dir=_data_dir()),
+            })
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid quick replies payload."}), 400
+        if data.get("reset") is True:
+            save_quick_replies(actor["id"], None, data_dir=_data_dir())
+            return jsonify({"ok": True, "quick_replies": None})
+        try:
+            cleaned = _normalize_quick_replies(data.get("quick_replies"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        saved = save_quick_replies(actor["id"], cleaned, data_dir=_data_dir())
+        return jsonify({"ok": True, "quick_replies": saved})
+
+    @app.route("/api/workspace/read-state", methods=["POST"])
+    def api_workspace_read_state():
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid read state payload."}), 400
+        default_ts = utc_now().isoformat()
+        updates = {}
+        raw_reads = data.get("reads")
+        if isinstance(raw_reads, dict):
+            for cid, ts in list(raw_reads.items())[:300]:
+                key = str(cid or "").strip()[:120]
+                if key:
+                    val = str(ts or "").strip()[:64] or default_ts
+                    updates[key] = val
+        elif data.get("case_id"):
+            key = str(data.get("case_id") or "").strip()[:120]
+            val = str(data.get("seen_at") or "").strip()[:64] or default_ts
+            if key:
+                updates[key] = val
+        if not updates:
+            return jsonify({"error": "Choose at least one case to mark as read."}), 400
+        merged = save_case_reads(actor["id"], updates, data_dir=_data_dir())
+        return jsonify({"ok": True, "case_reads": merged})
+
+    @app.route("/api/workspace/cases/bulk", methods=["POST"])
+    def api_workspace_cases_bulk():
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid bulk update payload."}), 400
+        raw_ids = data.get("case_ids")
+        if not isinstance(raw_ids, list) or not raw_ids or len(raw_ids) > 100:
+            return jsonify({"error": "Select between 1 and 100 cases."}), 400
+        case_ids = list(dict.fromkeys(str(cid).strip() for cid in raw_ids if str(cid or "").strip()))
+        if not case_ids:
+            return jsonify({"error": "Select at least one valid case."}), 400
+
+        action = str(data.get("action") or "update").strip().lower()
+        if action not in ("update", "close"):
+            return jsonify({"error": "Choose a valid bulk action."}), 400
+
+        target = None
+        has_agent = "agent_id" in data and str(data.get("agent_id") or "").strip() != ""
+        has_stage = "board_stage" in data and data.get("board_stage") is not None
+        has_priority = "priority" in data and str(data.get("priority") or "").strip() != ""
+
+        if action == "update":
+            if not (has_agent or has_stage or has_priority):
+                return jsonify({"error": "Choose an agent, workflow stage, or priority to apply."}), 400
+            if has_agent:
+                target = _resolve_active_agent(str(data.get("agent_id") or ""))
+                if not target:
+                    return jsonify({"error": "Choose an active agent from the team."}), 400
+                target_dict = {
+                    "id": target["id"],
+                    "name": target["name"],
+                    "username": target.get("username", ""),
+                }
+            else:
+                target_dict = None
+            stage_val = None
+            if has_stage:
+                stage_val = str(data.get("board_stage") or "").strip()
+                if stage_val not in _ALLOWED_STAGES:
+                    return jsonify({"error": "Choose a valid workflow stage."}), 400
+            prio_val = None
+            if has_priority:
+                prio_val = str(data.get("priority") or "").strip().lower()
+                if prio_val not in _ALLOWED_PRIORITIES:
+                    return jsonify({"error": "Choose a valid priority."}), 400
+
+        updated_ids = []
+        skipped = []
+        for cid in case_ids:
+            raw_case = case_store.get_case(cid)
+            if not raw_case:
+                skipped.append({"id": cid, "reason": "Case not found."})
+                continue
+            try:
+                cur = raw_case
+                if action == "close":
+                    workspace_write(
+                        actor,
+                        {"action": "close", "revision": workspace_revision(cur)},
+                        cid,
+                    )
+                else:
+                    if prio_val is not None and str(cur.get("priority") or "normal") != prio_val:
+                        cur = workspace_write(
+                            actor,
+                            {
+                                "action": "edit",
+                                "revision": workspace_revision(cur),
+                                "fields": {"priority": prio_val},
+                                "base_fields": {"priority": str(cur.get("priority") or "")},
+                            },
+                            cid,
+                        )
+                    if target_dict is not None and stage_val is not None:
+                        workspace_write(
+                            actor,
+                            {
+                                "action": "move",
+                                "revision": workspace_revision(cur),
+                                "target": target_dict,
+                                "stage": stage_val,
+                                "allow_concurrent_move": True,
+                            },
+                            cid,
+                        )
+                    elif target_dict is not None:
+                        workspace_write(
+                            actor,
+                            {
+                                "action": "reassign",
+                                "revision": workspace_revision(cur),
+                                "target": target_dict,
+                                "allow_concurrent_move": True,
+                            },
+                            cid,
+                        )
+                    elif stage_val is not None:
+                        workspace_write(
+                            actor,
+                            {
+                                "action": "stage",
+                                "revision": workspace_revision(cur),
+                                "stage": stage_val,
+                                "allow_concurrent_move": True,
+                            },
+                            cid,
+                        )
+                updated_ids.append(cid)
+            except (PermissionError, LookupError, ValueError) as exc:
+                skipped.append({"id": cid, "reason": str(exc)})
+            except Exception:
+                logger.exception("Bulk update failed for %s", cid)
+                skipped.append({"id": cid, "reason": "Unexpected save error."})
+
+        return jsonify({
+            "ok": True,
+            "updated_ids": updated_ids,
+            "updated_count": len(updated_ids),
+            "skipped": skipped,
+        })
 
     # Expose functions on `server` for backwards compatibility with callers/tests
     server._workspace_can_manage = _workspace_can_manage
