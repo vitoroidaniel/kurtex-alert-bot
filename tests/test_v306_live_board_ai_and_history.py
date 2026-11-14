@@ -160,6 +160,97 @@ class LiveBoardHistoryAndAITests(unittest.TestCase):
         self.assertEqual(res_ok.status_code, 200)
         self.assertEqual(res_ok.get_json()["llm_advice"], "• Route to TA Truck Service #142")
 
+    def test_ai_insights_ignores_test_dummy_and_noise_matches(self):
+        with db.write_tx(self.data_dir) as conn:
+            for c in (
+                {
+                    "id": "case-test-dummy",
+                    "case_type": "maintenance_report",
+                    "unit_number": "test",
+                    "report_driver": "test",
+                    "driver": "test",
+                    "vehicle_type": "truck",
+                    "issue_text": "test test test",
+                    "description": "test",
+                    "load_type": "JBS Load",
+                    "status": "reported",
+                    "reported_at": "2026-11-14T10:00:00+00:00",
+                    "workspace_notes": [{"id": "nt1", "text": "test"}],
+                },
+                {
+                    "id": "case-noise-1",
+                    "case_type": "maintenance_report",
+                    "unit_number": "910",
+                    "vehicle_type": "truck",
+                    "issue_text": "test test test",
+                    "description": "testing only",
+                    "load_type": "JBS Load",
+                    "status": "open",
+                    "reported_at": "2026-11-14T11:00:00+00:00",
+                },
+                {
+                    "id": "case-hist-test-word",
+                    "case_type": "maintenance_report",
+                    "unit_number": "777",
+                    "vehicle_type": "truck",
+                    "issue_text": "Brake chamber replacement and pressure test",
+                    "description": "Shop performed road test after brake repair",
+                    "load_type": "JBS Load",
+                    "shop_info": "Love's #999",
+                    "amount": "550.00",
+                    "status": "done",
+                    "reported_at": "2026-11-01T10:00:00+00:00",
+                    "closed_at": "2026-11-01T15:00:00+00:00",
+                },
+                {
+                    "id": "case-spn-hist",
+                    "case_type": "maintenance_report",
+                    "unit_number": "555",
+                    "vehicle_type": "truck",
+                    "issue_text": "Check engine light SPN 3251 FMI 18 aftertreatment derate",
+                    "shop_info": "Peterbilt Service",
+                    "amount": "1450.00",
+                    "status": "done",
+                    "reported_at": "2026-11-02T10:00:00+00:00",
+                    "closed_at": "2026-11-02T16:00:00+00:00",
+                },
+                {
+                    "id": "case-spn-target",
+                    "case_type": "maintenance_report",
+                    "unit_number": "556",
+                    "vehicle_type": "truck",
+                    "issue_text": "Active fault SPN-3251 regen issue",
+                    "status": "assigned",
+                    "reported_at": "2026-11-14T12:00:00+00:00",
+                },
+            ):
+                conn.execute(
+                    "INSERT INTO cases(id,status,agent_id,data_json) VALUES(?,?,?,?)",
+                    (c["id"], c["status"], 101, json.dumps(c)),
+                )
+
+        client = server.app.test_client()
+        with patch.object(workspace_board, "get_user", return_value=self.daniel), \
+             patch.object(server, "load_cases", side_effect=lambda: case_store.get_all_cases()):
+            for dummy_id in ("case-test-dummy", "case-noise-1"):
+                with client.session_transaction() as sess:
+                    sess["user"] = {"id": 101, "name": "Daniel", "role": "super_admin"}
+                res = client.get(f"/api/workspace/cases/{dummy_id}/ai-insights")
+                self.assertEqual(res.status_code, 200)
+                data = res.get_json()
+                self.assertEqual(data["similar_cases"], [], f"{dummy_id} unexpectedly matched {data['similar_cases']}")
+                self.assertEqual(data["suggested_shops"], [])
+                self.assertTrue(data["triage"].get("low_signal"))
+
+            with client.session_transaction() as sess:
+                sess["user"] = {"id": 101, "name": "Daniel", "role": "super_admin"}
+            spn_res = client.get("/api/workspace/cases/case-spn-target/ai-insights")
+            self.assertEqual(spn_res.status_code, 200)
+            spn_data = spn_res.get_json()
+            spn_ids = [s["id"] for s in spn_data["similar_cases"]]
+            self.assertEqual(spn_ids, ["case-spn-hist"])
+            self.assertIn("SPN3251", spn_data["triage"]["detected_codes"])
+
 
 if __name__ == "__main__":
     unittest.main()

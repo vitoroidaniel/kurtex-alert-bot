@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import re
 import time
 import urllib.parse
@@ -957,13 +958,129 @@ def register_workspace_routes(server):
             return None
         return round(num, 2) if 0 < num <= 250000 else None
 
+    _AI_NOISE_TERMS = {
+        "the", "and", "for", "with", "from", "that", "this", "was", "are", "not", "but", "has", "have",
+        "had", "into", "out", "too", "very", "about", "just", "now", "here", "there", "then", "than",
+        "been", "being", "will", "would", "could", "should", "can", "did", "does", "all", "any", "some",
+        "only", "also", "even", "still", "more", "much", "many", "most", "such", "other", "same", "each",
+        "every", "both", "what", "which", "when", "where", "why", "how", "who", "trying", "try", "tried",
+        "thing", "things", "stuff", "something", "anything", "nothing", "everything", "blah", "misc",
+        "said", "says", "say", "tell", "told", "look", "looked", "looking", "make", "made", "know",
+        "truck", "trailer", "reefer", "unit", "driver", "vehicle", "agent", "dispatch", "dispatcher",
+        "case", "cases", "issue", "issues", "problem", "problems", "report", "reported", "repair",
+        "repairs", "shop", "yard", "bay", "eta", "status", "priority", "stage", "load", "pickup",
+        "delivery", "jbs", "meijer", "broker", "opendeck", "empty", "standard", "normal", "high",
+        "medium", "low", "open", "closed", "done", "resolved", "assigned", "unassigned", "note",
+        "notes", "comment", "comments", "update", "updated", "call", "called", "calling", "check",
+        "checked", "checking", "wait", "waiting", "awaiting", "need", "needs", "needed", "please",
+        "help", "info", "information", "none", "null", "true", "false", "text", "msg", "work",
+        "working", "fix", "fixed", "broken", "send", "sent", "got", "get", "today", "yesterday",
+        "morning", "night", "tonight", "asap", "test", "testing", "tests", "tester", "dummy",
+        "sample", "example", "placeholder", "asdf", "qwerty", "fake", "debug", "temp", "n/a",
+    }
+
+    _AI_SYSTEM_KEYWORDS = (
+        ("cooling", "Cooling", {"coolant", "cool", "radiator", "overheat", "thermostat", "antifreeze", "waterpump", "fan", "fanclutch", "degas", "reservoir", "heater"}),
+        ("brakes", "Brakes", {"brake", "abs", "chamber", "slack", "adjust", "caliper", "rotor", "drum", "lining", "pad", "gladhand", "maxibrake"}),
+        ("air", "Air / Suspension", {"airbag", "airline", "compressor", "governor", "leveling", "suspension", "leaf", "spring", "bushing", "shock", "dryer", "purge"}),
+        ("electrical", "Electrical", {"battery", "alternator", "starter", "voltage", "volt", "crank", "solenoid", "wiring", "harness", "fuse", "relay", "dead", "ecm"}),
+        ("emissions", "DEF / Aftertreatment", {"def", "dpf", "regen", "scr", "nox", "egr", "aftertreatment", "soot", "derate", "doc", "dosing", "exhaust"}),
+        ("tires", "Tires & Wheels", {"tire", "steer", "blowout", "flat", "rim", "lug", "stud", "hub", "wheel", "seal", "bearing", "spindle", "align", "tread", "valve"}),
+        ("reefer", "Reefer Unit", {"thermoking", "carrier", "shutdown", "defrost", "freon", "refriger", "condenser", "evaporator", "micro", "temp"}),
+        ("fuel", "Fuel System", {"fuel", "injector", "primer", "priming", "separator", "gel"}),
+        ("drivetrain", "Drivetrain / Axles", {"transmission", "clutch", "driveshaft", "ujoint", "differential", "axle", "yoke", "flywheel", "pto", "gearbox"}),
+        ("body", "Body / Lights / DOT", {"windshield", "mirror", "headlight", "taillight", "marker", "clearance", "bumper", "door", "hinge", "latch", "mudflap", "wiper", "dot"}),
+        ("towing", "Towing / Roadside", {"tow", "wrecker", "winch", "lockout", "roadside"}),
+    )
+
+    _AI_CODE_RE = re.compile(r"\b(?:spn\s*[-]?\s*\d{2,5}|fmi\s*[-]?\s*\d{1,2}|[pbuc]\d{4}|[a-z]\d{2,3}|\d{3,5}-\d{1,3})\b", re.IGNORECASE)
+
+    def _ai_stem(word: str) -> str:
+        w = word.lower().strip("-_")
+        if len(w) <= 3 or any(ch.isdigit() for ch in w):
+            return w
+        if w.endswith("ies") and len(w) > 5:
+            return w[:-3] + "y"
+        if w.endswith("ing") and len(w) > 6:
+            stem = w[:-3]
+            return stem if stem[-1:] not in ("a", "e", "i", "o", "u") else w[:-3]
+        if w.endswith("ed") and len(w) > 5:
+            return w[:-2]
+        if w.endswith("es") and len(w) > 5:
+            return w[:-2]
+        if w.endswith("s") and not w.endswith("ss") and len(w) > 4:
+            return w[:-1]
+        return w
+
+    def _ai_extract_notes_text(c) -> str:
+        parts = []
+        for n in (c.get("workspace_notes") or []):
+            if isinstance(n, dict) and not n.get("deleted_at") and str(n.get("text") or "").strip():
+                parts.append(str(n["text"]))
+        raw_notes = c.get("notes")
+        if isinstance(raw_notes, str) and raw_notes.strip() and not raw_notes.lstrip().startswith("[{"):
+            parts.append(raw_notes)
+        return " ".join(parts)
+
+    def _ai_tokenize(text: str) -> set[str]:
+        tokens = set()
+        for raw in re.findall(r"[a-z0-9][a-z0-9_-]{1,}", (text or "").lower()):
+            if raw in _AI_NOISE_TERMS or raw.isdigit():
+                continue
+            stemmed = _ai_stem(raw)
+            if len(stemmed) < 3 or stemmed in _AI_NOISE_TERMS:
+                continue
+            tokens.add(stemmed)
+        return tokens
+
+    def _ai_extract_codes(text: str) -> set[str]:
+        return {
+            re.sub(r"[\s-]+", "", m.group(0)).upper()
+            for m in _AI_CODE_RE.finditer(text or "")
+        }
+
+    def _ai_detect_systems(raw_text: str, tokens: set[str]) -> tuple[set[str], dict[str, str]]:
+        raw_words = set(re.findall(r"[a-z0-9]+", (raw_text or "").lower()))
+        probe = raw_words | tokens
+        keys = set()
+        labels = {}
+        for key, label, kws in _AI_SYSTEM_KEYWORDS:
+            if probe & kws:
+                keys.add(key)
+                labels[key] = label
+        return keys, labels
+
+    def _ai_extract_signals(c) -> dict:
+        primary_text = " ".join(
+            str(c.get(k) or "") for k in ("issue_text", "description", "part_number", "location")
+        )
+        note_text = _ai_extract_notes_text(c)
+        full_text = f"{primary_text} {note_text}"
+        primary_tokens = _ai_tokenize(primary_text)
+        note_tokens = _ai_tokenize(note_text)
+        all_tokens = primary_tokens | note_tokens
+        codes = _ai_extract_codes(full_text)
+        systems, system_labels = _ai_detect_systems(full_text, all_tokens)
+        return {
+            "primary_tokens": primary_tokens,
+            "note_tokens": note_tokens,
+            "all_tokens": all_tokens,
+            "codes": codes,
+            "systems": systems,
+            "system_labels": system_labels,
+        }
+
     def _resolution_note(c):
         notes = [n for n in (c.get("workspace_notes") or []) if isinstance(n, dict) and not n.get("deleted_at") and str(n.get("text") or "").strip()]
         if notes:
-            return re.sub(r"\s+", " ", str(notes[-1]["text"])).strip()[:160]
+            txt = re.sub(r"\s+", " ", str(notes[-1]["text"])).strip()
+            return "" if txt.lower() in _IGNORED_SHOP_VALUES else txt[:160]
         for key in ("notes", "comments"):
-            txt = re.sub(r"\s+", " ", str(c.get(key) or "").strip())
-            if txt and txt.lower() not in _IGNORED_SHOP_VALUES:
+            val = c.get(key)
+            if not isinstance(val, str):
+                continue
+            txt = re.sub(r"\s+", " ", val.strip())
+            if txt and not txt.startswith("[{") and txt.lower() not in _IGNORED_SHOP_VALUES:
                 return txt[:160]
         return ""
 
@@ -997,23 +1114,29 @@ def register_workspace_routes(server):
                 return jsonify({"error": "Case not found."}), 404
 
             target_id = str(target.get("id") or "")
-            unit = str(target.get("unit_number") or "").strip()
+            raw_unit = str(target.get("unit_number") or "").strip()
+            target_is_test = server.is_history_test_case(target)
+            unit = "" if (target_is_test or raw_unit.lower() in _IGNORED_SHOP_VALUES) else raw_unit
             unit_norm = unit.lower()
             vtype = str(target.get("vehicle_type") or "").strip().lower()
             resolved_statuses = {"done", "resolved", "closed"}
             now_ct = chicago_now()
 
-            q_text = " ".join([
-                server._case_search_text(target),
-                str(target.get("location") or ""),
-                str(target.get("part_number") or ""),
-            ])
-            q_terms = server._terms(q_text)
+            q_sig = _ai_extract_signals(target)
+            has_signal = not target_is_test and bool(
+                q_sig["primary_tokens"] or q_sig["codes"] or q_sig["systems"] or len(q_sig["all_tokens"]) >= 2
+            )
 
-            all_cases = [c for c in server.load_cases() if isinstance(c, dict) and not server.is_testing(c)]
+            all_cases = [
+                c for c in server.load_cases()
+                if isinstance(c, dict)
+                and not server.is_testing(c)
+                and not server.is_history_test_case(c)
+            ]
+
+            candidates = []
             unit_cases = []
-            scored = []
-
+            doc_freq = {}
             for c in all_cases:
                 cid = str(c.get("id") or "")
                 if cid == target_id:
@@ -1022,41 +1145,89 @@ def register_workspace_routes(server):
                 same_unit = bool(unit_norm and c_unit.lower() == unit_norm)
                 if same_unit:
                     unit_cases.append(c)
+                if not has_signal:
+                    continue
+                c_sig = _ai_extract_signals(c)
+                if not (c_sig["all_tokens"] or c_sig["codes"] or c_sig["systems"]):
+                    continue
+                for tok in c_sig["all_tokens"]:
+                    doc_freq[tok] = doc_freq.get(tok, 0) + 1
+                candidates.append((c, same_unit, c_sig))
+
+            total_docs = max(1, len(candidates))
+
+            def _idf(tok: str) -> float:
+                df = doc_freq.get(tok, 0)
+                return math.log((total_docs + 1.5) / (df + 0.5)) + 0.35
+
+            q_weights = {}
+            for t in q_sig["all_tokens"]:
+                q_weights[t] = _idf(t) * (1.6 if t in q_sig["primary_tokens"] else 0.85)
+            q_norm = math.sqrt(sum(w * w for w in q_weights.values())) or 1.0
+
+            scored = []
+            for c, same_unit, c_sig in candidates:
+                overlap_tok = q_sig["all_tokens"] & c_sig["all_tokens"]
+                overlap_primary = q_sig["primary_tokens"] & c_sig["primary_tokens"]
+                overlap_codes = q_sig["codes"] & c_sig["codes"]
+                overlap_systems = q_sig["systems"] & c_sig["systems"]
+
+                passes_gate = bool(
+                    overlap_codes
+                    or len(overlap_tok) >= 2
+                    or (overlap_primary and overlap_systems)
+                    or (overlap_primary and len(q_sig["all_tokens"]) <= 2)
+                    or (same_unit and (overlap_tok or overlap_systems))
+                )
+                if not passes_gate:
+                    continue
+
+                c_weights = {}
+                for t in c_sig["all_tokens"]:
+                    c_weights[t] = _idf(t) * (1.6 if t in c_sig["primary_tokens"] else 0.85)
+                c_norm = math.sqrt(sum(w * w for w in c_weights.values())) or 1.0
+                dot = sum(q_weights.get(t, 0.0) * c_weights.get(t, 0.0) for t in overlap_tok)
+                cos_sim = dot / (q_norm * c_norm) if overlap_tok else 0.0
+
+                sem_sim = cos_sim
+                if overlap_codes:
+                    sem_sim += 0.34
+                if overlap_systems:
+                    sem_sim += 0.16 * min(2, len(overlap_systems)) / max(1, len(q_sig["systems"]))
+                sem_sim = min(0.99, sem_sim)
+
+                if sem_sim < 0.16 and not overlap_codes:
+                    continue
 
                 c_status = str(c.get("status") or "").strip().lower()
                 is_resolved = c_status in resolved_statuses or bool(c.get("closed_at"))
                 c_vtype = str(c.get("vehicle_type") or "").strip().lower()
-                c_terms = server._terms(server._case_search_text(c))
-                overlap = q_terms & c_terms if q_terms else set()
-                if not overlap and not (same_unit and c_terms):
-                    continue
-
-                base_sim = len(overlap) / (max(1, len(q_terms | c_terms)) ** 0.5) if (q_terms or c_terms) else 0.0
-                score = base_sim
-                if is_resolved:
-                    score += 0.28
-                if same_unit:
-                    score += 0.35
-                if vtype and c_vtype == vtype:
-                    score += 0.14
                 shop = _clean_shop(c.get("shop_info"))
+
+                rank_score = sem_sim
+                if is_resolved:
+                    rank_score += 0.14
+                if same_unit:
+                    rank_score += 0.18
+                if vtype and c_vtype == vtype:
+                    rank_score += 0.07
                 if shop:
-                    score += 0.12
+                    rank_score += 0.06
 
-                pct = (
-                    min(99, max(18, int(round((len(overlap) / max(1, min(len(q_terms), 5))) * 100))))
-                    if overlap
-                    else 38
-                )
-                scored.append((score, is_resolved, same_unit, pct, sorted(overlap)[:6], c, shop))
+                pct = min(99, max(24, int(round(sem_sim * 100))))
+                matched_tags = sorted(overlap_codes) + sorted(overlap_tok)[:max(0, 6 - len(overlap_codes))]
+                matched_sys_labels = [
+                    q_sig["system_labels"].get(k, k.title()) for k in sorted(overlap_systems)
+                ]
+                scored.append((rank_score, sem_sim, is_resolved, same_unit, pct, matched_tags[:6], matched_sys_labels, c, shop))
 
-            scored.sort(key=lambda x: (x[1], x[0]), reverse=True)
+            scored.sort(key=lambda x: (x[0], x[2], x[1]), reverse=True)
 
-            # Aggregate shop recommendations from matched fleet repairs and unit history
+            # Aggregate shop recommendations from genuinely matched fleet repairs
             shop_buckets = {}
             all_amounts = []
             seen_shop_cases = set()
-            for sc, is_res, same_u, _pct, _m, c, shop in scored[:45]:
+            for sc, _sem, is_res, same_u, _pct, _m, _sys, c, shop in scored[:40]:
                 cid = str(c.get("id") or "")
                 amt = _parse_amount(c.get("amount"))
                 if amt is not None and is_res:
@@ -1147,7 +1318,7 @@ def register_workspace_routes(server):
             }
 
             similar_cases = []
-            for sc, is_res, same_u, pct, matched, c, shop in scored[:6]:
+            for _sc, _sem, is_res, same_u, pct, matched, matched_sys, c, shop in scored[:6]:
                 amt = _parse_amount(c.get("amount"))
                 similar_cases.append({
                     "id": str(c.get("id") or ""),
@@ -1162,6 +1333,7 @@ def register_workspace_routes(server):
                     "closed_at": server.fmt_dt(c.get("closed_at")),
                     "agent": str(c.get("agent_name") or c.get("agent") or "Unassigned"),
                     "matched": matched,
+                    "matched_systems": matched_sys,
                     "match_pct": pct,
                     "same_unit": same_u,
                     "resolution_note": _resolution_note(c),
@@ -1177,31 +1349,44 @@ def register_workspace_routes(server):
                 }
 
             bullets = []
-            if suggested_shops:
-                top = suggested_shops[0]
-                bullets.append(
-                    f"Best historical shop candidate: {top['shop_name']} ({top['reason']})."
-                )
+            if not has_signal:
+                bullets.append("Test or placeholder text detected — add real mechanical symptoms, fault codes, or part names for AI matching.")
             else:
-                bullets.append("No previous shop matched these exact symptoms yet — check nearby preferred vendor.")
-            if cost_estimate:
-                bullets.append(
-                    f"Typical repair spend across {cost_estimate['count']} resolved match{'es' if cost_estimate['count'] != 1 else ''}: avg ${cost_estimate['avg']:,.0f} (${cost_estimate['min']:,.0f}–${cost_estimate['max']:,.0f})."
-                )
-            if unit_insights["recent_30d"] >= 1:
-                bullets.append(
-                    f"Repeat alert: Unit #{unit or '?'} had {unit_insights['recent_30d']} other breakdown(s) in the last 30 days — verify prior repair warranty."
-                )
-            elif similar_cases:
-                res_cnt = sum(1 for x in similar_cases if x["is_resolved"])
-                bullets.append(f"Found {len(similar_cases)} similar fleet case(s) ({res_cnt} resolved) to guide troubleshooting.")
+                if q_sig["system_labels"] or q_sig["codes"]:
+                    tags = ([f"Codes: {', '.join(sorted(q_sig['codes'])[:3])}"] if q_sig["codes"] else []) + (
+                        [f"Systems: {', '.join(sorted(q_sig['system_labels'].values())[:3])}"] if q_sig["system_labels"] else []
+                    )
+                    if tags:
+                        bullets.append("Detected triage signals — " + " · ".join(tags) + ".")
+                if suggested_shops:
+                    top = suggested_shops[0]
+                    bullets.append(
+                        f"Best historical shop candidate: {top['shop_name']} ({top['reason']})."
+                    )
+                else:
+                    bullets.append("No previous shop matched these exact symptoms yet — check nearby preferred vendor.")
+                if cost_estimate:
+                    bullets.append(
+                        f"Typical repair spend across {cost_estimate['count']} resolved match{'es' if cost_estimate['count'] != 1 else ''}: avg ${cost_estimate['avg']:,.0f} (${cost_estimate['min']:,.0f}–${cost_estimate['max']:,.0f})."
+                    )
+                if unit_insights["recent_30d"] >= 1:
+                    bullets.append(
+                        f"Repeat alert: Unit #{unit or '?'} had {unit_insights['recent_30d']} other breakdown(s) in the last 30 days — verify prior repair warranty."
+                    )
+                elif similar_cases:
+                    res_cnt = sum(1 for x in similar_cases if x["is_resolved"])
+                    bullets.append(f"Found {len(similar_cases)} verified fleet match{'es' if len(similar_cases) != 1 else ''} ({res_cnt} resolved) to guide troubleshooting.")
 
             triage = {
                 "headline": (
-                    f"Top match: {suggested_shops[0]['shop_name']}"
-                    if suggested_shops
-                    else f"{len(similar_cases)} similar fleet case(s) analyzed" if similar_cases else "Ready for triage"
+                    "Low-detail / test case" if not has_signal
+                    else f"Top match: {suggested_shops[0]['shop_name']}" if suggested_shops
+                    else f"{len(similar_cases)} verified fleet match{'es' if len(similar_cases) != 1 else ''}" if similar_cases
+                    else "No similar past cases yet"
                 ),
+                "detected_systems": sorted(q_sig["system_labels"].values()) if has_signal else [],
+                "detected_codes": sorted(q_sig["codes"])[:5] if has_signal else [],
+                "low_signal": not has_signal,
                 "bullets": bullets,
             }
 
@@ -1214,6 +1399,8 @@ def register_workspace_routes(server):
                         "equipment": vtype or "truck",
                         "issue": str(target.get("issue_text") or target.get("description") or "")[:350],
                         "location": str(target.get("location") or "")[:120],
+                        "detected_systems": triage["detected_systems"],
+                        "detected_codes": triage["detected_codes"],
                         "suggested_shops": suggested_shops[:3],
                         "cost_estimate": cost_estimate,
                         "unit_recent_30d": unit_insights["recent_30d"],
