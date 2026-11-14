@@ -160,3 +160,119 @@ def save_case_reads(user_id, updates: dict[str, str], data_dir: Path | None = No
         return merged
 
     return _mutate_user_prefs(user_id, _apply, data_dir=data_dir)
+
+
+_WORKSPACE_BOARD_BOOL_FIELDS = (
+    "background_alerts",
+    "alert_sound",
+    "ai_autocomplete",
+    "ai_tab_badge",
+)
+
+_WORKSPACE_TOOLBAR_KEYS = (
+    "priorities",
+    "agent_filter",
+    "my_cases",
+    "has_shop",
+    "unassigned",
+    "off_shift",
+    "export_csv",
+    "compact",
+    "refresh",
+)
+
+
+def _sanitize_saved_view_filters(raw_filters) -> dict:
+    f = raw_filters if isinstance(raw_filters, dict) else {}
+    prio = str(f.get("priority") or "all").strip().lower()
+    if prio not in ("all", "high", "medium", "low"):
+        prio = "all"
+    view_mode = str(f.get("view") or "board").strip().lower()
+    if view_mode not in ("board", "grid"):
+        view_mode = "board"
+    return {
+        "priority": prio,
+        "agent": str(f.get("agent") or "all").strip()[:64] or "all",
+        "my_cases": bool(f.get("my_cases", False)),
+        "has_shop": bool(f.get("has_shop", False)),
+        "unassigned": bool(f.get("unassigned", False)),
+        "hide_off_shift": bool(f.get("hide_off_shift", True)),
+        "query": str(f.get("query") or "")[:160],
+        "view": view_mode,
+        "compact": bool(f.get("compact", False)),
+    }
+
+
+def _sanitize_workspace_board_prefs(raw) -> dict:
+    src = raw if isinstance(raw, dict) else {}
+    prefs = {
+        key: bool(src.get(key, True))
+        for key in _WORKSPACE_BOARD_BOOL_FIELDS
+    }
+    raw_tb = src.get("toolbar_visibility")
+    tb = raw_tb if isinstance(raw_tb, dict) else {}
+    prefs["toolbar_visibility"] = {
+        key: bool(tb.get(key, True))
+        for key in _WORKSPACE_TOOLBAR_KEYS
+    }
+    views = []
+    seen_ids = set()
+    raw_views = src.get("saved_views")
+    if isinstance(raw_views, list):
+        for item in raw_views:
+            if not isinstance(item, dict):
+                continue
+            vid = "".join(ch for ch in str(item.get("id") or "").strip()[:48] if ch.isalnum() or ch in ("-", "_"))
+            name = " ".join(str(item.get("name") or "").split()).strip()[:48]
+            if not vid or not name or vid in seen_ids:
+                continue
+            seen_ids.add(vid)
+            entry = {
+                "id": vid,
+                "name": name,
+                "filters": _sanitize_saved_view_filters(item.get("filters")),
+            }
+            created_at = str(item.get("created_at") or "").strip()[:40]
+            if created_at:
+                entry["created_at"] = created_at
+            views.append(entry)
+            if len(views) >= 20:
+                break
+    prefs["saved_views"] = views
+    prefs["active_view_id"] = str(src.get("active_view_id") or "").strip()[:64]
+    return prefs
+
+
+def get_workspace_board_prefs(user_id, data_dir: Path | None = None) -> dict:
+    """Return validated Live Board workspace settings, toolbar layout, and saved views."""
+    raw = _read_user_prefs(user_id, data_dir=data_dir).get("workspace_board")
+    return _sanitize_workspace_board_prefs(raw)
+
+
+def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = None) -> dict:
+    """Atomically merge/update validated Live Board workspace settings and return stored copy."""
+    updates = payload if isinstance(payload, dict) else {}
+
+    def _apply(data):
+        if updates.get("reset") is True:
+            clean = _sanitize_workspace_board_prefs({})
+            data["workspace_board"] = clean
+            return clean
+        merged = _sanitize_workspace_board_prefs(data.get("workspace_board"))
+        for key in _WORKSPACE_BOARD_BOOL_FIELDS:
+            if key in updates:
+                merged[key] = bool(updates[key])
+        if isinstance(updates.get("toolbar_visibility"), dict):
+            tb_patch = updates["toolbar_visibility"]
+            for tk in _WORKSPACE_TOOLBAR_KEYS:
+                if tk in tb_patch:
+                    merged["toolbar_visibility"][tk] = bool(tb_patch[tk])
+        if "saved_views" in updates:
+            merged["saved_views"] = _sanitize_workspace_board_prefs({"saved_views": updates["saved_views"]})["saved_views"]
+        if "active_view_id" in updates:
+            merged["active_view_id"] = str(updates.get("active_view_id") or "").strip()[:64]
+        clean = _sanitize_workspace_board_prefs(merged)
+        data["workspace_board"] = clean
+        return clean
+
+    return _mutate_user_prefs(user_id, _apply, data_dir=data_dir)

@@ -32,8 +32,10 @@ from backend.storage.case_store import (
 from backend.storage.preference_store import (
     get_case_reads,
     get_quick_replies,
+    get_workspace_board_prefs,
     save_case_reads,
     save_quick_replies,
+    save_workspace_board_prefs,
 )
 from backend.storage.user_store import get_all_user_dicts, get_user
 
@@ -203,9 +205,11 @@ def register_workspace_routes(server):
         try:
             case_reads = get_case_reads(actor["id"], data_dir=_data_dir())
             quick_replies = get_quick_replies(actor["id"], data_dir=_data_dir())
+            workspace_prefs = get_workspace_board_prefs(actor["id"], data_dir=_data_dir())
         except Exception:
             case_reads = {}
             quick_replies = None
+            workspace_prefs = {}
         try:
             on_shift_state = shift_store.get_on_shift_state()
         except Exception:
@@ -245,6 +249,7 @@ def register_workspace_routes(server):
             "can_reassign_any": actor["role"] in ("developer", "super_admin"),
             "case_reads": case_reads,
             "quick_replies": quick_replies,
+            "workspace_prefs": workspace_prefs,
         })
 
     @app.route("/api/workspace/cases", methods=["POST"])
@@ -1688,6 +1693,125 @@ def register_workspace_routes(server):
             "skipped": skipped,
         })
 
+    @app.route("/api/workspace/preferences", methods=["GET", "PUT"])
+    def api_workspace_preferences():
+        """Read or update per-user Live Board UI, alerts, AI, toolbar & saved views preferences."""
+        if request.method == "GET":
+            actor, error = _workspace_actor_read()
+            if error:
+                return error
+            return jsonify({
+                "ok": True,
+                "preferences": get_workspace_board_prefs(actor["id"], data_dir=_data_dir()),
+            })
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid workspace preferences payload."}), 400
+        saved = save_workspace_board_prefs(actor["id"], data, data_dir=_data_dir())
+        return jsonify({
+            "ok": True,
+            "preferences": saved,
+        })
+
+    @app.route("/api/workspace/shops", methods=["GET"])
+    def api_workspace_shops():
+        """Return deduplicated repair shop directory from historical & active maintenance cases."""
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        q = re.sub(r"\s+", " ", str(request.args.get("q") or "").strip().lower())
+        q_terms = [t for t in q.split(" ") if t]
+        try:
+            limit = int(request.args.get("limit") or 80)
+        except ValueError:
+            limit = 80
+        limit = max(1, min(limit, 150))
+
+        buckets: dict[str, dict] = {}
+        for raw_case in server.load_cases():
+            c = normalize_case(raw_case)
+            if not is_maintenance_report(c) or server.is_history_test_case(c):
+                continue
+            shop = _clean_shop(c.get("shop_info") or c.get("dealer_shop"))
+            if not shop:
+                continue
+            canon = re.sub(r"[^a-z0-9]+", " ", shop.lower()).strip()
+            if not canon or canon in _IGNORED_SHOP_VALUES:
+                continue
+            bucket = buckets.setdefault(
+                canon,
+                {
+                    "shop_name": shop,
+                    "count": 0,
+                    "resolved_count": 0,
+                    "amounts": [],
+                    "last_used": "",
+                    "vehicle_types": [],
+                    "sample_units": [],
+                    "sample_issue": "",
+                },
+            )
+            bucket["count"] += 1
+            if len(shop) > len(bucket["shop_name"]):
+                bucket["shop_name"] = shop
+            status = str(c.get("status") or "").strip().lower()
+            if status in ("done", "closed", "resolved"):
+                bucket["resolved_count"] += 1
+            amt = _parse_amount(c.get("amount"))
+            if amt is not None:
+                bucket["amounts"].append(amt)
+            ts = str(c.get("closed_at") or c.get("updated_at") or c.get("reported_at") or c.get("opened_at") or "").strip()
+            if ts > bucket["last_used"]:
+                bucket["last_used"] = ts
+                issue_txt = re.sub(r"\s+", " ", str(c.get("issue_text") or c.get("description") or "").strip())
+                if issue_txt:
+                    bucket["sample_issue"] = issue_txt[:80]
+            vtype = str(c.get("vehicle_type") or "").strip().lower()
+            if vtype and vtype not in bucket["vehicle_types"] and len(bucket["vehicle_types"]) < 4:
+                bucket["vehicle_types"].append(vtype)
+            unit_num = str(c.get("unit_number") or "").strip()
+            if unit_num and unit_num not in bucket["sample_units"] and len(bucket["sample_units"]) < 3:
+                bucket["sample_units"].append(unit_num)
+            if not bucket["sample_issue"]:
+                issue_txt = re.sub(r"\s+", " ", str(c.get("issue_text") or c.get("description") or "").strip())
+                if issue_txt:
+                    bucket["sample_issue"] = issue_txt[:80]
+
+        results = []
+        for b in buckets.values():
+            hay = " ".join([
+                b["shop_name"].lower(),
+                b["sample_issue"].lower(),
+                " ".join(b["vehicle_types"]),
+                " ".join(b["sample_units"]).lower(),
+            ])
+            if q_terms and not all(term in hay for term in q_terms):
+                continue
+            amts = b["amounts"]
+            results.append({
+                "shop_name": b["shop_name"],
+                "count": b["count"],
+                "resolved_count": b["resolved_count"],
+                "avg_amount": round(sum(amts) / len(amts), 2) if amts else None,
+                "last_used": b["last_used"],
+                "vehicle_types": b["vehicle_types"],
+                "sample_units": b["sample_units"],
+                "sample_issue": b["sample_issue"],
+            })
+
+        results.sort(
+            key=lambda x: (x["resolved_count"] * 2 + x["count"], x["last_used"], len(x["shop_name"])),
+            reverse=True,
+        )
+        return jsonify({
+            "ok": True,
+            "shops": results[:limit],
+            "total": len(results),
+        })
+
     # Expose functions on `server` for backwards compatibility with callers/tests
     server._workspace_can_manage = _workspace_can_manage
     server._workspace_actor = _workspace_actor
@@ -1704,3 +1828,5 @@ def register_workspace_routes(server):
     server.api_workspace_presence = api_workspace_presence
     server.api_workspace_board = api_workspace_board
     server.api_workspace_case_ai_insights = api_workspace_case_ai_insights
+    server.api_workspace_preferences = api_workspace_preferences
+    server.api_workspace_shops = api_workspace_shops
