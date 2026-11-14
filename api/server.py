@@ -2661,9 +2661,26 @@ def api_workspace_board():
         version = after
     board.sort(key=lambda c: c.get("reported_at") or c.get("opened_at") or "", reverse=True)
     from backend.storage.case_store import workspace_revision
+    from backend.storage.user_store import get_all_user_dicts
+    # Resolve stored Telegram identities for board display; IDs remain internal.
+    def _agent_key(value):
+        raw = str(value or "").strip()
+        return str(int(raw)) if raw.isdecimal() else raw
+    roster_by_id = {_agent_key(u.get("id")): u for u in get_all_user_dicts()
+                    if isinstance(u, dict) and u.get("id") is not None}
     summaries = []
     for c in board:
         summary = serialize_case(c)
+        assigned = roster_by_id.get(_agent_key(c.get("agent_id")))
+        if assigned:
+            name = str(assigned.get("name") or "").strip()
+            if name and not name.isdecimal():
+                summary["agent"] = name
+            username = str(assigned.get("username") or "").strip().lstrip("@")
+            if username and not username.isdecimal():
+                summary["agent_username"] = username
+        elif str(summary.get("agent") or "").strip().isdecimal():
+            summary["agent"] = "Unknown agent"
         # Mobile drag-and-drop needs the same optimistic revision as Desktop.
         # The permission is checked again on the server for every write.
         summary["revision"] = workspace_revision(c)
