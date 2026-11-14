@@ -426,18 +426,26 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             if not row:
                 raise LookupError("Case not found.")
             case = json.loads(row["data_json"])
-            if payload["action"] not in ("reassign", "stage", "move", "rank") and not is_maintenance_report(case):
+            if payload["action"] not in ("reassign", "stage", "move", "rank", "set_test") and not is_maintenance_report(case):
                 raise LookupError("Maintenance report not found. Awaiting Telegram report.")
             action = payload["action"]
+            actor_role = str(actor.get("role") or "").lower()
+            is_dev = actor_role == "developer"
+            case_is_test = bool(case.get("is_test") or case.get("is_testing"))
+            if action == "set_test":
+                if not is_dev:
+                    raise PermissionError("Only developers can mark or unmark test cases.")
+            elif case_is_test and not is_dev:
+                raise PermissionError("This case is marked as Test and is read-only for non-developers.")
             collaboration = action in ("note", "note_edit", "note_delete", "note_pin")
             owns_unassigned = (not case.get("agent_id")) and str(case.get("created_by_id") or "") == str(actor["id"])
-            if not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]) and not owns_unassigned:
+            if action != "set_test" and not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]) and not owns_unassigned:
                 raise PermissionError("Only the assigned agent or a manager can update this case.")
             if payload["action"] == "close" and case.get("status") == "done":
                 return case
             if payload["action"] == "reopen" and case.get("status") != "done" and not case.get("closed_at"):
                 return case
-            if payload.get("revision") != workspace_revision(case):
+            if action != "set_test" and payload.get("revision") != workspace_revision(case):
                 # Allow field-level atomic merge when editing non-overlapping fields, or fractional rank updates.
                 can_merge = False
                 if action == "rank" or payload.get("allow_concurrent_move"):
@@ -451,7 +459,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     )
                 if not can_merge:
                     raise ValueError("This report changed. Refresh its details before saving again.")
-            if action != "reopen" and (case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at")):
+            if action not in ("reopen", "set_test") and (case.get("status") not in ("open", "assigned", "reported") or case.get("closed_at")):
                 raise ValueError("This report is already closed.")
             if payload["action"] == "close":
                 _close_record(case)
@@ -479,6 +487,26 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     "to": "reported",
                     **({"closed_by": prev_closed_by} if prev_closed_by else {}),
                 })
+            elif action == "set_test":
+                next_test = bool(payload.get("is_test"))
+                prev_test = bool(case.get("is_test") or case.get("is_testing"))
+                case["is_test"] = next_test
+                case.pop("is_testing", None)
+                if next_test:
+                    case["test_marked_by_id"] = str(actor.get("id") or "")
+                    case["test_marked_by_name"] = actor.get("name") or "Developer"
+                    case["test_marked_at"] = now
+                else:
+                    case["test_marked_by_id"] = ""
+                    case["test_marked_by_name"] = ""
+                    case["test_marked_at"] = None
+                if next_test != prev_test:
+                    case.setdefault("workspace_history", []).append({
+                        "action": "test_marked" if next_test else "test_unmarked",
+                        "author": actor["name"],
+                        "author_id": str(actor["id"]),
+                        "created_at": now,
+                    })
             elif action == "rank":
                 case["board_rank"] = float(payload.get("board_rank") or 0.0)
             elif action == "note":
@@ -643,7 +671,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                         if report_key in case["report_data"]:
                             case["report_data"][report_key] = value
             case["updated_at"] = now
-            if action not in ("reassign", "stage", "move", "rank", "reopen", "note", "note_edit", "note_delete", "note_pin"):
+            if action not in ("reassign", "stage", "move", "rank", "reopen", "note", "note_edit", "note_delete", "note_pin", "set_test"):
                 history_entry = {
                     "action": action, "author": actor["name"], "created_at": now,
                     "fields": sorted(payload.get("fields", {})) if action == "edit" else [],
@@ -1048,6 +1076,8 @@ def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None, 
         case = json.loads(row["data_json"]) if row else None
         if not case or not is_maintenance_report(case):
             raise LookupError("Case not found.")
+        if bool(case.get("is_test") or case.get("is_testing")) and str(actor.get("role") or "").lower() != "developer":
+            raise PermissionError("This case is marked as Test and is read-only for non-developers.")
         items = case.setdefault("workspace_attachments", [])
         if rename_id:
             target = next((x for x in items if x.get("id") == rename_id), None)
@@ -1120,6 +1150,8 @@ def workspace_telegram_media_remove(actor, case_id: str, index: int):
         case = json.loads(row["data_json"]) if row else None
         if not case or not is_maintenance_report(case):
             raise LookupError("Case not found.")
+        if bool(case.get("is_test") or case.get("is_testing")) and str(actor.get("role") or "").lower() != "developer":
+            raise PermissionError("This case is marked as Test and is read-only for non-developers.")
         if actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]):
             raise PermissionError("You cannot manage this case.")
         media = case.get("media") or []

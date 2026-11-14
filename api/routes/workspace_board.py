@@ -19,7 +19,7 @@ from werkzeug.utils import secure_filename
 
 from backend.core.app_time import chicago_date_str, chicago_now, chicago_timestamp, utc_now
 from backend.core.case_snapshot import normalize as normalize_case
-from backend.storage import case_store, db as kurtex_db
+from backend.storage import case_store, db as kurtex_db, shift_store
 from backend.storage.board_order import OrderConflict, read_order, save_order
 from backend.storage.board_presence import heartbeat, snapshot
 from backend.storage.case_store import (
@@ -64,8 +64,11 @@ def register_workspace_routes(server):
         return server.DATA_DIR
 
     def _workspace_can_manage(case, user):
+        role = server._website_role(user.get("role"))
+        if bool(case.get("is_test") or case.get("is_testing")) and role != "developer":
+            return False
         return (
-            server._website_role(user.get("role")) in ("developer", "super_admin")
+            role in ("developer", "super_admin")
             or bool(user.get("id") and str(case.get("agent_id")) == str(user["id"]))
             or bool(
                 user.get("id")
@@ -197,8 +200,38 @@ def register_workspace_routes(server):
         except Exception:
             case_reads = {}
             quick_replies = None
+        try:
+            on_shift_state = shift_store.get_on_shift_state()
+        except Exception:
+            on_shift_state = {}
+        on_duty_set = {str(uid) for uid in (on_shift_state.get("on_duty_user_ids") or [])}
+        active_shifts = [
+            {
+                "id": str(s.get("id") or ""),
+                "name": str(s.get("name") or ""),
+                "start_time": str(s.get("start_time") or ""),
+                "end_time": str(s.get("end_time") or ""),
+            }
+            for s in (on_shift_state.get("active_shifts") or [])
+            if isinstance(s, dict)
+        ]
+        user_shift_names: dict[str, list[str]] = {}
+        for s in (on_shift_state.get("active_shifts") or []):
+            if not isinstance(s, dict):
+                continue
+            sname = str(s.get("name") or "").strip()
+            for uid in (s.get("user_ids") or []):
+                if sname:
+                    user_shift_names.setdefault(str(uid), []).append(sname)
+        for a in agents:
+            uid = str(a.get("id") or "")
+            a["on_duty"] = uid in on_duty_set
+            a["shift_names"] = user_shift_names.get(uid, [])
         return jsonify({
             "agents": agents,
+            "has_configured_shifts": bool(on_shift_state.get("has_configured_shifts")),
+            "using_shift_fallback": bool(on_shift_state.get("using_fallback", True)),
+            "active_shifts": active_shifts,
             "current_user_id": actor["id"],
             "current_user_name": actor.get("name") or actor.get("first_name") or actor.get("username") or "",
             "current_user_role": actor.get("role", "agent"),
@@ -321,9 +354,10 @@ def register_workspace_routes(server):
                     "stage",
                     "move",
                     "rank",
+                    "set_test",
                 ):
                     raise ValueError("Choose a valid report action.")
-                payload = {"action": action, "revision": text("revision", action != "rank", 64)}
+                payload = {"action": action, "revision": text("revision", action not in ("rank", "set_test"), 64)}
 
                 def _opt_rank():
                     raw_rank = data.get("board_rank")
@@ -341,6 +375,12 @@ def register_workspace_routes(server):
                     if rank_val is None:
                         raise ValueError("Choose a valid card position.")
                     payload["board_rank"] = rank_val
+                elif action == "set_test":
+                    if str(actor.get("role") or "").lower() != "developer":
+                        raise PermissionError("Only developers can mark or unmark test cases.")
+                    if type(data.get("is_test")) is not bool:
+                        raise ValueError("Choose whether to mark this case as a test.")
+                    payload["is_test"] = data["is_test"]
                 elif action in ("note", "note_edit", "note_delete", "note_pin"):
                     if action in ("note", "note_edit"):
                         payload["text"] = text("text", False, 4000)
@@ -454,10 +494,12 @@ def register_workspace_routes(server):
                         if key in ("description", "issue_text") and not value.strip():
                             raise ValueError("The issue and description cannot be empty.")
                         if (
-                            key in ("unit_number", "report_driver", "group_name", "shop_info", "part_number")
+                            key in ("unit_number", "report_driver", "group_name", "part_number")
                             and len(value.strip()) > 200
                         ):
                             raise ValueError("The " + key.replace("_", " ") + " field is too long.")
+                        if key == "shop_info" and len(value.strip()) > 1000:
+                            raise ValueError("The shop info field is too long.")
                     if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "critical", "normal"):
                         raise ValueError("Choose a valid priority.")
                     if "vehicle_type" in fields and fields["vehicle_type"] not in ("truck", "trailer", "reefer", ""):
@@ -612,6 +654,12 @@ def register_workspace_routes(server):
                 )
                 return jsonify({"ok": True, "attachment": updated})
             case, item = workspace_attachment_lookup(case_id, attachment_id)
+            if (
+                request.method == "DELETE"
+                and bool(case.get("is_test") or case.get("is_testing"))
+                and str(actor.get("role") or "").lower() != "developer"
+            ):
+                return jsonify({"error": "This case is marked as Test and is read-only for non-developers."}), 403
             if (
                 request.method == "DELETE"
                 and actor["role"] not in ("developer", "super_admin")
@@ -825,6 +873,7 @@ def register_workspace_routes(server):
             summary["revision"] = workspace_revision(c)
             summary["can_manage"] = _workspace_can_manage(c, actor)
             summary["can_reassign"] = summary["can_manage"]
+            summary["can_comment"] = (not summary.get("is_test")) or (str(actor.get("role") or "").lower() == "developer")
             active_notes = [
                 n
                 for n in (c.get("workspace_notes") or [])
@@ -883,7 +932,6 @@ def register_workspace_routes(server):
                             and c.get("status") == "reported"
                             and not c.get("closed_at")
                             and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
-                            and not server.is_testing(c)
                         )
                         if active_board_item:
                             upserted.append(_summarize_board_case(c, roster_by_id))
@@ -905,7 +953,7 @@ def register_workspace_routes(server):
             ):
                 g.case_data_stale = False
                 rows = case_store.get_workspace_board_cases("2026-10-12")
-                return [normalize_case(c) for c in rows if not server.is_testing(c)]
+                return [normalize_case(c) for c in rows]
             cases = server.load_cases()
             return [
                 c
@@ -914,7 +962,6 @@ def register_workspace_routes(server):
                 and c.get("status") == "reported"
                 and not c.get("closed_at")
                 and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
-                and not server.is_testing(c)
             ]
 
         board = _read_board_cases()

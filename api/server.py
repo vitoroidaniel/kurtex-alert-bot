@@ -219,9 +219,9 @@ _TEST_VALUE_RE = re.compile(
 
 
 def is_testing(c):
-    # Testing tab/filter removed: cases from testing groups are no longer
-    # excluded from stats вЂ” they now count as normal active cases.
-    return False
+    if not isinstance(c, dict):
+        return False
+    return bool(c.get("is_test") or c.get("is_testing"))
 
 
 def is_history_test_case(c):
@@ -280,6 +280,7 @@ def serialize_case(c):
             "attachment_count": len(c.get("media") or []) + len(c.get("workspace_attachments") or []),
             "status":      c.get("status") or "open",
             "source":      c.get("source") or "telegram",
+            "is_test":     bool(c.get("is_test") or c.get("is_testing")),
             "closed_in_workspace": any(isinstance(h,dict) and h.get("action")=="close" for h in (c.get("workspace_history") or [])),
             "opened":      fmt_dt(c.get("opened_at")),
             "closed":      fmt_dt(c.get("closed_at")),
@@ -2304,7 +2305,8 @@ def api_cases():
             cases = [c for c in cases if is_maintenance_report(c) and not c.get("closed_at")
                      and c.get("status") == "reported"
                      and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"]
-        if f != "testing":
+        include_test = request.args.get("include_test") == "1"
+        if f != "testing" and not (include_test and not search and f in ("workspace", "workspace_closed")):
             cases = [c for c in cases if not is_testing(c)]
         if f in {"home_reported", "home_resolved", "home_attention"}:
             if "cases" not in _current_allowed_pages():
@@ -2757,10 +2759,14 @@ def api_case_detail():
                     "workspace_notes": _normalize_case_notes(c.get("workspace_notes") or []),
                     "workspace_attachments": c.get("workspace_attachments") or [],
                     "workspace_history": c.get("workspace_history") or [],
+                    "is_test": bool(c.get("is_test") or c.get("is_testing")),
+                    "test_marked_by_name": c.get("test_marked_by_name") or "",
+                    "test_marked_at": fmt_dt(c.get("test_marked_at")),
+                    "can_toggle_test": _current_viewer_role(session["user"]) == "developer",
                     "can_manage": _workspace_can_manage(c, session["user"]),
-                    "can_comment": True,
+                    "can_comment": (not bool(c.get("is_test") or c.get("is_testing"))) or (_current_viewer_role(session["user"]) == "developer"),
                     "can_pin": _workspace_can_manage(c, session["user"]),
-                    "can_moderate": _current_viewer_role(session["user"]) in ("developer", "super_admin"),
+                    "can_moderate": (_current_viewer_role(session["user"]) in ("developer", "super_admin")) and ((not bool(c.get("is_test") or c.get("is_testing"))) or (_current_viewer_role(session["user"]) == "developer")),
                     "viewer_role": _current_viewer_role(session["user"]),
                     "viewer_id": str(session["user"]["id"]),
                 })
