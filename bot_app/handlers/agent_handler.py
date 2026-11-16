@@ -57,9 +57,14 @@ def _fmt_dt(iso) -> str:
         return str(iso)[:16]
 
 
+def _inactive_bot_case_text(case: dict | None) -> str:
+    if case and case.get("status") == "reported":
+        return "This case was already reported and moved to Live Board."
+    return "This case is no longer active."
+
+
 def _active_case_text(case: dict, index: int | None = None, total: int | None = None) -> str:
-    status = case.get("status", "assigned")
-    badge = "📋 <b>Reported Case</b>" if status == "reported" else "⏳ <b>Current Case</b>"
+    badge = "⏳ <b>Current Case</b>"
     if index is not None and total is not None:
         badge = f"{badge} ({index}/{total})"
     opened = _fmt_dt(case.get("opened_at"))
@@ -76,11 +81,6 @@ def _active_case_text(case: dict, index: int | None = None, total: int | None = 
 
 
 def _active_case_keyboard(case_id: str, status: str = "assigned") -> InlineKeyboardMarkup:
-    if status == "reported":
-        return InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{case_id}"),
-            InlineKeyboardButton("🔁 Reassign", callback_data=f"reassign_{case_id}"),
-        ]])
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Solve",    callback_data=f"close_ask|{case_id}"),
         InlineKeyboardButton("📋 Report",   callback_data=f"solve|{case_id}"),
@@ -108,15 +108,6 @@ def _mycases_nav_keyboard(
     if nav:
         rows.append(nav)
 
-    def _fbtn(key: str, label: str) -> InlineKeyboardButton:
-        prefix = "• " if flt == key else ""
-        return InlineKeyboardButton(f"{prefix}{label}", callback_data=f"mycases_page|{key}|0")
-
-    rows.append([
-        _fbtn("all", f"All ({counts['total']})"),
-        _fbtn("assigned", f"Non-Rep ({counts['assigned']})"),
-        _fbtn("reported", f"Reported ({counts['reported']})"),
-    ])
     toggle_btn = (
         InlineKeyboardButton("🗂 Card View", callback_data=f"mycases_view|cards|{flt}|0")
         if view == "compact"
@@ -136,23 +127,21 @@ def _compact_mycases_payload(
     counts: dict,
     batch: list[dict],
 ) -> tuple[str, InlineKeyboardMarkup]:
-    label_map = {"all": "All Active", "assigned": "Non-Reported", "reported": "Reported"}
-    filtered_total = counts["total"] if flt == "all" else counts[flt]
+    filtered_total = counts["total"]
     offset = page * COMPACT_CASES_PER_PAGE
     lines = [
-        f"📋 <b>Your {label_map[flt]} Cases (Compact)</b> — Page {page + 1}/{total_pages}",
-        f"Total: <b>{counts['total']}</b> ({counts['assigned']} non-reported · {counts['reported']} reported) · Pick a # to open:",
+        f"📋 <b>Your Active Cases (Compact)</b> — Page {page + 1}/{total_pages}",
+        f"Total: <b>{counts['total']}</b> · Pick a # to open:",
         "",
     ]
     pick_buttons: list[InlineKeyboardButton] = []
     for pos, case in enumerate(batch, start=1):
         global_num = offset + pos
-        icon = "📋" if case.get("status") == "reported" else "⏳"
         age = format_age_short(case.get("opened_at"))
         age_part = f" · {esc_html(age)}" if age else ""
         issue = (case.get("description") or "—").replace("\n", " ")[:48]
         lines.append(
-            f"<b>{global_num}.</b> {icon} <b>{esc_html(case.get('group_name'))}</b> — "
+            f"<b>{global_num}.</b> ⏳ <b>{esc_html(case.get('group_name'))}</b> — "
             f"{esc_html(case.get('driver_name'))}{age_part}\n"
             f"     <i>{esc_html(issue)}</i>"
         )
@@ -173,7 +162,7 @@ async def _send_mycases_page(
     *,
     edit_query=None,
 ) -> None:
-    if flt not in ("all", "assigned", "reported"):
+    if flt not in ("all", "assigned"):
         flt = "all"
 
     view = "compact" if ctx.user_data.get("mycases_view") == "compact" else "cards"
@@ -210,13 +199,12 @@ async def _send_mycases_page(
                 ctx.user_data["mycases_msg_ids"] = [msg.message_id] if msg else []
             return
 
-        filtered_total = counts["total"] if flt == "all" else counts[flt]
+        filtered_total = counts["total"]
         offset = page * CASES_PER_PAGE
         sent_ids: list[int] = []
-        label_map = {"all": "All Active", "assigned": "Non-Reported", "reported": "Reported"}
         header = (
-            f"📋 <b>Your {label_map[flt]} Cases</b> — Page {page + 1}/{total_pages}\n"
-            f"Total: <b>{counts['total']}</b> ({counts['assigned']} non-reported · {counts['reported']} reported)"
+            f"📋 <b>Your Active Cases</b> — Page {page + 1}/{total_pages}\n"
+            f"Total: <b>{counts['total']}</b>"
         )
         hdr_msg = await safe_send_message(bot, chat_id, header)
         if hdr_msg:
@@ -232,7 +220,7 @@ async def _send_mycases_page(
             if msg:
                 sent_ids.append(msg.message_id)
 
-        footer = f"Showing {offset + 1}–{offset + len(batch)} of {filtered_total} · Filter or browse:"
+        footer = f"Showing {offset + 1}–{offset + len(batch)} of {filtered_total} · Browse:"
         ftr_msg = await safe_send_message(
             bot,
             chat_id,
@@ -298,9 +286,9 @@ async def cb_mycases_open(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     async with concurrent_ack(query):
         case_id = (query.data or "").split("|", 1)[1] if "|" in (query.data or "") else ""
         case = await get_case(case_id)
-        if not case or case.get("status") not in ("assigned", "reported"):
+        if not case or case.get("status") != "assigned":
             if getattr(query, "message", None):
-                await safe_reply_text(query.message, "This case is no longer active.", parse_mode=None)
+                await safe_reply_text(query.message, _inactive_bot_case_text(case), parse_mode=None)
             return
         bot = ctx.bot if ctx and getattr(ctx, "bot", None) else query.get_bot()
         sent = await safe_send_message(
@@ -364,7 +352,7 @@ async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     this_week = [c for c in all_cases if chicago_date_str(c.get("assigned_at")) >= w_str]
     done_all = [c for c in all_cases if c.get("status") == "done"]
     done_week = [c for c in this_week if c.get("status") == "done"]
-    active_cnt = sum(1 for c in all_cases if c.get("status") in ("assigned", "reported"))
+    active_cnt = sum(1 for c in all_cases if c.get("status") == "assigned")
 
     text = (
         f"📊 <b>Your Stats</b>\n\n"
@@ -500,14 +488,14 @@ async def cb_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         _clear_close_parts(ctx)
         case_id = query.data.split("|")[1]
         case = await get_case(case_id)
-        if case and case.get("status") in ("assigned", "reported"):
+        if case and case.get("status") == "assigned":
             await safe_edit_message_text(
                 query,
                 _active_case_text(case),
                 reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
             )
         else:
-            await safe_edit_message_text(query, "Case not found.", parse_mode=None, reply_markup=None)
+            await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
 
 
 async def cmd_solve_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -528,8 +516,8 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         case_id = query.data.split("|")[1]
         case = await get_case(case_id)
 
-        if not case or case.get("status") not in ("assigned", "reported"):
-            await safe_edit_message_text(query, "This case is no longer active.", parse_mode=None, reply_markup=None)
+        if not case or case.get("status") != "assigned":
+            await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
             return ConversationHandler.END
 
         _clear_close_parts(ctx)
@@ -554,9 +542,9 @@ async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     async with concurrent_ack(query):
         case_id = query.data.split("|", 1)[1]
         case = await get_case(case_id)
-        if not case or case.get("status") not in ("assigned", "reported"):
+        if not case or case.get("status") != "assigned":
             _clear_close_parts(ctx)
-            await safe_edit_message_text(query, "This case is no longer active.", parse_mode=None, reply_markup=None)
+            await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
             return
         ctx.user_data.pop("report_awaiting", None)
         ctx.user_data["close_parts_case_id"] = case_id
@@ -593,9 +581,9 @@ async def _finish_close(
 ):
     """Persist close and confirm completion cleanly without extra navigation buttons."""
     case = await get_case(case_id)
-    if not case or case.get("status") not in ("assigned", "reported"):
+    if not case or case.get("status") != "assigned":
         _clear_close_parts(ctx)
-        message = "This case is no longer active."
+        message = _inactive_bot_case_text(case)
         if getattr(update, "callback_query", None):
             await safe_edit_message_text(update.callback_query, message, parse_mode=None, reply_markup=None)
         else:
@@ -700,14 +688,14 @@ async def cb_close_parts_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         _clear_close_parts(ctx)
         case_id = query.data.split("|", 1)[1]
         case = await get_case(case_id)
-        if case and case.get("status") in ("assigned", "reported"):
+        if case and case.get("status") == "assigned":
             await safe_edit_message_text(
                 query,
                 _active_case_text(case),
                 reply_markup=_active_case_keyboard(case_id, case.get("status", "assigned")),
             )
         else:
-            await safe_edit_message_text(query, "This case is no longer active.", parse_mode=None, reply_markup=None)
+            await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
 
 
 async def recv_close_parts_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -747,14 +735,14 @@ async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         _clear_close_parts(ctx)
         case_id = query.data.split("|")[1]
         case = await get_case(case_id)
-        if case and case.get("status") in ("assigned", "reported"):
+        if case and case.get("status") == "assigned":
             await safe_edit_message_text(
                 query,
                 _active_case_text(case),
                 reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
             )
         else:
-            await safe_edit_message_text(query, "Case not found.", parse_mode=None, reply_markup=None)
+            await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
 
 
 # ── /done ─────────────────────────────────────────────────────────────────────
@@ -827,14 +815,14 @@ async def cb_delete_keep(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     async with concurrent_ack(query):
         case_id = query.data.split("|")[1]
         case = await get_case(case_id)
-        if case and case.get("status") in ("assigned", "reported"):
+        if case and case.get("status") == "assigned":
             await safe_edit_message_text(
                 query,
                 _active_case_text(case),
                 reply_markup=_active_case_keyboard(case["id"], case.get("status", "assigned")),
             )
         else:
-            await safe_edit_message_text(query, "Case not found.", parse_mode=None, reply_markup=None)
+            await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
 
 
 def get_solve_conversation():

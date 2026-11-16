@@ -198,8 +198,13 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         case_id = query.data.split("|")[1]
 
         case = await async_get_case(case_id)
-        if not case or case.get("status") not in ("assigned", "reported"):
-            await safe_edit_message_text(query, "This case is no longer active.", parse_mode=None, reply_markup=None)
+        if not case or case.get("status") != "assigned":
+            msg = (
+                "This case was already reported and moved to Live Board."
+                if case and case.get("status") == "reported"
+                else "This case is no longer active."
+            )
+            await safe_edit_message_text(query, msg, parse_mode=None, reply_markup=None)
             return ConversationHandler.END
 
         existing_case_id = ctx.user_data.get("report_case_id")
@@ -248,7 +253,7 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
 
         case = await async_get_case(report_case_id)
-        if not case or case.get("status") not in ("assigned", "reported"):
+        if not case or case.get("status") != "assigned":
             await _missing_report_session(query)
             return ConversationHandler.END
 

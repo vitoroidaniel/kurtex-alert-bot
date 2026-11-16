@@ -390,7 +390,7 @@ def close_case(
     closed_by_id=None,
     closed_by_name: Optional[str] = None,
 ) -> Optional[dict]:
-    """Close atomically, retaining explicitly reported replaced part numbers and syncing Live Board Done history."""
+    """Close atomically, retaining explicitly reported replaced part numbers."""
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
         if not row:
@@ -417,15 +417,6 @@ def close_case(
             case["closed_by_id"] = actor_id
         if not case.get("closed_by_name"):
             case["closed_by_name"] = actor_name
-        if is_maintenance_report(case) and (chicago_date_str(case.get("reported_at")) or "") >= "2026-10-12":
-            case.setdefault("workspace_history", []).append({
-                "action": "close",
-                "author": actor_name,
-                "author_id": str(actor_id) if actor_id is not None else "",
-                "source": "telegram",
-                "created_at": case.get("closed_at") or now_iso(),
-                "fields": [],
-            })
         _upsert_case_row(
             conn,
             case,
@@ -885,16 +876,11 @@ def get_active_cases_for_agent(
     limit: Optional[int] = None,
     offset: int = 0,
 ) -> list[dict]:
-    """Indexed lookup of active cases for one agent (zero closed-history scan)."""
-    if status_filter == "assigned":
-        statuses = ("assigned",)
-    elif status_filter == "reported":
-        statuses = ("reported",)
-    else:
-        statuses = ("assigned", "reported")
-    placeholders = ",".join("?" * len(statuses))
-    sql = f"SELECT data_json FROM cases WHERE agent_id=? AND status IN ({placeholders}) ORDER BY opened_at DESC"
-    params: list = [int(agent_id), *statuses]
+    """Indexed lookup of active unassigned-report cases for Telegram bot (reported cases live only on Live Board)."""
+    if status_filter == "reported":
+        return []
+    sql = "SELECT data_json FROM cases WHERE agent_id=? AND status='assigned' ORDER BY opened_at DESC"
+    params: list = [int(agent_id)]
     if limit is not None:
         sql += " LIMIT ? OFFSET ?"
         params.extend([int(limit), max(0, int(offset))])
@@ -904,16 +890,14 @@ def get_active_cases_for_agent(
 
 
 def count_active_cases_for_agent(agent_id: int) -> dict[str, int]:
+    """Return Telegram bot active case counts (reported cases live only on Live Board)."""
     with db.read_conn(_storage_dir()) as conn:
-        rows = conn.execute(
-            "SELECT status, COUNT(*) AS cnt FROM cases WHERE agent_id=? AND status IN ('assigned', 'reported') GROUP BY status",
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM cases WHERE agent_id=? AND status='assigned'",
             (int(agent_id),),
-        ).fetchall()
-    counts = {"assigned": 0, "reported": 0}
-    for r in rows:
-        counts[r["status"]] = int(r["cnt"])
-    counts["total"] = counts["assigned"] + counts["reported"]
-    return counts
+        ).fetchone()
+    assigned_cnt = int(row["cnt"]) if row else 0
+    return {"assigned": assigned_cnt, "reported": 0, "total": assigned_cnt}
 
 
 def get_agent_cases_page_data(
@@ -922,35 +906,26 @@ def get_agent_cases_page_data(
     page: int = 0,
     per_page: int = 5,
 ) -> tuple[dict[str, int], str, int, int, list[dict]]:
-    """Fetch counts + paginated active cases for /mycases in one SQLite read."""
-    flt = status_filter if status_filter in ("assigned", "reported") else "all"
+    """Fetch counts + paginated Telegram bot active cases (status='assigned' only)."""
+    flt = "assigned" if status_filter == "assigned" else "all"
     per_page = max(1, int(per_page))
     with db.read_conn(_storage_dir()) as conn:
-        rows = conn.execute(
-            "SELECT status, COUNT(*) AS cnt FROM cases WHERE agent_id=? AND status IN ('assigned', 'reported') GROUP BY status",
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM cases WHERE agent_id=? AND status='assigned'",
             (int(agent_id),),
-        ).fetchall()
-        counts = {"assigned": 0, "reported": 0}
-        for r in rows:
-            counts[r["status"]] = int(r["cnt"])
-        counts["total"] = counts["assigned"] + counts["reported"]
+        ).fetchone()
+        assigned_cnt = int(row["cnt"]) if row else 0
+        counts = {"assigned": assigned_cnt, "reported": 0, "total": assigned_cnt}
         if counts["total"] == 0:
             return counts, flt, 1, 0, []
 
-        filtered_total = counts["total"] if flt == "all" else counts[flt]
-        if filtered_total == 0:
-            flt = "all"
-            filtered_total = counts["total"]
-
-        total_pages = max(1, ((filtered_total - 1) // per_page) + 1)
+        total_pages = max(1, ((assigned_cnt - 1) // per_page) + 1)
         clamped_page = max(0, min(int(page), total_pages - 1))
         offset = clamped_page * per_page
 
-        statuses = ("assigned", "reported") if flt == "all" else (flt,)
-        placeholders = ",".join("?" * len(statuses))
         batch_rows = conn.execute(
-            f"SELECT data_json FROM cases WHERE agent_id=? AND status IN ({placeholders}) ORDER BY opened_at DESC LIMIT ? OFFSET ?",
-            [int(agent_id), *statuses, per_page, offset],
+            "SELECT data_json FROM cases WHERE agent_id=? AND status='assigned' ORDER BY opened_at DESC LIMIT ? OFFSET ?",
+            [int(agent_id), per_page, offset],
         ).fetchall()
     return counts, flt, total_pages, clamped_page, [json.loads(r["data_json"]) for r in batch_rows]
 
@@ -977,9 +952,10 @@ def get_case_or_prefix(case_id: str) -> tuple[Optional[dict], bool]:
 
 
 def get_active_case_for_agent(agent_id: int) -> Optional[dict]:
+    """Return latest un-reported active case for an agent in Telegram bot."""
     with db.read_conn(_storage_dir()) as conn:
         row = conn.execute(
-            "SELECT data_json FROM cases WHERE agent_id=? AND status IN ('assigned', 'reported') ORDER BY rowid DESC LIMIT 1",
+            "SELECT data_json FROM cases WHERE agent_id=? AND status='assigned' ORDER BY rowid DESC LIMIT 1",
             (int(agent_id),),
         ).fetchone()
     return json.loads(row["data_json"]) if row else None

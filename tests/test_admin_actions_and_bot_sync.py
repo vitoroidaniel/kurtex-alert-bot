@@ -48,7 +48,7 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             sess["user"] = {"id": user["id"], "name": user["name"], "role": user["role"]}
             sess["workspace_csrf"] = "test-csrf"
 
-    def test_telegram_close_reported_case_moves_to_live_board_done(self):
+    def test_reported_case_hidden_from_telegram_bot_and_close_does_not_sync_done(self):
         created = case_store.workspace_write(
             self.manager,
             {
@@ -76,6 +76,24 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             }
             case_store._upsert_case_row(conn, alert_only, event_type="created")
 
+        # Reported case is visible on Live Board, but hidden from Telegram bot /mycases & active counts.
+        bot_active = case_store.get_active_cases_for_agent(self.agent["id"])
+        self.assertEqual([c["id"] for c in bot_active], ["ALERT-702"])
+        self.assertEqual(case_store.get_active_cases_for_agent(self.agent["id"], status_filter="reported"), [])
+        self.assertEqual(case_store.count_active_cases_for_agent(self.agent["id"]), {"assigned": 1, "reported": 0, "total": 1})
+        counts, flt, total_pages, page, batch = case_store.get_agent_cases_page_data(self.agent["id"], status_filter="reported")
+        self.assertEqual(counts["total"], 1)
+        self.assertEqual([c["id"] for c in batch], ["ALERT-702"])
+        latest_bot = case_store.get_active_case_for_agent(self.agent["id"])
+        self.assertEqual(latest_bot["id"], "ALERT-702")
+
+        client = server.app.test_client()
+        self._auth_session(client, self.agent)
+        with patch.object(workspace_board, "get_user", return_value=self.agent):
+            board_ids = [c["full_id"] for c in client.get("/api/workspace/board").get_json()["cases"]]
+        self.assertIn("CASE-701", board_ids)
+
+        # Closing via case_store.close_case (Telegram close) does not sync a Live Board Done history entry.
         closed = case_store.close_case(
             created["id"],
             parts_replaced=True,
@@ -84,25 +102,11 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             closed_by_name=self.agent["name"],
         )
         self.assertEqual(closed["status"], "done")
-        self.assertEqual(closed["closed_by_name"], "Alex")
-        self.assertTrue(any(h.get("action") == "close" for h in closed.get("workspace_history", [])))
+        self.assertFalse(any(h.get("action") == "close" for h in closed.get("workspace_history", [])))
 
-        closed_alert = case_store.close_case(
-            "ALERT-702",
-            closed_by_id=self.agent["id"],
-            closed_by_name=self.agent["name"],
-        )
-        self.assertEqual(closed_alert["status"], "done")
-
-        client = server.app.test_client()
-        self._auth_session(client, self.agent)
         with patch.object(workspace_board, "get_user", return_value=self.agent):
-            board_ids = [c["full_id"] for c in client.get("/api/workspace/board").get_json()["cases"]]
             done_ids = [c["full_id"] for c in client.get("/api/cases?filter=workspace_closed").get_json()["cases"]]
-
-        self.assertNotIn("CASE-701", board_ids)
-        self.assertIn("CASE-701", done_ids)
-        self.assertNotIn("ALERT-702", done_ids)
+        self.assertNotIn("CASE-701", done_ids)
 
     def test_board_clear_keeps_cases_in_database_and_enforces_roles(self):
         c_active = case_store.workspace_write(
