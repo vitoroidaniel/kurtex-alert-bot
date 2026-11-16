@@ -23,6 +23,7 @@ from backend.core.app_time import (
     utc_now,
     week_start_str,
 )
+from backend.core.test_case_rules import TEST_LANE_STAGE, is_auto_test_report
 from backend.storage import db
 
 logger = logging.getLogger(__name__)
@@ -204,10 +205,13 @@ def create_case(
         "agent_id":        None,
         "agent_name":      None,
         "agent_username":  None,
+        "board_stage":     "",
         "status":          "open",
         "notes":           None,
         "report_msg_id":   None,
     }
+    if is_auto_test_report(case):
+        case["board_stage"] = TEST_LANE_STAGE
     with db.write_tx(_storage_dir()) as conn:
         _upsert_case_row(conn, case)
     logger.info("Case %s created", case_id)
@@ -295,6 +299,8 @@ def save_maintenance_report(case_id: str, data: dict, report_text: str, media: l
             case["status"] = "reported"
             if not case.get("notes"):
                 case["notes"] = "case reported"
+            if not case.get("board_stage") and not case.get("test_lane_overridden") and is_auto_test_report(case):
+                case["board_stage"] = TEST_LANE_STAGE
         _upsert_case_row(conn, case)
         return dict(case)
 
@@ -421,6 +427,15 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 "workspace_request_id": payload["request_id"],
                 "report_data":          {**payload, "load": payload.get("load_type", "")},
             }
+            if not case["board_stage"] and is_auto_test_report(case):
+                case["board_stage"] = TEST_LANE_STAGE
+                case.setdefault("workspace_history", []).append({
+                    "action": "stage",
+                    "author": "Auto-Sort",
+                    "from": "",
+                    "to": TEST_LANE_STAGE,
+                    "created_at": now,
+                })
         else:
             row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
             if not row:
@@ -630,6 +645,10 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 if payload["action"] == "move" and (case.get("board_stage") or "") != payload["stage"]:
                     old_stage = case.get("board_stage") or ""
                     case["board_stage"] = payload["stage"]
+                    if old_stage == TEST_LANE_STAGE and payload["stage"] != TEST_LANE_STAGE:
+                        case["test_lane_overridden"] = True
+                    elif payload["stage"] == TEST_LANE_STAGE:
+                        case.pop("test_lane_overridden", None)
                     case.setdefault("workspace_history", []).append({
                         "action": "stage", "author": actor["name"],
                         "from": old_stage, "to": payload["stage"], "created_at": now,
@@ -639,6 +658,10 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 if payload.get("board_rank") is not None:
                     case["board_rank"] = float(payload["board_rank"])
                 case["board_stage"] = payload["stage"]
+                if previous == TEST_LANE_STAGE and payload["stage"] != TEST_LANE_STAGE:
+                    case["test_lane_overridden"] = True
+                elif payload["stage"] == TEST_LANE_STAGE:
+                    case.pop("test_lane_overridden", None)
                 if previous != payload["stage"]:
                     case.setdefault("workspace_history", []).append({
                         "action": "stage", "author": actor["name"],
@@ -670,6 +693,19 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                         report_key = {"report_driver": "driver", "load_type": "load", "group_name": "group"}.get(key, key)
                         if report_key in case["report_data"]:
                             case["report_data"][report_key] = value
+                if (
+                    not (case.get("board_stage") or "")
+                    and not case.get("test_lane_overridden")
+                    and is_auto_test_report(case)
+                ):
+                    case["board_stage"] = TEST_LANE_STAGE
+                    case.setdefault("workspace_history", []).append({
+                        "action": "stage",
+                        "author": "Auto-Sort",
+                        "from": "",
+                        "to": TEST_LANE_STAGE,
+                        "created_at": now,
+                    })
             case["updated_at"] = now
             if action not in ("reassign", "stage", "move", "rank", "reopen", "note", "note_edit", "note_delete", "note_pin", "set_test"):
                 history_entry = {

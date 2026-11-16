@@ -131,7 +131,7 @@ def register_workspace_routes(server):
     def _realtime_signer():
         return URLSafeTimedSerializer(app.secret_key, salt=_REALTIME_SALT)
 
-    _ALLOWED_STAGES = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"}
+    _ALLOWED_STAGES = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard", "test"}
 
     def _is_allowed_stage(stage_val: str) -> bool:
         clean = str(stage_val or "").strip()

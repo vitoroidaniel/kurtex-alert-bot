@@ -422,7 +422,7 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bot_feedback_messages ADD COLUMN local_file_key TEXT NOT NULL DEFAULT ''")
 
 
-_LIVE_BOARD_SCHEMA_VERSION = "2"
+_LIVE_BOARD_SCHEMA_VERSION = "3"
 
 
 def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
@@ -531,6 +531,39 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
                 continue
         conn.execute(
             "INSERT INTO meta(key,value) VALUES('live_board_normalized_v1','1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'"
+        )
+    test_routed_row = conn.execute("SELECT value FROM meta WHERE key='test_lane_routed_v1'").fetchone()
+    if not (test_routed_row and test_routed_row["value"] == "1"):
+        from backend.core.test_case_rules import TEST_LANE_STAGE, is_auto_test_report
+
+        active_rows = conn.execute(
+            "SELECT id, data_json FROM cases WHERE status='reported' AND (closed_at IS NULL OR closed_at='') AND (board_stage='' OR board_stage IS NULL) LIMIT 500"
+        ).fetchall()
+        moved_any = False
+        for r in active_rows:
+            try:
+                c = json.loads(r["data_json"])
+                if (
+                    isinstance(c, dict)
+                    and not (c.get("board_stage") or "")
+                    and not c.get("test_lane_overridden")
+                    and is_auto_test_report(c)
+                ):
+                    c["board_stage"] = TEST_LANE_STAGE
+                    c.setdefault("id", r["id"])
+                    conn.execute(
+                        "UPDATE cases SET data_json=? WHERE id=?",
+                        (json.dumps(c, ensure_ascii=False, separators=(",", ":"), default=str), r["id"]),
+                    )
+                    sync_normalized_case_row(conn, c)
+                    moved_any = True
+            except Exception:
+                continue
+        if moved_any:
+            bump_version(conn, "cases_version")
+        conn.execute(
+            "INSERT INTO meta(key,value) VALUES('test_lane_routed_v1','1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'"
         )
     conn.execute(

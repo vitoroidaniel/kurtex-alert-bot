@@ -7,7 +7,7 @@ from backend.storage import db
 
 KEY = "workspace_manual_order_v1"
 CUSTOM_LANES_KEY = "workspace_custom_lanes_v1"
-BUILTIN_STAGES = ("jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard")
+BUILTIN_STAGES = ("jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard", "test")
 AGENT_LANE_RE = re.compile(r"^agent_workflow:agent:[0-9]{1,20}$")
 
 
