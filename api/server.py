@@ -1450,10 +1450,10 @@ def api_home_grid_preferences():
 # в”Ђв”Ђ Website role permissions в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 ROLE_PERMISSION_DEFAULTS = {
     "agent": ["overview","cases","missed","kurtex_intelligence","fleet","fleet_intel","parts_manual","ai_assistant","report_issue","my_profile"],
-    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","shifts","bot_issues","report_issue","my_profile"],
+    "super_admin": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","agents","shifts","users","bot_issues","report_issue","my_profile"],
     "developer": ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues","report_issue","users","developer","my_profile"],
 }
-ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","bot_issues","report_issue"]
+ROLE_PERMISSION_PAGES = ["overview","cases","missed","leaderboard","kurtex_intelligence","trends","comparison","fleet","fleet_intel","parts_manual","ai_assistant","ai_knowledge","agents","shifts","users","bot_issues","report_issue"]
 
 def _load_role_permissions():
     data = {k: list(v) for k, v in ROLE_PERMISSION_DEFAULTS.items()}
@@ -1462,6 +1462,7 @@ def _load_role_permissions():
             rows = conn.execute("SELECT role, pages_json FROM role_permissions").fetchall()
             seeded = conn.execute("SELECT value FROM meta WHERE key='shifts_perm_seeded'").fetchone()
             fb_seeded = conn.execute("SELECT value FROM meta WHERE key='bot_issues_perm_seeded'").fetchone()
+            users_seeded = conn.execute("SELECT value FROM meta WHERE key='users_perm_seeded'").fetchone()
             for r in rows:
                 role = r["role"]
                 if role in ("agent", "super_admin"):
@@ -1472,14 +1473,16 @@ def _load_role_permissions():
                 data["super_admin"].append("shifts")
             if rows and not fb_seeded and "bot_issues" not in data["super_admin"]:
                 data["super_admin"].append("bot_issues")
-        if rows and (not seeded or not fb_seeded):
+            if rows and not users_seeded and "users" not in data["super_admin"]:
+                data["super_admin"].append("users")
+        if rows and (not seeded or not fb_seeded or not users_seeded):
             with kurtex_db.write_tx(DATA_DIR) as wconn:
                 wconn.execute(
                     "INSERT INTO role_permissions(role, pages_json) VALUES('super_admin', ?) "
                     "ON CONFLICT(role) DO UPDATE SET pages_json=excluded.pages_json",
                     (json.dumps(data["super_admin"]),),
                 )
-                for mkey in ("shifts_perm_seeded", "bot_issues_perm_seeded"):
+                for mkey in ("shifts_perm_seeded", "bot_issues_perm_seeded", "users_perm_seeded"):
                     wconn.execute(
                         "INSERT INTO meta(key, value) VALUES(?, '1') "
                         "ON CONFLICT(key) DO UPDATE SET value='1'",
@@ -1494,11 +1497,12 @@ def _load_role_permissions():
         if "report_issue" not in data[role]: data[role].append("report_issue")
     return data
 
-def _save_role_permissions(data):
+def _save_role_permissions(data, *, editable_roles=("agent", "super_admin")):
+    existing = _load_role_permissions()
     clean = {}
     with kurtex_db.write_tx(DATA_DIR) as conn:
         for role in ("agent", "super_admin"):
-            vals = data.get(role, [])
+            vals = data.get(role, existing[role]) if role in editable_roles else existing[role]
             clean[role] = [x for x in ROLE_PERMISSION_PAGES if x in vals]
             if "overview" not in clean[role]: clean[role].insert(0, "overview")
             conn.execute(
@@ -1506,10 +1510,12 @@ def _save_role_permissions(data):
                 "ON CONFLICT(role) DO UPDATE SET pages_json=excluded.pages_json",
                 (role, json.dumps(clean[role])),
             )
-        conn.execute(
-            "INSERT INTO meta(key, value) VALUES('shifts_perm_seeded', '1') "
-            "ON CONFLICT(key) DO UPDATE SET value='1'",
-        )
+        for mkey in ("shifts_perm_seeded", "bot_issues_perm_seeded", "users_perm_seeded"):
+            conn.execute(
+                "INSERT INTO meta(key, value) VALUES(?, '1') "
+                "ON CONFLICT(key) DO UPDATE SET value='1'",
+                (mkey,),
+            )
     return clean
 
 def _website_role(role):
@@ -1518,15 +1524,24 @@ def _website_role(role):
 def _current_allowed_pages():
     user=session.get("user") or {}; return _load_role_permissions().get(_website_role(user.get("role","agent")), ROLE_PERMISSION_DEFAULTS["agent"])
 
+def _users_manager_only():
+    if _developer_only():
+        return True
+    user = session.get("user") or {}
+    role = user.get("role") or "agent"
+    return role in ("manager", "admin", "super_admin") and "users" in _current_allowed_pages()
+
 @app.route("/api/developer/permissions", methods=["GET","PUT"])
 def api_developer_permissions():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
-    if not _developer_only(): return jsonify({"error":"forbidden"}),403
-    if request.method=="GET": return jsonify({"permissions":_load_role_permissions(),"pages":ROLE_PERMISSION_PAGES})
+    if not _users_manager_only(): return jsonify({"error":"forbidden"}),403
+    is_dev = _developer_only()
+    if request.method=="GET": return jsonify({"permissions":_load_role_permissions(),"pages":ROLE_PERMISSION_PAGES,"can_edit_manager":is_dev})
     payload=request.get_json(silent=True) or {}; incoming=payload.get("permissions") or {}
     if not isinstance(incoming,dict): return jsonify({"error":"Invalid permissions."}),400
-    saved=_save_role_permissions(incoming)
-    return jsonify({"ok":True,"permissions":_load_role_permissions()})
+    editable = ("agent", "super_admin") if is_dev else ("agent",)
+    saved=_save_role_permissions(incoming, editable_roles=editable)
+    return jsonify({"ok":True,"permissions":_load_role_permissions(),"can_edit_manager":is_dev})
 
 # в”Ђв”Ђ Developer workspace в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _developer_only():
@@ -1626,11 +1641,11 @@ def api_developer_test_telegram():
 @app.route("/api/developer/users", methods=["GET", "POST"])
 def api_developer_users():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
-    if not _developer_only(): return jsonify({"error":"forbidden"}), 403
+    if not _users_manager_only(): return jsonify({"error":"forbidden"}), 403
     from backend.storage.user_store import get_all_user_dicts, add_user, VALID_ROLES
     if request.method == "GET":
         users = sorted(get_all_user_dicts(), key=lambda u: ((u.get("name") or "").lower(), str(u.get("id"))))
-        return jsonify({"users": users})
+        return jsonify({"users": users, "can_manage_developers": _developer_only()})
     payload = request.get_json(silent=True) or {}
     try: user_id = int(str(payload.get("id", "")).strip())
     except Exception: return jsonify({"error":"Enter a valid Telegram user ID."}), 400
@@ -1639,17 +1654,23 @@ def api_developer_users():
     role = str(payload.get("role") or "agent").strip()
     if not name: return jsonify({"error":"Name is required."}), 400
     if role not in VALID_ROLES: return jsonify({"error":"Invalid role."}), 400
+    if role == "developer" and not _developer_only():
+        return jsonify({"error":"Only developers can create or assign developer access."}), 403
     if not add_user(user_id, name, username, role): return jsonify({"error":"Unable to save user."}), 400
     return jsonify({"ok":True})
 
 @app.route("/api/developer/users/<int:user_id>", methods=["PATCH", "DELETE"])
 def api_developer_user(user_id):
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
-    if not _developer_only(): return jsonify({"error":"forbidden"}), 403
-    from backend.storage.user_store import edit_user, remove_user, VALID_ROLES
+    if not _users_manager_only(): return jsonify({"error":"forbidden"}), 403
+    from backend.storage.user_store import get_user, edit_user, remove_user, VALID_ROLES
+    is_dev = _developer_only()
     current_id = int(session["user"].get("id") or 0)
+    target_user = get_user(user_id)
+    if target_user and target_user.get("role") == "developer" and not is_dev:
+        return jsonify({"error":"Only developers can modify or remove developer accounts."}), 403
     if request.method == "DELETE":
-        if user_id == current_id: return jsonify({"error":"You cannot remove your own developer access while signed in."}), 400
+        if user_id == current_id: return jsonify({"error":"You cannot remove your own access while signed in."}), 400
         if not remove_user(user_id): return jsonify({"error":"User not found."}), 404
         return jsonify({"ok":True})
     payload = request.get_json(silent=True) or {}
@@ -1657,9 +1678,11 @@ def api_developer_user(user_id):
     name = str(payload.get("name") or "").strip()
     username = str(payload.get("username") or "").strip().lstrip("@")
     if role not in VALID_ROLES: return jsonify({"error":"Invalid role."}), 400
+    if role == "developer" and not is_dev:
+        return jsonify({"error":"Only developers can assign the Developer role."}), 403
     if not name: return jsonify({"error":"Name is required."}), 400
-    if user_id == current_id and role != "developer":
-        return jsonify({"error":"You cannot remove your own developer role while signed in."}), 400
+    if user_id == current_id and _website_role(role) != _website_role(session["user"].get("role") or "agent"):
+        return jsonify({"error":"You cannot change your own admin role while signed in."}), 400
     if not edit_user(user_id, name, username, role): return jsonify({"error":"User not found."}), 404
     return jsonify({"ok":True})
 
