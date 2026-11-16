@@ -32,7 +32,7 @@ def search_research(query,limit=7):
     def search(value):
         request=urllib.request.Request('https://google.serper.dev/search',data=json.dumps({'q':value,'gl':'us','hl':'en','num':4}).encode(),headers={'X-API-KEY':key,'Content-Type':'application/json'},method='POST')
         try:
-            with urllib.request.urlopen(request,timeout=7) as response:return json.load(response).get('organic',[]),True
+            with urllib.request.urlopen(request,timeout=4) as response:return json.load(response).get('organic',[]),True
         except Exception:return [],False
     with ThreadPoolExecutor(max_workers=3) as pool:responses=list(pool.map(search,queries))
     seen=set();results=[]
@@ -48,11 +48,9 @@ def search_research(query,limit=7):
     selected=results[:limit]
     discussion=next((x for x in results if x['source_type'].startswith('community')),None)
     if discussion and discussion not in selected and selected:selected[-1]=discussion
-    official_indices=[i for i,item in enumerate(selected) if item['source_type']=='manufacturer / official'][:2]
+    official_indices=[i for i,item in enumerate(selected) if item['source_type']=='manufacturer / official'][:1]
     if official_indices:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            enriched=list(pool.map(lambda i:official_excerpt(selected[i],q),official_indices))
-        for i,item in zip(official_indices,enriched):selected[i]=item
+        selected[official_indices[0]]=official_excerpt(selected[official_indices[0]],q)
     for i,item in enumerate(selected):item['citation']=i+1
     successes=sum(ok for _,ok in responses)
     return {'status':('available' if successes==3 else 'partial') if selected else ('no_results' if successes else 'unavailable'),'results':selected}
@@ -87,16 +85,16 @@ def official_excerpt(item,query):
     try:
         if not _official_url(item['url']):return item
         opener=urllib.request.build_opener(_OfficialRedirect())
-        with opener.open(urllib.request.Request(item['url'],headers={'User-Agent':'KurtexMaintenance/2.0'}),timeout=4) as response:
+        with opener.open(urllib.request.Request(item['url'],headers={'User-Agent':'KurtexMaintenance/2.0'}),timeout=2.5) as response:
             raw=response.read(512_001);content_type=response.headers.get('Content-Type','')
         if len(raw)>512_000:return item
         if 'pdf' in content_type:
             from pypdf import PdfReader
-            reader=PdfReader(io.BytesIO(raw));text='\n'.join(page.extract_text() or '' for page in reader.pages[:12])
+            reader=PdfReader(io.BytesIO(raw));text='\n'.join(page.extract_text() or '' for page in reader.pages[:6])
         elif 'html' in content_type or 'text/plain' in content_type:
             parser=Text();parser.feed(raw.decode('utf-8','replace'));text=' '.join(parser.parts)
         else:return item
-        excerpt=knowledge_excerpt(re.sub(r'\s+',' ',text),query,4500)
+        excerpt=knowledge_excerpt(re.sub(r'\s+',' ',text),query,1600)
         if len(excerpt)>100:item={**item,'excerpt':excerpt,'evidence_level':'excerpt from fetched official page; applicability still requires verification'}
     except Exception:pass
     return item

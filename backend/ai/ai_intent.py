@@ -45,6 +45,9 @@ TASK_WORDS = {
  'visual': ('what do you see','describe the image','describe this picture','what is visible',
             'ce vezi','descrie imaginea','ce se vede','что видно','опиши фото','что видишь',
             'qué ves','que ves','describe la imagen','qué se ve','que se ve'),
+ 'board_ops': ('[live board summary]','live board','active cases','active breakdowns','high priority',
+               'unassigned','in shop','over $','cost over','on shift','summarize board','board summary',
+               'cazuri active','pe board','активные кейсы','на доске'),
 }
 
 
@@ -74,42 +77,60 @@ def detect_language(message, transcript=''):
 def classify_task(message, has_video=False, has_images=False):
     text=_normalize(message)
     if has_video:return 'video_inspection'
+    if '[live board summary]' in text or any(phrase in text for phrase in TASK_WORDS['board_ops']):
+        return 'board_ops'
     for task in ('history','fault_code','parts','visual'):
         if any(phrase in text for phrase in TASK_WORDS[task]):return task
     if has_images:return 'image_inspection'
     return 'maintenance_question'
 
 
+def needs_web_search(message, task, has_images=False):
+    """Gate external web search to queries where technical/OEM snippets actually help."""
+    if task in ('board_ops', 'visual', 'history'):
+        return False
+    text = _normalize(message)
+    if len(text) < 8 and not has_images:
+        return False
+    if task in ('fault_code', 'parts'):
+        return True
+    explicit = ('manual', 'spec', 'torque', 'procedure', 'oem', 'diagram', 'wiring', 'search web', 'look up')
+    if any(w in text for w in explicit):
+        return True
+    if re.search(r'\b(?:spn|fmi|dtc|[pbcu]\d{4})\b', text):
+        return True
+    # Only search on general diagnostic symptoms when substantial symptom terms exist
+    symptom_hits = sum(1 for w in ('leak', 'brake', 'air', 'coolant', 'overheat', 'reefer', 'turbo', 'def', 'dpf', 'regen', 'no start', 'battery', 'alternator', 'abs', 'sensor', 'valve', 'compressor', 'smoke', 'alarm', 'error', 'code') if w in text)
+    return symptom_hits >= 1
+
+
 def retrieval_query(message, transcript='', max_extra=8):
-    value=' '.join([str(message or ''),str(transcript or '')[:2400]]).strip()
+    clean_msg = re.sub(r'\[Live Board Summary\][\s\S]*$', '', str(message or ''), flags=re.I).strip()
+    value=' '.join([clean_msg,str(transcript or '')[:1800]]).strip()
     folded=_normalize(value)
     extras=[]
     for term,variants in TERMS.items():
         if term in folded or any(v in folded for v in variants):
             extras.append(term)
         if len(extras)>=max_extra:break
-    return (value+' '+' '.join(extras)).strip()[:6800]
+    return (value+' '+' '.join(extras)).strip()[:4000]
 
 
 def response_policy(message, has_video=False, has_images=False, transcript=''):
     lang=detect_language(message,transcript)
     task=classify_task(message,has_video,has_images)
     sections={
-        'history':'Lead with matching cases, then confirmed recorded repairs only. No generic troubleshooting unless requested.',
-        'fault_code':'Lead with what the exact code means IF verified. State make/model ambiguity and the shortest useful checks; cite OEM sources when available.',
-        'parts':'Lead with verified part identification or say identification is not confirmed. Do not invent OEM part numbers or compatibility.',
-        'visual':'Describe visible evidence directly. Do not add an unrelated maintenance report.',
-        'image_inspection':'State what is visibly damaged, what cannot be confirmed, and the next useful inspection.',
-        'video_inspection':'Start with what the sampled video frames show and include timestamps for concrete observations. Then briefly separate what the driver said in audio, if transcribed. Note important discrepancies, uncertainty, and the next useful action. Never pretend all frames or continuous motion were inspected.',
-        'maintenance_question':'Answer the exact question first; add only the highest-value next steps.'
+        'board_ops':'Use ONLY the supplied Live Board / Active Case data. Group cleanly by Unit #, Priority, Stage/Shop, and Cost; keep it scannable and omit filler or maintenance disclaimers.',
+        'history':'Lead with matching fleet cases and confirmed recorded resolutions only. Omit generic troubleshooting unless asked.',
+        'fault_code':'State exact code meaning if verified, make/model ambiguity, and the top 2-3 sharpest checks.',
+        'parts':'Lead with verified part identification or state clearly that fitment is unconfirmed. Never invent OEM part numbers.',
+        'visual':'Describe only visible evidence concisely. Do not turn a visual question into a full diagnostic report.',
+        'image_inspection':'State visible findings first, what cannot be confirmed, and the top 1-3 next checks.',
+        'video_inspection':'Cite sampled frame timestamps for visible findings, briefly separate driver audio if transcribed, and give the top 1-3 next checks.',
+        'maintenance_question':'Answer the direct question in line 1, then give at most 3 high-signal bullets or next checks.'
     }
     return {'language':lang,'language_name':LANGUAGE_NAMES[lang],'task':task,
-            'instructions':('Reply in '+LANGUAGE_NAMES[lang]+'. Preserve original fault codes, OEM terms and part numbers verbatim. '
-                'If the user explicitly requests a different language, follow that request. '
-                'Write like a concise senior fleet maintenance advisor, not a generic chatbot. '
+            'instructions':('Reply in '+LANGUAGE_NAMES[lang]+'. Preserve original fault codes, unit numbers, and part numbers verbatim. '
+                'Write like a crisp, senior fleet maintenance dispatcher: zero fluff, zero greetings, never repeat the user question, never output empty headings or boilerplate disclaimers. '
                 'FIRST LINE: direct answer or immediate safety action. '+sections[task]+' '
-                'Default to 1-3 short paragraphs or at most 3 practical checks; expand only if complexity or the user asks for detail. '
-                'Do not dump all case records, repeat the question, pad with disclaimers, or show empty headings. '
-                'Separate observed evidence, driver-reported speech, historical records and hypotheses. '
-                'When uncertainty affects safety or part selection, ask one precise clarifying question. '
-                'Always verify safety-critical actions, model-specific codes and part numbers against OEM documentation.')}
+                'Keep replies compact (1-2 short sentences + up to 3 concise bullets) unless the user asks for deep detail.')}
