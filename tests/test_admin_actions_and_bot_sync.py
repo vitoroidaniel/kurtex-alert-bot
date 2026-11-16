@@ -1,4 +1,4 @@
-"""Tests for Manager/Dev Live Board actions, bot close -> Done sync, and prefill removal."""
+"""Tests for Manager/Dev Live Board actions, lane rename, proofs edit metadata, user+case batch editing, and bot sync."""
 import asyncio
 import os
 import tempfile
@@ -11,7 +11,7 @@ os.environ.setdefault("BOT_TOKEN", "123456:TESTTOKEN")
 
 from api import server
 from api.routes import workspace_board
-from backend.storage import board_order, case_store, db, preference_store
+from backend.storage import board_order, case_store, db, preference_store, user_store
 from bot_app.handlers import report_handler
 
 
@@ -23,6 +23,7 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
         for target, attr in (
             (case_store, "_storage_dir"),
             (preference_store, "_storage_dir"),
+            (user_store, "_storage_dir"),
         ):
             p = patch.object(target, attr, return_value=self.data_dir)
             p.start()
@@ -34,8 +35,9 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
         self.dev = {"id": 100, "name": "Dev", "role": "developer", "username": "dev"}
         self.manager = {"id": 101, "name": "Daniel", "role": "super_admin", "username": "danielv"}
         self.agent = {"id": 102, "name": "Alex", "role": "agent", "username": "alexr"}
+        self.agent2 = {"id": 103, "name": "Victor", "role": "agent", "username": "victorr"}
         with db.write_tx(self.data_dir) as conn:
-            for person in (self.dev, self.manager, self.agent):
+            for person in (self.dev, self.manager, self.agent, self.agent2):
                 conn.execute(
                     "INSERT INTO users(id,name,username,role) VALUES (?,?,?,?)",
                     (person["id"], person["name"], person["username"], person["role"]),
@@ -60,7 +62,6 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
                 "target_agent": self.agent,
             },
         )
-        # Seed a non-reported alert-only case closed directly in Telegram.
         with db.write_tx(self.data_dir) as conn:
             alert_only = {
                 "id": "ALERT-702",
@@ -103,7 +104,7 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
         self.assertIn("CASE-701", done_ids)
         self.assertNotIn("ALERT-702", done_ids)
 
-    def test_board_admin_endpoints_enforce_role_and_clear_or_close(self):
+    def test_board_clear_keeps_cases_in_database_and_enforces_roles(self):
         c_active = case_store.workspace_write(
             self.manager,
             {
@@ -143,14 +144,12 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
         client = server.app.test_client()
         headers = {"X-Workspace-CSRF": "test-csrf"}
 
-        # Agent blocked on all 3 admin actions
         self._auth_session(client, self.agent)
         with patch.object(workspace_board, "get_user", return_value=self.agent):
             self.assertEqual(client.post("/api/workspace/board/clear", headers=headers, json={"confirm": True}).status_code, 403)
             self.assertEqual(client.post("/api/workspace/board/close-all", headers=headers, json={"confirm": True}).status_code, 403)
             self.assertEqual(client.post("/api/workspace/order/reset", headers=headers, json={}).status_code, 403)
 
-        # Manager allowed, requires confirm=true for destructive actions
         self._auth_session(client, self.manager)
         with patch.object(workspace_board, "get_user", return_value=self.manager):
             self.assertEqual(client.post("/api/workspace/board/clear", headers=headers, json={}).status_code, 400)
@@ -160,9 +159,8 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
                 json={"scope": "active", "confirm": True},
             )
             self.assertEqual(close_res.status_code, 200)
-            close_payload = close_res.get_json()
-            self.assertEqual(close_payload["closed_count"], 1)
-            self.assertEqual(close_payload["skipped_count"], 1)
+            self.assertEqual(close_res.get_json()["closed_count"], 1)
+            self.assertEqual(close_res.get_json()["skipped_count"], 1)
 
             reset_res = client.post("/api/workspace/order/reset", headers=headers, json={})
             self.assertEqual(reset_res.status_code, 200)
@@ -176,9 +174,108 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             self.assertEqual(clear_res.status_code, 200)
             clear_payload = clear_res.get_json()
             self.assertEqual(clear_payload["deleted_count"], 2)
-            self.assertFalse(upload_dir.exists())
+            self.assertTrue(clear_payload["preserved_in_db"])
             self.assertEqual(client.get("/api/workspace/board").get_json()["cases"], [])
             self.assertEqual(client.get("/api/cases?filter=workspace_closed").get_json()["cases"], [])
+            # Verify cases and attachments remain safely in SQLite DB and CSV export
+            preserved = case_store.get_case("CASE-801")
+            self.assertIsNotNone(preserved)
+            self.assertTrue(preserved["board_hidden"])
+            self.assertTrue((upload_dir / "sample.txt").is_file())
+            export_csv = client.get("/api/export").get_data(as_text=True)
+            self.assertIn("CASE-801", export_csv)
+
+    def test_lane_rename_proofs_metadata_and_user_case_batch_edit(self):
+        c1 = case_store.workspace_write(
+            self.manager,
+            {
+                "id": "CASE-810",
+                "request_id": "req-810",
+                "driver": "Sam",
+                "unit_number": "810",
+                "issue": "Air compressor leak",
+                "vehicle_type": "truck",
+                "priority": "medium",
+                "board_stage": "dealer_shop",
+                "target_agent": self.agent,
+            },
+        )
+        case_store.workspace_attachment_write(
+            self.agent,
+            c1["id"],
+            attachment={
+                "id": "att-1",
+                "name": "shop_invoice.pdf",
+                "extension": ".pdf",
+                "size": 1200,
+                "category": "proof",
+                "proof_type": "invoice",
+                "version_num": 2,
+                "versions": [{"id": "b1", "version": 1}, {"id": "b2", "version": 2}],
+                "uploaded_by": "Alex",
+                "uploaded_by_id": str(self.agent["id"]),
+                "created_at": "2026-11-16T12:00:00Z",
+            },
+        )
+
+        client = server.app.test_client()
+        headers = {"X-Workspace-CSRF": "test-csrf"}
+        self._auth_session(client, self.manager)
+        with patch.object(workspace_board, "get_user", return_value=self.manager):
+            # 1. Rename built-in + custom lane
+            lane_add = client.post("/api/workspace/lanes", headers=headers, json={"name": "Night Shift", "color": "#7c3aed"})
+            self.assertEqual(lane_add.status_code, 201)
+            custom_id = lane_add.get_json()["lane"]["id"]
+
+            r_custom = client.patch(f"/api/workspace/lanes/{custom_id}", headers=headers, json={"name": "Night Ops"})
+            self.assertEqual(r_custom.status_code, 200)
+            self.assertEqual(r_custom.get_json()["name"], "Night Ops")
+
+            r_builtin = client.patch("/api/workspace/lanes/stage:dealer_shop", headers=headers, json={"name": "External Vendor"})
+            self.assertEqual(r_builtin.status_code, 200)
+            self.assertEqual(r_builtin.get_json()["lane_labels"]["dealer_shop"], "External Vendor")
+
+            order_data = client.get("/api/workspace/order").get_json()
+            self.assertEqual(order_data["lane_labels"]["dealer_shop"], "External Vendor")
+
+            # 2. Proofs endpoint includes edit permissions & versions
+            proofs = client.get("/api/workspace/proofs").get_json()["proofs"]
+            self.assertEqual(len(proofs), 1)
+            self.assertTrue(proofs[0]["can_edit"])
+            self.assertEqual(proofs[0]["version_num"], 2)
+            self.assertEqual(len(proofs[0]["versions"]), 2)
+
+        # 3. Edit user profile metadata + batch update user's Live Board cases
+        patch_user = client.patch(
+            f"/api/developer/users/{self.agent['id']}",
+            headers=headers,
+            json={"name": "Alex R", "username": "alex_new", "role": "agent", "phone": "555-0102", "title": "Lead Tech"},
+        )
+        self.assertEqual(patch_user.status_code, 200)
+        self.assertEqual(patch_user.get_json()["synced_cases"], 1)
+        self.assertEqual(case_store.get_case("CASE-810")["agent_name"], "Alex R")
+
+        uc_get = client.get(f"/api/developer/users/{self.agent['id']}/cases").get_json()
+        self.assertEqual(len(uc_get["active_cases"]), 1)
+        self.assertEqual(uc_get["user"]["phone"], "555-0102")
+
+        uc_post = client.post(
+            f"/api/developer/users/{self.agent['id']}/cases",
+            headers=headers,
+            json={
+                "reassign_to_id": str(self.agent2["id"]),
+                "board_stage": "monitoring",
+                "priority": "high",
+                "shop_info": "Love's Bay 3",
+            },
+        )
+        self.assertEqual(uc_post.status_code, 200)
+        self.assertEqual(uc_post.get_json()["updated_count"], 1)
+        moved = case_store.get_case("CASE-810")
+        self.assertEqual(moved["agent_id"], self.agent2["id"])
+        self.assertEqual(moved["board_stage"], "monitoring")
+        self.assertEqual(moved["priority"], "high")
+        self.assertEqual(moved["shop_info"], "Love's Bay 3")
 
     def test_report_handler_has_no_alert_prefill_prompts(self):
         conv = report_handler.get_report_conversation()

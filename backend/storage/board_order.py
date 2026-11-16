@@ -7,7 +7,9 @@ from backend.storage import db
 
 KEY = "workspace_manual_order_v1"
 CUSTOM_LANES_KEY = "workspace_custom_lanes_v1"
+LANE_LABELS_KEY = "workspace_lane_labels_v1"
 BUILTIN_STAGES = ("jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard", "test")
+SPECIAL_LANES = ("unassigned", "done")
 AGENT_LANE_RE = re.compile(r"^agent_workflow:agent:[0-9]{1,20}$")
 
 
@@ -142,6 +144,83 @@ def delete_custom_lane(lane_id: str, data_dir=None) -> list[dict]:
                 )
         db.bump_version(conn, "cases_version")
     return remaining
+
+
+def read_lane_labels(data_dir=None) -> dict[str, str]:
+    """Return custom display titles for built-in workflow, unassigned, and done lanes."""
+    with db.read_conn(data_dir) as conn:
+        row = conn.execute("SELECT data_json FROM kv_state WHERE key=?", (LANE_LABELS_KEY,)).fetchone()
+    if not row:
+        return {}
+    try:
+        parsed = json.loads(row["data_json"])
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    valid_keys = set(BUILTIN_STAGES) | set(SPECIAL_LANES)
+    return {
+        str(k): " ".join(str(v or "").split()).strip()[:40]
+        for k, v in parsed.items()
+        if str(k) in valid_keys and " ".join(str(v or "").split()).strip()
+    }
+
+
+def rename_lane(lane_id: str, new_name: str, *, reset: bool = False, data_dir=None) -> dict:
+    """Rename any custom or built-in workflow/unassigned/done lane."""
+    raw_key = str(lane_id or "").strip()
+    clean_key = raw_key[len("stage:"):] if raw_key.startswith("stage:") else raw_key
+    clean_name = " ".join(str(new_name or "").split()).strip()[:40]
+    if not reset and not clean_name:
+        raise ValueError("Enter a lane name.")
+    valid_builtin = set(BUILTIN_STAGES) | set(SPECIAL_LANES)
+
+    with db.write_tx(data_dir) as conn:
+        row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (CUSTOM_LANES_KEY,)).fetchone()
+        custom_ver = int(row["version"]) if row else 0
+        custom_lanes = _sanitize_custom_lanes(json.loads(row["data_json"])) if row else []
+        custom_hit = next((x for x in custom_lanes if x["id"] == clean_key), None)
+
+        if custom_hit:
+            if reset or not clean_name:
+                raise ValueError("Enter a new name for this custom lane.")
+            custom_hit["name"] = clean_name
+            conn.execute(
+                "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+                (CUSTOM_LANES_KEY, custom_ver + 1, json.dumps(custom_lanes, ensure_ascii=False, separators=(",", ":")))
+            )
+            labels = read_lane_labels(data_dir)
+            db.bump_version(conn, "cases_version")
+            return {"lane_id": raw_key, "name": clean_name, "custom_lanes": custom_lanes, "lane_labels": labels}
+
+        if clean_key not in valid_builtin:
+            raise LookupError("Lane not found or cannot be renamed.")
+
+        lbl_row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (LANE_LABELS_KEY,)).fetchone()
+        lbl_ver = int(lbl_row["version"]) if lbl_row else 0
+        try:
+            labels = json.loads(lbl_row["data_json"]) if lbl_row else {}
+        except (ValueError, TypeError):
+            labels = {}
+        if not isinstance(labels, dict):
+            labels = {}
+        if reset:
+            labels.pop(clean_key, None)
+        else:
+            labels[clean_key] = clean_name
+        clean_labels = {
+            str(k): " ".join(str(v or "").split()).strip()[:40]
+            for k, v in labels.items()
+            if str(k) in valid_builtin and " ".join(str(v or "").split()).strip()
+        }
+        conn.execute(
+            "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+            (LANE_LABELS_KEY, lbl_ver + 1, json.dumps(clean_labels, ensure_ascii=False, separators=(",", ":")))
+        )
+        db.bump_version(conn, "cases_version")
+    return {"lane_id": raw_key, "name": clean_name if not reset else "", "custom_lanes": custom_lanes, "lane_labels": clean_labels}
 
 
 def read_order(data_dir=None):

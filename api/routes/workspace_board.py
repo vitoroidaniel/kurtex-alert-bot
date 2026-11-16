@@ -27,7 +27,9 @@ from backend.storage.board_order import (
     allowed_stages,
     delete_custom_lane,
     read_custom_lanes,
+    read_lane_labels,
     read_order,
+    rename_lane,
     reset_order,
     save_order,
 )
@@ -267,6 +269,7 @@ def register_workspace_routes(server):
             "quick_replies": quick_replies,
             "workspace_prefs": workspace_prefs,
             "custom_lanes": read_custom_lanes(_data_dir()),
+            "lane_labels": read_lane_labels(_data_dir()),
         })
 
     @app.route("/api/workspace/cases", methods=["POST"])
@@ -919,7 +922,11 @@ def register_workspace_routes(server):
             actor, error = _workspace_actor_read()
             if error:
                 return error
-            return jsonify({"order": read_order(_data_dir()), "custom_lanes": read_custom_lanes(_data_dir())})
+            return jsonify({
+                "order": read_order(_data_dir()),
+                "custom_lanes": read_custom_lanes(_data_dir()),
+                "lane_labels": read_lane_labels(_data_dir()),
+            })
         actor, error = _workspace_actor()
         if error:
             return error
@@ -1005,11 +1012,25 @@ def register_workspace_routes(server):
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-    @app.route("/api/workspace/lanes/<lane_id>", methods=["DELETE"])
-    def api_workspace_lane_delete(lane_id):
+    @app.route("/api/workspace/lanes/<lane_id>", methods=["PATCH", "DELETE"])
+    def api_workspace_lane_manage(lane_id):
         actor, error = _workspace_actor()
         if error:
             return error
+        if request.method == "PATCH":
+            data = request.get_json(silent=True) or {}
+            try:
+                res = rename_lane(
+                    lane_id,
+                    data.get("name"),
+                    reset=bool(data.get("reset")),
+                    data_dir=_data_dir(),
+                )
+                return jsonify({"ok": True, **res})
+            except LookupError as exc:
+                return jsonify({"error": str(exc)}), 404
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
         try:
             remaining = delete_custom_lane(lane_id, data_dir=_data_dir())
             return jsonify({"ok": True, "custom_lanes": remaining})
@@ -1024,18 +1045,21 @@ def register_workspace_routes(server):
         if error:
             return error
         is_dev = str(actor.get("role") or "").lower() == "developer"
+        is_mgr_or_dev = actor.get("role") in ("developer", "super_admin")
         proof_filter = str(request.args.get("proof_type") or "").strip().lower()
         q = str(request.args.get("q") or "").strip().lower()
         items = []
         for raw_c in server.load_cases():
             if not is_maintenance_report(raw_c):
                 continue
-            if not is_dev and bool(raw_c.get("is_test") or raw_c.get("is_testing")):
+            is_test = bool(raw_c.get("is_test") or raw_c.get("is_testing"))
+            if not is_dev and is_test:
                 continue
             cid = str(raw_c.get("id") or "")
             unit = str(raw_c.get("unit_number") or "").strip()
             driver = str(raw_c.get("report_driver") or raw_c.get("driver_name") or "").strip()
             status = str(raw_c.get("status") or "reported")
+            is_assigned_actor = bool(actor.get("id") is not None and str(raw_c.get("agent_id") or "") == str(actor["id"]))
             for a in (raw_c.get("workspace_attachments") or []):
                 if not isinstance(a, dict) or not a.get("id"):
                     continue
@@ -1053,6 +1077,8 @@ def register_workspace_routes(server):
                 ]).lower()
                 if q and q not in hay:
                     continue
+                is_uploader = bool(actor.get("id") is not None and str(a.get("uploaded_by_id") or "") == str(actor["id"]))
+                can_edit = (not is_test or is_dev) and (is_mgr_or_dev or is_uploader or is_assigned_actor)
                 items.append({
                     "id": a["id"],
                     "case_id": cid,
@@ -1062,9 +1088,14 @@ def register_workspace_routes(server):
                     "name": a.get("name") or "Proof",
                     "extension": a.get("extension") or "",
                     "size": int(a.get("size") or 0),
+                    "category": "proof",
                     "proof_type": pt,
                     "description": a.get("description") or "",
+                    "version_num": int(a.get("version_num") or len(a.get("versions") or []) or 1),
+                    "versions": a.get("versions") if isinstance(a.get("versions"), list) else [],
                     "uploaded_by": a.get("uploaded_by") or "Agent",
+                    "uploaded_by_id": str(a.get("uploaded_by_id") or ""),
+                    "can_edit": can_edit,
                     "created_at": a.get("created_at") or "",
                     "url": f"/api/workspace/cases/{urllib.parse.quote(cid, safe='')}/attachments/{urllib.parse.quote(str(a['id']), safe='')}",
                 })
@@ -1198,6 +1229,7 @@ def register_workspace_routes(server):
                         c = normalize_case(raw_case)
                         active_board_item = (
                             is_maintenance_report(c)
+                            and not c.get("board_hidden")
                             and c.get("status") == "reported"
                             and not c.get("closed_at")
                             and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"
@@ -1228,6 +1260,7 @@ def register_workspace_routes(server):
                 c
                 for c in cases
                 if is_maintenance_report(c)
+                and not c.get("board_hidden")
                 and c.get("status") == "reported"
                 and not c.get("closed_at")
                 and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"

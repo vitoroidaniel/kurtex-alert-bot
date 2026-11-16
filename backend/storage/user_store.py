@@ -148,23 +148,75 @@ def edit_role(user_id: int, role: str) -> bool:
     return True
 
 
-def edit_user(user_id: int, name: str, username: str, role: str) -> bool:
-    """Update an existing user's display details and role without changing Telegram ID."""
+_ALLOWED_EXTRA_KEYS = ("title", "phone", "email", "notes")
+
+
+def edit_user(
+    user_id: int,
+    name: str,
+    username: str,
+    role: str,
+    *,
+    new_user_id: int | None = None,
+    extra: dict | None = None,
+) -> bool:
+    """Update an existing user's display details, profile metadata, role, and optional Telegram ID."""
     if role not in VALID_ROLES:
         return False
     sdir = _storage_dir()
     now = utc_now().isoformat()
     clean_uname = (username or "").strip().lstrip("@")
+    uid = int(user_id)
+    target_uid = int(new_user_id) if new_user_id is not None else uid
     with db.write_tx(sdir) as conn:
-        cur = conn.execute(
-            "UPDATE users SET name=?, username=?, role=?, updated_at=? WHERE id=?",
-            (name.strip(), clean_uname, role, now, int(user_id)),
-        )
-        if cur.rowcount == 0:
+        row = conn.execute("SELECT id, extra_json FROM users WHERE id=?", (uid,)).fetchone()
+        if not row:
             return False
+        if target_uid != uid:
+            clash = conn.execute("SELECT 1 FROM users WHERE id=?", (target_uid,)).fetchone()
+            if clash:
+                raise ValueError("Another user already uses that Telegram ID.")
+        try:
+            merged_extra = json.loads(row["extra_json"] or "{}")
+            if not isinstance(merged_extra, dict):
+                merged_extra = {}
+        except Exception:
+            merged_extra = {}
+        if isinstance(extra, dict):
+            for k in _ALLOWED_EXTRA_KEYS:
+                if k in extra:
+                    val = str(extra[k] or "").strip()[:300 if k == "notes" else 120]
+                    if val:
+                        merged_extra[k] = val
+                    else:
+                        merged_extra.pop(k, None)
+        extra_str = json.dumps(merged_extra, ensure_ascii=False, separators=(",", ":"))
+        conn.execute(
+            "UPDATE users SET id=?, name=?, username=?, role=?, extra_json=?, updated_at=? WHERE id=?",
+            (target_uid, name.strip(), clean_uname, role, extra_str, now, uid),
+        )
+        if target_uid != uid:
+            conn.execute("UPDATE user_shifts SET user_id=? WHERE user_id=?", (target_uid, uid))
+            conn.execute("UPDATE preferences SET user_id=? WHERE user_id=?", (str(target_uid), str(uid)))
+            case_rows = conn.execute("SELECT id, data_json FROM cases WHERE agent_id=?", (uid,)).fetchall()
+            for crow in case_rows:
+                try:
+                    cdict = json.loads(crow["data_json"])
+                except Exception:
+                    continue
+                if isinstance(cdict, dict):
+                    cdict["agent_id"] = target_uid
+                    cdict["agent_name"] = name.strip()
+                    cdict["agent_username"] = clean_uname
+                    conn.execute(
+                        "UPDATE cases SET agent_id=?, data_json=? WHERE id=?",
+                        (target_uid, json.dumps(cdict, ensure_ascii=False, separators=(",", ":")), crow["id"]),
+                    )
+            db.bump_version(conn, "shifts_version")
+            db.bump_version(conn, "cases_version")
         db.bump_version(conn, "users_version")
     _invalidate_cache(sdir)
-    logger.info("User updated: %s (%s) as %s", user_id, name, role)
+    logger.info("User updated: %s -> %s (%s) as %s", uid, target_uid, name, role)
     return True
 
 
@@ -209,13 +261,17 @@ def get_alert_recipients() -> list[int]:
 
 
 def get_all_user_dicts() -> list[dict]:
-    """All users as list of dicts with id included."""
-    return [
-        {
+    """All users as list of dicts with id and optional profile fields included."""
+    out = []
+    for uid, u in _load().items():
+        item = {
             "id":       int(uid),
             "name":     u["name"],
             "username": u.get("username", ""),
             "role":     u["role"],
         }
-        for uid, u in _load().items()
-    ]
+        for k in _ALLOWED_EXTRA_KEYS:
+            if u.get(k):
+                item[k] = u[k]
+        out.append(item)
+    return out

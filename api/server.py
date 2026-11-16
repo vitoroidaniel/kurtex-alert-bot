@@ -1644,7 +1644,18 @@ def api_developer_users():
     if not _users_manager_only(): return jsonify({"error":"forbidden"}), 403
     from backend.storage.user_store import get_all_user_dicts, add_user, VALID_ROLES
     if request.method == "GET":
-        users = sorted(get_all_user_dicts(), key=lambda u: ((u.get("name") or "").lower(), str(u.get("id"))))
+        from backend.storage.case_store import get_workspace_board_cases
+        active_counts = {}
+        try:
+            for bc in get_workspace_board_cases("2026-10-12"):
+                aid = str(bc.get("agent_id") or "").strip()
+                if aid:
+                    active_counts[aid] = active_counts.get(aid, 0) + 1
+        except Exception:
+            pass
+        users = []
+        for u in sorted(get_all_user_dicts(), key=lambda u: ((u.get("name") or "").lower(), str(u.get("id")))):
+            users.append({**u, "active_cases": active_counts.get(str(u.get("id") or ""), 0)})
         return jsonify({"users": users, "can_manage_developers": _developer_only()})
     payload = request.get_json(silent=True) or {}
     try: user_id = int(str(payload.get("id", "")).strip())
@@ -1664,6 +1675,7 @@ def api_developer_user(user_id):
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     if not _users_manager_only(): return jsonify({"error":"forbidden"}), 403
     from backend.storage.user_store import get_user, edit_user, remove_user, VALID_ROLES
+    from backend.storage.case_store import sync_user_display_on_cases
     is_dev = _developer_only()
     current_id = int(session["user"].get("id") or 0)
     target_user = get_user(user_id)
@@ -1674,17 +1686,82 @@ def api_developer_user(user_id):
         if not remove_user(user_id): return jsonify({"error":"User not found."}), 404
         return jsonify({"ok":True})
     payload = request.get_json(silent=True) or {}
-    role = str(payload.get("role") or "").strip()
-    name = str(payload.get("name") or "").strip()
-    username = str(payload.get("username") or "").strip().lstrip("@")
+    role = str(payload.get("role") or (target_user or {}).get("role") or "agent").strip()
+    name = str(payload.get("name") or (target_user or {}).get("name") or "").strip()
+    username = str(payload.get("username") if "username" in payload else (target_user or {}).get("username") or "").strip().lstrip("@")
     if role not in VALID_ROLES: return jsonify({"error":"Invalid role."}), 400
     if role == "developer" and not is_dev:
         return jsonify({"error":"Only developers can assign the Developer role."}), 403
     if not name: return jsonify({"error":"Name is required."}), 400
     if user_id == current_id and _website_role(role) != _website_role(session["user"].get("role") or "agent"):
         return jsonify({"error":"You cannot change your own admin role while signed in."}), 400
-    if not edit_user(user_id, name, username, role): return jsonify({"error":"User not found."}), 404
-    return jsonify({"ok":True})
+    new_id = None
+    if payload.get("new_id") not in (None, ""):
+        try:
+            new_id = int(str(payload.get("new_id")).strip())
+        except Exception:
+            return jsonify({"error":"Enter a valid Telegram user ID."}), 400
+        if new_id != user_id and user_id == current_id:
+            return jsonify({"error":"You cannot change your own active Telegram ID while signed in."}), 400
+    extra = {k: payload[k] for k in ("title", "phone", "email", "notes") if k in payload} or None
+    try:
+        ok = edit_user(user_id, name, username, role, new_user_id=new_id, extra=extra)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not ok:
+        return jsonify({"error":"User not found."}), 404
+    effective_id = new_id if new_id is not None else user_id
+    synced_cases = 0
+    if payload.get("sync_case_names", True):
+        synced_cases = sync_user_display_on_cases(effective_id, name, username)
+    return jsonify({"ok":True, "id": effective_id, "synced_cases": synced_cases})
+
+
+@app.route("/api/developer/users/<int:user_id>/cases", methods=["GET", "POST"])
+def api_developer_user_cases(user_id):
+    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not _users_manager_only(): return jsonify({"error":"forbidden"}), 403
+    from backend.storage.user_store import get_user, get_all_user_dicts
+    from backend.storage.case_store import bulk_update_user_cases, is_maintenance_report
+    is_dev = _developer_only()
+    target_user = get_user(user_id)
+    if target_user and target_user.get("role") == "developer" and not is_dev:
+        return jsonify({"error":"Only developers can inspect or batch-edit developer case loads."}), 403
+    if request.method == "GET":
+        all_cases = load_cases()
+        active_cases = []
+        done_cases = []
+        for c in all_cases:
+            if not is_maintenance_report(c) or c.get("board_hidden"):
+                continue
+            if str(c.get("agent_id") or "") != str(user_id):
+                continue
+            if not is_dev and is_testing(c):
+                continue
+            row = serialize_case(c)
+            if c.get("status") == "reported" and not c.get("closed_at") and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12":
+                active_cases.append(row)
+            elif c.get("status") == "done" and any(isinstance(h, dict) and h.get("action") == "close" for h in (c.get("workspace_history") or [])):
+                done_cases.append(row)
+        active_cases.sort(key=lambda r: r.get("reported_at") or r.get("opened_raw") or "", reverse=True)
+        done_cases.sort(key=lambda r: r.get("closed") or "", reverse=True)
+        roster = sorted(get_all_user_dicts(), key=lambda u: ((u.get("name") or "").lower(), str(u.get("id"))))
+        return jsonify({
+            "ok": True,
+            "user": ({**target_user, "id": user_id} if target_user else {"id": user_id, "name": f"Agent {user_id}"}),
+            "active_cases": active_cases,
+            "done_cases": done_cases[:40],
+            "roster": roster,
+        })
+    payload = request.get_json(silent=True) or {}
+    actor = {**session["user"], "role": _current_viewer_role(session["user"])}
+    try:
+        res = bulk_update_user_cases(actor, user_id, payload)
+        return jsonify({"ok": True, **res})
+    except PermissionError as exc:
+        return jsonify({"error": str(exc)}), 403
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
 # в”Ђв”Ђ API в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 
@@ -2466,7 +2543,7 @@ def api_cases():
             from backend.storage.case_store import is_maintenance_report
             # New board starts on Oct 12 Chicago time. Older reports remain in
             # the normal Cases history; editing them must not import them here.
-            cases = [c for c in cases if is_maintenance_report(c) and not c.get("closed_at")
+            cases = [c for c in cases if is_maintenance_report(c) and not c.get("board_hidden") and not c.get("closed_at")
                      and c.get("status") == "reported"
                      and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"]
         include_test = request.args.get("include_test") == "1"
@@ -2486,8 +2563,8 @@ def api_cases():
                 cases = [c for c in cases if str(c.get("status") or "").lower() in {"done", "resolved", "closed"}
                          and chicago_date_str(c.get("closed_at")) == now.date().isoformat()]
         if f == "workspace_closed":
-            # A closed case belongs here only when a workspace close action was recorded.
-            cases = [c for c in cases if c.get("status") == "done" and
+            # A closed case belongs here only when a workspace close action was recorded and not cleared from board.
+            cases = [c for c in cases if c.get("status") == "done" and not c.get("board_hidden") and
                      any(isinstance(h, dict) and h.get("action") == "close"
                          for h in (c.get("workspace_history") or []))]
         agent_filter = request.args.get("agent", "").strip().casefold()[:120]

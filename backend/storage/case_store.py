@@ -1041,7 +1041,11 @@ def get_workspace_board_cases(min_reported_date: str = "2026-10-12") -> list[dic
     result = []
     for r in rows:
         c = json.loads(r["data_json"])
-        if is_maintenance_report(c) and (chicago_date_str(c.get("reported_at")) or "") >= min_reported_date:
+        if (
+            is_maintenance_report(c)
+            and not c.get("board_hidden")
+            and (chicago_date_str(c.get("reported_at")) or "") >= min_reported_date
+        ):
             result.append(c)
     return result
 
@@ -1189,6 +1193,7 @@ def _is_active_live_board_case(case: dict) -> bool:
     return (
         isinstance(case, dict)
         and is_maintenance_report(case)
+        and not case.get("board_hidden")
         and case.get("status") == "reported"
         and not case.get("closed_at")
         and (chicago_date_str(case.get("reported_at")) or "") >= "2026-10-12"
@@ -1196,15 +1201,14 @@ def _is_active_live_board_case(case: dict) -> bool:
 
 
 def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
-    """Permanently delete Live Board cards matching scope (Managers/Developers only)."""
+    """Remove cards from Live Board while keeping every case record safely in the database."""
     role = str((actor or {}).get("role") or "").lower()
     if role not in ("developer", "super_admin"):
         raise PermissionError("Only managers and developers can clear the Live Board.")
     clean_scope = str(scope or "active").strip().lower()
     if clean_scope not in ("active", "active_and_done", "test_only"):
-        raise ValueError("Choose a valid Live Board delete scope.")
+        raise ValueError("Choose a valid Live Board clear scope.")
 
-    import shutil
     from backend.storage.board_order import KEY as BOARD_ORDER_KEY
 
     sdir = _storage_dir()
@@ -1222,7 +1226,7 @@ def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
                 c = json.loads(row["data_json"])
             except (TypeError, ValueError):
                 continue
-            if not isinstance(c, dict):
+            if not isinstance(c, dict) or c.get("board_hidden"):
                 continue
             cid = str(c.get("id") or row["id"] or "").strip()
             if not cid or not is_maintenance_report(c):
@@ -1242,26 +1246,36 @@ def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
                 continue
             if clean_scope == "active_and_done" and not (is_active or is_ws_done):
                 continue
+
+            if c.get("status") != "done":
+                _close_record(c)
+                c.setdefault("closed_by_id", actor.get("id"))
+                c.setdefault("closed_by_name", actor_name)
+            c["board_hidden"] = True
+            c["board_hidden_at"] = now
+            c["board_hidden_by"] = actor_name
+            c["updated_at"] = now
+            c.setdefault("workspace_history", []).append({
+                "action": "board_cleared",
+                "author": actor_name,
+                "author_id": actor_id,
+                "scope": clean_scope,
+                "created_at": now,
+            })
+            _upsert_case_row(
+                conn,
+                c,
+                event_type="board_cleared",
+                actor_id=actor_id,
+                actor_name=actor_name,
+            )
             deleted_ids.append(cid)
 
         if deleted_ids:
             for idx in range(0, len(deleted_ids), 250):
                 batch = deleted_ids[idx:idx + 250]
                 placeholders = ",".join("?" for _ in batch)
-                conn.execute(f"DELETE FROM cases WHERE id IN ({placeholders})", batch)
-                conn.execute(f"DELETE FROM case_notes WHERE case_id IN ({placeholders})", batch)
-                conn.execute(f"DELETE FROM case_attachments WHERE case_id IN ({placeholders})", batch)
                 conn.execute(f"DELETE FROM active_alerts WHERE alert_id IN ({placeholders})", batch)
-                for cid in batch:
-                    db.append_case_event(
-                        conn,
-                        cid,
-                        "deleted",
-                        actor_id=actor_id,
-                        actor_name=actor_name,
-                        summary={"deleted": True, "scope": clean_scope},
-                        created_at=now,
-                    )
 
             order_row = conn.execute("SELECT version, data_json FROM kv_state WHERE key=?", (BOARD_ORDER_KEY,)).fetchone()
             if order_row:
@@ -1282,19 +1296,19 @@ def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
                     )
             db.bump_version(conn, "cases_version")
 
-    upload_root = sdir / "workspace_uploads"
-    if upload_root.is_dir():
-        for cid in deleted_ids:
-            shutil.rmtree(upload_root / cid, ignore_errors=True)
-
     logger.warning(
-        "Live Board cleared by %s (%s): scope=%s deleted=%d",
+        "Live Board cards archived from board by %s (%s): scope=%s count=%d (cases preserved in SQLite)",
         actor_name,
         actor_id,
         clean_scope,
         len(deleted_ids),
     )
-    return {"deleted_ids": deleted_ids, "deleted_count": len(deleted_ids), "scope": clean_scope}
+    return {
+        "deleted_ids": deleted_ids,
+        "deleted_count": len(deleted_ids),
+        "preserved_in_db": True,
+        "scope": clean_scope,
+    }
 
 
 def close_all_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
@@ -1363,6 +1377,198 @@ def close_all_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
         "skipped_count": skipped_count,
         "scope": clean_scope,
     }
+
+
+def sync_user_display_on_cases(user_id: int, name: str, username: str) -> int:
+    """Propagate a user's updated display name/@username across their active Live Board cases."""
+    sdir = _storage_dir()
+    clean_name = str(name or "").strip()
+    clean_uname = str(username or "").strip().lstrip("@")
+    updated = 0
+    now = now_iso()
+    with db.write_tx(sdir) as conn:
+        rows = conn.execute(
+            "SELECT id, data_json FROM cases WHERE agent_id=? AND status IN ('open','assigned','reported')",
+            (int(user_id),),
+        ).fetchall()
+        for r in rows:
+            try:
+                c = json.loads(r["data_json"])
+            except Exception:
+                continue
+            if not isinstance(c, dict):
+                continue
+            if c.get("agent_name") == clean_name and c.get("agent_username", "") == clean_uname:
+                continue
+            c["agent_name"] = clean_name
+            c["agent_username"] = clean_uname
+            c["updated_at"] = now
+            _upsert_case_row(conn, c, event_type="updated", actor_id=str(user_id), actor_name=clean_name)
+            updated += 1
+    return updated
+
+
+def bulk_update_user_cases(actor: dict, target_user_id: int, payload: dict) -> dict:
+    """Batch-edit a specific user's Live Board cases (Managers/Developers only)."""
+    role = str((actor or {}).get("role") or "").lower()
+    if role not in ("developer", "super_admin"):
+        raise PermissionError("Only managers and developers can edit user case batches.")
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid update payload.")
+
+    from backend.storage.board_order import allowed_stages
+    from backend.storage.user_store import get_user
+
+    sdir = _storage_dir()
+    is_dev = role == "developer"
+    actor_id = str(actor.get("id") or "")
+    actor_name = str(actor.get("name") or "Manager").strip() or "Manager"
+    now = now_iso()
+
+    case_ids_filter = payload.get("case_ids")
+    selected_set = (
+        {str(x).strip() for x in case_ids_filter if str(x or "").strip()}
+        if isinstance(case_ids_filter, list) and case_ids_filter
+        else None
+    )
+
+    bulk_action = str(payload.get("bulk_action") or "").strip().lower()
+    if bulk_action not in ("", "close", "reopen", "clear_from_board"):
+        raise ValueError("Choose a valid bulk action.")
+
+    has_reassign = "reassign_to_id" in payload and str(payload.get("reassign_to_id") or "").strip() != ""
+    target_assignee = None
+    unassign = False
+    if has_reassign:
+        raw_target = str(payload.get("reassign_to_id") or "").strip()
+        if raw_target == "unassigned":
+            unassign = True
+        else:
+            if not raw_target.isdecimal():
+                raise ValueError("Choose a valid teammate to reassign cases to.")
+            target_assignee = get_user(int(raw_target))
+            if not target_assignee:
+                raise ValueError("Target agent account not found.")
+
+    has_stage = "board_stage" in payload and payload.get("board_stage") is not None
+    stage_val = None
+    if has_stage:
+        stage_val = str(payload.get("board_stage") or "").strip()
+        if stage_val not in allowed_stages(sdir):
+            raise ValueError("Choose a valid workflow stage.")
+
+    has_prio = "priority" in payload and str(payload.get("priority") or "").strip() != ""
+    prio_val = None
+    if has_prio:
+        prio_val = str(payload.get("priority") or "").strip().lower()
+        if prio_val not in ("low", "medium", "high", "normal"):
+            raise ValueError("Choose a valid priority.")
+
+    has_shop = "shop_info" in payload and payload.get("shop_info") is not None
+    shop_val = str(payload.get("shop_info") or "").strip()[:320] if has_shop else None
+
+    if not any([bulk_action, has_reassign, has_stage, has_prio, has_shop]):
+        raise ValueError("Choose at least one field or action to apply.")
+
+    updated_ids: list[str] = []
+    skipped_count = 0
+
+    with db.write_tx(sdir) as conn:
+        rows = conn.execute(
+            "SELECT id, data_json FROM cases WHERE agent_id=? AND status IN ('reported', 'done')",
+            (int(target_user_id),),
+        ).fetchall()
+        for row in rows:
+            try:
+                c = json.loads(row["data_json"])
+            except Exception:
+                continue
+            if not isinstance(c, dict) or not is_maintenance_report(c):
+                continue
+            cid = str(c.get("id") or row["id"] or "").strip()
+            if selected_set is not None and cid not in selected_set:
+                continue
+            is_active = _is_active_live_board_case(c)
+            is_ws_done = c.get("status") == "done" and not c.get("board_hidden") and any(
+                isinstance(h, dict) and h.get("action") == "close"
+                for h in (c.get("workspace_history") or [])
+            )
+            if bulk_action == "reopen":
+                if c.get("status") != "done" and not c.get("board_hidden"):
+                    continue
+            elif not is_active and not (bulk_action == "clear_from_board" and is_ws_done):
+                continue
+
+            if bool(c.get("is_test") or c.get("is_testing")) and not is_dev:
+                skipped_count += 1
+                continue
+
+            if bulk_action == "reopen":
+                c.update({
+                    "status": "reported",
+                    "reported_at": c.get("reported_at") or now,
+                    "closed_at": None,
+                    "closed_by_id": None,
+                    "closed_by_name": None,
+                    "resolution_secs": None,
+                    "board_hidden": False,
+                    "reopened_at": now,
+                    "reopened_by_id": actor.get("id"),
+                    "reopened_by_name": actor_name,
+                })
+                c.pop("board_hidden_at", None)
+                c.pop("board_hidden_by", None)
+
+            if unassign:
+                c["agent_id"] = None
+                c["agent_name"] = "Unassigned"
+                c["agent_username"] = ""
+            elif target_assignee is not None:
+                c["agent_id"] = int(payload["reassign_to_id"])
+                c["agent_name"] = str(target_assignee.get("name") or "")
+                c["agent_username"] = str(target_assignee.get("username") or "").lstrip("@")
+
+            if has_stage:
+                c["board_stage"] = stage_val
+            if has_prio:
+                c["priority"] = prio_val
+            if has_shop:
+                c["shop_info"] = shop_val
+
+            if bulk_action == "close" and c.get("status") != "done":
+                _close_record(c)
+                c["closed_by_id"] = actor.get("id")
+                c["closed_by_name"] = actor_name
+                c.setdefault("workspace_history", []).append({
+                    "action": "close",
+                    "author": actor_name,
+                    "author_id": actor_id,
+                    "created_at": now,
+                    "fields": [],
+                })
+                conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (cid,))
+            elif bulk_action == "clear_from_board":
+                if c.get("status") != "done":
+                    _close_record(c)
+                    c.setdefault("closed_by_id", actor.get("id"))
+                    c.setdefault("closed_by_name", actor_name)
+                c["board_hidden"] = True
+                c["board_hidden_at"] = now
+                c["board_hidden_by"] = actor_name
+                conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (cid,))
+
+            c["updated_at"] = now
+            c.setdefault("workspace_history", []).append({
+                "action": "user_bulk_edit",
+                "author": actor_name,
+                "author_id": actor_id,
+                "created_at": now,
+                "bulk_action": bulk_action or "edit",
+            })
+            _upsert_case_row(conn, c, event_type=bulk_action or "updated", actor_id=actor_id, actor_name=actor_name)
+            updated_ids.append(cid)
+
+    return {"updated_ids": updated_ids, "updated_count": len(updated_ids), "skipped_count": skipped_count}
 
 async def async_mark_missed(case_id):
     return await asyncio.to_thread(mark_missed, case_id)
