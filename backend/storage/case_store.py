@@ -1070,7 +1070,37 @@ async def ensure_indexes():
 
 # ── Workspace attachments & media ─────────────────────────────────────────────
 
-def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None, rename_id=None, new_name=None):
+def _sanitize_attachment_filename(raw_name: str, fallback_ext: str = "") -> str:
+    import re
+    clean = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", str(raw_name or "").strip()).strip(" .")[:140]
+    if not clean:
+        raise ValueError("Provide a valid file name.")
+    ext = str(fallback_ext or "").lower()
+    if ext and not clean.lower().endswith(ext):
+        clean = f"{clean}{ext}"
+    return clean
+
+
+def _can_edit_attachment(actor: dict, case: dict, target: dict) -> bool:
+    return (
+        actor.get("role") in ("developer", "super_admin")
+        or str(target.get("uploaded_by_id") or "") == str(actor.get("id") or "")
+        or str(case.get("agent_id") or "") == str(actor.get("id") or "")
+    )
+
+
+def workspace_attachment_write(
+    actor,
+    case_id,
+    attachment=None,
+    remove_id=None,
+    rename_id=None,
+    new_name=None,
+    update_id=None,
+    updates=None,
+    new_version_id=None,
+    version_meta=None,
+):
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
         case = json.loads(row["data_json"]) if row else None
@@ -1079,36 +1109,115 @@ def workspace_attachment_write(actor, case_id, attachment=None, remove_id=None, 
         if bool(case.get("is_test") or case.get("is_testing")) and str(actor.get("role") or "").lower() != "developer":
             raise PermissionError("This case is marked as Test and is read-only for non-developers.")
         items = case.setdefault("workspace_attachments", [])
-        if rename_id:
-            target = next((x for x in items if x.get("id") == rename_id), None)
+        target_id = update_id or rename_id or new_version_id
+        if target_id:
+            target = next((x for x in items if x.get("id") == target_id), None)
             if not target:
                 raise LookupError("Attachment not found.")
-            if (
-                actor["role"] not in ("developer", "super_admin")
-                and str(target.get("uploaded_by_id")) != str(actor["id"])
-                and str(case.get("agent_id")) != str(actor["id"])
-            ):
-                raise PermissionError("Only the assigned agent, uploader, or a manager can rename this attachment.")
-            raw_name = str(new_name or "").strip()
-            if not raw_name:
-                raise ValueError("Provide a file name.")
-            import re
-            clean_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", raw_name).strip(" .")[:140]
-            if not clean_name:
-                raise ValueError("Provide a valid file name.")
-            ext = str(target.get("extension") or "").lower()
-            if ext and not clean_name.lower().endswith(ext):
-                clean_name = f"{clean_name}{ext}"
-            old_name = target.get("name", "")
-            target["name"] = clean_name
-            case["updated_at"] = now_iso()
-            case.setdefault("workspace_history", []).append({
-                "action": "attachment_renamed",
-                "author": actor.get("name") or "Team member",
-                "from": old_name,
-                "to": clean_name,
-                "created_at": now_iso(),
-            })
+            if not _can_edit_attachment(actor, case, target):
+                raise PermissionError("Only the assigned agent, uploader, or a manager can update this attachment.")
+            if new_version_id:
+                if not isinstance(version_meta, dict) or not version_meta.get("blob_id"):
+                    raise ValueError("Missing uploaded file version metadata.")
+                versions = target.setdefault("versions", [])
+                if not versions:
+                    versions.append({
+                        "id": str(target.get("blob_id") or target["id"]),
+                        "blob_id": str(target.get("blob_id") or target["id"]),
+                        "version": 1,
+                        "name": str(target.get("name") or "File"),
+                        "size": int(target.get("size") or 0),
+                        "extension": str(target.get("extension") or ""),
+                        "created_at": str(target.get("created_at") or ""),
+                        "uploaded_by": str(target.get("uploaded_by") or "Team member"),
+                        "uploaded_by_id": str(target.get("uploaded_by_id") or ""),
+                    })
+                next_ver = max((int(v.get("version") or 0) for v in versions), default=1) + 1
+                new_ver_entry = {
+                    "id": str(version_meta["blob_id"]),
+                    "blob_id": str(version_meta["blob_id"]),
+                    "version": next_ver,
+                    "name": str(version_meta.get("name") or target.get("name") or "File"),
+                    "size": int(version_meta.get("size") or 0),
+                    "extension": str(version_meta.get("extension") or target.get("extension") or ""),
+                    "created_at": str(version_meta.get("created_at") or now_iso()),
+                    "uploaded_by": str(version_meta.get("uploaded_by") or actor.get("name") or "Team member"),
+                    "uploaded_by_id": str(version_meta.get("uploaded_by_id") or actor.get("id") or ""),
+                }
+                versions.append(new_ver_entry)
+                target["version_num"] = next_ver
+                target["blob_id"] = new_ver_entry["blob_id"]
+                target["name"] = new_ver_entry["name"]
+                target["size"] = new_ver_entry["size"]
+                target["extension"] = new_ver_entry["extension"]
+                target["created_at"] = new_ver_entry["created_at"]
+                target["uploaded_by"] = new_ver_entry["uploaded_by"]
+                target["uploaded_by_id"] = new_ver_entry["uploaded_by_id"]
+                case["updated_at"] = now_iso()
+                case.setdefault("workspace_history", []).append({
+                    "action": "attachment_version_added",
+                    "author": actor.get("name") or "Team member",
+                    "file_name": target["name"][:140],
+                    "version": next_ver,
+                    "created_at": now_iso(),
+                })
+                _upsert_case_row(conn, case)
+                return dict(target)
+
+            patch = dict(updates) if isinstance(updates, dict) else {}
+            if rename_id and new_name is not None:
+                patch.setdefault("name", new_name)
+            changed_actions = []
+            if "name" in patch and patch["name"] is not None:
+                old_name = target.get("name", "")
+                clean_name = _sanitize_attachment_filename(patch["name"], target.get("extension") or "")
+                if clean_name != old_name:
+                    target["name"] = clean_name
+                    changed_actions.append({
+                        "action": "attachment_renamed",
+                        "author": actor.get("name") or "Team member",
+                        "from": old_name,
+                        "to": clean_name,
+                        "created_at": now_iso(),
+                    })
+            if "description" in patch:
+                target["description"] = str(patch.get("description") or "").strip()[:500]
+                changed_actions.append({
+                    "action": "attachment_updated",
+                    "author": actor.get("name") or "Team member",
+                    "file_name": str(target.get("name") or "")[:140],
+                    "created_at": now_iso(),
+                })
+            if "category" in patch:
+                next_cat = str(patch.get("category") or "attachment").strip().lower()
+                if next_cat not in ("attachment", "proof"):
+                    raise ValueError("Invalid document category.")
+                prev_cat = str(target.get("category") or "attachment").lower()
+                target["category"] = next_cat
+                if next_cat == "proof":
+                    pt = str(patch.get("proof_type") or target.get("proof_type") or "repair_proof").strip().lower()
+                    if pt not in ("invoice", "repair_proof", "receipt", "other"):
+                        raise ValueError("Invalid proof type.")
+                    target["proof_type"] = pt
+                    if prev_cat != "proof":
+                        changed_actions.append({
+                            "action": "proof_added",
+                            "author": actor.get("name") or "Team member",
+                            "file_name": str(target.get("name") or "")[:140],
+                            "category": "proof",
+                            "created_at": now_iso(),
+                        })
+                else:
+                    target["proof_type"] = ""
+            elif "proof_type" in patch and str(target.get("category") or "").lower() == "proof":
+                pt = str(patch.get("proof_type") or "repair_proof").strip().lower()
+                if pt not in ("invoice", "repair_proof", "receipt", "other"):
+                    raise ValueError("Invalid proof type.")
+                target["proof_type"] = pt
+
+            if changed_actions:
+                case["updated_at"] = now_iso()
+                case.setdefault("workspace_history", []).extend(changed_actions)
             _upsert_case_row(conn, case)
             return dict(target)
         if remove_id:

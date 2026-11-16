@@ -21,7 +21,15 @@ from backend.ai.live_shop_search import search_live_repair_shops
 from backend.core.app_time import chicago_date_str, chicago_now, chicago_timestamp, utc_now
 from backend.core.case_snapshot import normalize as normalize_case
 from backend.storage import case_store, db as kurtex_db, shift_store
-from backend.storage.board_order import OrderConflict, read_order, save_order
+from backend.storage.board_order import (
+    OrderConflict,
+    add_custom_lane,
+    allowed_stages,
+    delete_custom_lane,
+    read_custom_lanes,
+    read_order,
+    save_order,
+)
 from backend.storage.board_presence import heartbeat, snapshot
 from backend.storage.case_store import (
     is_maintenance_report,
@@ -124,6 +132,10 @@ def register_workspace_routes(server):
         return URLSafeTimedSerializer(app.secret_key, salt=_REALTIME_SALT)
 
     _ALLOWED_STAGES = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"}
+
+    def _is_allowed_stage(stage_val: str) -> bool:
+        clean = str(stage_val or "").strip()
+        return clean in allowed_stages(_data_dir())
     _ALLOWED_PRIORITIES = {"low", "medium", "high", "normal"}
     _ALLOWED_QUICK_REPLY_ICONS = {
         "ph-phone-outgoing", "ph-wrench", "ph-package", "ph-receipt", "ph-check-circle",
@@ -251,6 +263,7 @@ def register_workspace_routes(server):
             "case_reads": case_reads,
             "quick_replies": quick_replies,
             "workspace_prefs": workspace_prefs,
+            "custom_lanes": read_custom_lanes(_data_dir()),
         })
 
     @app.route("/api/workspace/cases", methods=["POST"])
@@ -309,7 +322,7 @@ def register_workspace_routes(server):
                 ):
                     raise ValueError("Choose equipment and priority.")
                 board_stage = str(data.get("board_stage") or "").strip()
-                if board_stage not in ("", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"):
+                if not _is_allowed_stage(board_stage):
                     raise ValueError("Choose a valid workflow stage.")
                 if "agent_id" in data:
                     requested_agent_id = str(data.get("agent_id") or "").strip()
@@ -450,27 +463,18 @@ def register_workspace_routes(server):
                         "username": target.get("username", ""),
                     }
                     if action == "move":
-                        if data.get("stage") not in (
-                            "",
-                            "jbs_plant",
-                            "meijer",
-                            "dealer_shop",
-                            "monitoring",
-                            "to_yard",
-                            "at_yard",
-                        ):
+                        if not _is_allowed_stage(data.get("stage")):
                             raise ValueError("Choose a valid workflow stage.")
-                        payload["stage"] = data["stage"]
+                        payload["stage"] = str(data.get("stage") or "").strip()
                     rank_val = _opt_rank()
                     if rank_val is not None:
                         payload["board_rank"] = rank_val
                     if data.get("allow_concurrent_move") is True:
                         payload["allow_concurrent_move"] = True
                 elif action == "stage":
-                    allowed_stages = {"", "jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard"}
-                    if data.get("stage") not in allowed_stages:
+                    if not _is_allowed_stage(data.get("stage")):
                         raise ValueError("Choose a valid workflow stage.")
-                    payload["stage"] = data["stage"]
+                    payload["stage"] = str(data.get("stage") or "").strip()
                     rank_val = _opt_rank()
                     if rank_val is not None:
                         payload["board_rank"] = rank_val
@@ -540,15 +544,7 @@ def register_workspace_routes(server):
                         "Empty",
                     ):
                         raise ValueError("Choose a valid load type.")
-                    if "board_stage" in fields and fields["board_stage"] not in (
-                        "",
-                        "jbs_plant",
-                        "meijer",
-                        "dealer_shop",
-                        "monitoring",
-                        "to_yard",
-                        "at_yard",
-                    ):
+                    if "board_stage" in fields and not _is_allowed_stage(fields["board_stage"]):
                         raise ValueError("Choose a valid workflow stage.")
                     if "temp_recorder" in fields and fields["temp_recorder"] not in ("", "Yes", "No"):
                         raise ValueError("Choose a valid temperature recorder value.")
@@ -575,23 +571,34 @@ def register_workspace_routes(server):
             logger.exception("Workspace report write failed")
             return jsonify({"error": "The report could not be saved. Retry with your entered values."}), 503
 
+    _ALLOWED_UPLOAD_EXTS = {
+        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+        ".pdf", ".txt", ".csv", ".tsv", ".json", ".log",
+        ".doc", ".docx", ".mp4", ".mov", ".webm",
+    }
+
+    def _read_validated_upload(file_obj):
+        if not file_obj or not file_obj.filename:
+            return None, (jsonify({"error": "Select a file."}), 400)
+        name = secure_filename(file_obj.filename)[:160]
+        extension = Path(name).suffix.lower()
+        if extension not in _ALLOWED_UPLOAD_EXTS:
+            return None, (jsonify({"error": "Unsupported file type."}), 400)
+        limit = (50 if extension in (".mp4", ".mov", ".webm") else 15) * 1024 * 1024
+        content = file_obj.stream.read(limit + 1)
+        if len(content) > limit:
+            return None, (jsonify({"error": f"File exceeds {limit // (1024 * 1024)} MB."}), 413)
+        return (name, extension, content), None
+
     @app.route("/api/workspace/cases/<case_id>/attachments", methods=["POST"])
     def api_workspace_attachment_upload(case_id):
         actor, error = _workspace_actor()
         if error:
             return error
-        file = request.files.get("file")
-        if not file or not file.filename:
-            return jsonify({"error": "Select a file."}), 400
-        name = secure_filename(file.filename)[:160]
-        extension = Path(name).suffix.lower()
-        allowed = {
-            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
-            ".pdf", ".txt", ".csv", ".tsv", ".json", ".log",
-            ".doc", ".docx", ".mp4", ".mov", ".webm",
-        }
-        if extension not in allowed:
-            return jsonify({"error": "Unsupported file type."}), 400
+        parsed, upload_err = _read_validated_upload(request.files.get("file"))
+        if upload_err:
+            return upload_err
+        name, extension, content = parsed
         category = str(request.form.get("category") or "attachment").strip().lower()
         if category not in ("attachment", "proof"):
             return jsonify({"error": "Invalid document category."}), 400
@@ -599,10 +606,6 @@ def register_workspace_routes(server):
         if category == "proof" and proof_type not in ("invoice", "repair_proof", "receipt", "other"):
             return jsonify({"error": "Invalid proof type."}), 400
         description = str(request.form.get("description") or "").strip()[:500]
-        limit = (50 if extension in (".mp4", ".mov", ".webm") else 15) * 1024 * 1024
-        content = file.stream.read(limit + 1)
-        if len(content) > limit:
-            return jsonify({"error": f"File exceeds {limit // (1024 * 1024)} MB."}), 413
         attachment_id = uuid.uuid4().hex
         folder = _data_dir() / "workspace_uploads" / case_id
         folder.mkdir(parents=True, exist_ok=True)
@@ -611,16 +614,20 @@ def register_workspace_routes(server):
             path.write_bytes(content)
             metadata = {
                 "id": attachment_id,
+                "blob_id": attachment_id,
                 "name": name,
                 "size": len(content),
                 "extension": extension,
                 "category": category,
+                "description": description,
+                "version_num": 1,
+                "versions": [],
                 "created_at": server._now_iso(),
                 "uploaded_by": actor.get("name", ""),
                 "uploaded_by_id": str(actor["id"]),
             }
             if category == "proof":
-                metadata.update({"proof_type": proof_type, "description": description})
+                metadata["proof_type"] = proof_type
             workspace_attachment_write(actor, case_id, attachment=metadata)
             return jsonify({"ok": True, "id": attachment_id, "category": category})
         except (LookupError, PermissionError, ValueError) as exc:
@@ -662,11 +669,17 @@ def register_workspace_routes(server):
         try:
             if request.method == "PATCH":
                 data = request.get_json(silent=True) or {}
+                patch_fields = {}
+                for k in ("name", "description", "category", "proof_type"):
+                    if k in data:
+                        patch_fields[k] = data[k]
+                if not patch_fields:
+                    return jsonify({"error": "Provide fields to update."}), 400
                 updated = workspace_attachment_write(
                     actor,
                     case_id,
-                    rename_id=attachment_id,
-                    new_name=data.get("name"),
+                    update_id=attachment_id,
+                    updates=patch_fields,
                 )
                 return jsonify({"ok": True, "attachment": updated})
             case, item = workspace_attachment_lookup(case_id, attachment_id)
@@ -682,10 +695,16 @@ def register_workspace_routes(server):
                 and str(item.get("uploaded_by_id")) != str(actor["id"])
             ):
                 return jsonify({"error": "Only the uploading agent may delete this attachment."}), 403
-            path = _data_dir() / "workspace_uploads" / case_id / (attachment_id + item["extension"])
+            folder = _data_dir() / "workspace_uploads" / case_id
+            blob_id = str(item.get("blob_id") or attachment_id)
+            path = folder / (blob_id + str(item.get("extension") or ""))
             if request.method == "DELETE":
                 workspace_attachment_write(actor, case_id, remove_id=attachment_id)
                 path.unlink(missing_ok=True)
+                for ver in item.get("versions") or []:
+                    if isinstance(ver, dict) and ver.get("blob_id"):
+                        vpath = folder / (str(ver["blob_id"]) + str(ver.get("extension") or ""))
+                        vpath.unlink(missing_ok=True)
                 return jsonify({"ok": True})
             if not path.is_file():
                 return jsonify({"error": "File unavailable."}), 404
@@ -699,6 +718,104 @@ def register_workspace_routes(server):
             return jsonify({"error": str(exc)}), 400
         except LookupError as exc:
             return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/workspace/cases/<case_id>/attachments/<attachment_id>/versions", methods=["POST"])
+    def api_workspace_attachment_new_version(case_id, attachment_id):
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        parsed, upload_err = _read_validated_upload(request.files.get("file"))
+        if upload_err:
+            return upload_err
+        name, extension, content = parsed
+        blob_id = uuid.uuid4().hex
+        folder = _data_dir() / "workspace_uploads" / case_id
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / (blob_id + extension)
+        try:
+            path.write_bytes(content)
+            updated = workspace_attachment_write(
+                actor,
+                case_id,
+                new_version_id=attachment_id,
+                version_meta={
+                    "blob_id": blob_id,
+                    "name": name,
+                    "size": len(content),
+                    "extension": extension,
+                    "created_at": server._now_iso(),
+                    "uploaded_by": actor.get("name", ""),
+                    "uploaded_by_id": str(actor["id"]),
+                },
+            )
+            return jsonify({"ok": True, "attachment": updated})
+        except (PermissionError, LookupError, ValueError) as exc:
+            path.unlink(missing_ok=True)
+            code = 403 if isinstance(exc, PermissionError) else (404 if isinstance(exc, LookupError) else 400)
+            return jsonify({"error": str(exc)}), code
+        except Exception:
+            path.unlink(missing_ok=True)
+            logger.exception("Attachment version upload failed")
+            return jsonify({"error": "Unable to upload new file version."}), 503
+
+    @app.route("/api/workspace/cases/<case_id>/attachments/<attachment_id>/versions/<version_id>", methods=["GET"])
+    def api_workspace_attachment_version_file(case_id, attachment_id, version_id):
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        try:
+            _case, item = workspace_attachment_lookup(case_id, attachment_id)
+            versions = item.get("versions") or []
+            ver = next((v for v in versions if isinstance(v, dict) and str(v.get("id")) == str(version_id)), None)
+            if not ver:
+                return jsonify({"error": "Version not found."}), 404
+            blob_id = str(ver.get("blob_id") or ver.get("id"))
+            ext = str(ver.get("extension") or item.get("extension") or "").lower()
+            path = _data_dir() / "workspace_uploads" / case_id / (blob_id + ext)
+            if not path.is_file():
+                return jsonify({"error": "Version file unavailable."}), 404
+            inline = request.args.get("inline") == "1"
+            mime = _INLINE_MIMES.get(ext, "application/octet-stream") if inline else "application/octet-stream"
+            return send_file(path, as_attachment=not inline, download_name=ver.get("name") or item["name"], mimetype=mime)
+        except LookupError as exc:
+            return jsonify({"error": str(exc)}), 404
+
+    @app.route("/api/workspace/cases/<case_id>/attachments/bulk", methods=["POST"])
+    def api_workspace_attachments_bulk(case_id):
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True) or {}
+        action = str(data.get("action") or "").strip().lower()
+        ids = [str(x).strip() for x in (data.get("ids") or []) if str(x).strip()][:100]
+        if action not in ("delete", "convert_to_proof", "convert_to_attachment") or not ids:
+            return jsonify({"error": "Choose valid attachments and bulk action."}), 400
+        proof_type = str(data.get("proof_type") or "repair_proof").strip().lower()
+        processed = []
+        skipped = []
+        folder = _data_dir() / "workspace_uploads" / case_id
+        for aid in ids:
+            try:
+                if action == "delete":
+                    _case, item = workspace_attachment_lookup(case_id, aid)
+                    workspace_attachment_write(actor, case_id, remove_id=aid)
+                    blob_id = str(item.get("blob_id") or aid)
+                    (folder / (blob_id + str(item.get("extension") or ""))).unlink(missing_ok=True)
+                    for ver in item.get("versions") or []:
+                        if isinstance(ver, dict) and ver.get("blob_id"):
+                            (folder / (str(ver["blob_id"]) + str(ver.get("extension") or ""))).unlink(missing_ok=True)
+                else:
+                    target_cat = "proof" if action == "convert_to_proof" else "attachment"
+                    workspace_attachment_write(
+                        actor,
+                        case_id,
+                        update_id=aid,
+                        updates={"category": target_cat, "proof_type": proof_type},
+                    )
+                processed.append(aid)
+            except (PermissionError, LookupError, ValueError) as exc:
+                skipped.append({"id": aid, "error": str(exc)})
+        return jsonify({"ok": True, "processed": processed, "skipped": skipped})
 
     @app.route("/api/workspace/realtime-ticket", methods=["POST"])
     def api_workspace_realtime_ticket():
@@ -799,7 +916,7 @@ def register_workspace_routes(server):
             actor, error = _workspace_actor_read()
             if error:
                 return error
-            return jsonify({"order": read_order(_data_dir())})
+            return jsonify({"order": read_order(_data_dir()), "custom_lanes": read_custom_lanes(_data_dir())})
         actor, error = _workspace_actor()
         if error:
             return error
@@ -822,6 +939,89 @@ def register_workspace_routes(server):
             return jsonify({"error": str(exc)}), 403
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/lanes", methods=["GET", "POST"])
+    def api_workspace_lanes():
+        if request.method == "GET":
+            actor, error = _workspace_actor_read()
+            if error:
+                return error
+            return jsonify({"ok": True, "lanes": read_custom_lanes(_data_dir())})
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True) or {}
+        try:
+            res = add_custom_lane(data.get("name"), actor["id"], color=data.get("color") or "#7c3aed", data_dir=_data_dir())
+            return jsonify({"ok": True, **res}), 201
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/lanes/<lane_id>", methods=["DELETE"])
+    def api_workspace_lane_delete(lane_id):
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        try:
+            remaining = delete_custom_lane(lane_id, data_dir=_data_dir())
+            return jsonify({"ok": True, "custom_lanes": remaining})
+        except LookupError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/proofs", methods=["GET"])
+    def api_workspace_proofs():
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        is_dev = str(actor.get("role") or "").lower() == "developer"
+        proof_filter = str(request.args.get("proof_type") or "").strip().lower()
+        q = str(request.args.get("q") or "").strip().lower()
+        items = []
+        for raw_c in server.load_cases():
+            if not is_maintenance_report(raw_c):
+                continue
+            if not is_dev and bool(raw_c.get("is_test") or raw_c.get("is_testing")):
+                continue
+            cid = str(raw_c.get("id") or "")
+            unit = str(raw_c.get("unit_number") or "").strip()
+            driver = str(raw_c.get("report_driver") or raw_c.get("driver_name") or "").strip()
+            status = str(raw_c.get("status") or "reported")
+            for a in (raw_c.get("workspace_attachments") or []):
+                if not isinstance(a, dict) or not a.get("id"):
+                    continue
+                if str(a.get("category") or "").lower() != "proof":
+                    continue
+                pt = str(a.get("proof_type") or "repair_proof").lower()
+                if proof_filter and proof_filter != "all" and pt != proof_filter:
+                    continue
+                hay = " ".join([
+                    str(a.get("name") or ""),
+                    str(a.get("description") or ""),
+                    unit,
+                    driver,
+                    str(a.get("uploaded_by") or ""),
+                ]).lower()
+                if q and q not in hay:
+                    continue
+                items.append({
+                    "id": a["id"],
+                    "case_id": cid,
+                    "unit_number": unit,
+                    "driver": driver,
+                    "case_status": status,
+                    "name": a.get("name") or "Proof",
+                    "extension": a.get("extension") or "",
+                    "size": int(a.get("size") or 0),
+                    "proof_type": pt,
+                    "description": a.get("description") or "",
+                    "uploaded_by": a.get("uploaded_by") or "Agent",
+                    "created_at": a.get("created_at") or "",
+                    "url": f"/api/workspace/cases/{urllib.parse.quote(cid, safe='')}/attachments/{urllib.parse.quote(str(a['id']), safe='')}",
+                })
+        items.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+        return jsonify({"ok": True, "proofs": items[:150], "total": len(items)})
 
     @app.route("/api/workspace/presence", methods=["GET", "POST"])
     def api_workspace_presence():
@@ -1797,7 +1997,7 @@ def register_workspace_routes(server):
             stage_val = None
             if has_stage:
                 stage_val = str(data.get("board_stage") or "").strip()
-                if stage_val not in _ALLOWED_STAGES:
+                if not _is_allowed_stage(stage_val):
                     return jsonify({"error": "Choose a valid workflow stage."}), 400
             prio_val = None
             if has_priority:

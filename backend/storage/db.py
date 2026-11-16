@@ -471,11 +471,18 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
         category       TEXT NOT NULL DEFAULT 'attachment',
         proof_type     TEXT NOT NULL DEFAULT '',
         description    TEXT NOT NULL DEFAULT '',
+        version_num    INTEGER NOT NULL DEFAULT 1,
+        versions_json  TEXT NOT NULL DEFAULT '[]',
         uploaded_by    TEXT NOT NULL DEFAULT '',
         uploaded_by_id TEXT NOT NULL DEFAULT '',
         created_at     TEXT NOT NULL DEFAULT ''
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_case_attachments_case ON case_attachments(case_id, created_at DESC)")
+    att_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(case_attachments)")}
+    if "version_num" not in att_cols:
+        conn.execute("ALTER TABLE case_attachments ADD COLUMN version_num INTEGER NOT NULL DEFAULT 1")
+    if "versions_json" not in att_cols:
+        conn.execute("ALTER TABLE case_attachments ADD COLUMN versions_json TEXT NOT NULL DEFAULT '[]'")
 
     conn.execute("""CREATE TABLE IF NOT EXISTS case_events (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -608,13 +615,17 @@ def sync_normalized_case_row(conn: sqlite3.Connection, case: dict) -> None:
         conn.execute(
             """INSERT INTO case_attachments(
                 id, case_id, name, size, extension, category, proof_type,
-                description, uploaded_by, uploaded_by_id, created_at
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                description, version_num, versions_json, uploaded_by, uploaded_by_id, created_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name,
+                size=excluded.size,
+                extension=excluded.extension,
                 category=excluded.category,
                 proof_type=excluded.proof_type,
-                description=excluded.description""",
+                description=excluded.description,
+                version_num=excluded.version_num,
+                versions_json=excluded.versions_json""",
             (
                 aid,
                 cid,
@@ -624,6 +635,8 @@ def sync_normalized_case_row(conn: sqlite3.Connection, case: dict) -> None:
                 str(a.get("category") or "attachment"),
                 str(a.get("proof_type") or ""),
                 str(a.get("description") or ""),
+                int(a.get("version_num") or 1),
+                json.dumps(a.get("versions") or [], ensure_ascii=False, separators=(",", ":")),
                 str(a.get("uploaded_by") or ""),
                 str(a.get("uploaded_by_id") or ""),
                 str(a.get("created_at") or ""),

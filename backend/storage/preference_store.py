@@ -263,6 +263,7 @@ def _sanitize_workspace_board_prefs(raw) -> dict:
     ]
     prefs["collapsed_lanes"] = collapsed_lanes
     prefs["expanded_lanes"] = expanded_lanes
+    prefs["lane_order"] = _sanitize_key_list(src.get("lane_order"), allow_colon=True, max_items=120, max_len=64)
     prefs["watchlist_ids"] = _sanitize_key_list(src.get("watchlist_ids"), allow_colon=True, max_items=200, max_len=48)
     raw_tb = src.get("toolbar_visibility")
     tb = raw_tb if isinstance(raw_tb, dict) else {}
@@ -326,6 +327,8 @@ def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = N
             merged["collapsed_lanes"] = updates.get("collapsed_lanes")
         if "expanded_lanes" in updates:
             merged["expanded_lanes"] = updates.get("expanded_lanes")
+        if "lane_order" in updates:
+            merged["lane_order"] = updates.get("lane_order")
         if "watchlist_ids" in updates:
             merged["watchlist_ids"] = updates.get("watchlist_ids")
         if isinstance(updates.get("toolbar_visibility"), dict):
