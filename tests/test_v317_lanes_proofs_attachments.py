@@ -173,6 +173,42 @@ class LiveBoardV317BackendTests(unittest.TestCase):
             self.assertEqual(bulk_res.get_json()["processed"], [att_id])
             self.assertEqual(self.client.get("/api/workspace/proofs").get_json()["proofs"], [])
 
+    def test_existing_db_migrates_attachment_version_columns_on_upload(self):
+        # Simulate a pre-v317 SQLite DB where case_attachments lacked version_num/versions_json
+        # while .kurtex-db-initialized and live_board_normalized_v1='1' already exist.
+        with db.write_tx(self.data_dir) as conn:
+            conn.execute("DROP TABLE case_attachments")
+            conn.execute(
+                """CREATE TABLE case_attachments (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    name TEXT NOT NULL DEFAULT '',
+                    size INTEGER NOT NULL DEFAULT 0,
+                    extension TEXT NOT NULL DEFAULT '',
+                    category TEXT NOT NULL DEFAULT 'attachment',
+                    proof_type TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    uploaded_by TEXT NOT NULL DEFAULT '',
+                    uploaded_by_id TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT ''
+                )"""
+            )
+            conn.execute("DELETE FROM meta WHERE key='live_board_schema_version'")
+        db._INITIALIZED_DBS.clear()
+
+        with self._auth_patch():
+            up = self.client.post(
+                f"/api/workspace/cases/{self.case['id']}/attachments",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                data={"file": (io.BytesIO(b"\xff\xd8\xff\xe0"), "22. Windows Logo.jpg"), "category": "attachment"},
+                content_type="multipart/form-data",
+            )
+            self.assertEqual(up.status_code, 200, up.get_json())
+            with db.read_conn(self.data_dir) as conn:
+                cols = {r["name"] for r in conn.execute("PRAGMA table_info(case_attachments)")}
+                self.assertIn("version_num", cols)
+                self.assertIn("versions_json", cols)
+
 
 if __name__ == "__main__":
     unittest.main()

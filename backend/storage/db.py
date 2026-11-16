@@ -422,6 +422,9 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bot_feedback_messages ADD COLUMN local_file_key TEXT NOT NULL DEFAULT ''")
 
 
+_LIVE_BOARD_SCHEMA_VERSION = "2"
+
+
 def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
     """Create normalized Live Board tables, fractional ranking columns, and delta event log."""
     case_cols = {str(row["name"]) for row in conn.execute("PRAGMA table_info(cases)")}
@@ -530,6 +533,11 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
             "INSERT INTO meta(key,value) VALUES('live_board_normalized_v1','1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'"
         )
+    conn.execute(
+        "INSERT INTO meta(key,value) VALUES('live_board_schema_version',?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (_LIVE_BOARD_SCHEMA_VERSION,),
+    )
 
 
 def sync_normalized_case_row(conn: sqlite3.Connection, case: dict) -> None:
@@ -728,10 +736,16 @@ def _ensure_ready(data_dir: Path | str | None = None) -> tuple[sqlite3.Connectio
             if resolved not in _INITIALIZED_DBS or not marker.exists():
                 if db_path.exists() and marker.exists():
                     try:
-                        ready_row = conn.execute(
-                            "SELECT value FROM meta WHERE key='live_board_normalized_v1'"
-                        ).fetchone()
-                        if ready_row and ready_row["value"] == "1":
+                        meta_rows = {
+                            r["key"]: r["value"]
+                            for r in conn.execute(
+                                "SELECT key, value FROM meta WHERE key IN ('live_board_normalized_v1','live_board_schema_version')"
+                            ).fetchall()
+                        }
+                        if (
+                            meta_rows.get("live_board_normalized_v1") == "1"
+                            and meta_rows.get("live_board_schema_version") == _LIVE_BOARD_SCHEMA_VERSION
+                        ):
                             _INITIALIZED_DBS.add(resolved)
                             return conn, d
                     except sqlite3.Error:
