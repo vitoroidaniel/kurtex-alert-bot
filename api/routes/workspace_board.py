@@ -28,10 +28,13 @@ from backend.storage.board_order import (
     delete_custom_lane,
     read_custom_lanes,
     read_order,
+    reset_order,
     save_order,
 )
 from backend.storage.board_presence import heartbeat, snapshot
 from backend.storage.case_store import (
+    clear_live_board_cases,
+    close_all_live_board_cases,
     is_maintenance_report,
     workspace_attachment_lookup,
     workspace_attachment_write,
@@ -935,6 +938,51 @@ def register_workspace_routes(server):
             return jsonify({"order": result})
         except OrderConflict as exc:
             return jsonify({"error": str(exc), "order": read_order(_data_dir())}), 409
+        except PermissionError as exc:
+            return jsonify({"error": str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/order/reset", methods=["POST"])
+    def api_workspace_order_reset():
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        if actor["role"] not in ("developer", "super_admin"):
+            return jsonify({"error": "Only managers and developers can reset board card ordering."}), 403
+        return jsonify({"ok": True, "order": reset_order(_data_dir())})
+
+    @app.route("/api/workspace/board/close-all", methods=["POST"])
+    def api_workspace_board_close_all():
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        if actor["role"] not in ("developer", "super_admin"):
+            return jsonify({"error": "Only managers and developers can bulk-close the Live Board."}), 403
+        data = request.get_json(silent=True) or {}
+        if data.get("confirm") is not True:
+            return jsonify({"error": "Confirmation is required to bulk-close Live Board cards."}), 400
+        try:
+            res = close_all_live_board_cases(actor, scope=str(data.get("scope") or "active"))
+            return jsonify({"ok": True, **res})
+        except PermissionError as exc:
+            return jsonify({"error": str(exc)}), 403
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/board/clear", methods=["POST"])
+    def api_workspace_board_clear():
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        if actor["role"] not in ("developer", "super_admin"):
+            return jsonify({"error": "Only managers and developers can delete Live Board cards."}), 403
+        data = request.get_json(silent=True) or {}
+        if data.get("confirm") is not True:
+            return jsonify({"error": "Confirmation is required before deleting Live Board cards."}), 400
+        try:
+            res = clear_live_board_cases(actor, scope=str(data.get("scope") or "active"))
+            return jsonify({"ok": True, **res})
         except PermissionError as exc:
             return jsonify({"error": str(exc)}), 403
         except ValueError as exc:

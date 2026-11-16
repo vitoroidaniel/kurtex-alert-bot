@@ -387,8 +387,10 @@ def close_case(
     *,
     replaced_parts: Optional[list[str]] = None,
     parts_replaced: Optional[bool] = None,
+    closed_by_id=None,
+    closed_by_name: Optional[str] = None,
 ) -> Optional[dict]:
-    """Close atomically, retaining explicitly reported replaced part numbers for AI history."""
+    """Close atomically, retaining explicitly reported replaced part numbers and syncing Live Board Done history."""
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
         if not row:
@@ -405,7 +407,32 @@ def close_case(
             case["replaced_part_numbers"] = ", ".join(case["replaced_parts"])
             case["parts_recorded_at"] = now_iso()
         _close_record(case, notes)
-        _upsert_case_row(conn, case)
+        actor_id = closed_by_id if closed_by_id is not None else case.get("agent_id")
+        actor_name = (
+            str(closed_by_name).strip()
+            if closed_by_name
+            else str(case.get("agent_name") or "").strip() or "Telegram Bot"
+        )
+        if not case.get("closed_by_id") and actor_id is not None:
+            case["closed_by_id"] = actor_id
+        if not case.get("closed_by_name"):
+            case["closed_by_name"] = actor_name
+        if is_maintenance_report(case) and (chicago_date_str(case.get("reported_at")) or "") >= "2026-10-12":
+            case.setdefault("workspace_history", []).append({
+                "action": "close",
+                "author": actor_name,
+                "author_id": str(actor_id) if actor_id is not None else "",
+                "source": "telegram",
+                "created_at": case.get("closed_at") or now_iso(),
+                "fields": [],
+            })
+        _upsert_case_row(
+            conn,
+            case,
+            event_type="close",
+            actor_id=str(actor_id or ""),
+            actor_name=actor_name,
+        )
         conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (case_id,))
         logger.info(
             "Case %s closed; replaced part numbers: %s",
@@ -1138,10 +1165,204 @@ async def async_assign_case(case_id, agent_id, agent_name, agent_username, allow
 async def async_save_maintenance_report(case_id, data, report_text, media):
     return await asyncio.to_thread(save_maintenance_report, case_id, data, report_text, media)
 
-async def async_close_case(case_id, notes=None, *, replaced_parts=None, parts_replaced=None):
+async def async_close_case(
+    case_id,
+    notes=None,
+    *,
+    replaced_parts=None,
+    parts_replaced=None,
+    closed_by_id=None,
+    closed_by_name=None,
+):
     return await asyncio.to_thread(
-        close_case, case_id, notes, replaced_parts=replaced_parts, parts_replaced=parts_replaced
+        close_case,
+        case_id,
+        notes,
+        replaced_parts=replaced_parts,
+        parts_replaced=parts_replaced,
+        closed_by_id=closed_by_id,
+        closed_by_name=closed_by_name,
     )
+
+
+def _is_active_live_board_case(case: dict) -> bool:
+    return (
+        isinstance(case, dict)
+        and is_maintenance_report(case)
+        and case.get("status") == "reported"
+        and not case.get("closed_at")
+        and (chicago_date_str(case.get("reported_at")) or "") >= "2026-10-12"
+    )
+
+
+def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
+    """Permanently delete Live Board cards matching scope (Managers/Developers only)."""
+    role = str((actor or {}).get("role") or "").lower()
+    if role not in ("developer", "super_admin"):
+        raise PermissionError("Only managers and developers can clear the Live Board.")
+    clean_scope = str(scope or "active").strip().lower()
+    if clean_scope not in ("active", "active_and_done", "test_only"):
+        raise ValueError("Choose a valid Live Board delete scope.")
+
+    import shutil
+    from backend.storage.board_order import KEY as BOARD_ORDER_KEY
+
+    sdir = _storage_dir()
+    deleted_ids: list[str] = []
+    now = now_iso()
+    actor_id = str(actor.get("id") or "")
+    actor_name = str(actor.get("name") or "Manager").strip() or "Manager"
+
+    with db.write_tx(sdir) as conn:
+        rows = conn.execute(
+            "SELECT id, status, closed_at, data_json FROM cases WHERE status IN ('reported', 'done')"
+        ).fetchall()
+        for row in rows:
+            try:
+                c = json.loads(row["data_json"])
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(c, dict):
+                continue
+            cid = str(c.get("id") or row["id"] or "").strip()
+            if not cid or not is_maintenance_report(c):
+                continue
+            is_active = _is_active_live_board_case(c)
+            is_ws_done = c.get("status") == "done" and any(
+                isinstance(h, dict) and h.get("action") == "close"
+                for h in (c.get("workspace_history") or [])
+            )
+            is_test_card = (
+                str(c.get("board_stage") or "").strip().lower() == TEST_LANE_STAGE
+                or bool(c.get("is_test") or c.get("is_testing"))
+            )
+            if clean_scope == "active" and not is_active:
+                continue
+            if clean_scope == "test_only" and not (is_active and is_test_card):
+                continue
+            if clean_scope == "active_and_done" and not (is_active or is_ws_done):
+                continue
+            deleted_ids.append(cid)
+
+        if deleted_ids:
+            for idx in range(0, len(deleted_ids), 250):
+                batch = deleted_ids[idx:idx + 250]
+                placeholders = ",".join("?" for _ in batch)
+                conn.execute(f"DELETE FROM cases WHERE id IN ({placeholders})", batch)
+                conn.execute(f"DELETE FROM case_notes WHERE case_id IN ({placeholders})", batch)
+                conn.execute(f"DELETE FROM case_attachments WHERE case_id IN ({placeholders})", batch)
+                conn.execute(f"DELETE FROM active_alerts WHERE alert_id IN ({placeholders})", batch)
+                for cid in batch:
+                    db.append_case_event(
+                        conn,
+                        cid,
+                        "deleted",
+                        actor_id=actor_id,
+                        actor_name=actor_name,
+                        summary={"deleted": True, "scope": clean_scope},
+                        created_at=now,
+                    )
+
+            order_row = conn.execute("SELECT version, data_json FROM kv_state WHERE key=?", (BOARD_ORDER_KEY,)).fetchone()
+            if order_row:
+                try:
+                    groups = json.loads(order_row["data_json"])
+                except (TypeError, ValueError):
+                    groups = {}
+                if isinstance(groups, dict):
+                    deleted_set = set(deleted_ids)
+                    cleaned_groups = {
+                        k: [x for x in v if x not in deleted_set]
+                        for k, v in groups.items()
+                        if isinstance(v, list)
+                    }
+                    conn.execute(
+                        "UPDATE kv_state SET version=?, data_json=? WHERE key=?",
+                        (int(order_row["version"]) + 1, json.dumps(cleaned_groups, separators=(",", ":")), BOARD_ORDER_KEY),
+                    )
+            db.bump_version(conn, "cases_version")
+
+    upload_root = sdir / "workspace_uploads"
+    if upload_root.is_dir():
+        for cid in deleted_ids:
+            shutil.rmtree(upload_root / cid, ignore_errors=True)
+
+    logger.warning(
+        "Live Board cleared by %s (%s): scope=%s deleted=%d",
+        actor_name,
+        actor_id,
+        clean_scope,
+        len(deleted_ids),
+    )
+    return {"deleted_ids": deleted_ids, "deleted_count": len(deleted_ids), "scope": clean_scope}
+
+
+def close_all_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
+    """Close all active Live Board cards in a single transaction (Managers/Developers only)."""
+    role = str((actor or {}).get("role") or "").lower()
+    if role not in ("developer", "super_admin"):
+        raise PermissionError("Only managers and developers can bulk-close the Live Board.")
+    clean_scope = str(scope or "active").strip().lower()
+    if clean_scope not in ("active", "test_only"):
+        raise ValueError("Choose a valid close-all scope.")
+
+    sdir = _storage_dir()
+    is_dev = role == "developer"
+    actor_id = str(actor.get("id") or "")
+    actor_name = str(actor.get("name") or "Manager").strip() or "Manager"
+    now = now_iso()
+    closed_ids: list[str] = []
+    skipped_count = 0
+
+    with db.write_tx(sdir) as conn:
+        rows = conn.execute(
+            "SELECT id, data_json FROM cases WHERE status='reported' AND (closed_at IS NULL OR closed_at='')"
+        ).fetchall()
+        for row in rows:
+            try:
+                c = json.loads(row["data_json"])
+            except (TypeError, ValueError):
+                continue
+            if not _is_active_live_board_case(c):
+                continue
+            is_test_card = (
+                str(c.get("board_stage") or "").strip().lower() == TEST_LANE_STAGE
+                or bool(c.get("is_test") or c.get("is_testing"))
+            )
+            if clean_scope == "test_only" and not is_test_card:
+                continue
+            if bool(c.get("is_test") or c.get("is_testing")) and not is_dev:
+                skipped_count += 1
+                continue
+            cid = str(c.get("id") or row["id"] or "").strip()
+            if not cid:
+                continue
+            _close_record(c)
+            c["closed_by_id"] = actor.get("id")
+            c["closed_by_name"] = actor_name
+            c.setdefault("workspace_history", []).append({
+                "action": "close",
+                "author": actor_name,
+                "author_id": actor_id,
+                "created_at": now,
+                "fields": [],
+            })
+            _upsert_case_row(
+                conn,
+                c,
+                event_type="close",
+                actor_id=actor_id,
+                actor_name=actor_name,
+            )
+            conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (cid,))
+            closed_ids.append(cid)
+
+    return {
+        "closed_ids": closed_ids,
+        "closed_count": len(closed_ids),
+        "skipped_count": skipped_count,
+        "scope": clean_scope,
+    }
 
 async def async_mark_missed(case_id):
     return await asyncio.to_thread(mark_missed, case_id)

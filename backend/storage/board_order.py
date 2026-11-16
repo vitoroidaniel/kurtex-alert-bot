@@ -216,3 +216,17 @@ def save_order(group, ids, expected_version, actor_id, *, manager=False, data_di
         )
         db.bump_version(conn, "cases_version")
     return {"version": next_version, "groups": groups}
+
+
+def reset_order(data_dir=None) -> dict:
+    """Clear manual card ordering across all lanes for Managers and Developers."""
+    with db.write_tx(data_dir) as conn:
+        row = conn.execute("SELECT version FROM kv_state WHERE key=?", (KEY,)).fetchone()
+        next_version = (int(row["version"]) if row else 0) + 1
+        conn.execute(
+            "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+            (KEY, next_version, "{}"),
+        )
+        db.bump_version(conn, "cases_version")
+    return {"version": next_version, "groups": {}}

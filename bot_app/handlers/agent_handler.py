@@ -601,12 +601,22 @@ async def _finish_close(
         else:
             await safe_reply_text(update.message, message, parse_mode=None)
         return
+    user = update.effective_user
+    closer_id = user.id if user else case.get("agent_id")
+    closer_name = (
+        f"{user.first_name or ''} {user.last_name or ''}".strip()
+        or (user.username if user else "")
+        or case.get("agent_name")
+        or "Telegram Bot"
+    )
     try:
         saved = await close_case(
             case_id,
             notes=None,
             parts_replaced=parts_replaced,
             replaced_parts=replaced_parts,
+            closed_by_id=closer_id,
+            closed_by_name=closer_name,
         )
         if not saved or saved.get("status") != "done":
             raise RuntimeError("Case close was not saved")

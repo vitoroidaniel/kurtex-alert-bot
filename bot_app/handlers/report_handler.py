@@ -191,31 +191,6 @@ def _build_report(d: dict) -> str:
     return "\n".join(lines)
 
 
-def _driver_prompt(ctx) -> tuple[str, InlineKeyboardMarkup | None]:
-    prefill = (ctx.user_data.get("report_prefill") or {}).get("driver", "").strip()
-    if prefill:
-        label = prefill[:36] + ("..." if len(prefill) > 36 else "")
-        return (
-            f"Driver (from alert: <b>{esc_html(prefill)}</b>)\nType a name or tap below:",
-            InlineKeyboardMarkup([[
-                InlineKeyboardButton(f"👤 Use: {label}", callback_data="rpt_prefill|driver"),
-            ]]),
-        )
-    return "Driver:", None
-
-
-def _issue_prompt(ctx) -> tuple[str, InlineKeyboardMarkup | None]:
-    prefill = (ctx.user_data.get("report_prefill") or {}).get("issue", "").strip()
-    if prefill:
-        return (
-            f"Issue description:\n<i>Alert text: {esc_html(prefill[:160])}</i>\n\nType details or tap below:",
-            InlineKeyboardMarkup([[
-                InlineKeyboardButton("📝 Use alert issue", callback_data="rpt_prefill|issue"),
-            ]]),
-        )
-    return "Issue description:", None
-
-
 async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Entry point from Report button (solve|case_id)."""
     query = update.callback_query
@@ -239,14 +214,11 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 ctx.user_data.pop(key, None)
 
         ctx.user_data.pop("close_parts_case_id", None)
+        ctx.user_data.pop("report_prefill", None)
         user = update.effective_user
         handler_name = f"{user.first_name} {user.last_name or ''}".strip()
         ctx.user_data["report_case_id"] = case_id
         ctx.user_data["report_handler"] = handler_name
-        ctx.user_data["report_prefill"] = {
-            "driver": (case.get("driver_name") or "").strip(),
-            "issue": (case.get("description") or "").strip(),
-        }
         ctx.bot_data.setdefault("busy_agents", set()).add(user.id)
 
         await safe_edit_message_text(
@@ -284,11 +256,6 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["report_case_id"] = report_case_id
         if report_handler:
             ctx.user_data["report"]["handler"] = report_handler
-        if not ctx.user_data.get("report_prefill"):
-            ctx.user_data["report_prefill"] = {
-                "driver": (case.get("driver_name") or "").strip(),
-                "issue": (case.get("description") or "").strip(),
-            }
 
         unit_prompt = "Truck number:" if vtype == "truck" else "Trailer number:"
         label = {"truck": "🚛 Truck", "trailer": "🚚 Trailer", "reefer": "❄️ Reefer"}[vtype]
@@ -302,15 +269,13 @@ async def cb_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def recv_unit(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["unit_number"] = update.message.text.strip()
-    prompt, kb = _driver_prompt(ctx)
-    await safe_reply_text(update.message, prompt, reply_markup=kb)
+    await safe_reply_text(update.message, "Driver:", parse_mode=None)
     return ASK_DRIVER
 
 
 async def recv_driver(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["driver"] = update.message.text.strip()
-    prompt, kb = _issue_prompt(ctx)
-    await safe_reply_text(update.message, prompt, reply_markup=kb)
+    await safe_reply_text(update.message, "Issue description:", parse_mode=None)
     return ASK_ISSUE
 
 
@@ -318,28 +283,6 @@ async def recv_issue(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["report"]["issue"] = update.message.text.strip()
     await safe_reply_text(update.message, "Load type:", parse_mode=None, reply_markup=LOAD_TYPE_KB)
     return ASK_LOAD
-
-
-async def cb_prefill(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    async with _ack_report_ctx(query, "PREFILL"):
-        if not _report_ready(ctx):
-            await _missing_report_session(query)
-            return ConversationHandler.END
-        field = query.data.split("|", 1)[1]
-        prefill = ctx.user_data.get("report_prefill") or {}
-        if field == "driver":
-            val = prefill.get("driver", "").strip() or "—"
-            ctx.user_data["report"]["driver"] = val
-            prompt, kb = _issue_prompt(ctx)
-            await safe_edit_message_text(query, f"Driver: <b>{esc_html(val)}</b>\n\n{prompt}", reply_markup=kb)
-            return ASK_ISSUE
-        if field == "issue":
-            val = prefill.get("issue", "").strip() or "—"
-            ctx.user_data["report"]["issue"] = val
-            await safe_edit_message_text(query, "Load type:", parse_mode=None, reply_markup=LOAD_TYPE_KB)
-            return ASK_LOAD
-        return ASK_ISSUE
 
 
 async def cb_loadtype(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -793,14 +736,8 @@ def get_report_conversation():
         states={
             ASK_TYPE:          [CallbackQueryHandler(cb_type,          pattern=r"^rpt_type\|")],
             ASK_UNIT:          [MessageHandler(private_text,           recv_unit)],
-            ASK_DRIVER:        [
-                MessageHandler(private_text, recv_driver),
-                CallbackQueryHandler(cb_prefill, pattern=r"^rpt_prefill\|driver$"),
-            ],
-            ASK_ISSUE:         [
-                MessageHandler(private_text, recv_issue),
-                CallbackQueryHandler(cb_prefill, pattern=r"^rpt_prefill\|issue$"),
-            ],
+            ASK_DRIVER:        [MessageHandler(private_text,           recv_driver)],
+            ASK_ISSUE:         [MessageHandler(private_text,           recv_issue)],
             ASK_LOAD:          [
                 CallbackQueryHandler(cb_loadtype,      pattern=r"^rpt_loadtype\|"),
                 CallbackQueryHandler(cb_skip,          pattern=r"^rpt_skip$"),
@@ -847,7 +784,6 @@ def get_report_conversation():
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
-            CallbackQueryHandler(cb_prefill,         pattern=r"^rpt_prefill\|"),
             CallbackQueryHandler(cb_loadtype,        pattern=r"^rpt_loadtype\|"),
             CallbackQueryHandler(cb_skip,            pattern=r"^rpt_skip$"),
             CallbackQueryHandler(cb_temp_recorder,   pattern=r"^rpt_temprec\|"),
