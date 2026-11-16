@@ -2681,7 +2681,11 @@ def _normalize_case_notes(notes):
             continue
         item = dict(raw)
         aid = str(item.get("author_id") or "").strip()
-        if aid and aid in users_by_id:
+        if aid == "system" or item.get("system") or str(item.get("author_role") or "").lower() == "system":
+            item["author_role"] = "system"
+            if not item.get("author"):
+                item["author"] = "System"
+        elif aid and aid in users_by_id:
             item["author_role"] = users_by_id[aid]
         elif item.get("author_role"):
             item["author_role"] = _website_role(item.get("author_role"))

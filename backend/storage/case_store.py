@@ -23,7 +23,7 @@ from backend.core.app_time import (
     utc_now,
     week_start_str,
 )
-from backend.core.test_case_rules import TEST_LANE_STAGE, is_auto_test_report
+from backend.core.test_case_rules import TEST_LANE_STAGE, should_auto_move_to_test_lane
 from backend.storage import db
 
 logger = logging.getLogger(__name__)
@@ -210,7 +210,7 @@ def create_case(
         "notes":           None,
         "report_msg_id":   None,
     }
-    if is_auto_test_report(case):
+    if should_auto_move_to_test_lane(case):
         case["board_stage"] = TEST_LANE_STAGE
     with db.write_tx(_storage_dir()) as conn:
         _upsert_case_row(conn, case)
@@ -275,7 +275,9 @@ def report_case(case_id: str, notes: Optional[str] = "case reported") -> Optiona
 
 def save_maintenance_report(case_id: str, data: dict, report_text: str, media: list) -> Optional[dict]:
     """Persist report fields atomically without reopening a concurrently closed case."""
-    with db.write_tx(_storage_dir()) as conn:
+    saved_snapshot = None
+    storage_dir = _storage_dir()
+    with db.write_tx(storage_dir) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
         if not row:
             return None
@@ -299,9 +301,65 @@ def save_maintenance_report(case_id: str, data: dict, report_text: str, media: l
             case["status"] = "reported"
             if not case.get("notes"):
                 case["notes"] = "case reported"
-            if not case.get("board_stage") and not case.get("test_lane_overridden") and is_auto_test_report(case):
+            if not case.get("board_stage") and not case.get("test_lane_overridden") and should_auto_move_to_test_lane(case):
                 case["board_stage"] = TEST_LANE_STAGE
         _upsert_case_row(conn, case)
+        saved_snapshot = dict(case)
+    if saved_snapshot and saved_snapshot.get("status") == "reported" and not saved_snapshot.get("closed_at"):
+        from backend.core.test_case_ai import schedule_test_case_review
+
+        schedule_test_case_review(case_id, saved_snapshot, storage_dir=storage_dir)
+        refreshed = get_case(case_id)
+        if isinstance(refreshed, dict):
+            return refreshed
+    return saved_snapshot
+
+
+def add_system_test_note(case_id: str, text: str) -> Optional[dict]:
+    """Append an internal System note once for a possible test case without changing its lane."""
+    clean_text = " ".join(str(text or "").split()).strip()[:1000]
+    if not clean_text:
+        return None
+    import uuid
+
+    with db.write_tx(_storage_dir()) as conn:
+        row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            return None
+        case = json.loads(row["data_json"])
+        if case.get("status") == "done" or case.get("closed_at"):
+            return None
+        if str(case.get("board_stage") or "").strip().lower() == TEST_LANE_STAGE:
+            return None
+        notes = case.setdefault("workspace_notes", [])
+        if any(
+            isinstance(n, dict) and not n.get("deleted_at") and n.get("kind") == "test_suspect"
+            for n in notes
+        ):
+            return dict(case)
+        now = now_iso()
+        notes.append({
+            "id": f"sys-test-{uuid.uuid4().hex[:12]}",
+            "text": clean_text,
+            "author": "System",
+            "author_id": "system",
+            "author_role": "system",
+            "system": True,
+            "kind": "test_suspect",
+            "created_at": now,
+            "reply_to_id": None,
+            "file_ids": [],
+            "mentions": [],
+            "pinned": False,
+        })
+        case["updated_at"] = now
+        _upsert_case_row(
+            conn,
+            case,
+            event_type="note",
+            actor_id="system",
+            actor_name="System",
+        )
         return dict(case)
 
 
@@ -373,7 +431,10 @@ def workspace_revision(case: dict) -> str:
 
 def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -> dict:
     """Authorized report writes under SQLite transaction isolation."""
-    with db.write_tx(_storage_dir()) as conn:
+    storage_dir = _storage_dir()
+    should_review = False
+    written_case = None
+    with db.write_tx(storage_dir) as conn:
         now = now_iso()
         if case_id is None:
             existing_row = conn.execute(
@@ -427,7 +488,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 "workspace_request_id": payload["request_id"],
                 "report_data":          {**payload, "load": payload.get("load_type", "")},
             }
-            if not case["board_stage"] and is_auto_test_report(case):
+            if not case["board_stage"] and should_auto_move_to_test_lane(case):
                 case["board_stage"] = TEST_LANE_STAGE
                 case.setdefault("workspace_history", []).append({
                     "action": "stage",
@@ -436,6 +497,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     "to": TEST_LANE_STAGE,
                     "created_at": now,
                 })
+            else:
+                should_review = True
         else:
             row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
             if not row:
@@ -696,7 +759,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 if (
                     not (case.get("board_stage") or "")
                     and not case.get("test_lane_overridden")
-                    and is_auto_test_report(case)
+                    and should_auto_move_to_test_lane(case)
                 ):
                     case["board_stage"] = TEST_LANE_STAGE
                     case.setdefault("workspace_history", []).append({
@@ -706,6 +769,11 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                         "to": TEST_LANE_STAGE,
                         "created_at": now,
                     })
+                elif (
+                    not (case.get("board_stage") or "")
+                    and not case.get("test_lane_overridden")
+                ):
+                    should_review = True
             case["updated_at"] = now
             if action not in ("reassign", "stage", "move", "rank", "reopen", "note", "note_edit", "note_delete", "note_pin", "set_test"):
                 history_entry = {
@@ -723,7 +791,15 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             actor_id=str(actor.get("id") or ""),
             actor_name=str(actor.get("name") or ""),
         )
-        return dict(case)
+        written_case = dict(case)
+    if should_review and written_case and written_case.get("id"):
+        from backend.core.test_case_ai import schedule_test_case_review
+
+        schedule_test_case_review(str(written_case["id"]), written_case, storage_dir=storage_dir)
+        refreshed = get_case(str(written_case["id"]))
+        if isinstance(refreshed, dict):
+            return refreshed
+    return written_case
 
 
 def mark_missed(case_id: str) -> None:

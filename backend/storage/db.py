@@ -422,7 +422,7 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bot_feedback_messages ADD COLUMN local_file_key TEXT NOT NULL DEFAULT ''")
 
 
-_LIVE_BOARD_SCHEMA_VERSION = "3"
+_LIVE_BOARD_SCHEMA_VERSION = "4"
 
 
 def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
@@ -533,25 +533,73 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
             "INSERT INTO meta(key,value) VALUES('live_board_normalized_v1','1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'"
         )
-    test_routed_row = conn.execute("SELECT value FROM meta WHERE key='test_lane_routed_v1'").fetchone()
-    if not (test_routed_row and test_routed_row["value"] == "1"):
-        from backend.core.test_case_rules import TEST_LANE_STAGE, is_auto_test_report
+    test_routed_v2 = conn.execute("SELECT value FROM meta WHERE key='test_lane_routed_v2'").fetchone()
+    if not (test_routed_v2 and test_routed_v2["value"] == "1"):
+        import uuid
+        from backend.core.app_time import utc_now
+        from backend.core.test_case_ai import build_suspect_system_note_text
+        from backend.core.test_case_rules import (
+            TEST_LANE_STAGE,
+            is_suspect_test_candidate,
+            should_auto_move_to_test_lane,
+        )
 
         active_rows = conn.execute(
-            "SELECT id, data_json FROM cases WHERE status='reported' AND (closed_at IS NULL OR closed_at='') AND (board_stage='' OR board_stage IS NULL) LIMIT 500"
+            "SELECT id, data_json FROM cases WHERE status='reported' AND (closed_at IS NULL OR closed_at='') LIMIT 500"
         ).fetchall()
         moved_any = False
+        now_mig = utc_now().isoformat(timespec="seconds")
         for r in active_rows:
             try:
                 c = json.loads(r["data_json"])
+                if not isinstance(c, dict):
+                    continue
+                c.setdefault("id", r["id"])
+                stage_now = str(c.get("board_stage") or "")
+                changed = False
+                human_stage_test = any(
+                    isinstance(h, dict)
+                    and h.get("action") == "stage"
+                    and h.get("to") == TEST_LANE_STAGE
+                    and str(h.get("author") or "") != "Auto-Sort"
+                    for h in (c.get("workspace_history") or [])
+                )
                 if (
-                    isinstance(c, dict)
-                    and not (c.get("board_stage") or "")
-                    and not c.get("test_lane_overridden")
-                    and is_auto_test_report(c)
+                    stage_now == TEST_LANE_STAGE
+                    and not should_auto_move_to_test_lane(c)
+                    and not bool(c.get("is_test") or c.get("is_testing"))
+                    and not human_stage_test
                 ):
+                    c["board_stage"] = ""
+                    stage_now = ""
+                    changed = True
+                if not stage_now and not c.get("test_lane_overridden") and should_auto_move_to_test_lane(c):
                     c["board_stage"] = TEST_LANE_STAGE
-                    c.setdefault("id", r["id"])
+                    changed = True
+                elif not stage_now:
+                    suspect, reason = is_suspect_test_candidate(c)
+                    notes = c.setdefault("workspace_notes", [])
+                    has_sys_note = any(
+                        isinstance(n, dict) and not n.get("deleted_at") and n.get("kind") == "test_suspect"
+                        for n in notes
+                    )
+                    if suspect and not has_sys_note:
+                        notes.append({
+                            "id": f"sys-test-{uuid.uuid4().hex[:12]}",
+                            "text": build_suspect_system_note_text(reason, ai_verified=False),
+                            "author": "System",
+                            "author_id": "system",
+                            "author_role": "system",
+                            "system": True,
+                            "kind": "test_suspect",
+                            "created_at": now_mig,
+                            "reply_to_id": None,
+                            "file_ids": [],
+                            "mentions": [],
+                            "pinned": False,
+                        })
+                        changed = True
+                if changed:
                     conn.execute(
                         "UPDATE cases SET data_json=? WHERE id=?",
                         (json.dumps(c, ensure_ascii=False, separators=(",", ":"), default=str), r["id"]),
@@ -564,6 +612,10 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
             bump_version(conn, "cases_version")
         conn.execute(
             "INSERT INTO meta(key,value) VALUES('test_lane_routed_v1','1') "
+            "ON CONFLICT(key) DO UPDATE SET value='1'"
+        )
+        conn.execute(
+            "INSERT INTO meta(key,value) VALUES('test_lane_routed_v2','1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'"
         )
     conn.execute(

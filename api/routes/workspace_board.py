@@ -1095,18 +1095,23 @@ def register_workspace_routes(server):
                 for n in (c.get("workspace_notes") or [])
                 if isinstance(n, dict) and not n.get("deleted_at")
             ]
+            human_notes = [
+                n
+                for n in active_notes
+                if str(n.get("author_id") or "").strip() != "system" and not n.get("system")
+            ]
             summary["notes_count"] = int(
                 bool(c.get("comments") or (c.get("notes") and c.get("notes") != "case reported"))
             ) + len(active_notes)
             summary["note_markers"] = [
                 {"at": str(n.get("created_at") or ""), "aid": str(n.get("author_id") or "")}
-                for n in active_notes[-20:]
+                for n in human_notes[-20:]
                 if n.get("created_at")
             ]
-            if active_notes:
-                summary["last_note_at"] = str(active_notes[-1].get("created_at") or "")
-                summary["last_note_author_id"] = str(active_notes[-1].get("author_id") or "")
-                summary["last_note_author"] = str(active_notes[-1].get("author") or "")
+            if human_notes:
+                summary["last_note_at"] = str(human_notes[-1].get("created_at") or "")
+                summary["last_note_author_id"] = str(human_notes[-1].get("author_id") or "")
+                summary["last_note_author"] = str(human_notes[-1].get("author") or "")
             else:
                 summary["last_note_at"] = ""
                 summary["last_note_author_id"] = ""
