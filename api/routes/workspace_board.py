@@ -6,6 +6,7 @@ import hmac
 import json
 import math
 import re
+import shutil
 import time
 import urllib.parse
 import uuid
@@ -36,6 +37,7 @@ from backend.storage.board_order import (
 from backend.storage.board_presence import heartbeat, snapshot
 from backend.storage.case_store import (
     clear_live_board_cases,
+    remove_live_board_case,
     close_all_live_board_cases,
     is_maintenance_report,
     workspace_attachment_lookup,
@@ -576,6 +578,52 @@ def register_workspace_routes(server):
         except Exception:
             logger.exception("Workspace report write failed")
             return jsonify({"error": "The report could not be saved. Retry with your entered values."}), 503
+
+    @app.route("/api/workspace/cases/<case_id>", methods=["DELETE"])
+    def api_workspace_delete_case(case_id):
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or data.get("confirm") is not True:
+            return jsonify({"error": "Confirm the case deletion first."}), 400
+        if not re.fullmatch(r"[a-zA-Z0-9_-]{1,120}", case_id):
+            return jsonify({"error": "Invalid case ID."}), 400
+        mode = data.get("mode")
+        if mode not in ("board", "permanent") or not isinstance(data.get("revision"), str):
+            return jsonify({"error": "Choose a deletion option and reload the case."}), 400
+        # Resolve and verify the exact file target before any database mutation.
+        uploads = (_data_dir() / "workspace_uploads").resolve()
+        folder = uploads / case_id
+        if not uploads.is_relative_to(_data_dir().resolve()) or folder.is_symlink() or folder.resolve().parent != uploads:
+            return jsonify({"error": "Case upload path is invalid."}), 400
+        try:
+            result = remove_live_board_case(actor, case_id, mode=mode, revision=data["revision"])
+        except PermissionError as exc:
+            return jsonify({"error": str(exc)}), 403
+        except LookupError as exc:
+            return jsonify({"error": str(exc)}), 404
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 409
+        except Exception:
+            logger.exception("Case deletion failed")
+            return jsonify({"error": "The case could not be deleted. Please retry."}), 503
+        media_ids = result.pop("media_ids", [])
+        cleanup_pending = False
+        if mode == "permanent":
+            try:
+                server.fleet_knowledge_store.delete_case(case_id)
+                if folder.exists():
+                    shutil.rmtree(folder)
+                cache = _data_dir() / "telegram_media_cache"
+                for file_id in media_ids:
+                    digest = hashlib.sha256(file_id.encode()).hexdigest()
+                    for ext in (".bin", ".json"):
+                        (cache / (digest + ext)).unlink(missing_ok=True)
+            except Exception:
+                cleanup_pending = True
+                logger.exception("Case deleted from database; attachment or search-index cleanup pending for %s", case_id)
+        return jsonify({"ok": True, **result, "file_cleanup_pending": cleanup_pending})
 
     _ALLOWED_UPLOAD_EXTS = {
         ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",

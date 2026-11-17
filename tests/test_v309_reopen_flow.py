@@ -88,9 +88,12 @@ class LiveBoardV309ReopenTests(unittest.TestCase):
             self.assertEqual(detail_after["status"], "reported")
             self.assertEqual(detail_after["reopened_by_name"], "Alex")
             self.assertEqual(detail_after["board_stage"], "dealer_shop")
+            self.assertFalse(detail_after["can_view_history"])
+            self.assertEqual(detail_after["workspace_history"], [])
+            # History is retained in storage, but only managers/developers may view it.
             self.assertTrue(
                 any(h.get("action") == "reopen" and h.get("from") == "done" and h.get("to") == "reported"
-                    for h in detail_after["workspace_history"])
+                    for h in case_store.get_case("CASE-901")["workspace_history"])
             )
 
             board_after = client.get("/api/workspace/board").get_json()["cases"]

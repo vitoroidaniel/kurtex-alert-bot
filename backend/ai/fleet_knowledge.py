@@ -25,6 +25,7 @@ class FleetKnowledgeStore:
               case_id TEXT PRIMARY KEY, fingerprint TEXT, status TEXT, searchable TEXT,
               payload TEXT, quality TEXT, updated_at TEXT)''')
             db.execute('CREATE INDEX IF NOT EXISTS fleet_cases_status ON fleet_cases(status,updated_at)')
+            db.execute('CREATE TABLE IF NOT EXISTS deleted_case_ids (case_id TEXT PRIMARY KEY)')
     @contextmanager
     def connect(self):
         db=sqlite3.connect(self.path,timeout=10);db.row_factory=sqlite3.Row
@@ -44,10 +45,12 @@ class FleetKnowledgeStore:
     def ingest_cases(self,cases):
         changed=0; skipped=0; now=datetime.now(timezone.utc).isoformat()
         with self.connect() as db:
+            deleted={r[0] for r in db.execute('SELECT case_id FROM deleted_case_ids')}
             existing={r['case_id']:r['fingerprint'] for r in db.execute('SELECT case_id,fingerprint FROM fleet_cases')}
             for case in cases:
                 cid=str(case.get('id') or case.get('full_id') or '').strip()
                 if not cid:skipped+=1;continue
+                if cid in deleted:skipped+=1;continue
                 data=self._record(case); payload=json.dumps(data,ensure_ascii=False,sort_keys=True,default=str)
                 fp=hashlib.sha256(payload.encode()).hexdigest()
                 if existing.get(cid)==fp:continue
@@ -62,6 +65,11 @@ class FleetKnowledgeStore:
                   quality=excluded.quality,updated_at=excluded.updated_at''',
                   (cid,fp,str(case.get('status') or ''),searchable,payload,quality,now));changed+=1
         return {'changed':changed,'skipped':skipped}
+    def delete_case(self,case_id):
+        """Purge evidence and prevent an in-flight older snapshot from restoring it."""
+        with self.connect() as db:
+            db.execute('INSERT OR IGNORE INTO deleted_case_ids(case_id) VALUES(?)',(str(case_id),))
+            db.execute('DELETE FROM fleet_cases WHERE case_id=?',(str(case_id),))
     def stats(self):
         with self.connect() as db:
             total=db.execute('SELECT count(*) FROM fleet_cases').fetchone()[0]

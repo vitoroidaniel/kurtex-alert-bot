@@ -1176,6 +1176,99 @@ def _is_active_live_board_case(case: dict) -> bool:
     )
 
 
+def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: str) -> dict:
+    """Hide one card or delete its stored content, under the same writer lock.
+
+    A content-free deletion event remains so connected boards receive a removal.
+    Uploaded files are cleaned by the API after this transaction commits.
+    """
+    role = str((actor or {}).get("role") or "").lower()
+    if role not in ("developer", "super_admin"):
+        raise PermissionError("Only managers and developers can delete cases.")
+    if mode not in ("board", "permanent"):
+        raise ValueError("Choose board removal or permanent deletion.")
+    from backend.storage.board_order import KEY as BOARD_ORDER_KEY
+
+    now = now_iso()
+    actor_id = str(actor.get("id") or "")
+    actor_name = str(actor.get("name") or "Manager")
+    media_ids = []
+    with db.write_tx(_storage_dir()) as conn:
+        row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
+        if not row:
+            raise LookupError("Case not found. It may already have been deleted.")
+        case = json.loads(row["data_json"])
+        if not is_maintenance_report(case):
+            raise ValueError("Only maintenance report cases can be deleted here.")
+        if (case.get("is_test") or case.get("is_testing")) and role != "developer":
+            raise PermissionError("This test case is read-only for non-developers.")
+        if not revision or revision != workspace_revision(case):
+            raise ValueError("This report changed. Review it again before deleting.")
+        conn.execute("DELETE FROM active_alerts WHERE alert_id=?", (case_id,))
+        if mode == "board":
+            if case.get("status") != "done":
+                _close_record(case)
+                case.update({"closed_by_id": actor.get("id"), "closed_by_name": actor_name})
+            case.update({"board_hidden": True, "board_hidden_at": now,
+                         "board_hidden_by": actor_name, "updated_at": now})
+            case.setdefault("workspace_history", []).append({
+                "action": "board_cleared", "author": actor_name, "author_id": actor_id,
+                "scope": "single", "created_at": now,
+            })
+            _upsert_case_row(conn, case, event_type="board_cleared",
+                             actor_id=actor_id, actor_name=actor_name)
+        else:
+            for media in case.get("media") or []:
+                if isinstance(media, dict):
+                    file_id = media.get("file_id") or media.get("id")
+                elif isinstance(media, (list, tuple)) and len(media) >= 2:
+                    file_id = media[1]
+                else:
+                    continue
+                if file_id:
+                    media_ids.append(str(file_id))
+            for table in ("case_notes", "case_attachments", "case_events", "workspace_presence"):
+                conn.execute(f"DELETE FROM {table} WHERE case_id=?", (case_id,))
+            for notification in conn.execute("SELECT id, data_json FROM notifications").fetchall():
+                try:
+                    data = json.loads(notification["data_json"])
+                except (TypeError, ValueError):
+                    continue
+                if isinstance(data, dict) and str(data.get("case_id") or "") == case_id:
+                    conn.execute("DELETE FROM notifications WHERE id=?", (notification["id"],))
+            for pref in conn.execute("SELECT user_id, data_json FROM preferences").fetchall():
+                try:
+                    data = json.loads(pref["data_json"])
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(data, dict):
+                    continue
+                before = json.dumps(data)
+                if isinstance(data.get("case_reads"), dict):
+                    data["case_reads"].pop(case_id, None)
+                board = data.get("workspace_board")
+                if isinstance(board, dict) and isinstance(board.get("watchlist_ids"), list):
+                    board["watchlist_ids"] = [cid for cid in board["watchlist_ids"] if str(cid) != case_id]
+                if json.dumps(data) != before:
+                    conn.execute("UPDATE preferences SET data_json=?, updated_at=? WHERE user_id=?",
+                                 (json.dumps(data, separators=(",", ":")), now, pref["user_id"]))
+            conn.execute("DELETE FROM cases WHERE id=?", (case_id,))
+            # No old case details, notes, attachment metadata or actor PII in this marker.
+            db.append_case_event(conn, case_id, "deleted", created_at=now)
+            db.bump_version(conn, "cases_version")
+
+        order = conn.execute("SELECT version, data_json FROM kv_state WHERE key=?", (BOARD_ORDER_KEY,)).fetchone()
+        if order:
+            groups = json.loads(order["data_json"])
+            if isinstance(groups, dict):
+                groups = {k: [cid for cid in ids if str(cid) != case_id]
+                          for k, ids in groups.items() if isinstance(ids, list)}
+                conn.execute("UPDATE kv_state SET version=?, data_json=? WHERE key=?",
+                             (int(order["version"]) + 1, json.dumps(groups, separators=(",", ":")), BOARD_ORDER_KEY))
+    return {"deleted_id": case_id, "preserved_in_db": mode == "board", "mode": mode,
+            "media_ids": media_ids}
+
+
 def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
     """Remove cards from Live Board while keeping every case record safely in the database."""
     role = str((actor or {}).get("role") or "").lower()
