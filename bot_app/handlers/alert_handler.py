@@ -27,6 +27,7 @@ from backend.storage.case_store import (
     load_active_alerts,
 )
 from backend.storage.user_store import is_authorized
+from bot_app.network import background_telegram
 from bot_app.telegram_utils import (
     concurrent_ack,
     esc_html,
@@ -100,6 +101,14 @@ class AlertHandler:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    async def stop_background(self):
+        tasks = list(self._bg_tasks)
+        if tasks:
+            _, pending = await asyncio.wait(tasks, timeout=5)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     def _make_kb(self, alert_id: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([[
             InlineKeyboardButton("✅ Assign", callback_data=f"assign|{alert_id}"),
@@ -157,6 +166,7 @@ class AlertHandler:
 
     # ── Group trigger handler ─────────────────────────────────────────────────
 
+    @background_telegram
     async def handle(self, update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         msg = update.effective_message
         if not msg:
@@ -271,6 +281,7 @@ class AlertHandler:
         if notified == 0:
             logger.warning("No admins could be reached for alert!")
 
+    @background_telegram
     async def _nudge_if_unassigned(self, driver_id: int, ctx: ContextTypes.DEFAULT_TYPE):
         alert_id = self._driver_last_alert.get(driver_id)
         if not alert_id:
@@ -360,6 +371,7 @@ class AlertHandler:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    @background_telegram
     async def _post_assignment_updates(self, record, admin, name, alert_id, prev_agent_id, ctx):
         try:
             await self._cleanup_assignment_messages(record, admin.id, name, ctx)
@@ -438,7 +450,7 @@ class AlertHandler:
         if query is None or admin is None:
             return
 
-        if not is_authorized(admin.id):
+        if not await asyncio.to_thread(is_authorized, admin.id):
             await safe_answer(query, "Not authorized.", show_alert=True)
             return
 

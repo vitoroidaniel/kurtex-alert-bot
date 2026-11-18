@@ -24,7 +24,6 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     PersistenceInput,
-    PicklePersistence,
     TypeHandler,
     filters,
 )
@@ -93,6 +92,9 @@ from bot_app.handlers.report_handler import (
 from bot_app.handlers.scheduler import register_jobs
 from bot_app.telegram_utils import esc_html, safe_answer, safe_reply_text, safe_send_message
 from bot_app.update_processor import PerUserUpdateProcessor
+from bot_app.persistence import ThreadedPicklePersistence
+from bot_app.network import InteractiveTelegramRequest, background_telegram
+from bot_app.runtime import ResilientApplication, EventLoopWatchdog
 
 BOT_NAME = "Kurtex Alert Bot"
 BOT_TAGLINE = "Truck Maintenance Command Center"
@@ -205,8 +207,8 @@ async def auth_middleware(update: Update, ctx) -> None:
         return
     chat = update.effective_chat
 
-    # Fast cached user lookup; only touches SQLite write tx if @username changed.
-    stored = get_user(user.id)
+    # A cache miss can read SQLite; never make every user's event loop wait for it.
+    stored = await asyncio.to_thread(get_user, user.id)
     if stored is not None:
         clean_uname = (user.username or "").strip().lstrip("@")
         if stored.get("username", "") != clean_uname:
@@ -248,19 +250,8 @@ async def close_parts_text_middleware(update: Update, ctx) -> None:
 # ── Startup / Shutdown ────────────────────────────────────────────────────────
 
 async def post_init(application: Application) -> None:
-    try:
-        webhook_info = await application.bot.get_webhook_info()
-        if webhook_info.url:
-            logger.warning("[TELEGRAM] Webhook active at startup: %s", webhook_info.url)
-        await application.bot.delete_webhook(drop_pending_updates=False)
-        webhook_info = await application.bot.get_webhook_info()
-        if webhook_info.url:
-            raise RuntimeError(f"Webhook is still active after deleteWebhook: {webhook_info.url}")
-        logger.info("[TELEGRAM] Polling mode verified; webhook is disabled")
-    except Exception:
-        logger.exception("[TELEGRAM] Could not force polling mode before startup")
-        raise
-
+    # Updater.start_polling already removes webhooks with bootstrap retries.
+    # Optional command-menu registration must not hold up receiving reports.
     await ensure_indexes()
     alert_h = application.bot_data.get("alert_handler")
     if alert_h:
@@ -287,26 +278,47 @@ async def post_init(application: Application) -> None:
         ("editrole",    "Change a user's role"),
     ]
 
-    await application.bot.set_my_commands(base_commands)
+    @background_telegram
+    async def register_commands():
+        try:
+            await application.bot.set_my_commands(base_commands)
+            for uid_str, u in (await asyncio.to_thread(get_all_users)).items():
+                if u["role"] in ("developer", "super_admin"):
+                    try:
+                        await application.bot.set_my_commands(
+                            manager_commands, scope=BotCommandScopeChat(chat_id=int(uid_str)),
+                        )
+                    except Exception as exc:
+                        logger.warning("Could not set commands for %s: %s", uid_str, exc)
+        except Exception:
+            logger.exception("Command menu refresh failed; polling remains available")
 
-    for uid_str, u in (await asyncio.to_thread(get_all_users)).items():
-        if u["role"] in ("developer", "super_admin"):
-            try:
-                await application.bot.set_my_commands(
-                    manager_commands,
-                    scope=BotCommandScopeChat(chat_id=int(uid_str)),
-                )
-            except Exception as exc:
-                logger.warning("Could not set commands for %s: %s", uid_str, exc)
-
-    me = await application.bot.get_me()
+    application.bot_data["commands_task"] = asyncio.create_task(register_commands(), name="kurtex-commands")
+    me = application.bot.bot  # Cached by Application.initialize; no extra getMe request.
     application.bot_data["bot_identity"] = {"id": me.id, "username": me.username or ""}
     await asyncio.to_thread(_write_bot_heartbeat, me.username or "")
-    application.create_task(_bot_heartbeat_loop(application), name="kurtex-bot-heartbeat")
+    application.bot_data["heartbeat_task"] = asyncio.create_task(
+        _bot_heartbeat_loop(application), name="kurtex-bot-heartbeat"
+    )
+    application.bot_data["watchdog_task"] = asyncio.create_task(
+        EventLoopWatchdog().run(), name="kurtex-loop-watchdog"
+    )
     logger.info("%s started as @%s", BOT_NAME, me.username)
 
 
+async def post_stop(application: Application) -> None:
+    tasks = [application.bot_data.pop(key, None) for key in ("heartbeat_task", "commands_task", "watchdog_task")]
+    tasks = [task for task in tasks if task is not None]
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    alert_h = application.bot_data.get("alert_handler")
+    if alert_h:
+        await alert_h.stop_background()
+
+
 async def post_shutdown(application: Application) -> None:
+    await post_stop(application)
     stop_api_server()
 
 
@@ -491,22 +503,22 @@ def main():
 
     alert_h = AlertHandler()
 
-    bot_request = HTTPXRequest(
+    bot_request = InteractiveTelegramRequest(
         connection_pool_size=64,
-        connect_timeout=15.0,
-        read_timeout=30.0,
+        connect_timeout=5.0,
+        read_timeout=10.0,
         write_timeout=30.0,
-        pool_timeout=15.0,
+        pool_timeout=3.0,
     )
     updates_request = HTTPXRequest(
         connection_pool_size=4,
-        connect_timeout=15.0,
-        read_timeout=45.0,
-        write_timeout=15.0,
-        pool_timeout=15.0,
+        connect_timeout=5.0,
+        read_timeout=10.0,
+        write_timeout=10.0,
+        pool_timeout=3.0,
     )
 
-    report_persistence = PicklePersistence(
+    report_persistence = ThreadedPicklePersistence(
         filepath=Path(config.DATA_DIR) / "telegram_report_sessions.pickle",
         store_data=PersistenceInput(
             user_data=True, chat_data=False, bot_data=False, callback_data=False,
@@ -515,12 +527,14 @@ def main():
     )
     app = (
         Application.builder()
+        .application_class(ResilientApplication)
         .token(config.TELEGRAM_TOKEN)
         .request(bot_request)
         .get_updates_request(updates_request)
         .persistence(report_persistence)
         .concurrent_updates(PerUserUpdateProcessor(max_active=16))
         .post_init(post_init)
+        .post_stop(post_stop)
         .post_shutdown(post_shutdown)
         .build()
     )
@@ -653,7 +667,7 @@ def main():
     logger.info("Starting %s...", BOT_NAME)
     app.run_polling(
         drop_pending_updates=False,
-        timeout=20,
+        timeout=10,
         bootstrap_retries=-1,
     )
 

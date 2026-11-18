@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
+import time
 from contextlib import asynccontextmanager
 
 from telegram.ext import BaseUpdateProcessor
+
+logger = logging.getLogger(__name__)
 
 
 class PerUserUpdateProcessor(BaseUpdateProcessor):
@@ -21,6 +25,7 @@ class PerUserUpdateProcessor(BaseUpdateProcessor):
             raise ValueError("Require 1 <= max_active <= max_pending")
         super().__init__(max_pending)
         self._active = asyncio.Semaphore(max_active)
+        self._background = asyncio.Semaphore(4)
         self._users = {}
 
     async def initialize(self):
@@ -47,11 +52,21 @@ class PerUserUpdateProcessor(BaseUpdateProcessor):
         chat = getattr(update, "effective_chat", None)
         key = ("user", user.id) if user else ("chat", chat.id) if chat else None
         started = False
+        queued_at = time.monotonic()
         try:
             async with self._ordered(key):
-                async with self._active:
+                slots = self._background if getattr(chat, "type", None) in ("group", "supergroup", "channel") else self._active
+                async with slots:
+                    started_at = time.monotonic()
+                    if started_at - queued_at > 2:
+                        logger.warning("Telegram update %s queued for %.1fs", getattr(update, "update_id", None), started_at - queued_at)
                     started = True
-                    await coroutine
+                    try:
+                        await coroutine
+                    finally:
+                        elapsed = time.monotonic() - started_at
+                        if elapsed > 5:
+                            logger.warning("Telegram update %s took %.1fs", getattr(update, "update_id", None), elapsed)
         finally:
             # A cancelled queued update hasn't started its Application coroutine.
             if not started and inspect.iscoroutine(coroutine):

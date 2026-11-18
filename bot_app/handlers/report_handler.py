@@ -215,7 +215,7 @@ async def cb_report_entry(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 existing_case_id,
                 case_id,
             )
-            for key in ("report", "report_awaiting", "editing_field", "report_prefill"):
+            for key in ("report", "report_awaiting", "editing_field", "report_prefill", "report_delivery"):
                 ctx.user_data.pop(key, None)
 
         ctx.user_data.pop("close_parts_case_id", None)
@@ -355,6 +355,7 @@ async def recv_delivery(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def recv_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    logger.info("[REPORT] LOCATION ENTER update_id=%s user=%s", update.update_id, update.effective_user.id)
     ctx.user_data["report"]["location"] = update.message.text.strip()
     if _needs_reefer_temps(ctx.user_data["report"]):
         await safe_reply_text(update.message, "Setpoint temperature (e.g. -10°C):", parse_mode=None, reply_markup=SKIP_KB)
@@ -513,10 +514,28 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         report_text = _build_report(data)
         case_id = ctx.user_data.get("report_case_id")
+        delivery = ctx.user_data.get("report_delivery") or {}
+        already_sent = (
+            delivery.get("case_id") == case_id and delivery.get("text") == report_text
+            and delivery.get("destination") == dest_id
+        )
 
         try:
-            await safe_send_message(ctx.bot, dest_id, report_text)
-            logger.info("Report sent to %s", dest_id)
+            if not already_sent:
+                sent = await safe_send_message(ctx.bot, dest_id, report_text)
+                ctx.user_data["report_delivery"] = {
+                    "case_id": case_id, "text": report_text, "destination": dest_id,
+                    "message_id": getattr(sent, "message_id", None),
+                }
+                already_sent = True
+                logger.info("Report sent to %s", dest_id)
+
+            # Persist known delivery before the separate DB operation. A DB retry
+            # or a restart can then finish saving without posting the report twice.
+            application = getattr(ctx, "application", None)
+            if application is not None and application.persistence:
+                application.mark_data_for_update_persistence(user_ids=[update.effective_user.id])
+                await application.update_persistence()
 
             if case_id:
                 saved = await async_save_maintenance_report(case_id, dict(data), report_text, [])
@@ -525,20 +544,17 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 else:
                     logger.warning("Case %s not found in DB for fleet data save", case_id)
 
-            for key in ("report_awaiting", "report", "report_case_id", "report_handler", "report_prefill"):
-                ctx.user_data.pop(key, None)
-            if "busy_agents" in ctx.bot_data and update.effective_user:
-                ctx.bot_data["busy_agents"].discard(update.effective_user.id)
-
-            await safe_edit_message_text(query, "✅ <b>Report sent!</b>", reply_markup=None)
-            return ConversationHandler.END
-
-        except TelegramError as exc:
-            logger.error("Failed to send report: %s", exc)
+        except Exception as exc:
+            logger.exception("Report delivery/save failed (delivered=%s): %s", already_sent, exc)
             # Keep draft intact so user can retry without losing their work.
+            error_text = (
+                "⚠️ Report delivered, but its case could not be saved. Your draft was preserved. Retry to finish saving."
+                if already_sent else
+                "⚠️ Failed to send report due to a Telegram error. Your draft was preserved."
+            )
             await safe_edit_message_text(
                 query,
-                "⚠️ Failed to send report due to a Telegram error. Your draft was preserved.",
+                error_text,
                 parse_mode=None,
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔄 Retry Send", callback_data="rpt_confirm|yes"),
@@ -546,6 +562,17 @@ async def cb_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 ]]),
             )
             return CONFIRM
+
+        for key in ("report_awaiting", "report", "report_case_id", "report_handler", "report_prefill", "report_delivery"):
+            ctx.user_data.pop(key, None)
+        if "busy_agents" in ctx.bot_data and update.effective_user:
+            ctx.bot_data["busy_agents"].discard(update.effective_user.id)
+        try:
+            await safe_edit_message_text(query, "✅ <b>Report sent!</b>", reply_markup=None)
+        except TelegramError:
+            # A private confirmation failure doesn't undo delivery or a saved case.
+            logger.warning("Report saved but Telegram confirmation could not be updated")
+        return ConversationHandler.END
 
 
 async def cmd_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

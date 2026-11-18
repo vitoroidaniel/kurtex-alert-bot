@@ -241,7 +241,7 @@ async def _send_mycases_page(
 
 async def cmd_mycases(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not _is_admin(user.id):
+    if not await asyncio.to_thread(_is_admin, user.id):
         await safe_reply_text(update.message, "Not authorized.", parse_mode=None)
         return
     bot = ctx.bot if ctx and getattr(ctx, "bot", None) else update.get_bot()
@@ -341,7 +341,7 @@ async def cb_mycases_next_case(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not _is_admin(user.id):
+    if not await asyncio.to_thread(_is_admin, user.id):
         await safe_reply_text(update.message, "Not authorized.", parse_mode=None)
         return
 
@@ -368,7 +368,7 @@ async def cmd_mystats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_casehistory(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not _is_admin(user.id):
+    if not await asyncio.to_thread(_is_admin, user.id):
         await safe_reply_text(update.message, "Not authorized.", parse_mode=None)
         return
 
@@ -749,7 +749,7 @@ async def cb_close_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not _is_admin(user.id):
+    if not await asyncio.to_thread(_is_admin, user.id):
         await safe_reply_text(update.message, "Not authorized.", parse_mode=None)
         return
 

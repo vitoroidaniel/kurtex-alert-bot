@@ -14,6 +14,7 @@ from backend.core.shift_manager import get_all_admins
 from backend.storage.case_store import async_mark_missed, async_upsert_active_alert
 from backend.storage.user_store import get_all_user_dicts
 from bot_app.handlers.admin_handler import send_daily_report
+from bot_app.network import background_telegram
 from bot_app.telegram_utils import esc_html, safe_send_message
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ ESCALATION_REPEAT_MINUTES = 10
 ESCALATION_MAX_ROUNDS = 5
 
 
+@background_telegram
 async def job_daily_report(ctx) -> None:
     dest = config.REPORTS_GROUP_ID
     if not dest:
@@ -31,6 +33,7 @@ async def job_daily_report(ctx) -> None:
     await send_daily_report(ctx.bot, dest)
 
 
+@background_telegram
 async def job_escalation_check(ctx) -> None:
     alert_handler = ctx.bot_data.get("alert_handler")
     if not alert_handler:

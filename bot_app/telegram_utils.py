@@ -25,6 +25,7 @@ RetryAfter = getattr(_tg_error, "RetryAfter", _MissingTgError)
 TimedOut = getattr(_tg_error, "TimedOut", _MissingTgError)
 
 from backend.core.app_time import parse_timestamp, utc_now
+from bot_app.network import background_telegram
 
 _HTML_MODE = getattr(ParseMode, "HTML", "HTML")
 
@@ -114,7 +115,7 @@ async def _call_with_retry(coro_factory, *, plain_fallback_factory=None, max_ret
         try:
             return await coro_factory()
         except RetryAfter as exc:
-            wait = min(float(exc.retry_after) + 0.5, 30.0)
+            wait = float(exc.retry_after) + 0.5
             logger.warning("Telegram RetryAfter %.1fs (attempt %d/%d)", wait, attempt + 1, max_retries)
             if attempt == max_retries - 1:
                 raise
@@ -130,6 +131,7 @@ async def _call_with_retry(coro_factory, *, plain_fallback_factory=None, max_ret
                 return await plain_fallback_factory()
             raise
         except (TimedOut, NetworkError) as exc:
+            logger.warning("Telegram request %s (attempt %d/%d)", type(exc).__name__, attempt + 1, max_retries)
             if attempt == max_retries - 1:
                 raise
             await asyncio.sleep(0.5 * (attempt + 1))
@@ -228,11 +230,12 @@ async def safe_edit_message_text(
     return await _call_with_retry(_edit, plain_fallback_factory=_plain if parse_mode else None, max_retries=max_retries)
 
 
+@background_telegram
 async def safe_delete_message(bot, chat_id: int | str, message_id: int) -> None:
     try:
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
     except RetryAfter as exc:
-        await asyncio.sleep(min(float(exc.retry_after) + 0.5, 10.0))
+        await asyncio.sleep(float(exc.retry_after) + 0.5)
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id)
         except TelegramError:

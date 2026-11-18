@@ -16,6 +16,7 @@ from telegram.ext import (
 )
 
 from backend.storage.user_store import get_all_user_dicts, get_user, has_role
+from bot_app.network import background_telegram
 from bot_app.telegram_utils import (
     concurrent_ack,
     esc_html,
@@ -51,7 +52,7 @@ def _alert_preview_kb() -> InlineKeyboardMarkup:
 
 async def cmd_alert(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not has_role(user.id, "developer", "super_admin"):
+    if not await asyncio.to_thread(has_role, user.id, "developer", "super_admin"):
         await safe_reply_text(
             update.message,
             "⛔ Only developers and managers can broadcast team alerts with /alert.",
@@ -87,7 +88,7 @@ async def cmd_alert(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def recv_alert_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not has_role(user.id, "developer", "super_admin"):
+    if not await asyncio.to_thread(has_role, user.id, "developer", "super_admin"):
         ctx.user_data.pop("alert_draft_text", None)
         return ConversationHandler.END
 
@@ -110,7 +111,7 @@ async def recv_alert_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cb_alert_action(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user = update.effective_user
-    if not has_role(user.id, "developer", "super_admin"):
+    if not await asyncio.to_thread(has_role, user.id, "developer", "super_admin"):
         await query.answer("Not authorized.", show_alert=True)
         return ConversationHandler.END
 
@@ -140,7 +141,7 @@ async def cb_alert_action(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
 
         async with concurrent_ack(query, "Sending team alert..."):
-            stored = get_user(user.id) or {}
+            stored = await asyncio.to_thread(get_user, user.id) or {}
             sender_name = (
                 stored.get("name")
                 or f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '') or ''}".strip()
@@ -157,6 +158,7 @@ async def cb_alert_action(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             delivered = 0
             failed: list[str] = []
 
+            @background_telegram
             async def _push(u: dict):
                 nonlocal delivered
                 uid = u["id"]
