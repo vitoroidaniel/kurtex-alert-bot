@@ -90,18 +90,18 @@ def needs_web_search(message, task, has_images=False):
     if task in ('board_ops', 'visual', 'history'):
         return False
     text = _normalize(message)
-    if len(text) < 8 and not has_images:
+    if len(text) < 12 and not has_images:
         return False
     if task in ('fault_code', 'parts'):
         return True
-    explicit = ('manual', 'spec', 'torque', 'procedure', 'oem', 'diagram', 'wiring', 'search web', 'look up')
+    explicit = ('manual', 'spec', 'torque', 'procedure', 'oem', 'diagram', 'wiring', 'search web', 'look up', 'pinout', 'part number')
     if any(w in text for w in explicit):
         return True
     if re.search(r'\b(?:spn|fmi|dtc|[pbcu]\d{4})\b', text):
         return True
-    # Only search on general diagnostic symptoms when substantial symptom terms exist
-    symptom_hits = sum(1 for w in ('leak', 'brake', 'air', 'coolant', 'overheat', 'reefer', 'turbo', 'def', 'dpf', 'regen', 'no start', 'battery', 'alternator', 'abs', 'sensor', 'valve', 'compressor', 'smoke', 'alarm', 'error', 'code') if w in text)
-    return symptom_hits >= 1
+    # Only fire external search on multi-signal technical diagnostics
+    symptom_hits = sum(1 for w in ('leak', 'brake', 'air', 'coolant', 'overheat', 'reefer', 'turbo', 'def', 'dpf', 'regen', 'no start', 'battery', 'alternator', 'abs', 'sensor', 'valve', 'compressor', 'smoke', 'alarm', 'pressure', 'voltage') if w in text)
+    return symptom_hits >= 2
 
 
 def retrieval_query(message, transcript='', max_extra=8):

@@ -24,36 +24,33 @@ def source_type(url):
     if host=='reddit.com' or host.endswith('.reddit.com') or any(x in host for x in ('forum','truckersreport','truckersnetwork')):return 'community discussion - unverified'
     return 'independent technical source - verify applicability'
 
-def search_research(query,limit=7):
+def search_research(query,limit=5):
     key=os.getenv('SERPER_API_KEY','').strip();q=technical_query(query)
     if not key:return {'status':'not_configured','results':[]}
     if not q:return {'status':'needs_specific_symptom','results':[]}
-    queries=[q+' truck service manual troubleshooting',q+' truck mechanic diagnosis repair',q+' (site:reddit.com OR site:thetruckersreport.com)']
+    queries=[q+' truck service manual troubleshooting',q+' mechanic repair diagnosis']
     def search(value):
         request=urllib.request.Request('https://google.serper.dev/search',data=json.dumps({'q':value,'gl':'us','hl':'en','num':4}).encode(),headers={'X-API-KEY':key,'Content-Type':'application/json'},method='POST')
         try:
-            with urllib.request.urlopen(request,timeout=4) as response:return json.load(response).get('organic',[]),True
+            with urllib.request.urlopen(request,timeout=2.6) as response:return json.load(response).get('organic',[]),True
         except Exception:return [],False
-    with ThreadPoolExecutor(max_workers=3) as pool:responses=list(pool.map(search,queries))
+    with ThreadPoolExecutor(max_workers=2) as pool:responses=list(pool.map(search,queries))
     seen=set();results=[]
     for group,ok in responses:
         for item in group:
             url=str(item.get('link') or '')
             if not url.startswith('https://') or url in seen:continue
             seen.add(url);results.append({'url':url,'title':str(item.get('title') or '')[:180],
-                'snippet':str(item.get('snippet') or '')[:1000],'source_type':source_type(url),
+                'snippet':str(item.get('snippet') or '')[:900],'source_type':source_type(url),
                 'evidence_level':'search snippet only; full page not verified'})
     results.sort(key=lambda item:0 if item['source_type']=='manufacturer / official' else 2 if item['source_type'].startswith('community') else 1)
-    # Reserve one community result when available without displacing official results entirely.
     selected=results[:limit]
-    discussion=next((x for x in results if x['source_type'].startswith('community')),None)
-    if discussion and discussion not in selected and selected:selected[-1]=discussion
-    official_indices=[i for i,item in enumerate(selected) if item['source_type']=='manufacturer / official'][:1]
+    official_indices=[i for i,item in enumerate(selected) if item['source_type']=='manufacturer / official' and len(item.get('snippet') or '')<220][:1]
     if official_indices:
         selected[official_indices[0]]=official_excerpt(selected[official_indices[0]],q)
     for i,item in enumerate(selected):item['citation']=i+1
     successes=sum(ok for _,ok in responses)
-    return {'status':('available' if successes==3 else 'partial') if selected else ('no_results' if successes else 'unavailable'),'results':selected}
+    return {'status':('available' if successes==2 else 'partial') if selected else ('no_results' if successes else 'unavailable'),'results':selected}
 
 class _OfficialRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,request,fp,code,msg,headers,newurl):

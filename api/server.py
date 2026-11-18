@@ -1029,6 +1029,50 @@ def api_ai_status():
 def _ai_web_search(query, limit=5):
     return search_research(query,limit)
 
+def _format_ai_context_block(ctx_compact):
+    """Format retrieved fleet evidence into clean, readable Markdown instead of raw JSON."""
+    if not ctx_compact:
+        return ""
+    sections = []
+    if ctx_compact.get("visual_observations"):
+        sections.append("### Visual Inspection Notes\n" + str(ctx_compact["visual_observations"]))
+    if ctx_compact.get("driver_speech_reports"):
+        lines = []
+        for d in ctx_compact["driver_speech_reports"]:
+            tr = str(d.get("transcript") or "").strip()
+            lines.append(f"- **{d.get('name') or d.get('media')}** ({d.get('audio_status') or 'audio'}): {tr or 'No speech transcribed'}")
+        sections.append("### Driver Audio / Video Speech\n" + "\n".join(lines))
+    if ctx_compact.get("chat_selected_knowledge") or ctx_compact.get("approved_maintenance_knowledge"):
+        kb_items = (ctx_compact.get("chat_selected_knowledge") or []) + (ctx_compact.get("approved_maintenance_knowledge") or [])
+        lines = [f"- **{k.get('title') or 'Approved Note'}**: {k.get('content') or ''}" for k in kb_items[:5]]
+        sections.append("### Approved Maintenance Knowledge\n" + "\n".join(lines))
+    if ctx_compact.get("cases"):
+        lines = []
+        for c in ctx_compact["cases"][:5]:
+            unit = c.get("unit") or "Unit"
+            issue = c.get("issue") or c.get("description") or ""
+            res = c.get("resolution") or "No recorded resolution"
+            lines.append(f"- **Unit {unit}** ({c.get('status') or 'open'}): {issue} | Resolution: {res}")
+        sections.append("### Matching Historical Cases\n" + "\n".join(lines))
+    if ctx_compact.get("fleet_experience"):
+        lines = [f"- {x.get('title') or x.get('unit') or 'History'}: {x.get('summary') or x.get('text') or x}" for x in ctx_compact["fleet_experience"][:3]]
+        sections.append("### Fleet Experience\n" + "\n".join(lines))
+    if ctx_compact.get("parts_manual_matches"):
+        lines = [f"- **{p.get('name')}** ({p.get('category') or ''}): issues={', '.join((p.get('issues') or [])[:3])}; checks={'; '.join((p.get('checks') or [])[:3])}; guidance={p.get('guidance') or ''}" for p in ctx_compact["parts_manual_matches"][:3]]
+        sections.append("### Parts Manual Reference\n" + "\n".join(lines))
+    if ctx_compact.get("chat_attachments"):
+        lines = [f"- **{a.get('name')}**: {a.get('content')}" for a in ctx_compact["chat_attachments"][:4]]
+        sections.append("### Chat File Excerpts\n" + "\n".join(lines))
+    if ctx_compact.get("web_search_results"):
+        lines = [f"[{w.get('citation') or i+1}] **{w.get('title') or ''}** ({w.get('source_type') or 'source'}): {w.get('excerpt') or w.get('snippet') or ''}" for i, w in enumerate(ctx_compact["web_search_results"][:5])]
+        sections.append("### Technical Web References\n" + "\n".join(lines))
+    if ctx_compact.get("reviewed_lessons"):
+        lines = [f"- {x}" for x in ctx_compact["reviewed_lessons"][:3]]
+        sections.append("### Reviewed Lessons\n" + "\n".join(lines))
+    rendered = "\n\n".join(sections)
+    return rendered[:5400]
+
+
 def _build_ai_system_prompt(task, has_images, has_video, has_history, has_parts, has_web, response_contract):
     rules = [
         "You are Kurtex Maintenance AI for commercial trucks, trailers, and reefers.",
@@ -1181,8 +1225,9 @@ def api_ai_chat():
         )
         messages=[{"role":"system","content":sys_prompt}]
         ctx_compact={k:v for k,v in ctx.items() if k!="retrieval"}
-        if ctx_compact:
-            messages.append({"role":"system","content":"Read-only context (page="+page+"):\n"+json.dumps(ctx_compact,ensure_ascii=False,separators=(",",":"))})
+        ctx_block=_format_ai_context_block(ctx_compact)
+        if ctx_block:
+            messages.append({"role":"system","content":"Read-only context (page="+page+"):\n"+ctx_block})
         for item in history[-6:]:
             role=item.get("role"); content=_ai_clip(item.get("content"),1200)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
@@ -4793,6 +4838,96 @@ def api_bot_feedback_item(feedback_id):
         "notified": notified,
         **feedback_store.list_feedback(),
     })
+
+
+def _smart_lists_actor(*, write: bool = False, manager: bool = False):
+    from backend.storage.user_store import get_user
+    actor = session.get("user") or {}
+    if not actor.get("id"):
+        return None, (jsonify({"error": "Sign in required"}), 401)
+    if write:
+        token = session.get("workspace_csrf", "")
+        if not getattr(g, "mobile_authenticated", False) and (
+            not token or not hmac.compare_digest(token, request.headers.get("X-Workspace-CSRF", ""))
+        ):
+            return None, (jsonify({"error": "Invalid CSRF token"}), 403)
+    stored = get_user(actor["id"])
+    if not stored:
+        return None, (jsonify({"error": "Session not authorized"}), 403)
+    role = _website_role(stored.get("role"))
+    perms = _load_role_permissions().get(role, [])
+    if "cases" not in perms and role not in ("developer", "super_admin"):
+        return None, (jsonify({"error": "Cases access required"}), 403)
+    is_manager = role in ("developer", "super_admin", "manager", "admin", "administrator", "owner")
+    if manager and not is_manager:
+        return None, (jsonify({"error": "Manager access required"}), 403)
+    return {"id": str(actor["id"]), "manager": is_manager}, None
+
+
+@app.route("/api/smart-lists", methods=["GET", "POST"])
+def api_smart_lists():
+    from backend.storage import smart_lists_store
+    user, error = _smart_lists_actor(write=request.method != "GET", manager=request.method != "GET")
+    if error:
+        return error
+    if request.method == "GET":
+        return jsonify(lists=smart_lists_store.list_all(), can_manage=user["manager"])
+    body = request.get_json(silent=True) or {}
+    try:
+        ident = smart_lists_store.create_list(
+            str(body.get("name", "")).strip(),
+            body.get("fields"),
+            user["id"],
+        )
+        return jsonify(id=ident), 201
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.route("/api/smart-lists/<list_id>", methods=["GET", "DELETE"])
+def api_smart_list(list_id):
+    from backend.storage import smart_lists_store
+    user, error = _smart_lists_actor(write=request.method != "GET", manager=request.method != "GET")
+    if error:
+        return error
+    if request.method == "DELETE":
+        res = smart_lists_store.archive_list(list_id)
+        if res == "builtin":
+            return jsonify(error="Built-in lists cannot be deleted"), 403
+        if res == "not_found":
+            return jsonify(error="List not found"), 404
+        return jsonify(ok=True)
+    item, entries = smart_lists_store.get_list_with_entries(list_id)
+    if not item:
+        return jsonify(error="List not found"), 404
+    return jsonify(list=item, entries=entries, can_manage=user["manager"])
+
+
+@app.route("/api/smart-lists/<list_id>/entries", methods=["POST"])
+@app.route("/api/smart-lists/<list_id>/entries/<entry_id>", methods=["PUT", "DELETE"])
+def api_smart_list_entries(list_id, entry_id=None):
+    from backend.storage import smart_lists_store
+    user, error = _smart_lists_actor(write=True, manager=True)
+    if error:
+        return error
+    if request.method == "DELETE":
+        res = smart_lists_store.delete_entry(list_id, entry_id, user["id"])
+        if res == "list_not_found":
+            return jsonify(error="List not found"), 404
+        if res == "entry_not_found":
+            return jsonify(error="Entry not found"), 404
+        return jsonify(ok=True, id=entry_id)
+    body = request.get_json(silent=True) or {}
+    try:
+        res, saved_id = smart_lists_store.upsert_entry(list_id, body.get("values"), user["id"], entry_id=entry_id)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    if res == "list_not_found":
+        return jsonify(error="List not found"), 404
+    if res == "entry_not_found":
+        return jsonify(error="Entry not found"), 404
+    return jsonify(ok=True, id=saved_id)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
