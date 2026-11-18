@@ -22,7 +22,7 @@ from backend.core.app_time import CENTRAL_TZ, chicago_date_str, chicago_now, chi
 from backend.web_sso import register_web_sso
 from backend.core.case_snapshot import CaseSnapshot, DataUnavailable, normalize as normalize_case
 from backend.storage import case_store, db as kurtex_db
-from flask import Flask, g, jsonify, render_template, request, session, redirect, Response, send_file, stream_with_context
+from flask import Flask, g, has_app_context, jsonify, render_template, request, session, redirect, Response, send_file, stream_with_context
 try:
     from flask_sock import Sock
 except ImportError:
@@ -128,7 +128,8 @@ case_snapshot = CaseSnapshot()
 
 def load_cases():
     cases, stale = case_snapshot.read(DATA_DIR / "cases.json")
-    g.case_data_stale = stale
+    if has_app_context():
+        g.case_data_stale = stale
     return cases
 
 
@@ -1209,10 +1210,14 @@ def api_ai_chat():
         visual_terms=observations.rsplit("Search terms:",1)[-1][:300] if "Search terms:" in observations else ""
         retrieval_query=multilingual_retrieval_query(message+" "+visual_terms,speech_text)
 
+        def _run_with_app_context(fn, *args):
+            with app.app_context():
+                return fn(*args)
+
         is_ops=(task=="board_ops" and not wants_similar_cases and not image_urls)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            ctx_fut=pool.submit(_ai_context,retrieval_query,6,not is_ops and not visual_description_only,not is_ops and not visual_description_only)
-            web_fut=pool.submit(_ai_web_search,retrieval_query,5) if wants_web else None
+            ctx_fut=pool.submit(_run_with_app_context,_ai_context,retrieval_query,6,not is_ops and not visual_description_only,not is_ops and not visual_description_only)
+            web_fut=pool.submit(_run_with_app_context,_ai_web_search,retrieval_query,5) if wants_web else None
             ctx=ctx_fut.result()
             research=web_fut.result() if web_fut is not None else {"status":"skipped" if data.get("web_search",True) is not False else "disabled","results":[]}
 
