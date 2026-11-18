@@ -720,7 +720,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     if case.get("status") == "open":
                         case["status"] = "assigned"
                     case.setdefault("workspace_history", []).append({
-                        "action": "reassign", "author": actor["name"],
+                        "action": "reassign", "author": actor["name"], "author_id": str(actor.get("id") or ""),
                         "from": previous, "to": target["name"], "created_at": now,
                     })
                 if payload["action"] == "move" and (case.get("board_stage") or "") != payload["stage"]:
@@ -731,7 +731,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     elif payload["stage"] == TEST_LANE_STAGE:
                         case.pop("test_lane_overridden", None)
                     case.setdefault("workspace_history", []).append({
-                        "action": "stage", "author": actor["name"],
+                        "action": "stage", "author": actor["name"], "author_id": str(actor.get("id") or ""),
                         "from": old_stage, "to": payload["stage"], "created_at": now,
                     })
             elif payload["action"] == "stage":
@@ -745,7 +745,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     case.pop("test_lane_overridden", None)
                 if previous != payload["stage"]:
                     case.setdefault("workspace_history", []).append({
-                        "action": "stage", "author": actor["name"],
+                        "action": "stage", "author": actor["name"], "author_id": str(actor.get("id") or ""),
                         "from": previous, "to": payload["stage"], "created_at": now,
                     })
             elif payload["action"] == "edit":
@@ -795,7 +795,7 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             case["updated_at"] = now
             if action not in ("reassign", "stage", "move", "rank", "reopen", "note", "note_edit", "note_delete", "note_pin", "set_test"):
                 history_entry = {
-                    "action": action, "author": actor["name"], "created_at": now,
+                    "action": action, "author": actor["name"], "author_id": str(actor.get("id") or ""), "created_at": now,
                     "fields": sorted(payload.get("fields", {})) if action == "edit" else [],
                 }
                 if action == "edit" and edit_changes:
@@ -1900,3 +1900,254 @@ def workspace_attachment_lookup(case_id, attachment_id):
     if not item:
         raise LookupError("Attachment not found.")
     return dict(case), dict(item)
+
+
+_GLOBAL_HISTORY_CATEGORY = {
+    "create": "create",
+    "bot_report": "create",
+    "edit": "edit",
+    "set_test": "edit",
+    "reassign": "move",
+    "stage": "move",
+    "move": "move",
+    "reopen": "move",
+    "close": "close",
+    "board_cleared": "delete",
+    "deleted": "delete",
+    "note": "note",
+    "note_edit": "note",
+    "note_delete": "note",
+    "note_pin": "note",
+    "attachment_added": "file",
+    "attachment_removed": "file",
+    "attachment_renamed": "file",
+    "attachment_updated": "file",
+    "attachment_version_added": "file",
+    "proof_added": "file",
+    "proof_removed": "file",
+    "telegram_attachment_removed": "file",
+}
+
+
+def get_global_workspace_history(
+    *,
+    actor_filter: str = "all",
+    action_filter: str = "all",
+    days: Optional[int] = 30,
+    query: str = "",
+    include_test: bool = False,
+    limit: int = 80,
+    offset: int = 0,
+) -> dict:
+    """Return paginated global workspace audit events with actor/action/time/text filtering."""
+    limit = max(1, min(int(limit or 80), 250))
+    offset = max(0, int(offset or 0))
+    actor_raw = str(actor_filter or "all").strip()
+    action_raw = str(action_filter or "all").strip().lower()
+    q_norm = str(query or "").strip().lower()
+    cutoff_iso = ""
+    if days and int(days) > 0:
+        cutoff_iso = (utc_now() - timedelta(days=int(days))).isoformat()
+
+    raw_events: list[dict] = []
+    with db.read_conn(_storage_dir()) as conn:
+        user_rows = conn.execute("SELECT id, name, username, role FROM users").fetchall()
+        users_by_id: dict[str, dict] = {}
+        users_by_name: dict[str, str] = {}
+        for u in user_rows:
+            uid = str(u["id"])
+            uname = str(u["name"] or "").strip()
+            users_by_id[uid] = {"id": uid, "name": uname or uid, "role": str(u["role"] or "agent")}
+            if uname:
+                users_by_name[uname.lower()] = uid
+
+        case_rows = conn.execute("SELECT id, status, agent_id, unit_number, driver_name, data_json FROM cases").fetchall()
+        present_case_ids: set[str] = set()
+        for row in case_rows:
+            cid = str(row["id"] or "")
+            present_case_ids.add(cid)
+            try:
+                c = json.loads(row["data_json"])
+            except Exception:
+                continue
+            if not isinstance(c, dict):
+                continue
+            is_test = bool(c.get("is_test") or c.get("is_testing"))
+            if is_test and not include_test:
+                continue
+            hist = c.get("workspace_history") or []
+            if not isinstance(hist, list):
+                continue
+            unit = str(c.get("unit_number") or row["unit_number"] or "").strip()
+            driver = str(c.get("report_driver") or c.get("driver_name") or row["driver_name"] or "").strip()
+            c_status = str(c.get("status") or row["status"] or "")
+            c_prio = str(c.get("priority") or "normal")
+            for idx, h in enumerate(hist):
+                if not isinstance(h, dict):
+                    continue
+                act = str(h.get("action") or "update").strip().lower()
+                created_at = str(h.get("created_at") or "").strip()
+                if cutoff_iso and created_at and created_at < cutoff_iso:
+                    continue
+                author_name = str(h.get("author") or h.get("author_name") or "System").strip() or "System"
+                author_id = str(h.get("author_id") or "").strip()
+                if not author_id and author_name.lower() in users_by_name:
+                    author_id = users_by_name[author_name.lower()]
+                if author_id and author_id in users_by_id and (not h.get("author") or author_name == "Team member"):
+                    author_name = users_by_id[author_id]["name"]
+                cat = _GLOBAL_HISTORY_CATEGORY.get(act, "other")
+                raw_events.append({
+                    "event_id": f"{cid}:{idx}:{created_at}:{act}",
+                    "case_id": cid,
+                    "unit_number": unit,
+                    "driver_name": driver,
+                    "case_status": c_status,
+                    "priority": c_prio,
+                    "case_exists": True,
+                    "is_test": is_test,
+                    "action": act,
+                    "category": cat,
+                    "actor_id": author_id,
+                    "actor_name": author_name,
+                    "created_at": created_at,
+                    "fields": list(h.get("fields") or []),
+                    "changes": list(h.get("changes") or []),
+                    "from": str(h.get("from") or ""),
+                    "to": str(h.get("to") or ""),
+                    "preview": str(h.get("preview") or ""),
+                    "file_name": str(h.get("file_name") or ""),
+                    "file_count": int(h.get("file_count") or 0),
+                    "version": h.get("version"),
+                    "scope": str(h.get("scope") or ""),
+                    "source": str(h.get("source") or ""),
+                    "pinned": h.get("pinned"),
+                    "is_test_val": h.get("is_test"),
+                })
+
+        # Surface permanent deletion markers whose cases were purged from cases table
+        del_rows = conn.execute(
+            "SELECT id, case_id, actor_id, actor_name, created_at FROM case_events WHERE event_type='deleted' ORDER BY id DESC LIMIT 300"
+        ).fetchall()
+        for dr in del_rows:
+            dcid = str(dr["case_id"] or "")
+            if dcid in present_case_ids:
+                continue
+            created_at = str(dr["created_at"] or "").strip()
+            if cutoff_iso and created_at and created_at < cutoff_iso:
+                continue
+            d_actor_id = str(dr["actor_id"] or "").strip()
+            d_actor_name = str(dr["actor_name"] or "").strip() or (
+                users_by_id[d_actor_id]["name"] if d_actor_id in users_by_id else "Manager / Admin"
+            )
+            raw_events.append({
+                "event_id": f"del:{dr['id']}:{dcid}",
+                "case_id": dcid,
+                "unit_number": "",
+                "driver_name": "",
+                "case_status": "deleted",
+                "priority": "normal",
+                "case_exists": False,
+                "is_test": False,
+                "action": "deleted",
+                "category": "delete",
+                "actor_id": d_actor_id,
+                "actor_name": d_actor_name,
+                "created_at": created_at,
+                "fields": [],
+                "changes": [],
+                "from": "",
+                "to": "",
+                "preview": "",
+                "file_name": "",
+                "file_count": 0,
+                "version": None,
+                "scope": "permanent",
+                "source": "workspace",
+                "pinned": None,
+                "is_test_val": None,
+            })
+
+    # Distinct actors across the time window before actor/action narrowing
+    actor_counts: dict[str, dict] = {}
+    for ev in raw_events:
+        key = ev["actor_id"] or f"name:{ev['actor_name'].lower()}"
+        if key not in actor_counts:
+            actor_counts[key] = {
+                "key": ev["actor_id"] or ev["actor_name"],
+                "id": ev["actor_id"],
+                "name": ev["actor_name"],
+                "count": 0,
+            }
+        actor_counts[key]["count"] += 1
+
+    # Filter by actor
+    if actor_raw and actor_raw.lower() != "all":
+        actor_lower = actor_raw.lower()
+        target_name = ""
+        if actor_raw in users_by_id:
+            target_name = users_by_id[actor_raw]["name"].strip().lower()
+        scoped_by_actor = [
+            ev for ev in raw_events
+            if (ev["actor_id"] and ev["actor_id"] == actor_raw)
+            or ev["actor_name"].strip().lower() == actor_lower
+            or (target_name and ev["actor_name"].strip().lower() == target_name)
+        ]
+    else:
+        scoped_by_actor = raw_events
+
+    summary = {
+        "total": len(scoped_by_actor),
+        "create": sum(1 for ev in scoped_by_actor if ev["category"] == "create"),
+        "edit": sum(1 for ev in scoped_by_actor if ev["category"] == "edit"),
+        "move": sum(1 for ev in scoped_by_actor if ev["category"] == "move"),
+        "close": sum(1 for ev in scoped_by_actor if ev["category"] == "close"),
+        "delete": sum(1 for ev in scoped_by_actor if ev["category"] == "delete"),
+        "note_file": sum(1 for ev in scoped_by_actor if ev["category"] in ("note", "file")),
+    }
+
+    # Filter by action/category and free-text query
+    filtered: list[dict] = []
+    for ev in scoped_by_actor:
+        if action_raw and action_raw != "all":
+            if action_raw == "note_file":
+                if ev["category"] not in ("note", "file"):
+                    continue
+            elif action_raw in ("create", "edit", "move", "close", "delete", "note", "file"):
+                if ev["category"] != action_raw and ev["action"] != action_raw:
+                    continue
+            elif ev["action"] != action_raw:
+                continue
+        if q_norm:
+            change_parts = " ".join(
+                f"{ch.get('field', '')} {ch.get('from', '')} {ch.get('to', '')}"
+                for ch in (ev.get("changes") or []) if isinstance(ch, dict)
+            )
+            hay = " ".join([
+                ev["case_id"],
+                ev["unit_number"],
+                ev["driver_name"],
+                ev["actor_name"],
+                ev["action"],
+                ev["category"],
+                " ".join(str(f) for f in (ev.get("fields") or [])),
+                change_parts,
+                ev["from"],
+                ev["to"],
+                ev["preview"],
+                ev["file_name"],
+                ev["scope"],
+            ]).lower()
+            if q_norm not in hay:
+                continue
+        filtered.append(ev)
+
+    filtered.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+    total = len(filtered)
+    page_items = filtered[offset:offset + limit]
+    return {
+        "events": page_items,
+        "total": total,
+        "has_more": (offset + len(page_items)) < total,
+        "summary": summary,
+        "actors": sorted(actor_counts.values(), key=lambda a: (-a["count"], a["name"].lower())),
+    }

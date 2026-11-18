@@ -1150,6 +1150,73 @@ def register_workspace_routes(server):
         items.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
         return jsonify({"ok": True, "proofs": items[:150], "total": len(items)})
 
+    @app.route("/api/workspace/history", methods=["GET"])
+    def api_workspace_history():
+        """Return global audit history for Managers & Developers with filters."""
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        role = str(actor.get("role") or "").lower()
+        if role not in ("developer", "super_admin"):
+            return jsonify({"error": "Only managers and developers can view global activity history."}), 403
+        actor_filter = str(request.args.get("actor") or "all").strip()
+        action_filter = str(request.args.get("action") or "all").strip().lower()
+        days_raw = str(request.args.get("days") or "30").strip().lower()
+        days: int | None
+        if days_raw in ("all", "0", "none", ""):
+            days = None
+        else:
+            try:
+                days = max(1, min(int(days_raw), 3650))
+            except (TypeError, ValueError):
+                days = 30
+        q = str(request.args.get("q") or "").strip()
+        try:
+            limit = max(1, min(int(request.args.get("limit") or 80), 250))
+        except (TypeError, ValueError):
+            limit = 80
+        try:
+            offset = max(0, int(request.args.get("offset") or 0))
+        except (TypeError, ValueError):
+            offset = 0
+
+        data = case_store.get_global_workspace_history(
+            actor_filter=actor_filter,
+            action_filter=action_filter,
+            days=days,
+            query=q,
+            include_test=(role == "developer"),
+            limit=limit,
+            offset=offset,
+        )
+        # Merge active team roster so every agent appears in the actor dropdown even with 0 edits
+        roster_actors = {str(a["key"]): dict(a) for a in data.get("actors", []) if a.get("key")}
+        for u in get_all_user_dicts():
+            uid = str(u.get("id") or "")
+            uname = str(u.get("name") or "").strip()
+            if not uid or not uname:
+                continue
+            if uid not in roster_actors:
+                # Avoid duplicate name entry when legacy events lacked author_id
+                if any(str(existing.get("name") or "").strip().lower() == uname.lower() and not existing.get("id") for existing in roster_actors.values()):
+                    for k, existing in list(roster_actors.items()):
+                        if str(existing.get("name") or "").strip().lower() == uname.lower() and not existing.get("id"):
+                            existing["id"] = uid
+                            existing["key"] = uid
+                            roster_actors[uid] = roster_actors.pop(k)
+                            break
+                else:
+                    roster_actors[uid] = {"key": uid, "id": uid, "name": uname, "count": 0}
+        merged_actors = sorted(roster_actors.values(), key=lambda a: (-int(a.get("count") or 0), str(a.get("name") or "").lower()))
+        return jsonify({
+            "ok": True,
+            "events": data["events"],
+            "total": data["total"],
+            "has_more": data["has_more"],
+            "summary": data["summary"],
+            "actors": merged_actors,
+        })
+
     @app.route("/api/workspace/presence", methods=["GET", "POST"])
     def api_workspace_presence():
         """Return live team members, or record a short-lived authenticated session."""
@@ -2479,3 +2546,4 @@ def register_workspace_routes(server):
     server._search_live_route_shops = search_live_repair_shops
     server.api_workspace_preferences = api_workspace_preferences
     server.api_workspace_shops = api_workspace_shops
+    server.api_workspace_history = api_workspace_history
