@@ -183,11 +183,19 @@ _SHORT_FOLLOWUP_RE = re.compile(
     re.I,
 )
 
+_GREETING_HELP_RE = re.compile(
+    r'^(?:hi|hello|hey|yo|sup|good\s+(?:morning|afternoon|evening)|salut|bun[aă]|привет|здравствуйте|hola|buenos\s+d[ií]as|'
+    r'help|what\s+can\s+you\s+do|who\s+are\s+you|how\s+does\s+this\s+work)[\s!.,?]*$',
+    re.I,
+)
+
 
 def is_out_of_scope_query(message, history_text='', has_media=False):
     """Return True when a user prompt is outside Kurtex fleet maintenance & operations scope."""
     text = _normalize(message)
     if not text:
+        return False
+    if _GREETING_HELP_RE.match(text):
         return False
     has_domain_in_msg = bool(_MAINTENANCE_DOMAIN_RE.search(text))
     # Explicit jailbreak / off-topic patterns
@@ -208,9 +216,9 @@ def is_out_of_scope_query(message, history_text='', has_media=False):
     # If currently in an active maintenance conversation and message is a short follow-up (< 45 chars), allow it
     if history_text and _MAINTENANCE_DOMAIN_RE.search(history_text) and len(text) < 48:
         return False
-    # Otherwise, if the prompt has 2+ words and zero maintenance/fleet terms, it is out of scope
+    # Otherwise, if the prompt has 1+ words and zero maintenance/fleet terms, it is out of scope
     words = re.findall(r'[\w-]{2,}', text)
-    if len(words) >= 2:
+    if len(words) >= 1:
         return True
     return False
 

@@ -357,15 +357,18 @@ def _ai_visual_description_request(message, has_visual=False):
              "look at this image", "what does this show") + TASK_WORDS['visual']
     return any(p in text for p in phrases)
 
-def _cf_ai_prepare(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None, stream=False):
+KURTEX_AI_FAST_TEXT_MODEL = os.getenv("KURTEX_AI_FAST_TEXT_MODEL", "@cf/meta/llama-3.1-8b-instruct-fast").strip()
+
+def _cf_ai_prepare(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None, stream=False, model_override=None):
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         raise RuntimeError("Workers AI is not configured")
-    url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{KURTEX_AI_MODEL}"
+    image_inputs = images or ([image_data_url] if image_data_url else [])
+    chosen_model = model_override or (KURTEX_AI_MODEL if image_inputs else (KURTEX_AI_FAST_TEXT_MODEL or KURTEX_AI_MODEL))
+    url=f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{chosen_model}"
     payload_messages=[dict(m) for m in messages]
     payload_body={"messages":payload_messages,"max_tokens":max_tokens,"temperature":temperature}
     if stream:
         payload_body["stream"]=True
-    image_inputs = images or ([image_data_url] if image_data_url else [])
     if image_inputs:
         for i in range(len(payload_messages)-1,-1,-1):
             if payload_messages[i].get("role")=="user":
@@ -395,37 +398,44 @@ def _extract_cf_text(value):
     return ""
 
 def _cf_ai(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None):
-    req=_cf_ai_prepare(messages,max_tokens,temperature,image_data_url,images,stream=False)
-    try:
-        with urllib.request.urlopen(req,timeout=35) as resp: payload=json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        try: detail=e.read().decode("utf-8","replace")[:2000]
-        except Exception: detail=""
-        logger.warning("Workers AI HTTP %s: %s",getattr(e,"code","?"),detail)
-        raise RuntimeError(f"Workers AI HTTP {getattr(e,'code','error')}")
-    except Exception as e:
-        logger.warning("Workers AI request failed: %s",e); raise RuntimeError("Workers AI request failed")
-    if isinstance(payload,dict) and payload.get("success") is False:
-        logger.warning("Workers AI API error: %s",json.dumps(payload.get("errors") or payload,ensure_ascii=False)[:2000])
-        raise RuntimeError("Workers AI API returned an error")
-    text=_extract_cf_text((payload or {}).get("result") if isinstance(payload,dict) else payload)
-    if not text:
-        logger.warning("Workers AI unrecognized response shape: %s",json.dumps(payload,ensure_ascii=False)[:2000])
-        raise RuntimeError("Workers AI returned no readable response")
-    return text.strip()
+    image_inputs = images or ([image_data_url] if image_data_url else [])
+    models_to_try = [KURTEX_AI_MODEL] if image_inputs or KURTEX_AI_FAST_TEXT_MODEL == KURTEX_AI_MODEL else [KURTEX_AI_FAST_TEXT_MODEL, KURTEX_AI_MODEL]
+    last_err = None
+    payload = None
+    for idx, mdl in enumerate(models_to_try):
+        req=_cf_ai_prepare(messages,max_tokens,temperature,image_data_url,images,stream=False,model_override=mdl)
+        try:
+            with urllib.request.urlopen(req,timeout=18 if idx==0 and len(models_to_try)>1 else 35) as resp:
+                payload=json.loads(resp.read().decode("utf-8"))
+            if isinstance(payload,dict) and payload.get("success") is False:
+                raise RuntimeError("Workers AI API returned an error")
+            text=_extract_cf_text((payload or {}).get("result") if isinstance(payload,dict) else payload)
+            if text:
+                return text.strip()
+        except Exception as e:
+            last_err = e
+            logger.warning("Workers AI model %s attempt failed: %s", mdl, e)
+            continue
+    if isinstance(last_err, RuntimeError):
+        raise last_err
+    raise RuntimeError("Workers AI request failed")
 
 def _cf_ai_stream(messages, max_tokens=900, temperature=0.2, image_data_url=None, images=None):
     """Yield incremental response chunks from Workers AI SSE, falling back to non-stream JSON."""
-    req=_cf_ai_prepare(messages,max_tokens,temperature,image_data_url,images,stream=True)
-    try:
-        resp=urllib.request.urlopen(req,timeout=40)
-    except urllib.error.HTTPError as e:
-        try: detail=e.read().decode("utf-8","replace")[:2000]
-        except Exception: detail=""
-        logger.warning("Workers AI stream HTTP %s: %s",getattr(e,"code","?"),detail)
-        raise RuntimeError(f"Workers AI HTTP {getattr(e,'code','error')}")
-    except Exception as e:
-        logger.warning("Workers AI stream failed: %s",e); raise RuntimeError("Workers AI request failed")
+    image_inputs = images or ([image_data_url] if image_data_url else [])
+    models_to_try = [KURTEX_AI_MODEL] if image_inputs or KURTEX_AI_FAST_TEXT_MODEL == KURTEX_AI_MODEL else [KURTEX_AI_FAST_TEXT_MODEL, KURTEX_AI_MODEL]
+    resp = None
+    for idx, mdl in enumerate(models_to_try):
+        req=_cf_ai_prepare(messages,max_tokens,temperature,image_data_url,images,stream=True,model_override=mdl)
+        try:
+            resp=urllib.request.urlopen(req,timeout=18 if idx==0 and len(models_to_try)>1 else 40)
+            break
+        except Exception as e:
+            logger.warning("Workers AI stream model %s failed: %s", mdl, e)
+            if idx == len(models_to_try) - 1:
+                if isinstance(e, urllib.error.HTTPError):
+                    raise RuntimeError(f"Workers AI HTTP {getattr(e,'code','error')}")
+                raise RuntimeError("Workers AI request failed")
     with resp:
         ctype=str(resp.headers.get("Content-Type") or "").lower()
         if "text/event-stream" not in ctype:
@@ -806,11 +816,25 @@ def _format_fast_case_bullet(idx, r, include_unit=False):
     return line1
 
 
+_FAST_GREETING_RE = re.compile(
+    r'^(?:hi|hello|hey|yo|sup|good\s+(?:morning|afternoon|evening)|salut|bun[aă]|привет|здравствуйте|hola|buenos\s+d[ií]as|'
+    r'help|what\s+can\s+you\s+do|who\s+are\s+you|how\s+does\s+this\s+work)[\s!.,?]*$',
+    re.I,
+)
+
+
 def _try_fast_case_query_answer(message, history):
-    """Instant (<30ms) deterministic response for unit case lookups, recent cases, negated unit filters, and most-recent follow-ups."""
+    """Instant (<30ms) deterministic response for greetings, unit case lookups, recent cases, negated unit filters, symptom searches, and most-recent follow-ups."""
     raw = str(message or "").strip()
     if not raw or "[live board summary]" in raw.lower():
         return None, None
+    if _FAST_GREETING_RE.match(raw):
+        return (
+            "**Kurtex Maintenance AI** is ready.\n\n"
+            "- **Unit Case Search:** Enter a unit number (e.g. `Unit 308`, `R376`, `5 recent cases for R376`) to view verified maintenance history.\n"
+            "- **Symptom & Repair Search:** Enter a symptom or component (e.g. `hub cap leak`, `air leak at gladhand`, `won't start`, `door hinges broken`).\n"
+            "- **Fault Code Triage:** Paste an `SPN / FMI` or reefer alarm code for diagnostic checks."
+        ), ""
     if _HOWTO_DIAGNOSTIC_RE.search(raw):
         return None, None
 
@@ -877,8 +901,10 @@ def _try_fast_case_query_answer(message, history):
     # Also trigger if the user just typed a unit number like "Unit 308" or "check unit 308" or "cases for R376"
     msg_NonUnit_tokens = tokens(raw) - {active_unit.lower() if active_unit else ""}
     is_bare_unit_lookup = bool(active_unit and len(msg_NonUnit_tokens) == 0)
+    # Also trigger fast symptom case lookup if the user typed a short symptom/issue phrase (<= 6 words) and matching cases exist in DB
+    is_short_symptom_lookup = bool(not active_unit and all_cases and 1 <= len(msg_NonUnit_tokens) <= 5 and len(raw.split()) <= 6)
 
-    if not has_list_intent and not is_bare_unit_lookup:
+    if not has_list_intent and not is_bare_unit_lookup and not is_short_symptom_lookup:
         return None, None
 
     # 2. Exact Unit Case History Lookup (when active_unit is present and no other symptom component filter is requested, or symptom filter within unit)
@@ -926,6 +952,8 @@ def _try_fast_case_query_answer(message, history):
     if symptom_tokens:
         matched = _ai_relevant_cases(raw, pool, show_limit)
         if not matched:
+            if not has_list_intent:
+                return None, None
             return f"No matching fleet maintenance cases found for **{_ai_clip(raw, 80)}** in the Kurtex database.", ""
         matched.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
         excl_note = f" (excluding Unit {excluded_unit.upper()})" if excluded_unit else ""
