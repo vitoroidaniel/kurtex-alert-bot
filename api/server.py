@@ -932,8 +932,18 @@ def api_ai_chats():
     if not session.get("user"):return jsonify({"error":"unauthorized"}),401
     chats=_user_chats()
     if request.method=="GET":
-        summaries=[{"id":c.get("id"),"title":c.get("title") or "Maintenance chat","created_at":c.get("created_at"),
-                    "updated_at":c.get("updated_at"),"message_count":len(c.get("messages") or [])} for c in chats]
+        def _chat_summary(c):
+            msgs=c.get("messages") or []
+            raw_title=str(c.get("title") or "").strip()
+            if (not raw_title or raw_title=="New maintenance chat") and msgs:
+                first_user=next((str(m.get("content") or m.get("text") or "").strip() for m in msgs if m.get("role")=="user" and (m.get("content") or m.get("text"))), "")
+                raw_title=_chat_title(first_user) if first_user else "Maintenance chat"
+            last_msg=next((str(m.get("content") or m.get("text") or "").strip() for m in reversed(msgs) if (m.get("content") or m.get("text"))), "")
+            preview=re.sub(r"[#*_`>\[\]]+"," ",last_msg)
+            preview=re.sub(r"\s+"," ",preview).strip()[:90]
+            return {"id":c.get("id"),"title":raw_title or "Maintenance chat","preview":preview,"created_at":c.get("created_at"),
+                    "updated_at":c.get("updated_at"),"message_count":len(msgs)}
+        summaries=[_chat_summary(c) for c in chats]
         summaries.sort(key=lambda x:x.get("updated_at") or "",reverse=True)
         return jsonify({"items":summaries})
     data=request.get_json(silent=True) or {}; title=str(data.get("title") or "New maintenance chat")[:80]
