@@ -462,21 +462,53 @@ def _cf_ai_stream(messages, max_tokens=900, temperature=0.2, image_data_url=None
         if not emitted:
             raise RuntimeError("Workers AI returned empty stream")
 
+def _clean_ai_issue_text(c):
+    raw_issue = str(c.get("issue_text") or "").strip()
+    if raw_issue and raw_issue.lower() != "#repairs":
+        return raw_issue
+    rep_data = c.get("report_data") if isinstance(c.get("report_data"), dict) else {}
+    for k in ("issue", "problem", "symptom", "description"):
+        val = str(rep_data.get(k) or "").strip()
+        if val and val.lower() != "#repairs":
+            return val
+    desc = re.sub(r"(?i)^#repairs\b[\s:,-]*", "", str(c.get("description") or "").strip()).strip()
+    if desc and desc.lower() != "#repairs":
+        return desc
+    loc = str(c.get("location") or "").strip()
+    return loc or "Maintenance report"
+
+
+def _clean_ai_notes_text(c):
+    notes = str(c.get("notes") or "").strip()
+    if notes.lower() in ("case reported", "reported", "—", "-", "none", "n/a"):
+        return ""
+    return notes
+
+
 def _ai_case_record(c):
+    opened_iso = str(c.get("opened_at") or "").strip()
+    closed_iso = str(c.get("closed_at") or "").strip()
+    opened_fmt = fmt_dt(opened_iso) if opened_iso else ""
+    if opened_fmt in ("—", "-"):
+        opened_fmt = opened_iso[:16]
+    closed_fmt = fmt_dt(closed_iso) if closed_iso else ""
+    if closed_fmt in ("—", "-"):
+        closed_fmt = ""
     return {
       "id":c.get("id") or "",
       "driver":c.get("report_driver") or c.get("driver_name") or "",
       "group":c.get("group_name") or c.get("group") or "",
       "unit":c.get("unit_number") or "",
       "type":(c.get("vehicle_type") or "").lower(),
-      "issue":c.get("issue_text") or c.get("description") or "",
-      "description":c.get("description") or "",
-      "notes":c.get("notes") or "",
+      "issue":_clean_ai_issue_text(c),
+      "description":re.sub(r"(?i)^#repairs\b[\s:,-]*", "", str(c.get("description") or "").strip()).strip(),
+      "notes":_clean_ai_notes_text(c),
       "solved_by":c.get("closed_by_name") or c.get("closed_by") or c.get("resolved_by") or c.get("agent_name") or "",
       "resolution":c.get("resolution") or c.get("solution") or c.get("close_notes") or c.get("closing_notes") or c.get("resolution_notes") or "",
       "status":c.get("status") or "",
-      "opened":c.get("opened_at") or "",
-      "closed":c.get("closed_at") or ""
+      "opened":opened_fmt,
+      "opened_raw":opened_iso,
+      "closed":closed_fmt
     }
 
 def _ai_problem_family(text):
@@ -543,22 +575,42 @@ def _ai_similar_case_cards(query,limit=5):
 
 def _ai_clip(value,limit):
     text=re.sub(r"\s+"," ",str(value or "")).strip()
-    return text if len(text)<=limit else text[:max(0,limit-1)]+"вЂ¦"
+    return text if len(text)<=limit else text[:max(0,limit-1)]+"…"
 
 _EXPLICIT_UNIT_RE = re.compile(
     r'\b(?:unit|truck|trailer|reefer|юнит|camion|remorc[aă])\s*#?\s*([a-z0-9-]{2,10})\b',
     re.I,
 )
+_NEGATED_UNIT_RE = re.compile(
+    r'\b(?:not\s+(?:related\s+to|for|about|on|from)|other\s+than|besides|except(?:\s+for)?|excluding|without|outside(?:\s+of)?|not)\s+'
+    r'(?:unit|truck|trailer|reefer|юнит|camion|remorc[aă])?\s*#?\s*([a-z0-9-]{2,10})\b',
+    re.I,
+)
+_FLEET_SCOPE_RESET_RE = re.compile(
+    r'\b(?:all\s+units|any\s+unit|other\s+units|across\s+(?:the\s+)?fleet|whole\s+fleet|general\s+cases|fleet\s+recent\s+cases|not\s+related\s+to\s+(?:it|this\s+unit|that\s+unit))\b',
+    re.I,
+)
 _UNIT_STOP_WORDS = {
     "the", "for", "and", "not", "all", "any", "has", "had", "was", "are", "can", "his", "her", "its",
     "this", "that", "from", "with", "what", "when", "show", "find", "list", "last", "past", "open",
-    "done", "case", "cases", "recent", "history", "issue", "issues", "repair", "repairs",
+    "done", "case", "cases", "recent", "history", "issue", "issues", "repair", "repairs", "unit", "units",
 }
 
 
-def _extract_unit_from_text(text, known_units=None):
-    """Extract an explicit unit number from text, preferring 'Unit <X>' patterns and known fleet unit IDs."""
+def _extract_excluded_unit(text, known_units=None):
+    """Detect negated unit references like 'not related to unit 308' or 'other than R376'."""
     raw = str(text or "")
+    for m in _NEGATED_UNIT_RE.finditer(raw):
+        cand = m.group(1).strip().lower()
+        if cand and cand not in _UNIT_STOP_WORDS and any(c.isdigit() for c in cand):
+            if not known_units or cand in known_units or re.search(r'\b(?:unit|truck|trailer|reefer)\b', m.group(0), re.I):
+                return cand
+    return ""
+
+
+def _extract_unit_from_text(text, known_units=None):
+    """Extract an explicit positive unit number from text, ignoring negated units ('not related to unit 308')."""
+    raw = _NEGATED_UNIT_RE.sub(" ", str(text or ""))
     for m in _EXPLICIT_UNIT_RE.finditer(raw):
         cand = m.group(1).strip().lower()
         if cand and cand not in _UNIT_STOP_WORDS and any(c.isdigit() for c in cand):
@@ -581,18 +633,24 @@ def _resolve_conversational_context(message, history, cases=None):
     """Resolve active unit number and symptom context across follow-up turns ('for it', 'this unit', '5 recent cases')."""
     all_cases = cases if cases is not None else [c for c in load_cases() if not is_testing(c)]
     known_units = {str(c.get("unit_number") or "").strip().lower() for c in all_cases if str(c.get("unit_number") or "").strip()}
+    excluded_unit = _extract_excluded_unit(message, known_units)
+    scope_reset = bool(excluded_unit or _FLEET_SCOPE_RESET_RE.search(str(message or "")))
     active_unit = _extract_unit_from_text(message, known_units)
+    if active_unit and excluded_unit and active_unit == excluded_unit:
+        active_unit = ""
     carry_terms = []
-    if not active_unit and history:
+    if not active_unit and not scope_reset and history:
         for turn in reversed(history[-6:]):
             t_content = str(turn.get("content") or "")
+            if _extract_excluded_unit(t_content, known_units) or _FLEET_SCOPE_RESET_RE.search(t_content):
+                break
             found = _extract_unit_from_text(t_content, known_units)
             if found:
                 active_unit = found
                 break
     # Carry prior user symptom terms when the current turn is a short follow-up or pronoun query
     msg_tokens = tokens(message)
-    if len(msg_tokens) <= 2 and history:
+    if len(msg_tokens) <= 2 and not scope_reset and history:
         for turn in reversed(history[-6:]):
             if turn.get("role") == "user":
                 prev_t = str(turn.get("content") or "").strip()
@@ -608,28 +666,45 @@ def _resolve_conversational_context(message, history, cases=None):
     return active_unit, augmented.strip()
 
 
-def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,active_unit=""):
+def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,active_unit="",excluded_unit=""):
     """Build a focused, high-signal context without flooding the prompt."""
     cases=[c for c in load_cases() if not is_testing(c)]
-    if not active_unit:
+    if not excluded_unit:
+        known_units={str(c.get("unit_number") or "").strip().lower() for c in cases if str(c.get("unit_number") or "").strip()}
+        excluded_unit=_extract_excluded_unit(query,known_units)
+    if not active_unit and not excluded_unit:
         known_units={str(c.get("unit_number") or "").strip().lower() for c in cases if str(c.get("unit_number") or "").strip()}
         active_unit=_extract_unit_from_text(query,known_units)
     exact_unit_cases=[]
     if include_cases and active_unit:
         u_low=active_unit.strip().lower()
-        for c in cases:
-            if str(c.get("unit_number") or "").strip().lower()==u_low:
-                r=_ai_case_record(c)
-                item={"unit":r["unit"],"type":r["type"],"driver":r["driver"],"group":r["group"],
-                  "issue":_ai_clip(r["issue"],260),"description":_ai_clip(r["description"],340),
-                  "notes":_ai_clip(r["notes"],300),"solved_by":r["solved_by"],
-                  "resolution":_ai_clip(r["resolution"],480),"status":r["status"],
-                  "opened":r["opened"],"closed":r["closed"]}
-                exact_unit_cases.append({k:v for k,v in item.items() if v not in ("",None,[])})
+        unit_raw=[c for c in cases if str(c.get("unit_number") or "").strip().lower()==u_low]
+        unit_raw.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+        for c in unit_raw:
+            r=_ai_case_record(c)
+            item={"unit":r["unit"],"type":r["type"],"driver":r["driver"],"group":r["group"],
+              "issue":_ai_clip(r["issue"],260),"description":_ai_clip(r["description"],340),
+              "notes":_ai_clip(r["notes"],300),"solved_by":r["solved_by"],
+              "resolution":_ai_clip(r["resolution"],480),"status":r["status"],
+              "opened":r["opened"],"closed":r["closed"]}
+            exact_unit_cases.append({k:v for k,v in item.items() if v not in ("",None,[])})
     matched=_ai_relevant_cases(query,cases,min(limit,8)) if include_cases else []
-    compact=list(exact_unit_cases[:8])
+    if include_cases and not matched and not active_unit:
+        # Fallback to newest fleet cases when query is a general '5 recent cases' / 'not related to unit X' request
+        ex_low = excluded_unit.strip().lower() if excluded_unit else ""
+        pool_cases = [
+            c for c in cases
+            if not is_history_test_case(c)
+            and (not ex_low or str(c.get("unit_number") or "").strip().lower() != ex_low)
+        ]
+        pool_cases.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+        matched = pool_cases[:max(limit, 8)]
+    compact=list(exact_unit_cases[:10])
     seen_keys={(x.get("unit",""),x.get("issue",""),x.get("driver",""),x.get("opened","")) for x in compact}
+    ex_low = excluded_unit.strip().lower() if excluded_unit else ""
     for c in matched:
+        if ex_low and str(c.get("unit_number") or "").strip().lower() == ex_low:
+            continue
         r=_ai_case_record(c)
         item={"unit":r["unit"],"type":r["type"],"driver":r["driver"],"group":r["group"],
           "issue":_ai_clip(r["issue"],260),"description":_ai_clip(r["description"],340),
@@ -641,22 +716,29 @@ def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,ac
         if k not in seen_keys:
             seen_keys.add(k)
             compact.append(cleaned_item)
-        if len(compact)>=max(limit,8):
+        if len(compact)>=max(limit,10):
             break
     notes=[]
     if "_read_knowledge" in globals():
         raw=_read_knowledge() or []
-        for n in [n for n in raw if tokens(query) & tokens(json.dumps(n,ensure_ascii=False))][-3:]:
-            if isinstance(n,dict):
-                notes.append({k:_ai_clip(n.get(k),360) for k in ("part","note","author","updated") if n.get(k)})
-            else: notes.append(_ai_clip(n,360))
+        q_toks=tokens(query)
+        if q_toks:
+            for n in raw[-40:]:
+                n_txt = json.dumps(n, ensure_ascii=False).lower() if isinstance(n, dict) else str(n).lower()
+                if any(w in n_txt for w in q_toks):
+                    if isinstance(n,dict):
+                        notes.append({k:_ai_clip(n.get(k),360) for k in ("part","note","author","updated") if n.get(k)})
+                    else:
+                        notes.append(_ai_clip(n,360))
+                    if len(notes)>=3:
+                        break
     approved=[]
     for x in (_ai_knowledge_matches(query,3) if "_ai_knowledge_matches" in globals() else []):
         approved.append({"id":x.get("id"),"title":_ai_clip(x.get("title"),120),
           "tags":(x.get("tags") or [])[:6],"content":knowledge_excerpt(x.get("content"),query,1000)})
     lessons=learning_store.matches(query,limit=3) if include_cases else []
-    fleet_exp=fleet_knowledge_store.matches(query,5) if include_cases else []
-    if include_cases and active_unit:
+    fleet_exp=fleet_knowledge_store.matches(query,4) if (include_cases and len(compact)<4) else []
+    if include_cases and active_unit and not exact_unit_cases:
         u_low=active_unit.strip().lower()
         for fx in fleet_exp:
             if isinstance(fx,dict) and str(fx.get("unit_number") or fx.get("unit") or "").strip().lower()==u_low:
@@ -669,22 +751,197 @@ def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,ac
                     "status":fx.get("status") or "",
                 }
                 fx_clean={k:v for k,v in fx_item.items() if v not in ("",None,[])}
-                fk=(fx_clean.get("unit",""),fx_clean.get("issue",""),fx_clean.get("driver",""))
-                if fk not in {(x.get("unit",""),x.get("issue",""),x.get("driver","")) for x in exact_unit_cases}:
-                    exact_unit_cases.append(fx_clean)
-                    if fx_clean not in compact:
-                        compact.insert(0,fx_clean)
-    hist_chats=_ai_chat_history_matches(query,2) if include_chat_history else []
-    out={"retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved),"historical_chats_in_prompt":len(hist_chats)}}
+                exact_unit_cases.append(fx_clean)
+                if fx_clean not in compact:
+                    compact.insert(0,fx_clean)
+    out={"retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved),"historical_chats_in_prompt":0}}
     if active_unit and include_cases:
-        out["exact_unit_lookup"]={"unit":active_unit.upper(),"total_recorded":len(exact_unit_cases),"cases":exact_unit_cases[:10]}
+        out["exact_unit_lookup"]={"unit":active_unit.upper(),"total_recorded":len(exact_unit_cases),"cases":exact_unit_cases[:12]}
+    if excluded_unit:
+        out["excluded_unit"]=excluded_unit.upper()
     if compact: out["cases"]=compact
     if notes: out["knowledge_notes"]=notes
     if approved: out["approved_maintenance_knowledge"]=approved
     if lessons: out["reviewed_lessons"]=lessons
     if fleet_exp: out["fleet_experience"]=fleet_exp
-    if hist_chats: out["historical_chat_experience"]=hist_chats
     return out
+
+
+_HOWTO_DIAGNOSTIC_RE = re.compile(
+    r'\b(?:how\s+(?:to|do\s+i|can\s+i|should\s+i)|what\s+(?:causes|should\s+i\s+check|to\s+check|is\s+the\s+fix|is\s+the\s+procedure)|'
+    r'why\s+(?:is|does|would)|diagnos\w*|troubleshoot\w*|torque\s+spec|wiring\s+diagram|pinout|spn\s*\d+|fmi\s*\d+|dtc)\b',
+    re.I,
+)
+_MOST_RECENT_FOLLOWUP_RE = re.compile(
+    r'\b(?:most\s+recent\s+(?:one|case|record|issue)|latest\s+(?:one|case|record|issue)|'
+    r'(?:first|last|newest)\s+(?:one|case|record)|what\s+issue\s+was\s+(?:the\s+)?(?:most\s+recent|latest|last|first)|'
+    r'(?:most\s+recent|latest|last)\s+one\s+was\s+about)\b',
+    re.I,
+)
+_CASE_LIST_INTENT_RE = re.compile(
+    r'\b(?:cases?|history|records?|recent|latest|open\s+cases?|closed\s+cases?|past\s+repairs?|'
+    r'find\s+me|show\s+me|list|check\s+unit|u\s+sure|are\s+you\s+sure|how\s+many\s+cases)\b',
+    re.I,
+)
+
+
+def _format_fast_case_bullet(idx, r, include_unit=False):
+    status_lbl = str(r.get("status") or "open").upper()
+    opened_lbl = r.get("opened") or "Date N/A"
+    issue_lbl = _ai_clip(r.get("issue") or r.get("description") or "Maintenance report", 180)
+    unit_prefix = f"**Unit {r.get('unit') or '—'}** · " if include_unit else ""
+    line1 = f"{idx}. {unit_prefix}**{issue_lbl}** · `{status_lbl}` · {opened_lbl}"
+    meta_parts = []
+    who = " · ".join(x for x in (r.get("driver"), r.get("group")) if x and x != "—")
+    if who:
+        meta_parts.append(f"Driver / Group: {who}")
+    if r.get("resolution"):
+        meta_parts.append(f"Fix: {_ai_clip(r['resolution'], 180)}")
+    if r.get("notes"):
+        meta_parts.append(f"Notes: {_ai_clip(r['notes'], 140)}")
+    if r.get("solved_by"):
+        meta_parts.append(f"Closed by: {r['solved_by']}")
+    if meta_parts:
+        return line1 + "\n   - " + " · ".join(meta_parts)
+    return line1
+
+
+def _try_fast_case_query_answer(message, history):
+    """Instant (<30ms) deterministic response for unit case lookups, recent cases, negated unit filters, and most-recent follow-ups."""
+    raw = str(message or "").strip()
+    if not raw or "[live board summary]" in raw.lower():
+        return None, None
+    if _HOWTO_DIAGNOSTIC_RE.search(raw):
+        return None, None
+
+    all_cases = [c for c in load_cases() if not is_testing(c)]
+    known_units = {str(c.get("unit_number") or "").strip().lower() for c in all_cases if str(c.get("unit_number") or "").strip()}
+    excluded_unit = _extract_excluded_unit(raw, known_units)
+    active_unit, _ = _resolve_conversational_context(raw, history, cases=all_cases)
+
+    # Extract requested count if any (e.g. "5 recent cases", "9 cases")
+    cnt_match = re.search(
+        r'\b(\d{1,2})\s+(?:recent|latest|last|past|similar|open|closed|active|fleet|historical|history|top|more|new)?\s*(?:cases?|records?|issues?|reports?)\b',
+        raw,
+        re.I,
+    )
+    req_count = int(cnt_match.group(1)) if cnt_match else 0
+
+    # 1. Follow-up asking specifically about the most recent / latest case ("the most recent one was about what issue?")
+    if _MOST_RECENT_FOLLOWUP_RE.search(raw):
+        if active_unit:
+            u_low = active_unit.strip().lower()
+            pool = [c for c in all_cases if str(c.get("unit_number") or "").strip().lower() == u_low]
+            pool.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+            if not pool:
+                return f"**Unit {active_unit.upper()}** has **0 recorded maintenance cases** in the Kurtex database.", active_unit
+            r0 = _ai_case_record(pool[0])
+            lines = [
+                f"The most recent case for **Unit {active_unit.upper()}** (opened **{r0['opened'] or 'recently'}**, status `{str(r0['status'] or 'open').upper()}`) was about:",
+                f"- **Reported issue:** {r0['issue']}",
+            ]
+            who = " · ".join(x for x in (r0.get("driver"), r0.get("group")) if x)
+            if who:
+                lines.append(f"- **Driver / Group:** {who}")
+            if r0.get("resolution"):
+                lines.append(f"- **Recorded resolution:** {r0['resolution']}")
+            if r0.get("notes"):
+                lines.append(f"- **Notes:** {r0['notes']}")
+            if r0.get("solved_by"):
+                lines.append(f"- **Handled / Closed by:** {r0['solved_by']}")
+            return "\n".join(lines), active_unit
+        else:
+            ex_low = excluded_unit.strip().lower() if excluded_unit else ""
+            pool = [
+                c for c in all_cases
+                if not is_history_test_case(c)
+                and (not ex_low or str(c.get("unit_number") or "").strip().lower() != ex_low)
+            ]
+            pool.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+            if not pool:
+                return "No recorded maintenance cases were found in the Kurtex database.", ""
+            r0 = _ai_case_record(pool[0])
+            lines = [
+                f"The most recent fleet case is on **Unit {r0['unit'] or '—'}** (opened **{r0['opened'] or 'recently'}**, status `{str(r0['status'] or 'open').upper()}`):",
+                f"- **Reported issue:** {r0['issue']}",
+            ]
+            who = " · ".join(x for x in (r0.get("driver"), r0.get("group")) if x)
+            if who:
+                lines.append(f"- **Driver / Group:** {who}")
+            if r0.get("solved_by"):
+                lines.append(f"- **Handled / Closed by:** {r0['solved_by']}")
+            return "\n".join(lines), ""
+
+    task = classify_task(raw)
+    has_list_intent = bool(task == "history" or _CASE_LIST_INTENT_RE.search(raw) or req_count > 0 or excluded_unit)
+    # Also trigger if the user just typed a unit number like "Unit 308" or "check unit 308" or "cases for R376"
+    msg_NonUnit_tokens = tokens(raw) - {active_unit.lower() if active_unit else ""}
+    is_bare_unit_lookup = bool(active_unit and len(msg_NonUnit_tokens) == 0)
+
+    if not has_list_intent and not is_bare_unit_lookup:
+        return None, None
+
+    # 2. Exact Unit Case History Lookup (when active_unit is present and no other symptom component filter is requested, or symptom filter within unit)
+    if active_unit:
+        u_low = active_unit.strip().lower()
+        unit_cases = [c for c in all_cases if str(c.get("unit_number") or "").strip().lower() == u_low]
+        unit_cases.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+        total = len(unit_cases)
+        u_label = active_unit.upper()
+        if total == 0:
+            return (
+                f"**Unit {u_label}** has **0 recorded maintenance cases** in the Kurtex database.\n\n"
+                f"- Verify the unit number in Fleet Search or check open Live Board breakdowns."
+            ), active_unit
+        show_limit = min(max(req_count or 10, 1), 20)
+        shown = unit_cases[:show_limit]
+        if req_count and req_count > total:
+            header = (
+                f"**Unit {u_label}** — Kurtex database contains **{total} recorded case{'s' if total != 1 else ''}** "
+                f"(you requested {req_count}; showing all **{total}** verified record{'s' if total != 1 else ''}, newest first):"
+            )
+        elif total <= len(shown):
+            header = f"**Unit {u_label}** — **{total} recorded maintenance case{'s' if total != 1 else ''}** in Kurtex (newest first):"
+        else:
+            header = f"**Unit {u_label}** — Showing the **{len(shown)} most recent cases** out of **{total} total recorded** (newest first):"
+        bullets = [_format_fast_case_bullet(i + 1, _ai_case_record(c), include_unit=False) for i, c in enumerate(shown)]
+        return header + "\n\n" + "\n".join(bullets), active_unit
+
+    # 3. Fleet-wide Recent Cases or Symptom Case Search (no active_unit, or negated unit e.g. "not related to unit 308, 5 recent cases")
+    ex_low = excluded_unit.strip().lower() if excluded_unit else ""
+    pool = [
+        c for c in all_cases
+        if not is_history_test_case(c)
+        and (not ex_low or str(c.get("unit_number") or "").strip().lower() != ex_low)
+    ]
+    if re.search(r'\bopen\s+cases?\b', raw, re.I):
+        pool = [c for c in pool if str(c.get("status") or "").lower() in ("open", "assigned", "reported")]
+    elif re.search(r'\b(?:closed|done)\s+cases?\b', raw, re.I):
+        pool = [c for c in pool if str(c.get("status") or "").lower() == "done"]
+
+    cleaned_for_symptoms = _NEGATED_UNIT_RE.sub(" ", raw)
+    symptom_tokens = tokens(cleaned_for_symptoms) - ({excluded_unit.lower()} if excluded_unit else set())
+    show_limit = min(max(req_count or 5, 1), 15)
+
+    if symptom_tokens:
+        matched = _ai_relevant_cases(raw, pool, show_limit)
+        if not matched:
+            return f"No matching fleet maintenance cases found for **{_ai_clip(raw, 80)}** in the Kurtex database.", ""
+        matched.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+        excl_note = f" (excluding Unit {excluded_unit.upper()})" if excluded_unit else ""
+        header = f"**{len(matched)} matching fleet maintenance case{'s' if len(matched) != 1 else ''}**{excl_note} (newest first):"
+        bullets = [_format_fast_case_bullet(i + 1, _ai_case_record(c), include_unit=True) for i, c in enumerate(matched)]
+        return header + "\n\n" + "\n".join(bullets), ""
+
+    pool.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
+    shown = pool[:show_limit]
+    if not shown:
+        return "No recorded maintenance cases were found in the Kurtex database.", ""
+    excl_note = f" (excluding Unit {excluded_unit.upper()}, newest first)" if excluded_unit else " (newest first)"
+    header = f"**Latest {len(shown)} fleet maintenance case{'s' if len(shown) != 1 else ''}**{excl_note}:"
+    bullets = [_format_fast_case_bullet(i + 1, _ai_case_record(c), include_unit=True) for i, c in enumerate(shown)]
+    return header + "\n\n" + "\n".join(bullets), ""
+
 
 
 AI_PARTS_FILE = Path(__file__).resolve().parents[1] / "data" / "parts_manual_ai.json"
@@ -850,12 +1107,16 @@ def _ai_chat_history_matches(query,limit=6):
 
 def _ai_knowledge_matches(query,limit=12):
     items=_read_ai_knowledge(); q=tokens(query)
-    def score(x):
-        txt=(str(x.get("title") or "")+" "+str(x.get("content") or "")+" "+" ".join(x.get("tags") or [])).lower()
-        return len(q & tokens(txt))
-    ranked=sorted(items,key=lambda x:(score(x),x.get("updated_at") or x.get("created_at") or ""),reverse=True)
-    hits=[x for x in ranked if score(x)>0]
-    return hits[:limit]
+    if not q:
+        return []
+    scored=[]
+    for x in items:
+        txt=(str(x.get("title") or "")+" "+str(x.get("content") or "")[:20000]+" "+" ".join(x.get("tags") or [])).lower()
+        sc=sum(1 for w in q if w in txt)
+        if sc>0:
+            scored.append((sc, x.get("updated_at") or x.get("created_at") or "", x))
+    scored.sort(key=lambda t:(t[0],t[1]),reverse=True)
+    return [t[2] for t in scored[:limit]]
 
 @app.route("/api/ai/knowledge",methods=["GET","POST"])
 def api_ai_knowledge():
@@ -1263,9 +1524,9 @@ def _sse_frame(event, data):
 def _ai_max_tokens_for(task):
     if task in ("board_ops", "visual"):
         return 550
-    if task == "maintenance_question":
-        return 750
-    return 950
+    if task in ("maintenance_question", "history"):
+        return 520
+    return 650
 
 def _finalize_ai_chat(chat, history, chats, message, answer, active_ids, request_id, response_contract, retrieval_query, ctx, research, image_urls, active_media, wants_similar_cases, visual_description_only, started):
     answer_id=uuid.uuid4().hex
@@ -1276,7 +1537,7 @@ def _finalize_ai_chat(chat, history, chats, message, answer, active_ids, request
     chat["messages"]=history[-80:]; chat["updated_at"]=_now_iso()
     if not chat.get("title") or chat.get("title")=="New maintenance chat":chat["title"]=_chat_title(message)
     _save_user_chats(chats)
-    try:learning_store.capture_chat(_ai_user_key(),chat)
+    try:learning_store.capture_chat(_ai_user_key(),chat,latest_only=True)
     except Exception:logger.exception("Learning capture failed; chat answer remains saved")
     return {"message_id":answer_id,"answer":answer,"chat_id":chat["id"],"title":chat["title"],"elapsed_ms":round((time.monotonic()-started)*1000),"retrieval":ctx.get("retrieval",{}),"images_analyzed":len(image_urls),"sources":research["results"],"research_status":research["status"],"similar_cases":similar_cases,"parts":part_matches,"language":response_contract["language"],"task":response_contract["task"],"video_frames_reviewed":sum(len(m.get("frames") or []) for m in active_media if m.get("kind")=="video")}
 
@@ -1347,6 +1608,21 @@ def api_ai_chat():
                 yield _sse_frame("done", final_payload)
             return Response(stream_with_context(_stream_refusal()), content_type="text/event-stream; charset=utf-8", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
         return jsonify(_finalize_ai_chat(chat, history, chats, message, refusal_text, active_ids, request_id, response_contract, message, empty_ctx, empty_res, image_urls, active_media, False, False, started_guard))
+
+    # Deterministic Fast-Path (<30ms) for unit case lookups, recent cases, negated unit filters, and most-recent follow-ups
+    if not (image_urls or video_present or driver_reports):
+        fast_answer, _fast_unit = _try_fast_case_query_answer(message, history)
+        if fast_answer:
+            started_fast = time.monotonic()
+            fast_ctx = {"retrieval": {"historical_cases_total": len(load_cases()), "cases_in_prompt": 1, "approved_items_in_prompt": 0, "historical_chats_in_prompt": 0}}
+            fast_res = {"status": "skipped", "results": []}
+            if wants_stream:
+                def _stream_fast():
+                    yield _sse_frame("delta", {"delta": fast_answer})
+                    final_payload = _finalize_ai_chat(chat, history, chats, message, fast_answer, active_ids, request_id, response_contract, message, fast_ctx, fast_res, image_urls, active_media, False, False, started_fast)
+                    yield _sse_frame("done", final_payload)
+                return Response(stream_with_context(_stream_fast()), content_type="text/event-stream; charset=utf-8", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+            return jsonify(_finalize_ai_chat(chat, history, chats, message, fast_answer, active_ids, request_id, response_contract, message, fast_ctx, fast_res, image_urls, active_media, False, False, started_fast))
 
     def _prepare_prompt_state():
         observations=""

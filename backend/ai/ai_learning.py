@@ -30,14 +30,19 @@ class LearningStore:
             else:
                 db.execute('INSERT INTO lessons (id,source_key,source_type,title,evidence,fingerprint,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)',(ident,source_key,source_type,title[:160],evidence,digest,'pending',now,now))
             return ident
-    def capture_chat(self,owner,chat):
+    def capture_chat(self,owner,chat,latest_only=False):
         messages=chat.get('messages') or []
+        pairs=[]
         for index,message in enumerate(messages):
             if message.get('role')!='assistant':continue
             previous=messages[index-1] if index else {}
             key=message.get('id') or message.get('at') or str(index)
             evidence='Agent report (unverified):\n'+str(previous.get('content',''))+'\n\nAI suggestion (NOT confirmed):\n'+str(message.get('content',''))
-            self.capture(f'chat:{owner}:{chat["id"]}:{key}','chat',chat.get('title') or 'Maintenance conversation',evidence)
+            pairs.append((f'chat:{owner}:{chat["id"]}:{key}', evidence))
+        if latest_only and pairs:
+            pairs=pairs[-1:]
+        for source_key,evidence in pairs:
+            self.capture(source_key,'chat',chat.get('title') or 'Maintenance conversation',evidence)
     def capture_cases(self,cases):
         count=0
         for case in cases:

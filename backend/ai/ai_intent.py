@@ -35,8 +35,9 @@ TERMS = {
 
 TASK_WORDS = {
  'history': ('similar case','similar cases','previous case','previous cases','past case','past cases','recent case','recent cases',
+             'most recent','latest case','latest cases','latest one','last case','last cases','last one','first case','first one',
              'case history','fleet history','historical cases','cases for','history for','records for','all cases','open cases','closed cases',
-             'past repairs','previous repairs','how many cases','cazuri similare','cazuri asemănătoare','cazuri asemanatoare','istoric cazuri','cazuri precedente','cazuri recente',
+             'past repairs','previous repairs','how many cases','what issue','which issue','cazuri similare','cazuri asemănătoare','cazuri asemanatoare','istoric cazuri','cazuri precedente','cazuri recente',
              'похожие случаи','похожие заявки','история ремонтов','предыдущие случаи','последние кейсы',
              'casos similares','casos anteriores','historial de casos','casos recientes'),
  'fault_code': ('fault code','error code','spn','fmi','dtc','obd','cod eroare','cod de eroare','cod defect',

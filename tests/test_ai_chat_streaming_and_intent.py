@@ -128,7 +128,19 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
     def test_unit_followup_carryover_and_exact_unit_grounding(self):
         sample_cases = [
             {
-                "id": "c-308-1",
+                "id": "c-308-old",
+                "unit_number": "308",
+                "vehicle_type": "truck",
+                "report_driver": "Bryan Caple",
+                "group_name": "Testing",
+                "issue_text": "Brakes not holding",
+                "notes": "case reported",
+                "status": "done",
+                "opened_at": "2026-06-15T15:37:19.660093+00:00",
+                "closed_by_name": "Andrei",
+            },
+            {
+                "id": "c-308-new",
                 "unit_number": "308",
                 "vehicle_type": "truck",
                 "report_driver": "Victor Pelykh",
@@ -136,7 +148,7 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
                 "issue_text": "Hub cap leak",
                 "description": "Hub cap oil leak on front steer axle",
                 "status": "open",
-                "opened_at": "Nov 18 14:20",
+                "opened_at": "2026-11-18T14:20:00+00:00",
             },
             {
                 "id": "c-244-1",
@@ -147,22 +159,25 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
                 "issue_text": "Gladhand air leak",
                 "description": "Red supply gladhand seal torn",
                 "status": "done",
-                "opened_at": "Nov 17 09:10",
+                "opened_at": "2026-11-17T09:10:00+00:00",
             },
         ]
-        captured_prompts = []
-
-        def fake_cf(messages, max_tokens=900, temperature=0.2, **_kw):
-            captured_prompts.append(messages)
-            return "Kurtex has 1 recorded case for Unit 308: Hub cap leak."
 
         with patch.object(server, "load_cases", return_value=sample_cases), patch.object(
-            server, "_cf_ai", side_effect=fake_cf
-        ):
-            # Turn 1: user asks about Unit 308
+            server, "_cf_ai"
+        ) as mock_cf:
+            # Turn 1: user asks about Unit 308 (answered deterministically in <30ms without calling _cf_ai)
             r1 = self.client.post("/api/ai/chat", json={"message": "check unit 308", "web_search": False})
             self.assertEqual(r1.status_code, 200)
-            chat_id = r1.get_json()["chat_id"]
+            b1 = r1.get_json()
+            chat_id = b1["chat_id"]
+            self.assertIn("Unit 308", b1["answer"])
+            self.assertIn("Hub cap leak", b1["answer"])
+            # Newest case (Hub cap leak, Nov 18) must appear before older case (Brakes not holding, Jun 15)
+            self.assertLess(b1["answer"].index("Hub cap leak"), b1["answer"].index("Brakes not holding"))
+            # Must not contain raw ISO microseconds or "case reported" placeholder notes
+            self.assertNotIn("660093", b1["answer"])
+            self.assertNotIn("case reported", b1["answer"].lower())
 
             # Turn 2: follow-up using pronoun "for it" and count "5 recent cases"
             r2 = self.client.post(
@@ -170,12 +185,40 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
                 json={"message": "find me all 5 recent cases for it please", "chat_id": chat_id, "web_search": False},
             )
             self.assertEqual(r2.status_code, 200)
+            b2 = r2.get_json()
+            self.assertIn("2 recorded cases", b2["answer"])
+            self.assertIn("you requested 5", b2["answer"])
+            self.assertIn("Hub cap leak", b2["answer"])
 
-        self.assertEqual(len(captured_prompts), 2)
-        turn2_sys = "\n".join(m.get("content", "") for m in captured_prompts[1] if m.get("role") == "system")
-        self.assertIn("Verified Database Records for Unit 308 (Exact total: 1 case(s))", turn2_sys)
-        self.assertIn("Hub cap leak", turn2_sys)
-        self.assertIn("EXACTLY 1 recorded case(s) for Unit 308", turn2_sys)
+            # Turn 3: follow-up asking "the most recent one was about what issue?"
+            r3 = self.client.post(
+                "/api/ai/chat",
+                json={"message": "the most recent one was about what issue?", "chat_id": chat_id, "web_search": False},
+            )
+            self.assertEqual(r3.status_code, 200)
+            b3 = r3.get_json()
+            self.assertIn("Hub cap leak", b3["answer"])
+            self.assertNotIn("Brakes not holding", b3["answer"])
+
+            # Turn 4: negated unit query "not related to unit 308, 5 recent cases"
+            r4 = self.client.post(
+                "/api/ai/chat",
+                json={"message": "not related to unit 308, 5 recent cases", "chat_id": chat_id, "web_search": False},
+            )
+            self.assertEqual(r4.status_code, 200)
+            b4 = r4.get_json()
+            self.assertIn("excluding Unit 308", b4["answer"])
+            self.assertIn("Unit 244", b4["answer"])
+            self.assertIn("Gladhand air leak", b4["answer"])
+            self.assertNotIn("Hub cap leak", b4["answer"])
+
+            mock_cf.assert_not_called()
+
+            # Also verify _ai_context and _format_ai_context_block grounding directly
+            ctx = server._ai_context("Unit 308", active_unit="308")
+            block = server._format_ai_context_block(ctx)
+            self.assertIn("Verified Database Records for Unit 308 (Exact total: 2 case(s))", block)
+            self.assertIn("EXACTLY 2 recorded case(s) for Unit 308", block)
 
     def test_out_of_scope_queries_blocked_without_calling_llm(self):
         with patch.object(server, "_cf_ai") as mock_cf, patch.object(server, "_cf_ai_stream") as mock_stream:

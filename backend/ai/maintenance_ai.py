@@ -42,7 +42,7 @@ Recorded replaced part numbers are evidence that an agent reported a part replac
 they do not prove the reported fault was fixed. Never invent missing part numbers.
 """
 
-STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit issue problem maintenance repair service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported recent latest last first all any more many much most top list show give tell sure really records record history historical previous past fleet today yesterday week month days times'.split())
+STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit units issue issues problem problems maintenance repair repairs service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported recent latest last first all any more many much most top list show give tell sure really records record history historical previous past fleet today yesterday week month days times related unrelated other than besides except excluding without outside general different another'.split())
 GROUPS = [
  ('rim','rims','janta','jantă','диск','обод'),
  ('wheel','wheels','roata','roată','колесо'),
@@ -74,6 +74,25 @@ def tokens(value):
     raw = re.findall(r'[\w-]{2,}', cleaned)
     return {ALIASES.get(t,t) for t in raw if (len(t)>=3 or any(c.isdigit() for c in t)) and t not in STOP}
 
+_CASE_TOKEN_CACHE = {}
+
+def _case_tokens_cached(case):
+    cid = case.get('id') or case.get('full_id') or ''
+    key = (cid, case.get('opened_at') or '', case.get('closed_at') or '', case.get('status') or '', case.get('issue_text') or '') if cid else None
+    if key and key in _CASE_TOKEN_CACHE:
+        return _CASE_TOKEN_CACHE[key]
+    unit_val = str(case.get('unit_number') or case.get('unit') or '').strip().lower()
+    text = ' '.join(str(case.get(k) or '') for k in ('unit_number','unit','vehicle_type','report_driver','driver_name','group_name','group','issue_text','description','notes','resolution','solution','close_notes','closing_notes','resolution_notes','replaced_part_numbers'))
+    got = tokens(text)
+    if unit_val:
+        got.add(unit_val)
+    res = (unit_val, got)
+    if key:
+        if len(_CASE_TOKEN_CACHE) > 8000:
+            _CASE_TOKEN_CACHE.clear()
+        _CASE_TOKEN_CACHE[key] = res
+    return res
+
 def ranked_cases(query, cases, limit=12):
     cleaned_q = _COUNT_NUMBER_RE.sub(' ', str(query or '').lower())
     wanted=tokens(cleaned_q)
@@ -82,11 +101,7 @@ def ranked_cases(query, cases, limit=12):
     codes={t for t in wanted if any(c.isdigit() for c in t) and len(t)>=2}
     ranked=[]
     for case in cases:
-        unit_val=str(case.get('unit_number') or case.get('unit') or '').strip().lower()
-        text=' '.join(str(case.get(k) or '') for k in ('unit_number','unit','vehicle_type','report_driver','driver_name','group_name','group','issue_text','description','notes','resolution','solution','close_notes','closing_notes','resolution_notes','replaced_part_numbers'))
-        got=tokens(text)
-        if unit_val:
-            got.add(unit_val)
+        unit_val, got = _case_tokens_cached(case)
         overlap=wanted & got
         unit_hit=bool(unit_val and unit_val in wanted)
         if not overlap and not unit_hit:
@@ -107,6 +122,9 @@ def knowledge_excerpt(content, query, limit=2200):
     """Keep the relevant section of a long manual, not always its opening pages."""
     text=str(content or '')
     if len(text)<=limit:return text
-    chunks=[text[i:i+limit] for i in range(0,len(text),limit-300)]
+    step=max(200, limit-300)
+    chunks=[text[i:i+limit] for i in range(0,min(len(text), 120000),step)]
     wanted=tokens(query)
-    return max(chunks,key=lambda chunk:len(tokens(chunk)&wanted))
+    if not wanted:
+        return chunks[0]
+    return max(chunks,key=lambda chunk:sum(1 for w in wanted if w in chunk.lower()))

@@ -79,11 +79,20 @@ class FleetKnowledgeStore:
     def matches(self,query,limit=6):
         wanted=tokens(query)
         if not wanted:return []
-        with self.connect() as db: rows=db.execute('SELECT case_id,payload,quality,searchable FROM fleet_cases').fetchall()
+        sample_terms=sorted(wanted,key=len,reverse=True)[:6]
+        where_clause=' OR '.join(['LOWER(searchable) LIKE ?']*len(sample_terms))
+        params=[f'%{t.lower()}%' for t in sample_terms]
+        with self.connect() as db:
+            rows=db.execute(
+                f'SELECT case_id,payload,quality,searchable FROM fleet_cases WHERE ({where_clause}) ORDER BY updated_at DESC LIMIT 200',
+                params,
+            ).fetchall()
         ranked=[]
         for row in rows:
-            score=len(wanted & tokens(row['searchable']))
+            s_low=(row['searchable'] or '').lower()
+            score=sum(2 if w in s_low else 0 for w in wanted)
             if not score:continue
+            score=len(wanted & tokens(s_low)) or score
             data=json.loads(row['payload']); data['case_id']=row['case_id'];data['evidence_quality']=row['quality']
             # keep prompt payload bounded
             for k,v in list(data.items()):
