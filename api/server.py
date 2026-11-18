@@ -2191,6 +2191,11 @@ def build_kurtex_intelligence(cases):
     """Deterministic evidence engine. AI may explain findings elsewhere, never invent them."""
     cases=[c for c in cases if not is_testing(c)]
     today=chicago_now().date(); resolved={"done","resolved","closed"}
+    def _ki_meta(group_cases):
+        open_cnt=sum(1 for gc in group_cases if str(gc.get("status") or "").lower() not in resolved)
+        dates=[_ki_date(gc) for gc in group_cases]
+        latest=max((d for d in dates if d),default=None)
+        return open_cnt,(latest.strftime("%b %d") if latest else "")
     recent_start=today-timedelta(days=13); prev_start=today-timedelta(days=27); prev_end=recent_start-timedelta(days=1)
     recent=[c for c in cases if _ki_date(c) and recent_start<=_ki_date(c)<=today]
     previous=[c for c in cases if _ki_date(c) and prev_start<=_ki_date(c)<=prev_end]
@@ -2207,8 +2212,9 @@ def build_kurtex_intelligence(cases):
         pct=None if old==0 else round((n-old)/old*100)
         fid="emerging:"+cat.lower().replace(" ","-").replace("&","and").replace("/","-")
         severity="critical" if n>=8 and (old==0 or n>=old*3) else "elevated"
-        evidence=f"{n} cases В· {len(units)} units В· " + ("new pattern vs previous 14 days" if old==0 else f"+{pct}% vs previous 14 days")
-        findings.append({"id":fid,"type":"emerging_problem","title":f"{cat} reports are increasing","category":cat,"severity":severity,"evidence":evidence,"summary":f"Kurtex found {n} {cat.lower()} cases in the last 14 days compared with {old} in the previous 14 days.","case_ids":ids,"units":units,"count":n,"previous_count":old})
+        evidence=f"{n} cases · {len(units)} units · " + ("new pattern vs previous 14 days" if old==0 else f"+{pct}% vs previous 14 days")
+        open_cnt,latest_dt=_ki_meta(related)
+        findings.append({"id":fid,"type":"emerging_problem","title":f"{cat} reports are increasing","category":cat,"severity":severity,"evidence":evidence,"summary":f"Kurtex found {n} {cat.lower()} cases in the last 14 days compared with {old} in the previous 14 days.","case_ids":ids,"units":units,"count":n,"previous_count":old,"open_count":open_cnt,"latest_date":latest_dt})
         tag(ids,"Emerging","emerging",fid)
     by_unit={}
     for c in cases:
@@ -2219,7 +2225,8 @@ def build_kurtex_intelligence(cases):
         if len(unit_recent)>=4:
             ids=[_ki_case_id(c) for c in unit_recent]; cats=Counter(_ki_category(c) for c in unit_recent if _ki_category(c)!="Other")
             fid="chronic:"+unit
-            findings.append({"id":fid,"type":"chronic_unit","title":f"Unit {unit} has frequent maintenance reports","category":cats.most_common(1)[0][0] if cats else "Multiple systems","severity":"elevated" if len(unit_recent)<6 else "critical","evidence":f"{len(unit_recent)} cases in the last 30 days","summary":f"Unit {unit} has returned {len(unit_recent)} times in the last 30 days. Review its case history for related failures.","case_ids":ids,"units":[unit],"count":len(unit_recent)})
+            open_cnt,latest_dt=_ki_meta(unit_recent)
+            findings.append({"id":fid,"type":"chronic_unit","title":f"Unit {unit} has frequent maintenance reports","category":cats.most_common(1)[0][0] if cats else "Multiple systems","severity":"elevated" if len(unit_recent)<6 else "critical","evidence":f"{len(unit_recent)} cases in the last 30 days","summary":f"Unit {unit} has returned {len(unit_recent)} times in the last 30 days. Review its case history for related failures.","case_ids":ids,"units":[unit],"count":len(unit_recent),"open_count":open_cnt,"latest_date":latest_dt})
             tag(ids,"Chronic unit","chronic",fid)
         for i,(d,c) in enumerate(rows):
             if str(c.get("status") or "").lower() in resolved: continue
@@ -2229,7 +2236,8 @@ def build_kurtex_intelligence(cases):
             if not prior: continue
             pd,prior_case=prior[-1]; days=(d-pd).days; ids=[_ki_case_id(prior_case),_ki_case_id(c)]
             fid="repeat:"+unit+":"+fam.lower().replace(" ","-").replace("/","-")
-            findings.append({"id":fid,"type":"repeat_repair","title":f"Unit {unit} returned with a similar issue","category":fam,"severity":"watch" if days>7 else "elevated","evidence":f"Returned {days} day{'s' if days!=1 else ''} after resolution","summary":f"A {fam.lower()} case on unit {unit} appeared {days} day{'s' if days!=1 else ''} after a similar case was resolved.","case_ids":ids,"units":[unit],"count":2})
+            open_cnt,latest_dt=_ki_meta([prior_case,c])
+            findings.append({"id":fid,"type":"repeat_repair","title":f"Unit {unit} returned with a similar issue","category":fam,"severity":"watch" if days>7 else "elevated","evidence":f"Returned {days} day{'s' if days!=1 else ''} after resolution","summary":f"A {fam.lower()} case on unit {unit} appeared {days} day{'s' if days!=1 else ''} after a similar case was resolved.","case_ids":ids,"units":[unit],"count":2,"open_count":open_cnt,"latest_date":latest_dt})
             tag(ids,"Repeat issue","repeat",fid)
     # De-duplicate repeated unit/category findings, keeping newest evidence.
     unique={}
