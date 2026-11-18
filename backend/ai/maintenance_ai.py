@@ -42,7 +42,7 @@ Recorded replaced part numbers are evidence that an agent reported a part replac
 they do not prove the reported fault was fixed. Never invent missing part numbers.
 """
 
-STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit issue problem maintenance repair service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported'.split())
+STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit issue problem maintenance repair service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported recent latest last first all any more many much most top list show give tell sure really records record history historical previous past fleet today yesterday week month days times'.split())
 GROUPS = [
  ('rim','rims','janta','jantă','диск','обод'),
  ('wheel','wheels','roata','roată','колесо'),
@@ -54,27 +54,51 @@ GROUPS = [
  ('battery','baterie','аккумулятор'),
  ('engine','motor','двигатель'),
  ('oil','ulei','масло'),
+ ('air','pneumatic','gladhand','airline','chamber','airbag'),
+ ('coolant','antifreeze','radiator','overheat'),
+ ('fuel','diesel','injector','davco'),
+ ('hub','axle','bearing','seal','gasket'),
+ ('door','hinge','panel','roof','latch'),
+ ('electrical','alternator','starter','wiring','harness','fuse','relay','voltage'),
 ]
 ALIASES = {term:group[0] for group in GROUPS for term in group}
-COMPONENTS = set('rim wheel brake turbo reefer battery engine tire hub stud coolant compressor alternator starter suspension steering belt radiator abs dpf def scr'.split())
+COMPONENTS = set('rim wheel brake turbo reefer battery engine tire hub stud coolant compressor alternator starter suspension steering belt radiator abs dpf def scr gasket seal axle gladhand chamber hinge door roof panel windshield light wiring harness clutch transmission differential injector filter pump fan thermostat sensor nox regen condenser evaporator discharge alarm leak crack dead'.split())
+
+_COUNT_NUMBER_RE = re.compile(
+    r'\b\d+\s+(?=(?:recent|latest|last|past|similar|open|closed|active|fleet|historical|history|top|more|new)?\s*(?:cases?|records?|issues?|reports?|days?|times?|weeks?|months?|units?)\b)',
+    re.I,
+)
 
 def tokens(value):
-    raw = re.findall(r'[\w-]{3,}', str(value or '').lower())
-    return {ALIASES.get(t,t) for t in raw if t not in STOP}
+    cleaned = _COUNT_NUMBER_RE.sub(' ', str(value or '').lower())
+    raw = re.findall(r'[\w-]{2,}', cleaned)
+    return {ALIASES.get(t,t) for t in raw if (len(t)>=3 or any(c.isdigit() for c in t)) and t not in STOP}
 
 def ranked_cases(query, cases, limit=12):
-    wanted=tokens(query)
+    cleaned_q = _COUNT_NUMBER_RE.sub(' ', str(query or '').lower())
+    wanted=tokens(cleaned_q)
     if not wanted:return []
     components=wanted & COMPONENTS
-    codes={t for t in wanted if any(c.isdigit() for c in t)}
+    codes={t for t in wanted if any(c.isdigit() for c in t) and len(t)>=2}
     ranked=[]
     for case in cases:
-        text=' '.join(str(case.get(k) or '') for k in ('issue_text','description','notes','resolution','solution','close_notes','closing_notes','resolution_notes','replaced_part_numbers'))
-        got=tokens(text); overlap=wanted & got
-        if not overlap or (components and not components & got):continue
-        if codes and not codes & got:continue
-        if len(overlap)<2 and not (components & got or codes & got):continue
-        score=sum(4 if t in COMPONENTS or t in codes else 1 for t in overlap)
+        unit_val=str(case.get('unit_number') or case.get('unit') or '').strip().lower()
+        text=' '.join(str(case.get(k) or '') for k in ('unit_number','unit','vehicle_type','report_driver','driver_name','group_name','group','issue_text','description','notes','resolution','solution','close_notes','closing_notes','resolution_notes','replaced_part_numbers'))
+        got=tokens(text)
+        if unit_val:
+            got.add(unit_val)
+        overlap=wanted & got
+        unit_hit=bool(unit_val and unit_val in wanted)
+        if not overlap and not unit_hit:
+            continue
+        if not unit_hit:
+            if components and not (components & got):
+                continue
+            if codes and not (codes & got):
+                continue
+            if len(overlap)<2 and not ((components & got) or (codes & got)):
+                continue
+        score=(35 if unit_hit else 0) + sum(5 if t in codes else 4 if t in COMPONENTS else 1 for t in overlap)
         ranked.append((score,case))
     ranked.sort(key=lambda p:p[0],reverse=True)
     return [case for _,case in ranked[:limit]]
