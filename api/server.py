@@ -324,15 +324,13 @@ Rules:
 - Keep answers practical for mechanics and maintenance agents.
 - Reply in the language used by the agent unless asked otherwise.
 - Never show internal Kurtex case IDs/UUIDs unless the agent explicitly asks for an ID.
-- When citing fleet history, prioritize useful operations fields: Driver / Group, Unit, Reported issue, Resolution, and Resolved by when useful.
-- RESOLUTION means only the recorded repair/fix text. solved_by/resolved_by/closed_by is personnel metadata and MUST NEVER be presented as the Resolution.
-- If no explicit repair/fix text exists, write "Resolution: No recorded resolution". You may separately write "Resolved by: <name>" when that metadata exists.
-- When a case explicitly records replaced_part_numbers, display them as "Reported replaced part numbers" if relevant. These are agent-reported historical data, NOT proof of a successful repair or OEM fitment. Do not invent or infer part numbers.
-- Omit unavailable fields instead of writing "not provided", "unknown", or similar filler.
+- When citing fleet history, write clean scannable bullets using only known operations fields (e.g., **Unit <#> — <Reported issue>** with Driver / Group / Status), plus **Fix:** or **Reported parts:** only when actually recorded. Omit empty/missing fields completely—never output "Not provided", "Unknown", or repeat "Resolution: No recorded resolution" under each bullet.
+- RESOLUTION means only the recorded repair/fix text. solved_by/resolved_by/closed_by is personnel metadata and MUST NEVER be presented as the Resolution. When none of the matching cases have a recorded repair fix, state that once in a single brief note instead of repeating it on every case.
+- When a case records replaced_part_numbers, present them briefly as agent-reported historical parts (not confirmed OEM fitment), without inventing or inferring part numbers.
 - Do not pad a history answer with generic observations (for example, do not say that check-engine issues can occur on trucks).
 - If the agent asks for matching/history cases, answer with the matching case facts first. Ask diagnostic follow-up questions only when the agent is actually asking for diagnosis.
 - Similar cases must match the affected SYSTEM/COMPONENT, not merely share words. Never group pneumatic air leaks with tire-pressure leaks; coolant, oil, fuel and refrigerant leaks are also separate problem families. Never include unrelated cases just to fill a section.
-- When summarizing history, include only CONFIRMED recorded fixes. If a case has no explicit resolution, say "Resolution: No recorded resolution"; never invent, merge, infer a repair, or substitute the person who resolved/closed the case.
+- When summarizing history, include only CONFIRMED recorded fixes; never invent, merge, infer a repair, or substitute the person who resolved/closed the case as the fix.
 - For history questions, synthesize the useful pattern: state how many truly relevant cases were found, summarize confirmed fixes, exclude false matches, then give the next practical checks only if the user is asking what to do. Do not repeat the same issue label in multiple redundant bullets.
 - For diagnosis, behave like a maintenance triage workflow, not a generic chatbot: first identify what is known, then ask the highest-value missing questions, then give prioritized checks from easiest/most likely to more involved.
 - Give focused actionable diagnostic branches only when evidence supports them.
@@ -1051,11 +1049,33 @@ def _format_ai_context_block(ctx_compact):
         for c in ctx_compact["cases"][:5]:
             unit = c.get("unit") or "Unit"
             issue = c.get("issue") or c.get("description") or ""
-            res = c.get("resolution") or "No recorded resolution"
-            lines.append(f"- **Unit {unit}** ({c.get('status') or 'open'}): {issue} | Resolution: {res}")
+            meta = " · ".join(x for x in (c.get("driver"), c.get("group"), c.get("status") or "open") if x)
+            extra = [f"Fix: {c['resolution']}"] if c.get("resolution") else []
+            if c.get("solved_by"):
+                extra.append(f"Closed by: {c['solved_by']}")
+            suffix = (" | " + " · ".join(extra)) if extra else ""
+            lines.append(f"- **Unit {unit}**" + (f" ({meta})" if meta else "") + f": {issue}{suffix}")
         sections.append("### Matching Historical Cases\n" + "\n".join(lines))
     if ctx_compact.get("fleet_experience"):
-        lines = [f"- {x.get('title') or x.get('unit') or 'History'}: {x.get('summary') or x.get('text') or x}" for x in ctx_compact["fleet_experience"][:3]]
+        lines = []
+        for x in ctx_compact["fleet_experience"][:3]:
+            if isinstance(x, dict):
+                unit = x.get("unit_number") or x.get("unit") or x.get("title") or "History"
+                issue = _ai_clip(x.get("issue_text") or x.get("description") or x.get("summary") or x.get("text") or "", 260)
+                who = " / ".join(v for v in (x.get("report_driver") or x.get("driver_name"), x.get("group_name")) if v)
+                res = _ai_clip(x.get("resolution") or x.get("solution") or x.get("close_notes") or x.get("closing_notes") or x.get("resolution_notes") or "", 300)
+                parts = _ai_clip(x.get("replaced_part_numbers") or "", 140)
+                meta = " · ".join(v for v in (who, x.get("status")) if v)
+                details = []
+                if issue:
+                    details.append(issue)
+                if res:
+                    details.append(f"Fix: {res}")
+                if parts:
+                    details.append(f"Reported parts: {parts}")
+                lines.append(f"- **Unit {unit}**" + (f" ({meta})" if meta else "") + (f": {' | '.join(details)}" if details else ""))
+            else:
+                lines.append(f"- {_ai_clip(x, 300)}")
         sections.append("### Fleet Experience\n" + "\n".join(lines))
     if ctx_compact.get("parts_manual_matches"):
         lines = [f"- **{p.get('name')}** ({p.get('category') or ''}): issues={', '.join((p.get('issues') or [])[:3])}; checks={'; '.join((p.get('checks') or [])[:3])}; guidance={p.get('guidance') or ''}" for p in ctx_compact["parts_manual_matches"][:3]]
@@ -1087,7 +1107,7 @@ def _build_ai_system_prompt(task, has_images, has_video, has_history, has_parts,
     if has_images or has_video:
         rules.append("Visual/Media: distinguish OBSERVED vs suspected vs unassessable; cite video frame timestamps when present; separate driver audio speech from visual proof.")
     if has_history:
-        rules.append("Fleet history: match same component/system only. Resolution means explicit repair text only (never closed_by/resolved_by metadata); if absent say 'Resolution: No recorded resolution'. Treat replaced_part_numbers as unverified agent reports.")
+        rules.append("Fleet history: match same component/system only. Format concisely by Unit & symptom without printing UUID Case IDs or repeating 'No recorded resolution' / 'Not provided' filler lines; mention once if no confirmed fixes were recorded. Treat closed_by/resolved_by as personnel only and replaced_part_numbers as unverified agent reports.")
     if has_parts or has_web:
         rules.append("Parts/Web: cite source numbers [1], [2] only for claims supported by supplied sources. Never present snippets as complete OEM manuals.")
     return "\n".join(rules) + "\n\n" + str(response_contract.get("instructions") or "")

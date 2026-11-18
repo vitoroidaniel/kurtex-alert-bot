@@ -93,6 +93,38 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
         self.assertEqual(res2.status_code, 200)
         self.assertEqual(res2.get_json()["answer"], "Follow-up ok")
 
+    def test_format_context_block_omits_case_uuids_and_empty_filler(self):
+        block = server._format_ai_context_block(
+            {
+                "cases": [
+                    {
+                        "unit": "306",
+                        "driver": "Marin Popovici",
+                        "group": "GR - Ruben Pineda",
+                        "status": "open",
+                        "issue": "Dead Truck",
+                    }
+                ],
+                "fleet_experience": [
+                    {
+                        "id": "0b12aa74-73b8-4e7a-83ef-6bfb0231b086",
+                        "case_id": "0b12aa74-73b8-4e7a-83ef-6bfb0231b086",
+                        "unit_number": "306",
+                        "report_driver": "AfterHours Team 4",
+                        "group_name": "GR - Ruben Pineda",
+                        "issue_text": "windshield crack",
+                        "status": "done",
+                    }
+                ],
+            }
+        )
+        self.assertNotIn("0b12aa74", block)
+        self.assertNotIn("case_id", block)
+        self.assertNotIn("No recorded resolution", block)
+        self.assertIn("**Unit 306**", block)
+        self.assertIn("Dead Truck", block)
+        self.assertIn("windshield crack", block)
+
 
 if __name__ == "__main__":
     unittest.main()
