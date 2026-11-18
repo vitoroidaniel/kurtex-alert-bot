@@ -92,6 +92,7 @@ from bot_app.handlers.report_handler import (
 )
 from bot_app.handlers.scheduler import register_jobs
 from bot_app.telegram_utils import esc_html, safe_answer, safe_reply_text, safe_send_message
+from bot_app.update_processor import PerUserUpdateProcessor
 
 BOT_NAME = "Kurtex Alert Bot"
 BOT_TAGLINE = "Truck Maintenance Command Center"
@@ -518,7 +519,7 @@ def main():
         .request(bot_request)
         .get_updates_request(updates_request)
         .persistence(report_persistence)
-        .concurrent_updates(16)
+        .concurrent_updates(PerUserUpdateProcessor(max_active=16))
         .post_init(post_init)
         .post_shutdown(post_shutdown)
         .build()

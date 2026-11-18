@@ -31,6 +31,7 @@ _HTML_MODE = getattr(ParseMode, "HTML", "HTML")
 logger = logging.getLogger(__name__)
 
 _TAG_RE = re.compile(r"<[^>]+>")
+CALLBACK_ACK_TIMEOUT = 1.5
 
 
 def esc_html(value, fallback: str = "—") -> str:
@@ -84,11 +85,21 @@ async def safe_answer(query, text: Optional[str] = None, *, show_alert: bool = F
 
 @contextlib.asynccontextmanager
 async def concurrent_ack(query, text: Optional[str] = None, *, show_alert: bool = False, **kwargs):
-    """Fire query.answer concurrently with DB work and edits to halve callback RTT."""
+    """Acknowledge in parallel, without delaying state changes on a slow answer."""
     if query is None:
         yield None
         return
-    task = asyncio.create_task(safe_answer(query, text=text, show_alert=show_alert, **kwargs))
+    async def _bounded_answer():
+        try:
+            return await asyncio.wait_for(
+                safe_answer(query, text=text, show_alert=show_alert, **kwargs),
+                timeout=CALLBACK_ACK_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            logger.debug("Callback acknowledgement timed out; continuing handler")
+            return False
+
+    task = asyncio.create_task(_bounded_answer())
     try:
         yield task
     finally:
