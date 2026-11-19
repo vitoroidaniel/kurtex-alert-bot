@@ -4020,10 +4020,16 @@ def api_issue_search():
         return jsonify({"error":"Unable to load data. Please retry."}), 500
 
 
+_FLEET_CACHE = {"key": None, "payload": None}
+
+
 @app.route("/api/fleet")
 def api_fleet():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     try:
+        cache_key = (str(DATA_DIR), kurtex_db.get_version("cases_version", DATA_DIR))
+        if _FLEET_CACHE["key"] == cache_key and _FLEET_CACHE["payload"] is not None:
+            return jsonify(_FLEET_CACHE["payload"])
         cases = [c for c in load_cases() if c.get("vehicle_type")]
         total         = len(cases)
         truck_count   = sum(1 for c in cases if c.get("vehicle_type") == "truck")
@@ -4063,7 +4069,7 @@ def api_fleet():
             fleet_status,
             key=lambda x: (x["status"] != "active", x["vtype"], x["unit"])
         )
-        return jsonify({
+        payload = {
             "total_reports": total, "truck_count": truck_count,
             "trailer_count": trailer_count, "reefer_count": reefer_count,
             "active_units": active_units,
@@ -4074,7 +4080,10 @@ def api_fleet():
             "top_issues":   [{"unit":iss,"vtype":"","count":cnt} for iss,cnt in issue_counts.most_common(8)],
             "load_types":   [{"unit":lt,"vtype":"","count":cnt} for lt,cnt in load_counts.most_common(6)],
             "fleet_status": fleet_status,
-        })
+        }
+        _FLEET_CACHE["key"] = cache_key
+        _FLEET_CACHE["payload"] = payload
+        return jsonify(payload)
     except DataUnavailable:
         raise
     except Exception as e:
@@ -4315,6 +4324,10 @@ def api_fleet_knowledge_csv():
 
 
 
+_TRENDS_CACHE = {}
+_COMPARISON_CACHE = {}
+
+
 @app.route("/api/trends")
 def api_trends():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
@@ -4323,7 +4336,11 @@ def api_trends():
     from datetime import timedelta
     try:
         days=max(1,min(366,int(request.args.get("period","30"))))
-        cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date()
+        today=chicago_now().date()
+        t_key=(str(DATA_DIR), kurtex_db.get_version("cases_version", DATA_DIR), today.isoformat(), days)
+        if t_key in _TRENDS_CACHE:
+            return jsonify(_TRENDS_CACHE[t_key])
+        cases=[c for c in load_cases() if not is_testing(c)]
         resolved_status={"done","resolved","closed"}
         def cat(c):
             t=" ".join(str(c.get(k) or "") for k in ("issue_text","description","notes")).lower()
@@ -4359,7 +4376,10 @@ def api_trends():
         if aged: insights.append(f"{aged} open cases have been open for more than 7 days.")
         if incomplete: insights.append(f"{incomplete} reports are incomplete or pending and may need more information.")
         if not insights: insights=["No major repeat-problem or report-quality issue stands out in the selected period."]
-        return jsonify(metrics=metrics,categories=categories,recurring_hotspots=hotspots,equipment_mix=equipment_mix,data_quality=data_quality,insights=insights,sample_size=len(cur),period=days)
+        payload=dict(metrics=metrics,categories=categories,recurring_hotspots=hotspots,equipment_mix=equipment_mix,data_quality=data_quality,insights=insights,sample_size=len(cur),period=days)
+        if len(_TRENDS_CACHE) > 24: _TRENDS_CACHE.clear()
+        _TRENDS_CACHE[t_key] = payload
+        return jsonify(payload)
     except Exception:
         logger.exception("Fleet analytics failed"); return jsonify({"error":"Unable to load fleet analytics."}),500
 
@@ -4370,7 +4390,12 @@ def api_comparison():
         return jsonify({"error":"This management tab is not available for your role."}),403
     from datetime import timedelta
     try:
-        days=max(1,min(366,int(request.args.get("period","30")))); cases=[c for c in load_cases() if not is_testing(c)]; today=chicago_now().date(); start=today-timedelta(days=days-1); pe=start-timedelta(days=1); ps=pe-timedelta(days=days-1)
+        days=max(1,min(366,int(request.args.get("period","30"))))
+        today=chicago_now().date()
+        c_key=(str(DATA_DIR), kurtex_db.get_version("cases_version", DATA_DIR), today.isoformat(), days)
+        if c_key in _COMPARISON_CACHE:
+            return jsonify(_COMPARISON_CACHE[c_key])
+        cases=[c for c in load_cases() if not is_testing(c)]; start=today-timedelta(days=days-1); pe=start-timedelta(days=1); ps=pe-timedelta(days=days-1)
         cur=[c for c in cases if start.isoformat()<=case_local_date(c)<=today.isoformat()]; prev=[c for c in cases if ps.isoformat()<=case_local_date(c)<=pe.isoformat()]
         resolved_status={"done","resolved","closed"}
         def category(c):
@@ -4392,7 +4417,10 @@ def api_comparison():
         new=sorted(a['recurring']-b['recurring']); cleared=sorted(b['recurring']-a['recurring'])
         new_rows=[{"label":u,"value":"Repeat","detail":"Repeats a problem now, but did not in the previous period"} for u in new[:8]]; cleared_rows=[{"label":u,"value":"Clear","detail":"Repeated a problem previously, but not in the current period"} for u in cleared[:8]]
         insights=[f"Cases changed {pct(a['total'],b['total']):+d}%: {a['total']} now versus {b['total']} previously.",f"Units with repeat problems changed from {len(b['recurring'])} to {len(a['recurring'])}. {len(new)} are new repeat-problem units and {len(cleared)} no longer repeat a problem.",f"Repeated problems changed {pct(a['repeat'],b['repeat']):+d}%: {a['repeat']} now versus {b['repeat']} previously.",f"Incomplete reports are {a['incomplete_pct']}% of current cases versus {b['incomplete_pct']}% previously."]
-        return jsonify(rows=rows,category_change=category_change,equipment_change=equipment_change,new_recurring=new_rows,cleared_recurring=cleared_rows,insights=insights,period=days)
+        payload=dict(rows=rows,category_change=category_change,equipment_change=equipment_change,new_recurring=new_rows,cleared_recurring=cleared_rows,insights=insights,period=days)
+        if len(_COMPARISON_CACHE) > 24: _COMPARISON_CACHE.clear()
+        _COMPARISON_CACHE[c_key] = payload
+        return jsonify(payload)
     except Exception:
         logger.exception("Management comparison failed");return jsonify({"error":"Unable to build comparison."}),500
 
