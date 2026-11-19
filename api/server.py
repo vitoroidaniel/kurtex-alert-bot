@@ -4104,7 +4104,7 @@ def api_report():
                 return jsonify({"error":"Choose a valid start and end date in order."}), 400
         cases     = load_cases()
         if period == "today":
-            label = "Today вЂ” " + chicago_now().strftime("%B %d, %Y")
+            label = "Today, " + chicago_now().strftime("%B %d, %Y")
             cases = [c for c in cases if case_local_date(c) == today_str()]
         elif period == "week":
             label = "This Week"; cases = [c for c in cases if case_local_date(c) >= week_start_str()]
