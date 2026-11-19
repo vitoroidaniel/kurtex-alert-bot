@@ -2169,10 +2169,15 @@ def _developer_only():
     user = session.get("user") or {}
     return user.get("role") == "developer"
 
+_DEV_SERVER_STARTED_AT = time.time()
+
+
 @app.route("/api/developer/status")
 def api_developer_status():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
     if not _developer_only(): return jsonify({"error":"forbidden"}), 403
+    import platform, shutil, sys as _sys
+    t0 = time.perf_counter()
     from backend.storage.user_store import get_all_users
     from backend.core.app_time import chicago_date_str, today_str
     data_dir = Path(os.getenv("DATA_DIR", "/app/data"))
@@ -2189,6 +2194,9 @@ def api_developer_status():
     resolved_today = sum(1 for c in cases if c.get("status") == "done" and chicago_date_str(c.get("closed_at")) == today)
     assigned_now = sum(1 for c in cases if c.get("status") == "assigned")
     reported_now = sum(1 for c in cases if c.get("status") == "reported")
+    done_total = sum(1 for c in cases if str(c.get("status") or "").lower() in ("done", "resolved", "closed"))
+    missed_total = sum(1 for c in cases if str(c.get("status") or "").lower() == "missed")
+    open_total = max(0, len(cases) - done_total)
 
     heartbeat = {}
     heartbeat_path = data_dir / "bot_runtime.json"
@@ -2213,15 +2221,136 @@ def api_developer_status():
     except Exception:
         pass
 
+    # System & resource telemetry
+    memory_rss_mb = None
+    try:
+        import resource as _res
+        rss = _res.getrusage(_res.RUSAGE_SELF).ru_maxrss
+        memory_rss_mb = round(rss / (1024 * 1024), 1) if _sys.platform == "darwin" else round(rss / 1024.0, 1)
+    except Exception:
+        pass
+    disk_info = {"total_gb": None, "used_gb": None, "free_gb": None, "used_pct": None}
+    try:
+        du = shutil.disk_usage(str(data_dir if data_dir.exists() else Path(".")))
+        disk_info = {
+            "total_gb": round(du.total / (1024 ** 3), 2),
+            "used_gb": round(du.used / (1024 ** 3), 2),
+            "free_gb": round(du.free / (1024 ** 3), 2),
+            "used_pct": round((du.used / du.total) * 100, 1) if du.total else 0,
+        }
+    except Exception:
+        pass
+
+    # Storage file breakdown inside DATA_DIR
+    storage_files = []
+    storage_total_bytes = 0
+    try:
+        if data_dir.exists():
+            for entry in data_dir.iterdir():
+                if entry.is_file():
+                    st = entry.stat()
+                    storage_total_bytes += st.st_size
+                    storage_files.append({
+                        "name": entry.name,
+                        "size_kb": round(st.st_size / 1024.0, 1),
+                        "updated_at": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                    })
+            storage_files.sort(key=lambda x: x["size_kb"], reverse=True)
+    except Exception:
+        pass
+
+    # AI & DB counters
+    kb_count = 0
+    try:
+        kb_count = len(_read_ai_knowledge())
+    except Exception:
+        pass
+    ai_chats_count = 0
+    try:
+        ai_chats_count = len(kurtex_db.list_ai_chats(DATA_DIR)) if hasattr(kurtex_db, "list_ai_chats") else 0
+    except Exception:
+        pass
+    cases_version = None
+    try:
+        cases_version = kurtex_db.get_version("cases_version", DATA_DIR)
+    except Exception:
+        pass
+    on_duty_count = 0
+    active_shift_name = ""
+    try:
+        from backend.storage import shift_store
+        snap = shift_store.get_on_duty_snapshot() if hasattr(shift_store, "get_on_duty_snapshot") else {}
+        on_duty_count = len(snap.get("on_duty_users") or [])
+        active_shift_name = str(snap.get("current_shift_name") or "")
+    except Exception:
+        pass
+
+    all_users = get_all_users()
+    ai_ok = bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN)
+    tg_ok = bool(os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN"))
+    env_name = "Railway" if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID") else "Local"
+    git_sha = (os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("GIT_COMMIT") or "")[:8]
+    git_branch = os.getenv("RAILWAY_GIT_BRANCH") or ""
+    response_ms = round((time.perf_counter() - t0) * 1000, 1)
+
     return jsonify({
-        "telegram_configured": bool(os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")),
-        "ai_configured": bool(CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN),
+        "telegram_configured": tg_ok,
+        "ai_configured": ai_ok,
         "data_writable": data_writable,
         "data_dir": str(data_dir),
         "case_count": len(cases),
-        "user_count": len(get_all_users()),
-        "ai_model": KURTEX_AI_MODEL if (CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN) else "",
-        "environment": "Railway" if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PROJECT_ID") else "Local",
+        "user_count": len(all_users),
+        "ai_model": KURTEX_AI_MODEL if ai_ok else "",
+        "environment": env_name,
+        "response_ms": response_ms,
+        "system": {
+            "python_version": platform.python_version(),
+            "platform": platform.system(),
+            "pid": os.getpid(),
+            "api_uptime_seconds": max(0, int(time.time() - _DEV_SERVER_STARTED_AT)),
+            "memory_rss_mb": memory_rss_mb,
+            "disk": disk_info,
+            "git_commit": git_sha,
+            "git_branch": git_branch,
+            "railway_service": os.getenv("RAILWAY_SERVICE_NAME") or heartbeat.get("railway_service", ""),
+            "railway_environment": os.getenv("RAILWAY_ENVIRONMENT_NAME") or os.getenv("RAILWAY_ENVIRONMENT") or heartbeat.get("railway_environment", ""),
+            "railway_deployment_id": (os.getenv("RAILWAY_DEPLOYMENT_ID") or heartbeat.get("railway_deployment_id", ""))[:12],
+            "server_time_chicago": chicago_now().strftime("%b %d, %I:%M %p %Z"),
+            "server_time_utc": datetime.now(timezone.utc).strftime("%H:%M:%S UTC"),
+        },
+        "ai_stack": {
+            "configured": ai_ok,
+            "text_model": KURTEX_AI_FAST_TEXT_MODEL if ai_ok else "",
+            "vision_model": KURTEX_AI_MODEL if ai_ok else "",
+            "fast_case_engine": True,
+            "knowledge_count": kb_count,
+            "chats_count": ai_chats_count,
+        },
+        "storage": {
+            "data_dir": str(data_dir),
+            "writable": data_writable,
+            "total_mb": round(storage_total_bytes / (1024 * 1024), 2),
+            "file_count": len(storage_files),
+            "files": storage_files[:8],
+        },
+        "queue_metrics": {
+            "total_cases": len(cases),
+            "open_cases": open_total,
+            "assigned_now": assigned_now,
+            "reported_now": reported_now,
+            "missed_cases": missed_total,
+            "done_cases": done_total,
+            "cases_version": cases_version,
+            "on_duty_count": on_duty_count,
+            "active_shift_name": active_shift_name,
+        },
+        "env_checks": [
+            {"key": "BOT_TOKEN", "ok": tg_ok, "detail": "Telegram bot credentials"},
+            {"key": "CLOUDFLARE_AI", "ok": ai_ok, "detail": "Workers AI account + token"},
+            {"key": "DATA_DIR", "ok": data_writable, "detail": str(data_dir)},
+            {"key": "SESSION_SECRET", "ok": bool(os.getenv("SESSION_SECRET") or os.getenv("SECRET_KEY")), "detail": "Signed session cookie key"},
+            {"key": "RAILWAY_RUNTIME", "ok": env_name == "Railway", "detail": env_name},
+        ],
         "bot_runtime": {
             "alive": bot_alive,
             "heartbeat_age_seconds": heartbeat_age,
