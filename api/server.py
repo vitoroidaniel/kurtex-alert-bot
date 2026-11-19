@@ -4163,62 +4163,192 @@ def api_fleet():
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
 
+def _compute_report_data(period="today", date_from="", date_to=""):
+    period = (period or "today").strip().lower()
+    date_from = (date_from or "").strip()
+    date_to = (date_to or "").strip()
+    if period == "custom":
+        date_to = date_to or today_str()
+        if not valid_date(date_from) or not valid_date(date_to) or date_from > date_to:
+            return None, ("Choose a valid start and end date in order.", 400)
+    cases = load_cases()
+    if period == "today":
+        label = "Today, " + chicago_now().strftime("%B %d, %Y")
+        cases = [c for c in cases if case_local_date(c) == today_str()]
+    elif period == "week":
+        label = "This Week (" + week_start_str() + " to " + today_str() + ")"
+        cases = [c for c in cases if case_local_date(c) >= week_start_str()]
+    elif period == "month":
+        label = "This Month (" + chicago_now().strftime("%B %Y") + ")"
+        cases = [c for c in cases if case_local_date(c) >= month_start_str()]
+    elif period == "custom" and date_from:
+        dt = date_to or today_str()
+        label = f"{date_from} to {dt}"
+        cases = [c for c in cases if date_from <= case_local_date(c) <= dt]
+    else:
+        label = "All Time"
+    total = len(cases)
+    done = sum(1 for c in cases if c.get("status") == "done")
+    missed = [c for c in cases if c.get("status") == "missed"]
+    rt = [c["response_secs"] for c in cases if c.get("response_secs") is not None]
+    avg = int(sum(rt) / len(rt)) if rt else 0
+    agent_counts = Counter(c["agent_name"] for c in cases if c.get("agent_name") and c.get("status") in ("assigned", "reported", "done"))
+    group_counts = Counter(c.get("group_name", "Unknown") for c in cases)
+
+    by_vtype = {}
+    for vt in ("truck", "trailer", "reefer"):
+        vt_cases = [c for c in cases if (c.get("vehicle_type") or "").lower() == vt]
+        issue_counts = Counter(
+            (c.get("issue_text") or c.get("description") or "Unspecified issue").strip()
+            for c in vt_cases
+            if (c.get("issue_text") or c.get("description"))
+        )
+        by_vtype[vt] = {
+            "total": len(vt_cases),
+            "top_issues": [{"issue": i, "count": n} for i, n in issue_counts.most_common(5)],
+        }
+
+    top_units = top_units_for(cases, 10)
+    return {
+        "label": label,
+        "total": total,
+        "done": done,
+        "missed": len(missed),
+        "assigned": sum(1 for c in cases if c.get("status") in ("assigned", "reported", "done")),
+        "open": sum(1 for c in cases if c.get("status") == "open"),
+        "avg_resp": fmt_secs(avg),
+        "rate": round(done / total * 100) if total else 0,
+        "leaderboard": [{"name": n, "count": v} for n, v in agent_counts.most_common(10)],
+        "top_groups": [{"name": n, "count": v} for n, v in group_counts.most_common(6)],
+        "missed_cases": [serialize_case(c) for c in missed[:20]],
+        "by_vtype": by_vtype,
+        "top_units": top_units,
+    }, None
+
+
+def _clean_report_str(val):
+    s = str(val if val is not None else "")
+    s = (
+        s.replace("\u2014", " - ")
+        .replace("\u2013", " - ")
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2026", "...")
+        .replace("\u00b7", " | ")
+        .replace("\u2022", "-")
+    )
+    # Strip control chars and non-BMP emojis that Helvetica cannot render
+    s = "".join(ch for ch in s if (32 <= ord(ch) <= 126) or (160 <= ord(ch) <= 255))
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _pdf_esc(val):
+    from xml.sax.saxutils import escape as _xml_escape
+    return _xml_escape(_clean_report_str(val))
+
+
+def _build_deterministic_report_narrative(data, selected, tone="executive", focus=""):
+    total = int(data.get("total") or 0)
+    done = int(data.get("done") or 0)
+    open_cnt = int(data.get("open") or 0)
+    missed_cnt = int(data.get("missed") or 0)
+    assigned = int(data.get("assigned") or 0)
+    rate = int(data.get("rate") or 0)
+    label = _clean_report_str(data.get("label") or "Selected Period")
+    agents = data.get("leaderboard") or []
+    groups = data.get("top_groups") or []
+    units = data.get("top_units") or []
+    by_vt = data.get("by_vtype") or {}
+
+    headline = "Fleet Maintenance & Operations Brief" if tone == "executive" else "Detailed Fleet Maintenance Report"
+    if total == 0:
+        p1 = f"No maintenance incidents were recorded during {label}. Fleet operations remained clear of logged repair escalations across monitored dispatch channels."
+        p2 = "Continue routine preventive inspections and shift monitoring to maintain zero-backlog readiness."
+    else:
+        status_note = (
+            "Resolution throughput is on target with minimal open backlog."
+            if rate >= 80
+            else ("Resolution progress is moderate and requires active follow-up on open tickets." if rate >= 55 else "A significant portion of logged cases remains unresolved and requires immediate dispatch prioritization.")
+        )
+        p1 = (
+            f"During {label}, Kurtex Fleet Operations logged {total} maintenance "
+            f"{'incident' if total == 1 else 'incidents'}, of which {done} {'has' if done == 1 else 'have'} been resolved "
+            f"({rate}% closure rate) and {open_cnt} remain actively open. {assigned} cases were assigned to maintenance operators."
+        )
+        p2 = f"{status_note}"
+        if missed_cnt > 0:
+            p2 += f" Additionally, {missed_cnt} {'case has' if missed_cnt == 1 else 'cases have'} breached SLA windows and require supervisor review."
+        elif focus:
+            p2 += f" Report scope emphasizes: {_clean_report_str(focus)}."
+
+    takeaways = []
+    if total > 0:
+        takeaways.append(f"Closure performance stands at {rate}% ({done} of {total} cases resolved, {open_cnt} open).")
+    if agents:
+        lead = agents[0]
+        takeaways.append(f"Top operator volume led by {_clean_report_str(lead.get('name'))} with {lead.get('count', 0)} handled cases across {len(agents)} active team members.")
+    if groups:
+        top_g = groups[0]
+        takeaways.append(f"Highest dispatch group demand came from {_clean_report_str(top_g.get('name'))} ({top_g.get('count', 0)} cases).")
+    if units:
+        top_u = units[0]
+        takeaways.append(f"Unit {_clean_report_str(top_u.get('unit'))} ({_clean_report_str(top_u.get('vtype') or 'Fleet').title()}) led repeat activity with {top_u.get('count', 0)} reports.")
+    if not takeaways:
+        takeaways.append("No active maintenance exceptions detected in this timeframe.")
+
+    workload_nar = ""
+    if agents or groups:
+        parts = []
+        if agents:
+            parts.append(f"{len(agents)} operators handled active maintenance workload, led by {_clean_report_str(agents[0].get('name'))} ({agents[0].get('count', 0)} cases).")
+        if groups:
+            parts.append(f"Across dispatch groups, {_clean_report_str(groups[0].get('name'))} generated the largest share of requests ({groups[0].get('count', 0)} cases).")
+        workload_nar = " ".join(parts)
+
+    equip_parts = []
+    for vt, lbl in (("truck", "Trucks"), ("trailer", "Trailers"), ("reefer", "Reefers")):
+        blk = by_vt.get(vt) or {}
+        if blk.get("total"):
+            top_i = (blk.get("top_issues") or [{}])[0].get("issue", "")
+            equip_parts.append(f"{lbl} accounted for {blk['total']} reports" + (f" (most frequent: {_clean_report_str(top_i)})" if top_i else ""))
+    equipment_nar = ("; ".join(equip_parts) + ".") if equip_parts else "No equipment-specific fault concentrations were recorded for this period."
+
+    recs = []
+    if missed_cnt > 0:
+        recs.append(f"Escalate and close the {missed_cnt} overdue/missed SLA {'case' if missed_cnt == 1 else 'cases'} during the current shift handover.")
+    if units and int(units[0].get("count") or 0) >= 2:
+        recs.append(f"Schedule root-cause shop inspection for Unit {_clean_report_str(units[0].get('unit'))} to prevent repeat roadside breakdowns.")
+    if open_cnt > 0:
+        recs.append(f"Verify technician ETAs and parts availability on the {open_cnt} open maintenance {'case' if open_cnt == 1 else 'cases'}.")
+    if not recs:
+        recs.append("Maintain standard preventive maintenance cadence and keep shift handovers current.")
+
+    return {
+        "headline": headline,
+        "executive_summary": [p1, p2],
+        "key_takeaways": takeaways[:4],
+        "workload_narrative": workload_nar,
+        "equipment_narrative": equipment_nar,
+        "risk_recommendations": recs[:3],
+        "source": "deterministic",
+    }
+
+
 @app.route("/api/report")
 def api_report():
-    if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
     try:
-        period    = request.args.get("period","today")
-        date_from = request.args.get("from","")
-        date_to   = request.args.get("to","")
-        if period == "custom":
-            date_to = date_to or today_str()
-            if not valid_date(date_from) or not valid_date(date_to) or date_from > date_to:
-                return jsonify({"error":"Choose a valid start and end date in order."}), 400
-        cases     = load_cases()
-        if period == "today":
-            label = "Today, " + chicago_now().strftime("%B %d, %Y")
-            cases = [c for c in cases if case_local_date(c) == today_str()]
-        elif period == "week":
-            label = "This Week"; cases = [c for c in cases if case_local_date(c) >= week_start_str()]
-        elif period == "month":
-            label = "This Month"; cases = [c for c in cases if case_local_date(c) >= month_start_str()]
-        elif period == "custom" and date_from:
-            dt = date_to or today_str(); label = f"{date_from} to {dt}"
-            cases = [c for c in cases if date_from <= case_local_date(c) <= dt]
-        else:
-            label = "All Time"
-        total  = len(cases)
-        done   = sum(1 for c in cases if c.get("status") == "done")
-        missed = [c for c in cases if c.get("status") == "missed"]
-        rt     = [c["response_secs"] for c in cases if c.get("response_secs") is not None]
-        avg    = int(sum(rt)/len(rt)) if rt else 0
-        agent_counts  = Counter(c["agent_name"] for c in cases if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
-        group_counts  = Counter(c.get("group_name","Unknown") for c in cases)
-
-        # Top issues broken down by vehicle type (truck/trailer/reefer)
-        by_vtype = {}
-        for vt in ("truck", "trailer", "reefer"):
-            vt_cases = [c for c in cases if (c.get("vehicle_type") or "").lower() == vt]
-            issue_counts = Counter((c.get("issue_text") or c.get("description") or "Unspecified issue").strip() for c in vt_cases if (c.get("issue_text") or c.get("description")))
-            by_vtype[vt] = {
-                "total": len(vt_cases),
-                "top_issues": [{"issue": i, "count": n} for i, n in issue_counts.most_common(5)],
-            }
-
-        # Top problem units for this period (most reported units, any type)
-        top_units = top_units_for(cases, 10)
-
-        return jsonify({
-            "label": label, "total": total, "done": done, "missed": len(missed),
-            "assigned": sum(1 for c in cases if c.get("status") in ("assigned","reported","done")),
-            "open": sum(1 for c in cases if c.get("status") == "open"),
-            "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
-            "leaderboard": [{"name":n,"count":v} for n,v in agent_counts.most_common(10)],
-            "top_groups":  [{"name":n,"count":v} for n,v in group_counts.most_common(5)],
-            "missed_cases": [serialize_case(c) for c in missed[:20]],
-            "by_vtype": by_vtype,
-            "top_units": top_units,
-        })
+        data, err = _compute_report_data(
+            request.args.get("period", "today"),
+            request.args.get("from", ""),
+            request.args.get("to", ""),
+        )
+        if err:
+            return jsonify({"error": err[0]}), err[1]
+        return jsonify(data)
     except DataUnavailable:
         raise
     except Exception as e:
@@ -4226,99 +4356,355 @@ def api_report():
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
 
-@app.route("/api/report/pdf")
-def api_report_pdf():
-    """Generate a real A4 PDF from the same live report data used by the clients."""
+@app.route("/api/report/ai-draft", methods=["POST"])
+def api_report_ai_draft():
     if not session.get("user"):
         return jsonify({"error": "unauthorized"}), 401
     try:
-        report_response = api_report()
-        if isinstance(report_response, tuple):
-            return report_response
-        data = report_response.get_json() or {}
-        selected = {x.strip() for x in request.args.get("sections", "summary,agents,groups,vtype,units,missed").split(",") if x.strip()}
+        body = request.get_json(silent=True) or {}
+        period = body.get("period", "today")
+        date_from = body.get("from", "")
+        date_to = body.get("to", "")
+        tone = "detailed" if str(body.get("tone", "")).lower() == "detailed" else "executive"
+        focus = _clean_report_str(body.get("focus", ""))[:180]
+        raw_secs = body.get("sections") or ["summary", "agents", "groups", "vtype", "units", "missed"]
+        selected = [s for s in raw_secs if s in ("summary", "agents", "groups", "vtype", "units", "missed")]
+
+        data, err = _compute_report_data(period, date_from, date_to)
+        if err:
+            return jsonify({"error": err[0]}), err[1]
+
+        fallback = _build_deterministic_report_narrative(data, selected, tone=tone, focus=focus)
+        if not (CF_ACCOUNT_ID and CF_API_TOKEN):
+            return jsonify({"data": data, "narrative": fallback})
+
+        compact_stats = {
+            "period": data.get("label"),
+            "total_cases": data.get("total"),
+            "resolved": data.get("done"),
+            "open": data.get("open"),
+            "assigned": data.get("assigned"),
+            "missed_sla": data.get("missed"),
+            "resolution_rate_pct": data.get("rate"),
+            "avg_response": data.get("avg_resp"),
+            "top_agents": (data.get("leaderboard") or [])[:6],
+            "top_groups": (data.get("top_groups") or [])[:5],
+            "equipment": {
+                k: {"total": v.get("total", 0), "top_issues": (v.get("top_issues") or [])[:3]}
+                for k, v in (data.get("by_vtype") or {}).items()
+            },
+            "repeat_units": (data.get("top_units") or [])[:6],
+            "open_alerts_sample": [
+                {"driver": c.get("driver"), "group": c.get("group"), "opened": c.get("opened")}
+                for c in (data.get("missed_cases") or [])[:5]
+            ],
+            "requested_sections": selected,
+            "tone": tone,
+            "user_focus": focus,
+        }
+        sys_prompt = (
+            "You are a senior fleet operations analyst writing an official Kurtex Fleet Operations management report. "
+            "Write clear, formal, boardroom-ready prose strictly grounded in the provided JSON telemetry. "
+            "Never invent units, numbers, or facts. Use clean plain English (no markdown bold, no emojis). "
+            "Return ONLY valid JSON with these exact keys:\n"
+            '{"headline":"short formal title","executive_summary":["paragraph 1","paragraph 2"],'
+            '"key_takeaways":["bullet 1","bullet 2","bullet 3"],'
+            '"workload_narrative":"1 concise paragraph on operator and dispatch group workload",'
+            '"equipment_narrative":"1 concise paragraph on truck/trailer/reefer patterns",'
+            '"risk_recommendations":["action 1","action 2","action 3"]}'
+        )
+        user_msg = (
+            f"Style: {'concise executive brief' if tone == 'executive' else 'detailed operational analysis'}.\n"
+            + (f"Special focus requested by manager: {focus}\n" if focus else "")
+            + "Live telemetry JSON:\n"
+            + json.dumps(compact_stats, ensure_ascii=True)
+        )
+        try:
+            raw_ai = _cf_ai(
+                [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_msg}],
+                max_tokens=750,
+                temperature=0.2,
+            )
+            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", (raw_ai or "").strip())
+            m = re.search(r"\{[\s\S]*\}", cleaned)
+            parsed = json.loads(m.group(0) if m else cleaned)
+            if isinstance(parsed, dict) and parsed.get("executive_summary"):
+                narrative = {
+                    "headline": _clean_report_str(parsed.get("headline") or fallback["headline"])[:90],
+                    "executive_summary": [
+                        _clean_report_str(p) for p in (parsed.get("executive_summary") if isinstance(parsed.get("executive_summary"), list) else [parsed.get("executive_summary")])
+                        if _clean_report_str(p)
+                    ][:3] or fallback["executive_summary"],
+                    "key_takeaways": [
+                        _clean_report_str(b) for b in (parsed.get("key_takeaways") or [])
+                        if _clean_report_str(b)
+                    ][:4] or fallback["key_takeaways"],
+                    "workload_narrative": _clean_report_str(parsed.get("workload_narrative") or fallback["workload_narrative"]),
+                    "equipment_narrative": _clean_report_str(parsed.get("equipment_narrative") or fallback["equipment_narrative"]),
+                    "risk_recommendations": [
+                        _clean_report_str(r) for r in (parsed.get("risk_recommendations") or [])
+                        if _clean_report_str(r)
+                    ][:4] or fallback["risk_recommendations"],
+                    "source": "ai",
+                }
+                return jsonify({"data": data, "narrative": narrative})
+        except Exception as ai_err:
+            logger.warning("AI report draft fallback triggered: %s", ai_err)
+
+        return jsonify({"data": data, "narrative": fallback})
+    except DataUnavailable:
+        raise
+    except Exception as e:
+        logger.error(f"api_report_ai_draft error: {e}")
+        return jsonify({"error": "Unable to draft report."}), 500
+
+
+@app.route("/api/report/pdf", methods=["GET", "POST"])
+def api_report_pdf():
+    """Generate a clean, text-first executive A4 PDF matching Report Studio."""
+    if not session.get("user"):
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        payload = request.get_json(silent=True) if request.method == "POST" else None
+        if isinstance(payload, dict):
+            period = payload.get("period", "today")
+            date_from = payload.get("from", "")
+            date_to = payload.get("to", "")
+            raw_secs = payload.get("sections") or ["summary", "agents", "groups", "vtype", "units", "missed"]
+            selected = {str(x).strip() for x in raw_secs if str(x).strip()}
+            tone = str(payload.get("tone", "executive")).lower()
+            focus = _clean_report_str(payload.get("focus", ""))
+            custom_narrative = payload.get("narrative") if isinstance(payload.get("narrative"), dict) else None
+        else:
+            period = request.args.get("period", "today")
+            date_from = request.args.get("from", "")
+            date_to = request.args.get("to", "")
+            selected = {x.strip() for x in request.args.get("sections", "summary,agents,groups,vtype,units,missed").split(",") if x.strip()}
+            tone = "executive"
+            focus = ""
+            custom_narrative = None
+
+        data, err = _compute_report_data(period, date_from, date_to)
+        if err:
+            return jsonify({"error": err[0]}), err[1]
+
+        narrative = _build_deterministic_report_narrative(data, list(selected), tone=tone, focus=focus)
+        if custom_narrative:
+            if custom_narrative.get("headline"):
+                narrative["headline"] = _clean_report_str(custom_narrative["headline"])[:90]
+            if isinstance(custom_narrative.get("executive_summary"), list) and custom_narrative["executive_summary"]:
+                narrative["executive_summary"] = [_clean_report_str(p) for p in custom_narrative["executive_summary"] if _clean_report_str(p)][:3]
+            if isinstance(custom_narrative.get("key_takeaways"), list) and custom_narrative["key_takeaways"]:
+                narrative["key_takeaways"] = [_clean_report_str(b) for b in custom_narrative["key_takeaways"] if _clean_report_str(b)][:4]
+            if custom_narrative.get("workload_narrative"):
+                narrative["workload_narrative"] = _clean_report_str(custom_narrative["workload_narrative"])
+            if custom_narrative.get("equipment_narrative"):
+                narrative["equipment_narrative"] = _clean_report_str(custom_narrative["equipment_narrative"])
+            if isinstance(custom_narrative.get("risk_recommendations"), list) and custom_narrative["risk_recommendations"]:
+                narrative["risk_recommendations"] = [_clean_report_str(r) for r in custom_narrative["risk_recommendations"] if _clean_report_str(r)][:4]
 
         from reportlab.lib import colors
-        from reportlab.lib.enums import TA_CENTER
+        from reportlab.lib.enums import TA_LEFT, TA_RIGHT
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
+        from reportlab.pdfgen import canvas as rl_canvas
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+
+        class _NumberedCanvas(rl_canvas.Canvas):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._saved_page_states = []
+
+            def showPage(self):
+                self._saved_page_states.append(dict(self.__dict__))
+                self._startPage()
+
+            def save(self):
+                num_pages = len(self._saved_page_states)
+                for state in self._saved_page_states:
+                    self.__dict__.update(state)
+                    self._draw_footer(num_pages)
+                    super().showPage()
+                super().save()
+
+            def _draw_footer(self, page_count):
+                w, _ = A4
+                self.saveState()
+                self.setStrokeColor(colors.HexColor("#E5E7EB"))
+                self.setLineWidth(0.5)
+                self.line(20 * mm, 14 * mm, w - 20 * mm, 14 * mm)
+                self.setFont("Helvetica", 7.5)
+                self.setFillColor(colors.HexColor("#6B7280"))
+                self.drawString(20 * mm, 9 * mm, "Kurtex Fleet Operations - Official Management Report")
+                self.drawRightString(w - 20 * mm, 9 * mm, f"Page {self._pageNumber} of {page_count}")
+                self.restoreState()
 
         buf = io.BytesIO()
-        accent = colors.HexColor("#20242B")
-        red = colors.HexColor("#D92D20")
-        green = colors.HexColor("#16803A")
-        muted = colors.HexColor("#667085")
-        line = colors.HexColor("#E4E7EC")
-        soft = colors.HexColor("#F7F8FA")
+        ink = colors.HexColor("#111827")
+        ink2 = colors.HexColor("#374151")
+        muted = colors.HexColor("#6B7280")
+        rose = colors.HexColor("#E11D48")
+        line = colors.HexColor("#E5E7EB")
+        tint = colors.HexColor("#F9FAFB")
+
         styles = getSampleStyleSheet()
-        title = ParagraphStyle("KurtexTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=20, leading=23, textColor=accent, alignment=TA_CENTER, spaceAfter=3)
-        kicker = ParagraphStyle("KurtexKicker", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=8.5, leading=11, textColor=red, alignment=TA_CENTER, spaceAfter=12)
-        section = ParagraphStyle("KurtexSection", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=accent, spaceBefore=10, spaceAfter=6, uppercase=True)
-        body = ParagraphStyle("KurtexBody", parent=styles["BodyText"], fontName="Helvetica", fontSize=8.5, leading=11, textColor=accent)
-        small = ParagraphStyle("KurtexSmall", parent=body, fontSize=7.5, leading=9, textColor=muted)
-        metric_num = ParagraphStyle("MetricNum", parent=body, fontName="Helvetica-Bold", fontSize=17, leading=19, alignment=TA_CENTER, textColor=accent)
-        metric_label = ParagraphStyle("MetricLabel", parent=small, fontName="Helvetica-Bold", fontSize=6.8, alignment=TA_CENTER, textColor=muted)
+        st_kicker = ParagraphStyle("KtxKicker", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=7.5, leading=10, textColor=rose, spaceAfter=2)
+        st_title = ParagraphStyle("KtxTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=17, leading=21, textColor=ink, alignment=TA_LEFT, spaceAfter=4)
+        st_meta = ParagraphStyle("KtxMeta", parent=styles["Normal"], fontName="Helvetica", fontSize=8.5, leading=12, textColor=muted, spaceAfter=10)
+        st_sec = ParagraphStyle("KtxSec", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=10, leading=14, textColor=ink, spaceBefore=12, spaceAfter=5)
+        st_body = ParagraphStyle("KtxBody", parent=styles["BodyText"], fontName="Helvetica", fontSize=9.2, leading=14, textColor=ink2, spaceAfter=6)
+        st_bullet = ParagraphStyle("KtxBullet", parent=st_body, leftIndent=12, firstLineIndent=-8, spaceAfter=4)
+        st_th = ParagraphStyle("KtxTh", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=7.5, leading=10, textColor=muted)
+        st_th_r = ParagraphStyle("KtxThR", parent=st_th, alignment=TA_RIGHT)
+        st_td = ParagraphStyle("KtxTd", parent=styles["Normal"], fontName="Helvetica", fontSize=8.6, leading=12, textColor=ink)
+        st_td_r = ParagraphStyle("KtxTdR", parent=st_td, alignment=TA_RIGHT, fontName="Helvetica-Bold")
+        st_kpi_lbl = ParagraphStyle("KtxKpiL", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=7, leading=9, textColor=muted)
+        st_kpi_val = ParagraphStyle("KtxKpiV", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=14, leading=17, textColor=ink)
 
-        def footer(canvas, doc):
-            canvas.saveState()
-            w, _ = A4
-            canvas.setStrokeColor(line); canvas.line(18*mm, 13*mm, w-18*mm, 13*mm)
-            canvas.setFont("Helvetica", 7); canvas.setFillColor(muted)
-            canvas.drawString(18*mm, 8*mm, "Kurtex Maintenance - generated from live case data")
-            canvas.drawRightString(w-18*mm, 8*mm, f"Page {doc.page}")
-            canvas.restoreState()
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=A4,
+            rightMargin=20 * mm,
+            leftMargin=20 * mm,
+            topMargin=18 * mm,
+            bottomMargin=20 * mm,
+            title="Kurtex Fleet Maintenance Report",
+            author="Kurtex Fleet Operations",
+        )
 
-        doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=18*mm, leftMargin=18*mm, topMargin=15*mm, bottomMargin=18*mm,
-                                title="Kurtex Maintenance Report", author="Kurtex Maintenance")
-        story = [Paragraph("KURTEX MAINTENANCE", title), Paragraph("OFFICIAL MAINTENANCE REPORT", kicker)]
-        meta = Table([[Paragraph("REPORT PERIOD", metric_label), Paragraph("GENERATED", metric_label)],
-                      [Paragraph(str(data.get("label", "")), body), Paragraph(chicago_now().strftime("%B %d, %Y - %I:%M %p CT"), body)]],
-                     colWidths=[85*mm, 85*mm])
-        meta.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),soft),("BOX",(0,0),(-1,-1),0.5,line),("INNERGRID",(0,0),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),("LEFTPADDING",(0,0),(-1,-1),8)]))
-        story += [meta, Spacer(1, 8*mm)]
+        prepared_by = _clean_report_str((session.get("user") or {}).get("first_name") or "Operations")
+        gen_time = chicago_now().strftime("%B %d, %Y at %I:%M %p CT")
+        story = [
+            Paragraph("KURTEX FLEET OPERATIONS", st_kicker),
+            Paragraph(_pdf_esc(narrative.get("headline") or "Fleet Maintenance Report"), st_title),
+            Paragraph(
+                f"Period: {_pdf_esc(data.get('label', ''))}   |   Generated: {_pdf_esc(gen_time)}   |   Prepared by: {_pdf_esc(prepared_by)}",
+                st_meta,
+            ),
+            HRFlowable(width="100%", thickness=1.2, color=rose, spaceBefore=0, spaceAfter=10),
+        ]
+
+        sec_idx = 0
+        def add_heading(text):
+            nonlocal sec_idx
+            sec_idx += 1
+            story.append(Paragraph(f"{sec_idx}. {_pdf_esc(text)}", st_sec))
 
         if "summary" in selected:
-            story.append(Paragraph("SUMMARY", section))
-            metrics = [(data.get("total",0),"TOTAL CASES"),(data.get("done",0),"RESOLVED"),(data.get("open",0),"OPEN CASES"),(f'{data.get("rate",0)}%',"RESOLVED %")]
-            cells=[]
-            for val,lab in metrics:
-                cells.append([Paragraph(str(val),metric_num),Paragraph(lab,metric_label)])
-            t=Table([cells], colWidths=[42.5*mm]*4)
-            t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),soft),("BOX",(0,0),(-1,-1),0.5,line),("INNERGRID",(0,0),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7)]))
-            story += [t, Spacer(1,4*mm)]
+            add_heading("Executive Overview")
+            kpi_row = [[
+                [Paragraph("TOTAL CASES", st_kpi_lbl), Paragraph(_pdf_esc(data.get("total", 0)), st_kpi_val)],
+                [Paragraph("RESOLVED", st_kpi_lbl), Paragraph(_pdf_esc(data.get("done", 0)), st_kpi_val)],
+                [Paragraph("OPEN", st_kpi_lbl), Paragraph(_pdf_esc(data.get("open", 0)), st_kpi_val)],
+                [Paragraph("CLOSURE RATE", st_kpi_lbl), Paragraph(_pdf_esc(f"{data.get('rate', 0)}%"), st_kpi_val)],
+            ]]
+            kpi_tbl = Table(kpi_row, colWidths=[42.5 * mm] * 4)
+            kpi_tbl.setStyle(TableStyle([
+                ("LINEABOVE", (0, 0), (-1, 0), 0.6, line),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.6, line),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ]))
+            story.append(kpi_tbl)
+            story.append(Spacer(1, 5 * mm))
+            for para in (narrative.get("executive_summary") or []):
+                story.append(Paragraph(_pdf_esc(para), st_body))
+            if narrative.get("key_takeaways"):
+                story.append(Spacer(1, 1.5 * mm))
+                for b in narrative["key_takeaways"]:
+                    story.append(Paragraph(f"-  {_pdf_esc(b)}", st_bullet))
 
-        def data_table(title_text, headers, rows, widths=None):
-            if not rows: return
-            story.append(Paragraph(title_text.upper(), section))
-            vals=[[Paragraph(str(x), metric_label) for x in headers]] + [[Paragraph(str(x), body) for x in row] for row in rows]
-            t=Table(vals, colWidths=widths, repeatRows=1, hAlign="LEFT")
-            t.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),soft),("TEXTCOLOR",(0,0),(-1,0),muted),("LINEBELOW",(0,0),(-1,0),0.7,line),("LINEBELOW",(0,1),(-1,-1),0.35,line),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5)]))
-            story += [t, Spacer(1,3*mm)]
+        def add_editorial_table(headers, rows, widths, right_cols=None):
+            if not rows:
+                return
+            right_cols = set(right_cols or ())
+            vals = [[Paragraph(_pdf_esc(h_lbl), st_th_r if i in right_cols else st_th) for i, h_lbl in enumerate(headers)]]
+            for row in rows:
+                vals.append([Paragraph(_pdf_esc(cell), st_td_r if i in right_cols else st_td) for i, cell in enumerate(row)])
+            t = Table(vals, colWidths=widths, repeatRows=1, hAlign="LEFT")
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), tint),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.6, line),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.7, line),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.35, line),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 3 * mm))
 
-        if "agents" in selected:
-            data_table("Agent activity", ["Agent","Cases"], [[x.get("name","-"),x.get("count",0)] for x in data.get("leaderboard",[])], [135*mm,35*mm])
-        if "groups" in selected:
-            data_table("Most active groups", ["Group","Cases"], [[x.get("name","-"),x.get("count",0)] for x in data.get("top_groups",[])], [135*mm,35*mm])
+        if ("agents" in selected and data.get("leaderboard")) or ("groups" in selected and data.get("top_groups")):
+            add_heading("Workload & Dispatch Distribution")
+            if narrative.get("workload_narrative"):
+                story.append(Paragraph(_pdf_esc(narrative["workload_narrative"]), st_body))
+            if "agents" in selected and data.get("leaderboard"):
+                add_editorial_table(
+                    ["OPERATOR", "CASES HANDLED"],
+                    [[x.get("name", "-"), x.get("count", 0)] for x in (data.get("leaderboard") or [])[:10]],
+                    [135 * mm, 35 * mm],
+                    right_cols={1},
+                )
+            if "groups" in selected and data.get("top_groups"):
+                add_editorial_table(
+                    ["DISPATCH GROUP", "INCIDENTS"],
+                    [[x.get("name", "-"), x.get("count", 0)] for x in (data.get("top_groups") or [])[:6]],
+                    [135 * mm, 35 * mm],
+                    right_cols={1},
+                )
+
         if "vtype" in selected:
-            rows=[]
-            labels={"truck":"Trucks","trailer":"Trailers","reefer":"Reefers"}
-            for vt, block in (data.get("by_vtype") or {}).items():
-                for x in block.get("top_issues",[]): rows.append([labels.get(vt,vt.title()), x.get("issue","-"), x.get("count",0)])
-            data_table("Issues by equipment", ["Equipment","Issue","Cases"], rows, [32*mm,118*mm,20*mm])
-        if "units" in selected:
-            data_table("Problem units", ["Unit","Type","Reports"], [[x.get("unit","-"),str(x.get("vtype","-")).title(),x.get("count",0)] for x in data.get("top_units",[])], [75*mm,55*mm,40*mm])
-        if "missed" in selected:
-            rows=[]
-            for x in data.get("missed_cases",[]): rows.append([x.get("driver_name") or x.get("driver") or "-", x.get("group_name") or x.get("group") or "-", x.get("opened_at") or x.get("opened") or "-"])
-            data_table("Unresolved cases", ["Driver","Group","Opened"], rows, [65*mm,60*mm,45*mm])
+            vt_rows = []
+            vt_labels = {"truck": "Truck", "trailer": "Trailer", "reefer": "Reefer"}
+            for vt in ("truck", "trailer", "reefer"):
+                blk = (data.get("by_vtype") or {}).get(vt) or {}
+                for x in (blk.get("top_issues") or [])[:4]:
+                    vt_rows.append([vt_labels[vt], x.get("issue", "-"), x.get("count", 0)])
+            if vt_rows or narrative.get("equipment_narrative"):
+                add_heading("Equipment & Failure Analysis")
+                if narrative.get("equipment_narrative"):
+                    story.append(Paragraph(_pdf_esc(narrative["equipment_narrative"]), st_body))
+                add_editorial_table(["EQUIPMENT", "REPORTED ISSUE", "COUNT"], vt_rows, [30 * mm, 118 * mm, 22 * mm], right_cols={2})
 
-        story += [Spacer(1,5*mm), Paragraph("This report contains only the sections selected in Kurtex Report Builder and was generated from live fleet case data.", small)]
-        doc.build(story, onFirstPage=footer, onLaterPages=footer)
+        if "units" in selected and data.get("top_units"):
+            add_heading("High-Frequency Units")
+            add_editorial_table(
+                ["UNIT #", "EQUIPMENT", "REPORTS"],
+                [[x.get("unit", "-"), str(x.get("vtype", "Fleet")).title(), x.get("count", 0)] for x in (data.get("top_units") or [])[:10]],
+                [55 * mm, 80 * mm, 35 * mm],
+                right_cols={2},
+            )
+
+        if "missed" in selected and data.get("missed_cases"):
+            add_heading("Unresolved Alerts Requiring Follow-Up")
+            add_editorial_table(
+                ["DRIVER", "DISPATCH GROUP", "OPENED"],
+                [
+                    [x.get("driver") or x.get("driver_name") or "-", x.get("group") or x.get("group_name") or "-", x.get("opened") or x.get("opened_at") or "-"]
+                    for x in (data.get("missed_cases") or [])[:12]
+                ],
+                [58 * mm, 68 * mm, 44 * mm],
+                right_cols={2},
+            )
+
+        if narrative.get("risk_recommendations"):
+            add_heading("Recommended Actions")
+            for rec in narrative["risk_recommendations"]:
+                story.append(Paragraph(f"-  {_pdf_esc(rec)}", st_bullet))
+
+        doc.build(story, canvasmaker=_NumberedCanvas)
         buf.seek(0)
         filename = "kurtex-maintenance-report-" + chicago_now().strftime("%Y-%m-%d") + ".pdf"
-        return Response(buf.getvalue(), mimetype="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        return Response(
+            buf.getvalue(),
+            mimetype="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
     except Exception as e:
         logger.exception("report PDF generation failed")
         return jsonify({"error": "Unable to generate PDF report."}), 500
