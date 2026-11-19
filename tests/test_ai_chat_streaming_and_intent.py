@@ -220,6 +220,96 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
             self.assertIn("Verified Database Records for Unit 308 (Exact total: 2 case(s))", block)
             self.assertIn("EXACTLY 2 recorded case(s) for Unit 308", block)
 
+    def test_fleet_recent_cases_sanitizes_backticks_excludes_testing_and_handles_count_corrections(self):
+        sample_cases = [
+            {
+                "id": "c-ping-1",
+                "unit_number": "",
+                "report_driver": "I R",
+                "group_name": "GR Nelson Gonzalez",
+                "issue_text": "need some assistance here",
+                "status": "done",
+                "opened_at": "2026-11-18T17:55:00+00:00",
+                "closed_by_name": "Alexandru KX Repairs",
+            },
+            {
+                "id": "c-test-1",
+                "unit_number": "",
+                "report_driver": "Sandu",
+                "group_name": "Testing",
+                "issue_text": "Maintenance report",
+                "status": "done",
+                "opened_at": "2026-11-18T16:51:00+00:00",
+                "closed_by_name": "Sandu",
+            },
+            {
+                "id": "c-r122-1",
+                "unit_number": "R122",
+                "vehicle_type": "reefer",
+                "report_driver": "Stephan Bridges",
+                "group_name": "GR Stephan Bridges",
+                "issue_text": "Won`t start",
+                "status": "reported",
+                "agent_name": "Andrei",
+                "opened_at": "2026-11-18T16:51:00+00:00",
+            },
+            {
+                "id": "c-rt29-1",
+                "unit_number": "RT29",
+                "vehicle_type": "trailer",
+                "report_driver": "Nelson Gonzales",
+                "group_name": "GR Nelson Gonzalez",
+                "issue_text": "OOS/Flat tire",
+                "status": "reported",
+                "agent_name": "Alexandru KX Repairs",
+                "opened_at": "2026-11-18T16:50:00+00:00",
+            },
+            {
+                "id": "c-308-old",
+                "unit_number": "308",
+                "vehicle_type": "truck",
+                "report_driver": "Bryan Caple",
+                "group_name": "GR Caple",
+                "issue_text": "Check engine light",
+                "status": "done",
+                "closed_by_name": "John",
+                "opened_at": "2026-09-09T19:33:00+00:00",
+            },
+        ]
+        with patch.object(server, "load_cases", return_value=sample_cases), patch.object(
+            server, "_cf_ai"
+        ) as mock_cf:
+            # Greeting replies instantly without LLM
+            rg = self.client.post("/api/ai/chat", json={"message": "hello", "web_search": False})
+            self.assertEqual(rg.status_code, 200)
+            self.assertIn("Kurtex Maintenance AI", rg.get_json()["answer"])
+
+            # Ask about unit 308 first
+            r1 = self.client.post("/api/ai/chat", json={"message": "check unit 308", "web_search": False})
+            chat_id = r1.get_json()["chat_id"]
+
+            # Next turn: "current 2 recent cases" must NOT lock onto Unit 308, must exclude Testing & unit-less pings, sanitize Won`t start, and show Assigned (not Closed by) for REPORTED
+            r2 = self.client.post("/api/ai/chat", json={"message": "current 2 recent cases", "chat_id": chat_id, "web_search": False})
+            ans2 = r2.get_json()["answer"]
+            self.assertIn("Latest 2 fleet maintenance cases", ans2)
+            self.assertIn("Unit R122", ans2)
+            self.assertIn("Unit RT29", ans2)
+            self.assertIn("Won't start", ans2)
+            self.assertNotIn("Won`t start", ans2)
+            self.assertIn("Assigned: Andrei", ans2)
+            self.assertNotIn("Closed by: Andrei", ans2)
+            self.assertNotIn("need some assistance here", ans2)
+            self.assertNotIn("Testing", ans2)
+
+            # Follow-up correction: "i said current 2" must still return 2 fleet cases, never "No matching cases"
+            r3 = self.client.post("/api/ai/chat", json={"message": "i said current 2", "chat_id": chat_id, "web_search": False})
+            ans3 = r3.get_json()["answer"]
+            self.assertIn("Latest 2 fleet maintenance cases", ans3)
+            self.assertIn("Unit R122", ans3)
+            self.assertIn("Unit RT29", ans3)
+
+            mock_cf.assert_not_called()
+
     def test_out_of_scope_queries_blocked_without_calling_llm(self):
         with patch.object(server, "_cf_ai") as mock_cf, patch.object(server, "_cf_ai_stream") as mock_stream:
             for bad_prompt in (

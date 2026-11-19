@@ -472,27 +472,42 @@ def _cf_ai_stream(messages, max_tokens=900, temperature=0.2, image_data_url=None
         if not emitted:
             raise RuntimeError("Workers AI returned empty stream")
 
+def _sanitize_md_text(value):
+    text = str(value or "").replace("`", "'").replace("**", "").strip()
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _clean_ai_issue_text(c):
-    raw_issue = str(c.get("issue_text") or "").strip()
+    raw_issue = _sanitize_md_text(c.get("issue_text") or "")
     if raw_issue and raw_issue.lower() != "#repairs":
         return raw_issue
     rep_data = c.get("report_data") if isinstance(c.get("report_data"), dict) else {}
     for k in ("issue", "problem", "symptom", "description"):
-        val = str(rep_data.get(k) or "").strip()
+        val = _sanitize_md_text(rep_data.get(k) or "")
         if val and val.lower() != "#repairs":
             return val
-    desc = re.sub(r"(?i)^#repairs\b[\s:,-]*", "", str(c.get("description") or "").strip()).strip()
+    desc = _sanitize_md_text(re.sub(r"(?i)^#repairs\b[\s:,-]*", "", str(c.get("description") or "").strip()))
     if desc and desc.lower() != "#repairs":
         return desc
-    loc = str(c.get("location") or "").strip()
+    loc = _sanitize_md_text(c.get("location") or "")
     return loc or "Maintenance report"
 
 
 def _clean_ai_notes_text(c):
-    notes = str(c.get("notes") or "").strip()
+    notes = _sanitize_md_text(c.get("notes") or "")
     if notes.lower() in ("case reported", "reported", "—", "-", "none", "n/a"):
         return ""
     return notes
+
+
+def _is_fleet_recent_candidate(c):
+    if is_history_test_case(c):
+        return False
+    if is_test_group_name(c.get("group_name") or c.get("group") or ""):
+        return False
+    if not str(c.get("unit_number") or "").strip():
+        return False
+    return True
 
 
 def _ai_case_record(c):
@@ -506,16 +521,17 @@ def _ai_case_record(c):
         closed_fmt = ""
     return {
       "id":c.get("id") or "",
-      "driver":c.get("report_driver") or c.get("driver_name") or "",
-      "group":c.get("group_name") or c.get("group") or "",
-      "unit":c.get("unit_number") or "",
+      "driver":_sanitize_md_text(c.get("report_driver") or c.get("driver_name") or ""),
+      "group":_sanitize_md_text(c.get("group_name") or c.get("group") or ""),
+      "unit":_sanitize_md_text(c.get("unit_number") or ""),
       "type":(c.get("vehicle_type") or "").lower(),
       "issue":_clean_ai_issue_text(c),
-      "description":re.sub(r"(?i)^#repairs\b[\s:,-]*", "", str(c.get("description") or "").strip()).strip(),
+      "description":_sanitize_md_text(re.sub(r"(?i)^#repairs\b[\s:,-]*", "", str(c.get("description") or "").strip())),
       "notes":_clean_ai_notes_text(c),
-      "solved_by":c.get("closed_by_name") or c.get("closed_by") or c.get("resolved_by") or c.get("agent_name") or "",
-      "resolution":c.get("resolution") or c.get("solution") or c.get("close_notes") or c.get("closing_notes") or c.get("resolution_notes") or "",
-      "status":c.get("status") or "",
+      "agent":_sanitize_md_text(c.get("agent_name") or ""),
+      "solved_by":_sanitize_md_text(c.get("closed_by_name") or c.get("closed_by") or c.get("resolved_by") or ""),
+      "resolution":_sanitize_md_text(c.get("resolution") or c.get("solution") or c.get("close_notes") or c.get("closing_notes") or c.get("resolution_notes") or ""),
+      "status":str(c.get("status") or "").strip(),
       "opened":opened_fmt,
       "opened_raw":opened_iso,
       "closed":closed_fmt
@@ -600,6 +616,17 @@ _FLEET_SCOPE_RESET_RE = re.compile(
     r'\b(?:all\s+units|any\s+unit|other\s+units|across\s+(?:the\s+)?fleet|whole\s+fleet|general\s+cases|fleet\s+recent\s+cases|not\s+related\s+to\s+(?:it|this\s+unit|that\s+unit))\b',
     re.I,
 )
+_UNIT_PRONOUN_REF_RE = re.compile(
+    r'\b(?:for\s+it|for\s+this|for\s+that|this\s+unit|that\s+unit|this\s+truck|this\s+trailer|its\b|'
+    r'u\s+sure|are\s+you\s+sure|most\s+recent\s+one|latest\s+one|last\s+one|first\s+one)\b',
+    re.I,
+)
+_GENERAL_FLEET_LIST_RE = re.compile(
+    r'\b(?:current|latest|last|recent|open|active|closed)\s+(?:\d+\s+)?(?:recent\s+|latest\s+|open\s+|active\s+)?(?:cases?|records?|breakdowns?)\b|'
+    r'\b\d+\s+(?:recent|latest|last|open|active|closed|current)\s+(?:cases?|records?|breakdowns?)\b|'
+    r'\b(?:i\s+said|only|just)\s+(?:current|latest|last|recent|top)?\s*\d{1,2}\b',
+    re.I,
+)
 _UNIT_STOP_WORDS = {
     "the", "for", "and", "not", "all", "any", "has", "had", "was", "are", "can", "his", "her", "its",
     "this", "that", "from", "with", "what", "when", "show", "find", "list", "last", "past", "open",
@@ -626,11 +653,17 @@ def _extract_unit_from_text(text, known_units=None):
         if cand and cand not in _UNIT_STOP_WORDS and any(c.isdigit() for c in cand):
             return cand
     if known_units:
-        # Strip count numbers like '5 recent cases' before scanning standalone tokens
+        # Strip count numbers like '5 recent cases' or 'current 2' before scanning standalone tokens
         cleaned = re.sub(
-            r'\b\d+\s+(?=(?:recent|latest|last|past|similar|open|closed|active|fleet|historical|history|top|more|new)?\s*(?:cases?|records?|issues?|reports?|days?|times?)\b)',
+            r'\b\d+\s+(?=(?:recent|latest|last|past|similar|open|closed|active|current|fleet|historical|history|top|more|new)?\s*(?:cases?|records?|issues?|reports?|days?|times?)\b)',
             ' ',
             raw,
+            flags=re.I,
+        )
+        cleaned = re.sub(
+            r'\b(?:current|latest|last|recent|top|only|just|said)\s+\d{1,2}\b',
+            ' ',
+            cleaned,
             flags=re.I,
         )
         for tok in re.findall(r'\b[a-z0-9-]{2,10}\b', cleaned.lower()):
@@ -643,9 +676,11 @@ def _resolve_conversational_context(message, history, cases=None):
     """Resolve active unit number and symptom context across follow-up turns ('for it', 'this unit', '5 recent cases')."""
     all_cases = cases if cases is not None else [c for c in load_cases() if not is_testing(c)]
     known_units = {str(c.get("unit_number") or "").strip().lower() for c in all_cases if str(c.get("unit_number") or "").strip()}
-    excluded_unit = _extract_excluded_unit(message, known_units)
-    scope_reset = bool(excluded_unit or _FLEET_SCOPE_RESET_RE.search(str(message or "")))
-    active_unit = _extract_unit_from_text(message, known_units)
+    raw_msg = str(message or "")
+    excluded_unit = _extract_excluded_unit(raw_msg, known_units)
+    is_general_fleet_list = bool(_GENERAL_FLEET_LIST_RE.search(raw_msg) and not _UNIT_PRONOUN_REF_RE.search(raw_msg))
+    scope_reset = bool(excluded_unit or _FLEET_SCOPE_RESET_RE.search(raw_msg) or is_general_fleet_list)
+    active_unit = _extract_unit_from_text(raw_msg, known_units)
     if active_unit and excluded_unit and active_unit == excluded_unit:
         active_unit = ""
     carry_terms = []
@@ -795,11 +830,32 @@ _CASE_LIST_INTENT_RE = re.compile(
 )
 
 
+def _extract_requested_case_count(text):
+    raw = str(text or "")
+    m = re.search(
+        r'\b(\d{1,2})\s+(?:recent|latest|last|past|similar|open|closed|active|current|fleet|historical|history|top|more|new)?\s*(?:cases?|records?|issues?|reports?)\b',
+        raw,
+        re.I,
+    )
+    if m:
+        return int(m.group(1))
+    m2 = re.search(
+        r'\b(?:current|latest|last|recent|top|only|just|i\s+said(?:\s+current|\s+last|\s+recent)?)\s+(\d{1,2})\b',
+        raw,
+        re.I,
+    )
+    if m2:
+        return int(m2.group(1))
+    return 0
+
+
 def _format_fast_case_bullet(idx, r, include_unit=False):
-    status_lbl = str(r.get("status") or "open").upper()
+    status_raw = str(r.get("status") or "open").strip().lower()
+    status_lbl = status_raw.upper()
     opened_lbl = r.get("opened") or "Date N/A"
-    issue_lbl = _ai_clip(r.get("issue") or r.get("description") or "Maintenance report", 180)
-    unit_prefix = f"**Unit {r.get('unit') or '—'}** · " if include_unit else ""
+    issue_lbl = _ai_clip(_sanitize_md_text(r.get("issue") or r.get("description") or "Maintenance report"), 180)
+    unit_val = _sanitize_md_text(r.get("unit") or "")
+    unit_prefix = f"**Unit {unit_val}** · " if (include_unit and unit_val) else ""
     line1 = f"{idx}. {unit_prefix}**{issue_lbl}** · `{status_lbl}` · {opened_lbl}"
     meta_parts = []
     who = " · ".join(x for x in (r.get("driver"), r.get("group")) if x and x != "—")
@@ -809,8 +865,14 @@ def _format_fast_case_bullet(idx, r, include_unit=False):
         meta_parts.append(f"Fix: {_ai_clip(r['resolution'], 180)}")
     if r.get("notes"):
         meta_parts.append(f"Notes: {_ai_clip(r['notes'], 140)}")
-    if r.get("solved_by"):
-        meta_parts.append(f"Closed by: {r['solved_by']}")
+    if status_raw == "done":
+        closer = r.get("solved_by") or r.get("agent")
+        if closer:
+            meta_parts.append(f"Closed by: {closer}")
+    else:
+        assignee = r.get("agent") or r.get("solved_by")
+        if assignee:
+            meta_parts.append(f"Assigned: {assignee}")
     if meta_parts:
         return line1 + "\n   - " + " · ".join(meta_parts)
     return line1
@@ -843,13 +905,23 @@ def _try_fast_case_query_answer(message, history):
     excluded_unit = _extract_excluded_unit(raw, known_units)
     active_unit, _ = _resolve_conversational_context(raw, history, cases=all_cases)
 
-    # Extract requested count if any (e.g. "5 recent cases", "9 cases")
-    cnt_match = re.search(
-        r'\b(\d{1,2})\s+(?:recent|latest|last|past|similar|open|closed|active|fleet|historical|history|top|more|new)?\s*(?:cases?|records?|issues?|reports?)\b',
-        raw,
-        re.I,
-    )
-    req_count = int(cnt_match.group(1)) if cnt_match else 0
+    req_count = _extract_requested_case_count(raw)
+    # If this turn is a negated-unit correction ("not related to unit 308") with no explicit count, carry the count from the prior user turn
+    if not req_count and excluded_unit and history:
+        for turn in reversed(history[-4:]):
+            if turn.get("role") == "user":
+                prev_cnt = _extract_requested_case_count(turn.get("content") or "")
+                if prev_cnt:
+                    req_count = prev_cnt
+                break
+    # If this turn is a count-only correction ("i said current 2"), carry excluded_unit from the prior user turn if any
+    if req_count and not excluded_unit and not active_unit and history:
+        for turn in reversed(history[-4:]):
+            if turn.get("role") == "user":
+                prev_excl = _extract_excluded_unit(turn.get("content") or "", known_units)
+                if prev_excl:
+                    excluded_unit = prev_excl
+                break
 
     # 1. Follow-up asking specifically about the most recent / latest case ("the most recent one was about what issue?")
     if _MOST_RECENT_FOLLOWUP_RE.search(raw):
@@ -860,8 +932,9 @@ def _try_fast_case_query_answer(message, history):
             if not pool:
                 return f"**Unit {active_unit.upper()}** has **0 recorded maintenance cases** in the Kurtex database.", active_unit
             r0 = _ai_case_record(pool[0])
+            st0 = str(r0["status"] or "open").strip().lower()
             lines = [
-                f"The most recent case for **Unit {active_unit.upper()}** (opened **{r0['opened'] or 'recently'}**, status `{str(r0['status'] or 'open').upper()}`) was about:",
+                f"The most recent case for **Unit {active_unit.upper()}** (opened **{r0['opened'] or 'recently'}**, status `{st0.upper()}`) was about:",
                 f"- **Reported issue:** {r0['issue']}",
             ]
             who = " · ".join(x for x in (r0.get("driver"), r0.get("group")) if x)
@@ -871,29 +944,34 @@ def _try_fast_case_query_answer(message, history):
                 lines.append(f"- **Recorded resolution:** {r0['resolution']}")
             if r0.get("notes"):
                 lines.append(f"- **Notes:** {r0['notes']}")
-            if r0.get("solved_by"):
-                lines.append(f"- **Handled / Closed by:** {r0['solved_by']}")
+            if st0 == "done" and (r0.get("solved_by") or r0.get("agent")):
+                lines.append(f"- **Closed by:** {r0.get('solved_by') or r0.get('agent')}")
+            elif st0 != "done" and (r0.get("agent") or r0.get("solved_by")):
+                lines.append(f"- **Assigned to:** {r0.get('agent') or r0.get('solved_by')}")
             return "\n".join(lines), active_unit
         else:
             ex_low = excluded_unit.strip().lower() if excluded_unit else ""
             pool = [
                 c for c in all_cases
-                if not is_history_test_case(c)
+                if _is_fleet_recent_candidate(c)
                 and (not ex_low or str(c.get("unit_number") or "").strip().lower() != ex_low)
             ]
             pool.sort(key=lambda c: str(c.get("opened_at") or ""), reverse=True)
             if not pool:
                 return "No recorded maintenance cases were found in the Kurtex database.", ""
             r0 = _ai_case_record(pool[0])
+            st0 = str(r0["status"] or "open").strip().lower()
             lines = [
-                f"The most recent fleet case is on **Unit {r0['unit'] or '—'}** (opened **{r0['opened'] or 'recently'}**, status `{str(r0['status'] or 'open').upper()}`):",
+                f"The most recent fleet case is on **Unit {r0['unit'] or '—'}** (opened **{r0['opened'] or 'recently'}**, status `{st0.upper()}`):",
                 f"- **Reported issue:** {r0['issue']}",
             ]
             who = " · ".join(x for x in (r0.get("driver"), r0.get("group")) if x)
             if who:
                 lines.append(f"- **Driver / Group:** {who}")
-            if r0.get("solved_by"):
-                lines.append(f"- **Handled / Closed by:** {r0['solved_by']}")
+            if st0 == "done" and (r0.get("solved_by") or r0.get("agent")):
+                lines.append(f"- **Closed by:** {r0.get('solved_by') or r0.get('agent')}")
+            elif st0 != "done" and (r0.get("agent") or r0.get("solved_by")):
+                lines.append(f"- **Assigned to:** {r0.get('agent') or r0.get('solved_by')}")
             return "\n".join(lines), ""
 
     task = classify_task(raw)
@@ -937,15 +1015,23 @@ def _try_fast_case_query_answer(message, history):
     ex_low = excluded_unit.strip().lower() if excluded_unit else ""
     pool = [
         c for c in all_cases
-        if not is_history_test_case(c)
+        if _is_fleet_recent_candidate(c)
         and (not ex_low or str(c.get("unit_number") or "").strip().lower() != ex_low)
     ]
-    if re.search(r'\bopen\s+cases?\b', raw, re.I):
+    if not pool:
+        pool = [
+            c for c in all_cases
+            if not is_history_test_case(c)
+            and not is_test_group_name(c.get("group_name") or c.get("group") or "")
+            and (not ex_low or str(c.get("unit_number") or "").strip().lower() != ex_low)
+        ]
+    if re.search(r'\b(?:open|active)\s+cases?\b', raw, re.I):
         pool = [c for c in pool if str(c.get("status") or "").lower() in ("open", "assigned", "reported")]
     elif re.search(r'\b(?:closed|done)\s+cases?\b', raw, re.I):
         pool = [c for c in pool if str(c.get("status") or "").lower() == "done"]
 
     cleaned_for_symptoms = _NEGATED_UNIT_RE.sub(" ", raw)
+    cleaned_for_symptoms = re.sub(r'\b(?:current|latest|last|recent|top|only|just|i\s+said(?:\s+current|\s+last|\s+recent)?)\s+\d{1,2}\b', ' ', cleaned_for_symptoms, flags=re.I)
     symptom_tokens = tokens(cleaned_for_symptoms) - ({excluded_unit.lower()} if excluded_unit else set())
     show_limit = min(max(req_count or 5, 1), 15)
 

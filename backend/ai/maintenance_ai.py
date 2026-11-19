@@ -42,7 +42,7 @@ Recorded replaced part numbers are evidence that an agent reported a part replac
 they do not prove the reported fault was fixed. Never invent missing part numbers.
 """
 
-STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit units issue issues problem problems maintenance repair repairs service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported recent latest last first all any more many much most top list show give tell sure really records record history historical previous past fleet today yesterday week month days times related unrelated other than besides except excluding without outside general different another'.split())
+STOP = set('the and for with this that what from have has was were please help find similar cases case truck trailer unit units issue issues problem problems maintenance repair repairs service driver picture image photo visible observed assess inspect likely possible check checks damage shows showing need about does could would can not only part system reported recent latest last first all any more many much most top list show give tell sure really records record history historical previous past fleet today yesterday week month days times related unrelated other than besides except excluding without outside general different another current currently active open closed done said just meant'.split())
 GROUPS = [
  ('rim','rims','janta','jantă','диск','обод'),
  ('wheel','wheels','roata','roată','колесо'),
