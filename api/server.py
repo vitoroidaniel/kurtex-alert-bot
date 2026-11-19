@@ -3906,6 +3906,78 @@ def api_agents():
         return jsonify({"error": "Unable to load data. Please retry."}), 500
 
 
+_AVATAR_CACHE = {}  # tg_user_id -> (expires_at, bytes_or_None, mime)
+_AVATAR_TTL_OK = 6 * 3600
+_AVATAR_TTL_MISS = 1800
+
+
+@app.route("/api/avatar/<int:tg_user_id>")
+def api_telegram_avatar(tg_user_id):
+    if not session.get("user"):
+        return ("", 401)
+    if not BOT_TOKEN or tg_user_id <= 0:
+        return ("", 404)
+    now = time.time()
+    cached = _AVATAR_CACHE.get(tg_user_id)
+    if cached and cached[0] > now:
+        if cached[1]:
+            return Response(
+                cached[1],
+                mimetype=cached[2],
+                headers={"Cache-Control": "private, max-age=21600"},
+            )
+        return ("", 404)
+    try:
+        photos_url = (
+            "https://api.telegram.org/bot" + BOT_TOKEN + "/getUserProfilePhotos?"
+            + urllib.parse.urlencode({"user_id": tg_user_id, "limit": 1})
+        )
+        with urllib.request.urlopen(photos_url, timeout=4) as r:
+            pdata = json.loads(r.read().decode("utf-8", errors="ignore") or "{}")
+        photos = (pdata.get("result") or {}).get("photos") or []
+        if not photos or not photos[0]:
+            _AVATAR_CACHE[tg_user_id] = (now + _AVATAR_TTL_MISS, None, "")
+            return ("", 404)
+        sizes = photos[0]
+        # Prefer medium small avatar (~160px) if available, otherwise smallest
+        pick = sizes[0] if len(sizes) == 1 else sizes[min(1, len(sizes) - 1)]
+        file_id = pick.get("file_id") or ""
+        if not file_id:
+            _AVATAR_CACHE[tg_user_id] = (now + _AVATAR_TTL_MISS, None, "")
+            return ("", 404)
+        file_url = (
+            "https://api.telegram.org/bot" + BOT_TOKEN + "/getFile?"
+            + urllib.parse.urlencode({"file_id": file_id})
+        )
+        with urllib.request.urlopen(file_url, timeout=4) as r:
+            fdata = json.loads(r.read().decode("utf-8", errors="ignore") or "{}")
+        fpath = str((fdata.get("result") or {}).get("file_path") or "").lstrip("/")
+        if not fpath or ".." in fpath:
+            _AVATAR_CACHE[tg_user_id] = (now + _AVATAR_TTL_MISS, None, "")
+            return ("", 404)
+        safe_path = urllib.parse.quote(fpath, safe="/")
+        dl_url = "https://api.telegram.org/file/bot" + BOT_TOKEN + "/" + safe_path
+        with urllib.request.urlopen(dl_url, timeout=5) as r:
+            raw = r.read(512 * 1024)
+            mime = r.headers.get_content_type() or "image/jpeg"
+            if not mime.startswith("image/"):
+                mime = "image/jpeg"
+        if not raw:
+            _AVATAR_CACHE[tg_user_id] = (now + _AVATAR_TTL_MISS, None, "")
+            return ("", 404)
+        if len(_AVATAR_CACHE) > 200:
+            _AVATAR_CACHE.clear()
+        _AVATAR_CACHE[tg_user_id] = (now + _AVATAR_TTL_OK, raw, mime)
+        return Response(
+            raw,
+            mimetype=mime,
+            headers={"Cache-Control": "private, max-age=21600"},
+        )
+    except Exception:
+        _AVATAR_CACHE[tg_user_id] = (now + _AVATAR_TTL_MISS, None, "")
+        return ("", 404)
+
+
 @app.route("/api/my_profile")
 def api_my_profile():
     if not session.get("user"): return jsonify({"error":"unauthorized"}), 401
