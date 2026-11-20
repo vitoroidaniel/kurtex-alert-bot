@@ -170,13 +170,39 @@ def valid_date(value):
     except (TypeError, ValueError):
         return False
 
-def matches_agent(case, user):
+def _duplicate_user_names(users=None):
+    if users is None:
+        try:
+            from backend.storage.user_store import get_all_user_dicts
+            users = get_all_user_dicts()
+        except Exception:
+            users = []
+    counts = Counter(
+        (u.get("name") or u.get("first_name") or "").strip().casefold()
+        for u in (users or [])
+        if (u.get("name") or u.get("first_name") or "").strip()
+    )
+    return {k for k, v in counts.items() if v > 1}
+
+
+def matches_agent(case, user, duplicate_names=None):
     if user.get("id") and case.get("agent_id"):
         return str(case["agent_id"]) == str(user["id"])
-    if user.get("username") and case.get("agent_username"):
-        return norm_uname(case["agent_username"]) == norm_uname(user["username"])
-    name = user.get("name") or user.get("first_name") or ""
-    return bool(name and case["agent_name"].strip().casefold() == name.strip().casefold())
+    c_uname = norm_uname(case.get("agent_username"))
+    u_uname = norm_uname(user.get("username"))
+    if u_uname and c_uname:
+        return c_uname == u_uname
+    name = (user.get("name") or user.get("first_name") or "").strip().casefold()
+    if not name or (case.get("agent_name") or "").strip().casefold() != name:
+        return False
+    # Prevent cross-attribution when two users share the same first name (e.g. two "Daniel"s)
+    if c_uname and not u_uname:
+        return False
+    if case.get("agent_id") and not user.get("id"):
+        return False
+    if duplicate_names and name in duplicate_names:
+        return False
+    return True
 
 def top_units_for(cases, limit):
     counts = Counter((c["unit_number"].strip(), c["vehicle_type"].strip().lower()) for c in cases if c["unit_number"].strip())
@@ -3829,7 +3855,8 @@ def api_agent():
     except (TypeError, ValueError):
         limit = 15
     try:
-        cases = [c for c in load_cases() if matches_agent(c, {"id":request.args.get("id"), "name":agent_name, "username":agent_uname})]
+        dup_names = _duplicate_user_names()
+        cases = [c for c in load_cases() if matches_agent(c, {"id":request.args.get("id"), "name":agent_name, "username":agent_uname}, duplicate_names=dup_names)]
         total  = len(cases)
         done   = sum(1 for c in cases if c.get("status") == "done")
         missed = sum(1 for c in cases if c.get("status") == "missed")
@@ -3893,11 +3920,14 @@ def api_agents():
     try:
         cases = load_cases()
         users = []
+        all_users = []
         try:
             from backend.storage.user_store import get_all_user_dicts
-            users = [u for u in get_all_user_dicts() if (u.get("role") or "") in ("agent","super_admin")]
+            all_users = get_all_user_dicts()
+            users = [u for u in all_users if (u.get("role") or "") in ("agent","super_admin","developer")]
         except Exception as e:
             logger.error(f"user_store error: {e}")
+        dup_names = _duplicate_user_names(all_users)
         if not users:
             seen = {}
             for c in cases:
@@ -3910,7 +3940,7 @@ def api_agents():
             name = (u.get("name") or "").strip()
             if not name: continue
             uname = norm_uname(u.get("username"))
-            agent_cases = [c for c in cases if matches_agent(c, u)]
+            agent_cases = [c for c in cases if matches_agent(c, u, duplicate_names=dup_names)]
             total  = len(agent_cases)
             done   = sum(1 for c in agent_cases if c.get("status") == "done")
             missed = sum(1 for c in agent_cases if c.get("status") == "missed")
@@ -4022,7 +4052,8 @@ def api_my_profile():
         name  = user.get("first_name","")
         uname = norm_uname(user.get("username",""))
         cases = load_cases()
-        my_cases = [c for c in cases if matches_agent(c, user)]
+        dup_names = _duplicate_user_names()
+        my_cases = [c for c in cases if matches_agent(c, user, duplicate_names=dup_names)]
         today = today_str(); wk = week_start_str()
         tc = [c for c in my_cases if case_local_date(c) == today]
         wc = [c for c in my_cases if case_local_date(c) >= wk]
