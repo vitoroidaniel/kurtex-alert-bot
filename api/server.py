@@ -2706,13 +2706,32 @@ def api_stats():
             cnt = Counter(c["agent_name"] for c in lst if c.get("agent_name") and c.get("status") in ("assigned","reported","done"))
             return [{"name":n,"count":v} for n,v in cnt.most_common(10)]
 
+        user_id_by_name = {}
+        try:
+            from backend.storage.user_store import get_all_user_dicts
+            for u in get_all_user_dicts():
+                uid = str(u.get("id") or "").strip()
+                if not uid:
+                    continue
+                for key in (u.get("name"), u.get("first_name"), u.get("username")):
+                    k = str(key or "").strip().lstrip("@").casefold()
+                    if k and k not in user_id_by_name:
+                        user_id_by_name[k] = uid
+        except Exception:
+            pass
+
         def agent_performance(lst):
             agents = {}
             for c in lst:
                 name = (c.get("agent_name") or "").strip()
                 if not name:
                     continue
-                a = agents.setdefault(name, {"name": name, "handled": 0, "resolved": 0, "active": 0, "missed": 0, "reassigned": 0})
+                aid = str(c.get("agent_id") or "").strip()
+                if not aid:
+                    aid = user_id_by_name.get(name.casefold()) or user_id_by_name.get(norm_uname(c.get("agent_username")).casefold(), "")
+                a = agents.setdefault(name, {"id": aid, "name": name, "handled": 0, "resolved": 0, "active": 0, "missed": 0, "reassigned": 0})
+                if aid and not a.get("id"):
+                    a["id"] = aid
                 a["handled"] += 1
                 status = c.get("status") or "open"
                 if status == "done": a["resolved"] += 1
@@ -3997,6 +4016,7 @@ def api_my_profile():
         avg    = int(sum(rt)/len(rt)) if rt else 0
         recent = sorted(my_cases, key=lambda c: c.get("opened_at",""), reverse=True)[:10]
         return jsonify({
+            "id": user.get("id", ""),
             "name": name, "username": uname, "role": user.get("role","agent"),
             "total": total, "done": done, "missed": missed,
             "avg_resp": fmt_secs(avg), "rate": round(done/total*100) if total else 0,
