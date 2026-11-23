@@ -29,12 +29,14 @@ from backend.storage.board_order import (
     delete_custom_lane,
     infer_issue_category,
     read_custom_lanes,
+    read_deleted_builtin_lanes,
     read_issue_categories,
     read_lane_colors,
     read_lane_labels,
     read_order,
     rename_lane,
     reset_order,
+    restore_deleted_builtin_lanes,
     save_issue_categories,
     save_order,
 )
@@ -89,14 +91,12 @@ def register_workspace_routes(server):
         role = server._website_role(user.get("role"))
         if bool(case.get("is_test") or case.get("is_testing")) and role != "developer":
             return False
+        raw_aid = str(case.get("agent_id") or "").strip().lower()
+        is_unassigned = not raw_aid or raw_aid in ("none", "unassigned", "0")
         return (
             role in ("developer", "super_admin")
             or bool(user.get("id") and str(case.get("agent_id")) == str(user["id"]))
-            or bool(
-                user.get("id")
-                and not case.get("agent_id")
-                and str(case.get("created_by_id") or "") == str(user["id"])
-            )
+            or bool(user.get("id") and is_unassigned)
         )
 
     def _workspace_actor():
@@ -275,6 +275,7 @@ def register_workspace_routes(server):
             "quick_replies": quick_replies,
             "workspace_prefs": workspace_prefs,
             "custom_lanes": read_custom_lanes(_data_dir()),
+            "deleted_builtin_lanes": read_deleted_builtin_lanes(_data_dir()),
             "lane_labels": read_lane_labels(_data_dir()),
             "lane_colors": read_lane_colors(_data_dir()),
             "issue_categories": read_issue_categories(_data_dir()),
@@ -336,7 +337,8 @@ def register_workspace_routes(server):
                 elif payload["load_type"] == "" or data.get("vehicle_type") != "reefer":
                     for key in ("setpoint", "current_temp", "temp_recorder"):
                         payload[key] = ""
-                if data.get("vehicle_type") not in ("truck", "trailer", "reefer") or data.get("priority") not in (
+                prio_val = str(data.get("priority") or "normal").strip().lower() or "normal"
+                if data.get("vehicle_type") not in ("truck", "trailer", "reefer") or prio_val not in (
                     "low",
                     "medium",
                     "high",
@@ -347,18 +349,13 @@ def register_workspace_routes(server):
                 board_stage = str(data.get("board_stage") or "").strip()
                 if not _is_allowed_stage(board_stage):
                     raise ValueError("Choose a valid workflow stage.")
-                if "agent_id" in data:
-                    requested_agent_id = str(data.get("agent_id") or "").strip()
-                elif board_stage:
-                    requested_agent_id = ""
-                else:
-                    requested_agent_id = str(actor["id"]).strip()
+                requested_agent_id = str(data.get("agent_id") or "").strip()
 
                 if requested_agent_id.lower() in ("", "unassigned", "none"):
                     payload.update({
                         "id": str(uuid.uuid4()),
                         "vehicle_type": data["vehicle_type"],
-                        "priority": data["priority"],
+                        "priority": prio_val,
                         "board_stage": board_stage,
                         "unassigned": True,
                         "target_agent": None,
@@ -381,7 +378,7 @@ def register_workspace_routes(server):
                     payload.update({
                         "id": str(uuid.uuid4()),
                         "vehicle_type": data["vehicle_type"],
-                        "priority": data["priority"],
+                        "priority": prio_val,
                         "board_stage": board_stage,
                         "target_agent": {
                             "id": target["id"],
@@ -1017,6 +1014,7 @@ def register_workspace_routes(server):
             return jsonify({
                 "order": read_order(_data_dir()),
                 "custom_lanes": read_custom_lanes(_data_dir()),
+                "deleted_builtin_lanes": read_deleted_builtin_lanes(_data_dir()),
                 "lane_labels": read_lane_labels(_data_dir()),
                 "lane_colors": read_lane_colors(_data_dir()),
                 "issue_categories": read_issue_categories(_data_dir()),
@@ -1089,7 +1087,7 @@ def register_workspace_routes(server):
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-    @app.route("/api/workspace/lanes", methods=["GET", "POST", "PATCH"])
+    @app.route("/api/workspace/lanes", methods=["GET", "POST", "PATCH", "DELETE"])
     def api_workspace_lanes():
         if request.method == "GET":
             actor, error = _workspace_actor_read()
@@ -1098,6 +1096,7 @@ def register_workspace_routes(server):
             return jsonify({
                 "ok": True,
                 "lanes": read_custom_lanes(_data_dir()),
+                "deleted_builtin_lanes": read_deleted_builtin_lanes(_data_dir()),
                 "lane_labels": read_lane_labels(_data_dir()),
                 "lane_colors": read_lane_colors(_data_dir()),
             })
@@ -1107,6 +1106,18 @@ def register_workspace_routes(server):
         if actor.get("role") not in ("developer", "super_admin", "admin", "manager"):
             return jsonify({"error": "Only managers and developers can edit board lanes."}), 403
         data = request.get_json(silent=True) or {}
+        if request.method == "DELETE":
+            try:
+                remaining = delete_custom_lane(data.get("lane_id") or "", data_dir=_data_dir())
+                return jsonify({
+                    "ok": True,
+                    "custom_lanes": remaining,
+                    "deleted_builtin_lanes": read_deleted_builtin_lanes(_data_dir()),
+                })
+            except LookupError as exc:
+                return jsonify({"error": str(exc)}), 404
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
         if request.method == "PATCH":
             try:
                 res = rename_lane(
@@ -1126,6 +1137,21 @@ def register_workspace_routes(server):
             return jsonify({"ok": True, **res}), 201
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/lanes/restore", methods=["POST"])
+    def api_workspace_lanes_restore():
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        if actor.get("role") not in ("developer", "super_admin", "admin", "manager"):
+            return jsonify({"error": "Only managers and developers can edit board lanes."}), 403
+        data = request.get_json(silent=True) or {}
+        remaining_deleted = restore_deleted_builtin_lanes(data.get("lane_id"), data_dir=_data_dir())
+        return jsonify({
+            "ok": True,
+            "custom_lanes": read_custom_lanes(_data_dir()),
+            "deleted_builtin_lanes": remaining_deleted,
+        })
 
     @app.route("/api/workspace/lanes/<path:lane_id>", methods=["PATCH", "DELETE"])
     def api_workspace_lane_manage(lane_id):
@@ -1151,7 +1177,11 @@ def register_workspace_routes(server):
                 return jsonify({"error": str(exc)}), 400
         try:
             remaining = delete_custom_lane(lane_id, data_dir=_data_dir())
-            return jsonify({"ok": True, "custom_lanes": remaining})
+            return jsonify({
+                "ok": True,
+                "custom_lanes": remaining,
+                "deleted_builtin_lanes": read_deleted_builtin_lanes(_data_dir()),
+            })
         except LookupError as exc:
             return jsonify({"error": str(exc)}), 404
         except ValueError as exc:

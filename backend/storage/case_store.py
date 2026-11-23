@@ -548,8 +548,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
             elif case_is_test and not is_dev:
                 raise PermissionError("This case is marked as Test and is read-only for non-developers.")
             collaboration = action in ("note", "note_edit", "note_delete", "note_pin")
-            owns_unassigned = (not case.get("agent_id")) and str(case.get("created_by_id") or "") == str(actor["id"])
-            if action != "set_test" and not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]) and not owns_unassigned:
+            is_unassigned = not case.get("agent_id") or str(case.get("agent_id")).strip().lower() in ("", "none", "unassigned", "0")
+            if action != "set_test" and not collaboration and actor["role"] not in ("developer", "super_admin") and str(case.get("agent_id")) != str(actor["id"]) and not is_unassigned:
                 raise PermissionError("Only the assigned agent or a manager can update this case.")
             if payload["action"] == "close" and case.get("status") == "done":
                 return case

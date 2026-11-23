@@ -9,8 +9,18 @@ KEY = "workspace_manual_order_v1"
 CUSTOM_LANES_KEY = "workspace_custom_lanes_v1"
 LANE_LABELS_KEY = "workspace_lane_labels_v1"
 LANE_COLORS_KEY = "workspace_lane_colors_v1"
+DELETED_BUILTIN_LANES_KEY = "workspace_deleted_builtin_lanes_v1"
 ISSUE_CATEGORIES_KEY = "workspace_issue_categories_v1"
 BUILTIN_STAGES = ("jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard", "test")
+BUILTIN_STAGE_NAMES = {
+    "jbs_plant": "JBS Plant",
+    "meijer": "Meijer",
+    "dealer_shop": "Dealer / Shop",
+    "monitoring": "Monitoring",
+    "to_yard": "To Yard",
+    "at_yard": "At Yard",
+    "test": "Test",
+}
 SPECIAL_LANES = ("unassigned", "done")
 AGENT_LANE_RE = re.compile(r"^agent_workflow:agent:[0-9]{1,20}$")
 VALID_LANE_LABEL_KEY_RE = re.compile(r"^(?:agent:[0-9]{1,20}|legacy:.{1,48}|[a-z0-9_]{1,40})$")
@@ -75,6 +85,53 @@ def read_custom_lanes(data_dir=None) -> list[dict]:
         return []
 
 
+def read_deleted_builtin_lanes(data_dir=None) -> list[str]:
+    with db.read_conn(data_dir) as conn:
+        row = conn.execute("SELECT data_json FROM kv_state WHERE key=?", (DELETED_BUILTIN_LANES_KEY,)).fetchone()
+    if not row:
+        return []
+    try:
+        parsed = json.loads(row["data_json"])
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    out = []
+    for item in parsed:
+        k = str(item or "").strip()
+        if k in BUILTIN_STAGES and k not in out:
+            out.append(k)
+    return out
+
+
+def restore_deleted_builtin_lanes(lane_id: str | None = None, data_dir=None) -> list[str]:
+    clean_id = str(lane_id or "").strip()
+    if clean_id.startswith("stage:"):
+        clean_id = clean_id[len("stage:"):]
+    with db.write_tx(data_dir) as conn:
+        row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (DELETED_BUILTIN_LANES_KEY,)).fetchone()
+        version = int(row["version"]) if row else 0
+        current = []
+        if row:
+            try:
+                raw = json.loads(row["data_json"])
+                if isinstance(raw, list):
+                    current = [str(x) for x in raw if str(x) in BUILTIN_STAGES]
+            except (ValueError, TypeError):
+                current = []
+        if clean_id:
+            remaining = [k for k in current if k != clean_id]
+        else:
+            remaining = []
+        conn.execute(
+            "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+            (DELETED_BUILTIN_LANES_KEY, version + 1, json.dumps(remaining, separators=(",", ":"))),
+        )
+        db.bump_version(conn, "cases_version")
+    return remaining
+
+
 def allowed_stages(data_dir=None) -> set[str]:
     return {"", *BUILTIN_STAGES, *(x["id"] for x in read_custom_lanes(data_dir))}
 
@@ -87,6 +144,23 @@ def add_custom_lane(name: str, actor_id, color: str = "#7c3aed", data_dir=None) 
     safe_color = str(color or "#7c3aed").strip()
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", safe_color):
         safe_color = "#7c3aed"
+    deleted_builtins = read_deleted_builtin_lanes(data_dir)
+    matching_builtin = next(
+        (
+            b
+            for b in deleted_builtins
+            if b == slug or BUILTIN_STAGE_NAMES.get(b, "").lower() == clean_name.lower()
+        ),
+        None,
+    )
+    if matching_builtin:
+        restore_deleted_builtin_lanes(matching_builtin, data_dir=data_dir)
+        rename_lane(matching_builtin, clean_name, color=safe_color, data_dir=data_dir)
+        return {
+            "lane": {"id": matching_builtin, "name": clean_name, "color": safe_color},
+            "custom_lanes": read_custom_lanes(data_dir),
+            "deleted_builtin_lanes": read_deleted_builtin_lanes(data_dir),
+        }
     with db.write_tx(data_dir) as conn:
         row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (CUSTOM_LANES_KEY,)).fetchone()
         version = int(row["version"]) if row else 0
@@ -114,25 +188,47 @@ def add_custom_lane(name: str, actor_id, color: str = "#7c3aed", data_dir=None) 
             (CUSTOM_LANES_KEY, version + 1, json.dumps(existing, ensure_ascii=False, separators=(",", ":")))
         )
         db.bump_version(conn, "cases_version")
-    return {"lane": entry, "custom_lanes": existing}
+    return {"lane": entry, "custom_lanes": existing, "deleted_builtin_lanes": deleted_builtins}
 
 
 def delete_custom_lane(lane_id: str, data_dir=None) -> list[dict]:
     clean_id = str(lane_id or "").strip()
-    if clean_id in BUILTIN_STAGES or not clean_id:
-        raise ValueError("Built-in workflow lanes cannot be deleted.")
+    if clean_id.startswith("stage:"):
+        clean_id = clean_id[len("stage:"):]
+    if not clean_id:
+        raise ValueError("Choose a valid workflow lane to delete.")
     with db.write_tx(data_dir) as conn:
         row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (CUSTOM_LANES_KEY,)).fetchone()
         version = int(row["version"]) if row else 0
         existing = _sanitize_custom_lanes(json.loads(row["data_json"])) if row else []
-        remaining = [x for x in existing if x["id"] != clean_id]
-        if len(remaining) == len(existing):
-            raise LookupError("Custom lane not found.")
-        conn.execute(
-            "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
-            "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
-            (CUSTOM_LANES_KEY, version + 1, json.dumps(remaining, ensure_ascii=False, separators=(",", ":")))
-        )
+        if clean_id in BUILTIN_STAGES:
+            del_row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (DELETED_BUILTIN_LANES_KEY,)).fetchone()
+            del_ver = int(del_row["version"]) if del_row else 0
+            deleted_list = []
+            if del_row:
+                try:
+                    raw_del = json.loads(del_row["data_json"])
+                    if isinstance(raw_del, list):
+                        deleted_list = [str(x) for x in raw_del if str(x) in BUILTIN_STAGES]
+                except (ValueError, TypeError):
+                    deleted_list = []
+            if clean_id not in deleted_list:
+                deleted_list.append(clean_id)
+            conn.execute(
+                "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+                (DELETED_BUILTIN_LANES_KEY, del_ver + 1, json.dumps(deleted_list, separators=(",", ":"))),
+            )
+            remaining = existing
+        else:
+            remaining = [x for x in existing if x["id"] != clean_id]
+            if len(remaining) == len(existing):
+                raise LookupError("Lane not found.")
+            conn.execute(
+                "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+                (CUSTOM_LANES_KEY, version + 1, json.dumps(remaining, ensure_ascii=False, separators=(",", ":")))
+            )
         # Re-home any active or archived cases in this stage back to Assigned Agent ("")
         case_rows = conn.execute(
             "SELECT id, data_json FROM cases WHERE board_stage=?",

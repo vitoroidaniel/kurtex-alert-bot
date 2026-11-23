@@ -224,14 +224,38 @@ def _sanitize_key_list(raw, *, allow_colon: bool = True, max_items: int = 80, ma
     return out
 
 
+def _sanitize_saved_view_conditions(raw_conds) -> list[dict]:
+    if not isinstance(raw_conds, list):
+        return []
+    out = []
+    for item in raw_conds[:20]:
+        if not isinstance(item, dict):
+            continue
+        field = str(item.get("field") or "").strip()[:48]
+        op = str(item.get("operator") or "contains").strip()[:48]
+        if not field:
+            continue
+        val = str(item.get("value") or "")[:240]
+        raw_vals = item.get("values")
+        vals = [str(v)[:120] for v in raw_vals[:40] if v is not None] if isinstance(raw_vals, list) else []
+        out.append({
+            "field": field,
+            "operator": op,
+            "value": val,
+            "values": vals,
+        })
+    return out
+
+
 def _sanitize_saved_view_filters(raw_filters) -> dict:
     f = raw_filters if isinstance(raw_filters, dict) else {}
     prio = str(f.get("priority") or "all").strip().lower()
-    if prio not in ("all", "high", "medium", "low"):
+    if prio not in ("all", "high", "medium", "low", "gray"):
         prio = "all"
     view_mode = str(f.get("view") or "board").strip().lower()
-    if view_mode not in ("board", "grid"):
+    if view_mode not in ("board", "grid", "table"):
         view_mode = "board"
+    match_mode = "any" if str(f.get("match_mode") or "all").strip().lower() == "any" else "all"
     return {
         "priority": prio,
         "agent": str(f.get("agent") or "all").strip()[:64] or "all",
@@ -243,6 +267,10 @@ def _sanitize_saved_view_filters(raw_filters) -> dict:
         "query": str(f.get("query") or "")[:160],
         "view": view_mode,
         "compact": bool(f.get("compact", False)),
+        "match_mode": match_mode,
+        "shared": bool(f.get("shared", False)),
+        "include_parent_rows": bool(f.get("include_parent_rows", False)),
+        "conditions": _sanitize_saved_view_conditions(f.get("conditions")),
     }
 
 
