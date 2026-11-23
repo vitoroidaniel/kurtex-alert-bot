@@ -510,6 +510,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 "current_temp":         payload.get("current_temp", ""),
                 "temp_recorder":        payload.get("temp_recorder", ""),
                 "part_number":          payload.get("part_number", ""),
+                "issue_category":       payload.get("issue_category", ""),
+                "issue_category_source": payload.get("issue_category_source", "manual" if payload.get("issue_category") else "ai"),
                 "comments":             payload.get("comments", ""),
                 "notes":                None,
                 "media":                [],
@@ -586,6 +588,25 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     "reopened_by_id": actor["id"],
                     "reopened_by_name": actor["name"],
                 })
+                if payload.get("board_rank") is not None:
+                    case["board_rank"] = float(payload["board_rank"])
+                if payload.get("unassign"):
+                    case.update({
+                        "agent_id": None,
+                        "agent_name": "Unassigned",
+                        "agent_username": "",
+                    })
+                elif isinstance(payload.get("target"), dict) and payload["target"].get("id") is not None:
+                    target = payload["target"]
+                    case.update({
+                        "agent_id": target["id"],
+                        "agent_name": target["name"],
+                        "agent_username": target.get("username", ""),
+                        "assigned_at": now,
+                        "reassigned": True,
+                    })
+                if "stage" in payload and payload["stage"] is not None:
+                    case["board_stage"] = str(payload["stage"] or "")
                 case.setdefault("workspace_history", []).append({
                     "action": "reopen",
                     "author": actor["name"],
@@ -750,6 +771,18 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                 previous = case.get("board_stage") or ""
                 if payload.get("board_rank") is not None:
                     case["board_rank"] = float(payload["board_rank"])
+                if payload.get("unassign"):
+                    prev_owner = case.get("agent_name") or "Unassigned"
+                    if case.get("agent_id") is not None and str(case.get("agent_id") or "").strip() != "":
+                        case.update({
+                            "agent_id": None,
+                            "agent_name": "Unassigned",
+                            "agent_username": "",
+                        })
+                        case.setdefault("workspace_history", []).append({
+                            "action": "reassign", "author": actor["name"], "author_id": str(actor.get("id") or ""),
+                            "from": prev_owner, "to": "Unassigned", "created_at": now,
+                        })
                 case["board_stage"] = payload["stage"]
                 if previous == TEST_LANE_STAGE and payload["stage"] != TEST_LANE_STAGE:
                     case["test_lane_overridden"] = True
@@ -762,6 +795,8 @@ def workspace_write(actor: dict, payload: dict, case_id: Optional[str] = None) -
                     })
             elif payload["action"] == "edit":
                 fields = dict(payload["fields"])
+                if "issue_category" in fields and "issue_category_source" not in fields:
+                    fields["issue_category_source"] = "manual" if str(fields.get("issue_category") or "").strip() else "ai"
                 new_load = fields.get(
                     "load_type",
                     case.get("load_type") or (case.get("report_data") or {}).get("load", ""),
@@ -1492,7 +1527,7 @@ def sync_user_display_on_cases(user_id: int, name: str, username: str) -> int:
 def bulk_update_user_cases(actor: dict, target_user_id: int, payload: dict) -> dict:
     """Batch-edit a specific user's Live Board cases (Managers/Developers only)."""
     role = str((actor or {}).get("role") or "").lower()
-    if role not in ("developer", "super_admin"):
+    if role not in ("developer", "super_admin", "admin", "manager"):
         raise PermissionError("Only managers and developers can edit user case batches.")
     if not isinstance(payload, dict):
         raise ValueError("Invalid update payload.")

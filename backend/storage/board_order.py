@@ -8,9 +8,28 @@ from backend.storage import db
 KEY = "workspace_manual_order_v1"
 CUSTOM_LANES_KEY = "workspace_custom_lanes_v1"
 LANE_LABELS_KEY = "workspace_lane_labels_v1"
+LANE_COLORS_KEY = "workspace_lane_colors_v1"
+ISSUE_CATEGORIES_KEY = "workspace_issue_categories_v1"
 BUILTIN_STAGES = ("jbs_plant", "meijer", "dealer_shop", "monitoring", "to_yard", "at_yard", "test")
 SPECIAL_LANES = ("unassigned", "done")
 AGENT_LANE_RE = re.compile(r"^agent_workflow:agent:[0-9]{1,20}$")
+VALID_LANE_LABEL_KEY_RE = re.compile(r"^(?:agent:[0-9]{1,20}|legacy:.{1,48}|[a-z0-9_]{1,40})$")
+
+DEFAULT_ISSUE_CATEGORIES = (
+    "Windshield & Glass",
+    "Tires & Wheel End",
+    "Brakes & Air System",
+    "Coolant & Cooling",
+    "Engine & Aftertreatment (DEF/DPF)",
+    "Electrical & Lights",
+    "Reefer / Thermo King",
+    "Transmission & Drivetrain",
+    "Suspension & Steering",
+    "Doors, Body & Liftgate",
+    "PM & Oil Service",
+    "DOT & Inspection",
+    "Other / General",
+)
 
 
 class OrderConflict(Exception):
@@ -146,8 +165,16 @@ def delete_custom_lane(lane_id: str, data_dir=None) -> list[dict]:
     return remaining
 
 
+def _is_valid_lane_label_key(key: str) -> bool:
+    if not key:
+        return False
+    if key in BUILTIN_STAGES or key in SPECIAL_LANES:
+        return True
+    return bool(VALID_LANE_LABEL_KEY_RE.fullmatch(key))
+
+
 def read_lane_labels(data_dir=None) -> dict[str, str]:
-    """Return custom display titles for built-in workflow, unassigned, and done lanes."""
+    """Return custom display titles for workflow, agent, unassigned, and done lanes."""
     with db.read_conn(data_dir) as conn:
         row = conn.execute("SELECT data_json FROM kv_state WHERE key=?", (LANE_LABELS_KEY,)).fetchone()
     if not row:
@@ -158,22 +185,42 @@ def read_lane_labels(data_dir=None) -> dict[str, str]:
         return {}
     if not isinstance(parsed, dict):
         return {}
-    valid_keys = set(BUILTIN_STAGES) | set(SPECIAL_LANES)
     return {
         str(k): " ".join(str(v or "").split()).strip()[:40]
         for k, v in parsed.items()
-        if str(k) in valid_keys and " ".join(str(v or "").split()).strip()
+        if _is_valid_lane_label_key(str(k)) and " ".join(str(v or "").split()).strip()
     }
 
 
-def rename_lane(lane_id: str, new_name: str, *, reset: bool = False, data_dir=None) -> dict:
-    """Rename any custom or built-in workflow/unassigned/done lane."""
+def read_lane_colors(data_dir=None) -> dict[str, str]:
+    """Return custom accent colors for built-in workflow, agent, unassigned, and done lanes."""
+    with db.read_conn(data_dir) as conn:
+        row = conn.execute("SELECT data_json FROM kv_state WHERE key=?", (LANE_COLORS_KEY,)).fetchone()
+    if not row:
+        return {}
+    try:
+        parsed = json.loads(row["data_json"])
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {
+        str(k): str(v).strip()
+        for k, v in parsed.items()
+        if _is_valid_lane_label_key(str(k)) and re.fullmatch(r"#[0-9a-fA-F]{6}", str(v or "").strip())
+    }
+
+
+def rename_lane(lane_id: str, new_name: str, *, color: str | None = None, reset: bool = False, data_dir=None) -> dict:
+    """Rename (and optionally recolor) any custom, built-in workflow, agent, unassigned, or done lane."""
     raw_key = str(lane_id or "").strip()
     clean_key = raw_key[len("stage:"):] if raw_key.startswith("stage:") else raw_key
     clean_name = " ".join(str(new_name or "").split()).strip()[:40]
+    safe_color = str(color or "").strip() if color is not None else ""
+    if safe_color and not re.fullmatch(r"#[0-9a-fA-F]{6}", safe_color):
+        safe_color = ""
     if not reset and not clean_name:
         raise ValueError("Enter a lane name.")
-    valid_builtin = set(BUILTIN_STAGES) | set(SPECIAL_LANES)
 
     with db.write_tx(data_dir) as conn:
         row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (CUSTOM_LANES_KEY,)).fetchone()
@@ -185,16 +232,19 @@ def rename_lane(lane_id: str, new_name: str, *, reset: bool = False, data_dir=No
             if reset or not clean_name:
                 raise ValueError("Enter a new name for this custom lane.")
             custom_hit["name"] = clean_name
+            if safe_color:
+                custom_hit["color"] = safe_color
             conn.execute(
                 "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
                 "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
                 (CUSTOM_LANES_KEY, custom_ver + 1, json.dumps(custom_lanes, ensure_ascii=False, separators=(",", ":")))
             )
             labels = read_lane_labels(data_dir)
+            colors = read_lane_colors(data_dir)
             db.bump_version(conn, "cases_version")
-            return {"lane_id": raw_key, "name": clean_name, "custom_lanes": custom_lanes, "lane_labels": labels}
+            return {"lane_id": raw_key, "name": clean_name, "color": custom_hit.get("color", ""), "custom_lanes": custom_lanes, "lane_labels": labels, "lane_colors": colors}
 
-        if clean_key not in valid_builtin:
+        if not _is_valid_lane_label_key(clean_key):
             raise LookupError("Lane not found or cannot be renamed.")
 
         lbl_row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (LANE_LABELS_KEY,)).fetchone()
@@ -212,15 +262,183 @@ def rename_lane(lane_id: str, new_name: str, *, reset: bool = False, data_dir=No
         clean_labels = {
             str(k): " ".join(str(v or "").split()).strip()[:40]
             for k, v in labels.items()
-            if str(k) in valid_builtin and " ".join(str(v or "").split()).strip()
+            if _is_valid_lane_label_key(str(k)) and " ".join(str(v or "").split()).strip()
         }
         conn.execute(
             "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
             "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
             (LANE_LABELS_KEY, lbl_ver + 1, json.dumps(clean_labels, ensure_ascii=False, separators=(",", ":")))
         )
+
+        col_row = conn.execute("SELECT version,data_json FROM kv_state WHERE key=?", (LANE_COLORS_KEY,)).fetchone()
+        col_ver = int(col_row["version"]) if col_row else 0
+        try:
+            colors = json.loads(col_row["data_json"]) if col_row else {}
+        except (ValueError, TypeError):
+            colors = {}
+        if not isinstance(colors, dict):
+            colors = {}
+        if reset or (color is not None and not safe_color):
+            colors.pop(clean_key, None)
+        elif safe_color:
+            colors[clean_key] = safe_color
+        clean_colors = {
+            str(k): str(v).strip()
+            for k, v in colors.items()
+            if _is_valid_lane_label_key(str(k)) and re.fullmatch(r"#[0-9a-fA-F]{6}", str(v or "").strip())
+        }
+        if color is not None or reset:
+            conn.execute(
+                "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+                (LANE_COLORS_KEY, col_ver + 1, json.dumps(clean_colors, ensure_ascii=False, separators=(",", ":")))
+            )
+
         db.bump_version(conn, "cases_version")
-    return {"lane_id": raw_key, "name": clean_name if not reset else "", "custom_lanes": custom_lanes, "lane_labels": clean_labels}
+    return {
+        "lane_id": raw_key,
+        "name": clean_name if not reset else "",
+        "color": clean_colors.get(clean_key, ""),
+        "custom_lanes": custom_lanes,
+        "lane_labels": clean_labels,
+        "lane_colors": clean_colors,
+    }
+
+
+def _sanitize_issue_categories(raw) -> list[str]:
+    if not isinstance(raw, list):
+        return list(DEFAULT_ISSUE_CATEGORIES)
+    out = []
+    seen = set()
+    for item in raw:
+        name = " ".join(str(item or "").split()).strip()[:64]
+        key = name.casefold()
+        if not name or key in seen:
+            continue
+        seen.add(key)
+        out.append(name)
+        if len(out) >= 40:
+            break
+    return out if out else list(DEFAULT_ISSUE_CATEGORIES)
+
+
+def read_issue_categories(data_dir=None) -> list[str]:
+    with db.read_conn(data_dir) as conn:
+        row = conn.execute("SELECT data_json FROM kv_state WHERE key=?", (ISSUE_CATEGORIES_KEY,)).fetchone()
+    if not row:
+        return list(DEFAULT_ISSUE_CATEGORIES)
+    try:
+        return _sanitize_issue_categories(json.loads(row["data_json"]))
+    except (ValueError, TypeError):
+        return list(DEFAULT_ISSUE_CATEGORIES)
+
+
+def save_issue_categories(categories: list[str], data_dir=None) -> list[str]:
+    cleaned = _sanitize_issue_categories(categories)
+    with db.write_tx(data_dir) as conn:
+        row = conn.execute("SELECT version FROM kv_state WHERE key=?", (ISSUE_CATEGORIES_KEY,)).fetchone()
+        ver = int(row["version"]) if row else 0
+        conn.execute(
+            "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+            (ISSUE_CATEGORIES_KEY, ver + 1, json.dumps(cleaned, ensure_ascii=False, separators=(",", ":")))
+        )
+        db.bump_version(conn, "cases_version")
+    return cleaned
+
+
+_CATEGORY_KEYWORD_RULES = (
+    ("Windshield & Glass", ("windshield", "windscreen", "wiper", "glass", "mirror", "defroster", "rock chip", "cracked glass")),
+    ("Tires & Wheel End", ("tire", "tyre", "flat", "blowout", "puncture", "rim", "wheel seal", "hub", "hubcap", "lug nut", "mudflap", "steer tire", "drive tire", "tread")),
+    ("Brakes & Air System", ("brake", "air leak", "air bag", "air line", "chamber", "slack adjuster", "abs", "gladhand", "compressor", "governor", "drum", "rotor", "caliper", "bendix", "parking valve")),
+    ("Coolant & Cooling", ("coolant", "radiator", "water pump", "thermostat", "overheat", "antifreeze", "hose clamp", "fan clutch", "surge tank", "reservoir")),
+    ("Reefer / Thermo King", ("reefer", "thermo king", "thermoking", "carrier unit", "setpoint", "freon", "refriger", "evaporator", "chute", "return air", "temp alarm", "alarm code")),
+    ("Engine & Aftertreatment (DEF/DPF)", ("engine", "check engine", "cel", "def", "dpf", "regen", "scr", "nox", "injector", "turbo", "oil leak", "fuel pump", "fuel filter", "fuel leak", "derate", "egr", "spn", "fmi", "exhaust")),
+    ("Electrical & Lights", ("light", "lamp", "headlight", "marker light", "tail light", "blinker", "turn signal", "alternator", "battery", "starter", "wiring", "fuse", "harness", "pigtail", "7-way", "inverter")),
+    ("Transmission & Drivetrain", ("transmission", "clutch", "gearbox", "shifting", "driveshaft", "u-joint", "differential", "rear end", "axle")),
+    ("Suspension & Steering", ("suspension", "shock", "leaf spring", "kingpin", "tie rod", "alignment", "steering", "power steering", "air spring", "leveling valve")),
+    ("Doors, Body & Liftgate", ("door", "hinge", "latch", "roll door", "swing door", "liftgate", "bumper", "fender", "roof", "floor", "landing gear", "icc bar", "fairing", "hood", "fifth wheel")),
+    ("PM & Oil Service", ("pm service", "oil change", "preventive", "lube", "filter service", "grease", "a-service", "b-service")),
+    ("DOT & Inspection", ("dot inspection", "annual inspection", "inspection sticker", "registration", "permit", "ifta", "cab card", "dot violation")),
+)
+
+
+def infer_issue_category(case_or_text, categories: list[str] | None = None) -> str:
+    """AI/heuristic tagger that classifies a maintenance case into one of the configured categories."""
+    cats = list(categories) if categories else list(DEFAULT_ISSUE_CATEGORIES)
+    if isinstance(case_or_text, dict):
+        parts = [
+            case_or_text.get("issue_text"),
+            case_or_text.get("description"),
+            case_or_text.get("full_description"),
+            case_or_text.get("comments"),
+            case_or_text.get("notes"),
+            " ".join(
+                str(n.get("text") or "")
+                for n in (case_or_text.get("workspace_notes") or [])
+                if isinstance(n, dict) and not n.get("deleted_at")
+            ),
+        ]
+        vtype = str(case_or_text.get("vehicle_type") or "").lower()
+        hay = " ".join(str(p or "") for p in parts if p).lower()
+    else:
+        hay = str(case_or_text or "").lower()
+        vtype = ""
+
+    if not hay.strip():
+        return ""
+
+    # 1. Exact or token match against any custom manager-configured categories first
+    cat_by_low = {c.lower(): c for c in cats}
+    for c in cats:
+        clow = c.lower()
+        if clow in ("other / general", "other", "general"):
+            continue
+        if clow in hay:
+            return c
+        tokens = [t for t in re.split(r"[^a-z0-9]+", clow) if len(t) >= 4 and t not in ("system", "service", "general", "other", "aftertreatment")]
+        if tokens and any(re.search(r"\b" + re.escape(tok), hay) for tok in tokens):
+            # Also check built-in synonym rules below before committing if a stronger synonym matches
+            pass
+
+    # 2. Domain synonym scoring mapped onto the active category list
+    best_cat = ""
+    best_score = 0
+    for canonical, keywords in _CATEGORY_KEYWORD_RULES:
+        # Resolve canonical to a matching active category if present
+        target_cat = cat_by_low.get(canonical.lower())
+        if not target_cat:
+            canon_prefix = canonical.split()[0].lower()
+            target_cat = next((c for c in cats if canon_prefix in c.lower()), None)
+        if not target_cat:
+            continue
+        score = 0
+        for kw in keywords:
+            if kw in hay:
+                score += 2 if " " in kw or len(kw) >= 6 else 1
+        if score > best_score:
+            best_score = score
+            best_cat = target_cat
+
+    if best_cat:
+        return best_cat
+
+    # 3. Check custom category tokens
+    for c in cats:
+        clow = c.lower()
+        if clow in ("other / general", "other", "general"):
+            continue
+        tokens = [t for t in re.split(r"[^a-z0-9]+", clow) if len(t) >= 3 and t not in ("and", "the", "for", "system", "service")]
+        if tokens and any(re.search(r"\b" + re.escape(tok), hay) for tok in tokens):
+            return c
+
+    if vtype == "reefer":
+        reefer_cat = next((c for c in cats if "reefer" in c.lower() or "thermo" in c.lower()), None)
+        if reefer_cat:
+            return reefer_cat
+
+    fallback = next((c for c in cats if "other" in c.lower() or "general" in c.lower()), "")
+    return fallback or (cats[-1] if cats else "Other / General")
 
 
 def read_order(data_dir=None):

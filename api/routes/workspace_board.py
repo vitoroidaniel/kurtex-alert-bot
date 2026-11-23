@@ -27,11 +27,15 @@ from backend.storage.board_order import (
     add_custom_lane,
     allowed_stages,
     delete_custom_lane,
+    infer_issue_category,
     read_custom_lanes,
+    read_issue_categories,
+    read_lane_colors,
     read_lane_labels,
     read_order,
     rename_lane,
     reset_order,
+    save_issue_categories,
     save_order,
 )
 from backend.storage.board_presence import heartbeat, snapshot
@@ -272,6 +276,8 @@ def register_workspace_routes(server):
             "workspace_prefs": workspace_prefs,
             "custom_lanes": read_custom_lanes(_data_dir()),
             "lane_labels": read_lane_labels(_data_dir()),
+            "lane_colors": read_lane_colors(_data_dir()),
+            "issue_categories": read_issue_categories(_data_dir()),
         })
 
     @app.route("/api/workspace/cases", methods=["POST"])
@@ -306,11 +312,20 @@ def register_workspace_routes(server):
                     "current_temp": 80,
                     "temp_recorder": 16,
                     "part_number": 120,
+                    "issue_category": 120,
                 }
                 payload = {
                     key: text(key, key in ("unit_number", "driver", "issue", "request_id"), maximum)
                     for key, maximum in limits.items()
                 }
+                if payload.get("issue_category"):
+                    payload["issue_category_source"] = "manual"
+                else:
+                    payload["issue_category"] = infer_issue_category(
+                        {"issue_text": payload.get("issue", ""), "vehicle_type": data.get("vehicle_type", "")},
+                        read_issue_categories(_data_dir()),
+                    )
+                    payload["issue_category_source"] = "ai"
                 if payload["load_type"] not in ("", "JBS Load", "Meijer Load", "Broker Load", "OpenDeck", "Empty"):
                     raise ValueError("Choose a valid load type.")
                 if payload["temp_recorder"] not in ("", "Yes", "No"):
@@ -452,6 +467,31 @@ def register_workspace_routes(server):
                             if type(data.get("pinned")) is not bool:
                                 raise ValueError("Choose a pin state.")
                             payload["pinned"] = data["pinned"]
+                elif action == "reopen":
+                    rank_val = _opt_rank()
+                    if rank_val is not None:
+                        payload["board_rank"] = rank_val
+                    if data.get("allow_concurrent_move") is True:
+                        payload["allow_concurrent_move"] = True
+                    if data.get("unassign") is True:
+                        payload["unassign"] = True
+                    elif "agent_id" in data and str(data.get("agent_id") or "").strip():
+                        target_id = str(data.get("agent_id") or "").strip()
+                        if target_id.lower() in ("unassigned", "none", "0"):
+                            payload["unassign"] = True
+                        else:
+                            target = _resolve_active_agent(target_id)
+                            if not target:
+                                raise ValueError("Choose an active agent from the team.")
+                            payload["target"] = {
+                                "id": target["id"],
+                                "name": target["name"],
+                                "username": target.get("username", ""),
+                            }
+                    if "stage" in data and data.get("stage") is not None:
+                        if not _is_allowed_stage(data.get("stage")):
+                            raise ValueError("Choose a valid workflow stage.")
+                        payload["stage"] = str(data.get("stage") or "").strip()
                 elif action in ("reassign", "move"):
                     target_id = str(data.get("agent_id") or "").strip()
                     target = next(
@@ -483,6 +523,8 @@ def register_workspace_routes(server):
                     if not _is_allowed_stage(data.get("stage")):
                         raise ValueError("Choose a valid workflow stage.")
                     payload["stage"] = str(data.get("stage") or "").strip()
+                    if data.get("unassign") is True:
+                        payload["unassign"] = True
                     rank_val = _opt_rank()
                     if rank_val is not None:
                         payload["board_rank"] = rank_val
@@ -507,6 +549,8 @@ def register_workspace_routes(server):
                         "pickup",
                         "delivery",
                         "part_number",
+                        "issue_category",
+                        "issue_category_source",
                         "setpoint",
                         "current_temp",
                         "temp_recorder",
@@ -974,6 +1018,8 @@ def register_workspace_routes(server):
                 "order": read_order(_data_dir()),
                 "custom_lanes": read_custom_lanes(_data_dir()),
                 "lane_labels": read_lane_labels(_data_dir()),
+                "lane_colors": read_lane_colors(_data_dir()),
+                "issue_categories": read_issue_categories(_data_dir()),
             })
         actor, error = _workspace_actor()
         if error:
@@ -1043,34 +1089,58 @@ def register_workspace_routes(server):
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-    @app.route("/api/workspace/lanes", methods=["GET", "POST"])
+    @app.route("/api/workspace/lanes", methods=["GET", "POST", "PATCH"])
     def api_workspace_lanes():
         if request.method == "GET":
             actor, error = _workspace_actor_read()
             if error:
                 return error
-            return jsonify({"ok": True, "lanes": read_custom_lanes(_data_dir())})
+            return jsonify({
+                "ok": True,
+                "lanes": read_custom_lanes(_data_dir()),
+                "lane_labels": read_lane_labels(_data_dir()),
+                "lane_colors": read_lane_colors(_data_dir()),
+            })
         actor, error = _workspace_actor()
         if error:
             return error
+        if actor.get("role") not in ("developer", "super_admin", "admin", "manager"):
+            return jsonify({"error": "Only managers and developers can edit board lanes."}), 403
         data = request.get_json(silent=True) or {}
+        if request.method == "PATCH":
+            try:
+                res = rename_lane(
+                    data.get("lane_id") or "",
+                    data.get("name"),
+                    color=data.get("color"),
+                    reset=bool(data.get("reset")),
+                    data_dir=_data_dir(),
+                )
+                return jsonify({"ok": True, **res})
+            except LookupError as exc:
+                return jsonify({"error": str(exc)}), 404
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
         try:
             res = add_custom_lane(data.get("name"), actor["id"], color=data.get("color") or "#7c3aed", data_dir=_data_dir())
             return jsonify({"ok": True, **res}), 201
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
-    @app.route("/api/workspace/lanes/<lane_id>", methods=["PATCH", "DELETE"])
+    @app.route("/api/workspace/lanes/<path:lane_id>", methods=["PATCH", "DELETE"])
     def api_workspace_lane_manage(lane_id):
         actor, error = _workspace_actor()
         if error:
             return error
+        if actor.get("role") not in ("developer", "super_admin", "admin", "manager"):
+            return jsonify({"error": "Only managers and developers can edit board lanes."}), 403
         if request.method == "PATCH":
             data = request.get_json(silent=True) or {}
             try:
                 res = rename_lane(
                     lane_id,
                     data.get("name"),
+                    color=data.get("color"),
                     reset=bool(data.get("reset")),
                     data_dir=_data_dir(),
                 )
@@ -1086,6 +1156,59 @@ def register_workspace_routes(server):
             return jsonify({"error": str(exc)}), 404
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/workspace/categories", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    def api_workspace_issue_categories():
+        if request.method == "GET":
+            actor, error = _workspace_actor_read()
+            if error:
+                return error
+            return jsonify({
+                "ok": True,
+                "categories": read_issue_categories(_data_dir()),
+                "can_manage": actor.get("role") in ("developer", "super_admin", "admin", "manager"),
+            })
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        if actor.get("role") not in ("developer", "super_admin", "admin", "manager"):
+            return jsonify({"error": "Only managers and developers can customize issue categories."}), 403
+        data = request.get_json(silent=True) or {}
+        current = read_issue_categories(_data_dir())
+        if request.method == "PUT" and isinstance(data.get("categories"), list):
+            updated = save_issue_categories(data["categories"], data_dir=_data_dir())
+            return jsonify({"ok": True, "categories": updated})
+        if request.method == "POST":
+            name = " ".join(str(data.get("name") or "").split()).strip()[:64]
+            if not name:
+                return jsonify({"error": "Enter a category name."}), 400
+            if any(c.casefold() == name.casefold() for c in current):
+                return jsonify({"error": "That category already exists."}), 400
+            next_list = list(current)
+            if next_list and next_list[-1].lower() in ("other / general", "other", "general"):
+                next_list.insert(len(next_list) - 1, name)
+            else:
+                next_list.append(name)
+            updated = save_issue_categories(next_list, data_dir=_data_dir())
+            return jsonify({"ok": True, "categories": updated})
+        if request.method == "PATCH":
+            old_name = " ".join(str(data.get("old_name") or "").split()).strip()
+            new_name = " ".join(str(data.get("new_name") or data.get("name") or "").split()).strip()[:64]
+            if not old_name or not new_name:
+                return jsonify({"error": "Enter a valid category name."}), 400
+            next_list = [new_name if c.casefold() == old_name.casefold() else c for c in current]
+            updated = save_issue_categories(next_list, data_dir=_data_dir())
+            return jsonify({"ok": True, "categories": updated})
+        if request.method == "DELETE":
+            target = " ".join(str(data.get("name") or "").split()).strip()
+            if not target:
+                return jsonify({"error": "Choose a category to delete."}), 400
+            next_list = [c for c in current if c.casefold() != target.casefold()]
+            if not next_list:
+                return jsonify({"error": "At least one category must remain in the list."}), 400
+            updated = save_issue_categories(next_list, data_dir=_data_dir())
+            return jsonify({"ok": True, "categories": updated})
+        return jsonify({"ok": True, "categories": current})
 
     @app.route("/api/workspace/proofs", methods=["GET"])
     def api_workspace_proofs():

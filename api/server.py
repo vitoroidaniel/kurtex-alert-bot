@@ -281,8 +281,40 @@ def build_phrase_pattern(q):
         return None
     return re.compile(r"\b" + r"\s+".join(tokens) + r"\b", re.IGNORECASE)
 
+def _request_issue_categories():
+    from backend.storage.board_order import DEFAULT_ISSUE_CATEGORIES, read_issue_categories
+    if has_app_context():
+        cached = getattr(g, "_cached_issue_categories", None)
+        if cached is not None:
+            return cached
+        try:
+            cats = read_issue_categories(DATA_DIR)
+        except Exception:
+            cats = list(DEFAULT_ISSUE_CATEGORIES)
+        g._cached_issue_categories = cats
+        return cats
+    try:
+        return read_issue_categories(DATA_DIR)
+    except Exception:
+        return list(DEFAULT_ISSUE_CATEGORIES)
+
+
+def _resolve_case_category(c):
+    from backend.storage.board_order import infer_issue_category
+    raw_cat = str(c.get("issue_category") or "").strip()
+    raw_src = str(c.get("issue_category_source") or "").strip().lower()
+    if raw_cat:
+        return raw_cat, (raw_src if raw_src in ("ai", "manual") else "manual")
+    try:
+        inferred = infer_issue_category(c, _request_issue_categories())
+    except Exception:
+        inferred = ""
+    return inferred, ("ai" if inferred else "")
+
+
 def serialize_case(c):
     try:
+        issue_cat, issue_cat_src = _resolve_case_category(c)
         return {
             "id":          (c.get("id") or "")[:8],
             "full_id":     c.get("id") or "",
@@ -292,6 +324,8 @@ def serialize_case(c):
             "agent_id":    c.get("agent_id"),
             "can_reassign": _workspace_can_manage(c, session.get("user") or {}) if session.get("user") else False,
             "load_type":   c.get("load_type") or (c.get("report_data") or {}).get("load") or "",
+            "issue_category": issue_cat,
+            "issue_category_source": issue_cat_src,
             "board_stage": c.get("board_stage") or "",
             "board_rank":  float(c.get("board_rank") or 0.0),
             "pickup":      c.get("pickup") or "",
@@ -2178,14 +2212,15 @@ def _website_role(role):
     return "super_admin" if role in ("manager","admin","super_admin") else ("developer" if role=="developer" else "agent")
 
 def _current_allowed_pages():
-    user=session.get("user") or {}; return _load_role_permissions().get(_website_role(user.get("role","agent")), ROLE_PERMISSION_DEFAULTS["agent"])
+    user=session.get("user") or {}; return _load_role_permissions().get(_current_viewer_role(user), ROLE_PERMISSION_DEFAULTS["agent"])
 
 def _users_manager_only():
     if _developer_only():
         return True
     user = session.get("user") or {}
-    role = user.get("role") or "agent"
-    return role in ("manager", "admin", "super_admin") and "users" in _current_allowed_pages()
+    eff_role = _current_viewer_role(user)
+    raw_role = str(user.get("role") or "agent").lower()
+    return eff_role == "super_admin" or raw_role in ("manager", "admin", "super_admin")
 
 @app.route("/api/developer/permissions", methods=["GET","PUT"])
 def api_developer_permissions():
@@ -2202,7 +2237,7 @@ def api_developer_permissions():
 # в”Ђв”Ђ Developer workspace в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
 def _developer_only():
     user = session.get("user") or {}
-    return user.get("role") == "developer"
+    return user.get("role") == "developer" or _current_viewer_role(user) == "developer"
 
 _DEV_SERVER_STARTED_AT = time.time()
 
@@ -2510,8 +2545,6 @@ def api_developer_user_cases(user_id):
     from backend.storage.case_store import bulk_update_user_cases, is_maintenance_report
     is_dev = _developer_only()
     target_user = get_user(user_id)
-    if target_user and target_user.get("role") == "developer" and not is_dev:
-        return jsonify({"error":"Only developers can inspect or batch-edit developer case loads."}), 403
     if request.method == "GET":
         all_cases = load_cases()
         active_cases = []
@@ -3797,6 +3830,9 @@ def api_case_detail():
                     "report_driver":    c.get("report_driver",""),
                     "issue_text":       c.get("issue_text",""),
                     "load_type":        c.get("load_type", "") or (c.get("report_data") or {}).get("load", ""),
+                    "issue_category":   data.get("issue_category", ""),
+                    "issue_category_source": data.get("issue_category_source", ""),
+                    "issue_categories": _request_issue_categories(),
                     "board_stage":      c.get("board_stage", ""),
                     "shop_info":        c.get("shop_info", ""),
                     "amount":           c.get("amount", ""),
