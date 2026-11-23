@@ -330,6 +330,8 @@ def rename_lane(lane_id: str, new_name: str, *, color: str | None = None, reset:
             custom_hit["name"] = clean_name
             if safe_color:
                 custom_hit["color"] = safe_color
+            elif color is not None:
+                custom_hit["color"] = "#7c3aed"
             conn.execute(
                 "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
                 "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",

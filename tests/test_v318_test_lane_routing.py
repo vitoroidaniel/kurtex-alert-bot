@@ -313,6 +313,56 @@ class LiveBoardV318TestLaneRoutingTests(unittest.TestCase):
             self.assertEqual(real_json["workspace_notes"][0]["author_role"], "system")
             self.assertEqual(row_111["board_stage"], "test")
 
+    def test_patch_lane_color_palette_and_reset(self):
+        with self._auth_patch():
+            # Built-in stage lane custom palette hex color + reset
+            r1 = self.client.patch(
+                "/api/workspace/lanes",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                json={"lane_id": "stage:monitoring", "name": "Monitoring", "color": "#06b6d4"},
+            )
+            self.assertEqual(r1.status_code, 200, r1.get_json())
+            self.assertEqual(r1.get_json()["lane_colors"].get("monitoring"), "#06b6d4")
+            r2 = self.client.patch(
+                "/api/workspace/lanes",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                json={"lane_id": "stage:monitoring", "name": "Monitoring", "color": ""},
+            )
+            self.assertEqual(r2.status_code, 200, r2.get_json())
+            self.assertNotIn("monitoring", r2.get_json()["lane_colors"])
+
+            # Agent lane color
+            r3 = self.client.patch(
+                "/api/workspace/lanes",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                json={"lane_id": "agent:101", "name": "Alex", "color": "#db2777"},
+            )
+            self.assertEqual(r3.status_code, 200, r3.get_json())
+            self.assertEqual(r3.get_json()["lane_colors"].get("agent:101"), "#db2777")
+
+            # Custom lane color update and reset to default (#7c3aed)
+            c_add = self.client.post(
+                "/api/workspace/lanes",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                json={"name": "Body Shop", "color": "#0d9488"},
+            )
+            self.assertEqual(c_add.status_code, 201, c_add.get_json())
+            custom_id = c_add.get_json()["lane"]["id"]
+            c_patch = self.client.patch(
+                "/api/workspace/lanes",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                json={"lane_id": f"stage:{custom_id}", "name": "Body Shop", "color": "#4f46e5"},
+            )
+            self.assertEqual(c_patch.status_code, 200, c_patch.get_json())
+            self.assertEqual(c_patch.get_json()["color"], "#4f46e5")
+            c_reset = self.client.patch(
+                "/api/workspace/lanes",
+                headers={"X-Workspace-CSRF": "csrf-1"},
+                json={"lane_id": f"stage:{custom_id}", "name": "Body Shop", "color": ""},
+            )
+            self.assertEqual(c_reset.status_code, 200, c_reset.get_json())
+            self.assertEqual(c_reset.get_json()["color"], "#7c3aed")
+
 
 if __name__ == "__main__":
     unittest.main()
