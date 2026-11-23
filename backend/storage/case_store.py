@@ -390,14 +390,17 @@ def close_case(
     closed_by_id=None,
     closed_by_name: Optional[str] = None,
 ) -> Optional[dict]:
-    """Close atomically, retaining explicitly reported replaced part numbers."""
+    """Close from Telegram and leave reported cases open for Live Board review."""
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
         if not row:
             return None
         case = json.loads(row["data_json"])
-        if case.get("status") == "done":
+        if case.get("status") == "done" or case.get("telegram_closed_at"):
             return dict(case)
+        board_active = _is_active_live_board_case(case)
+        if board_active and closed_by_id is not None and str(case.get("agent_id")) != str(closed_by_id):
+            raise PermissionError("Only the assigned agent can close this report in Telegram.")
         if parts_replaced is not None:
             numbers = [str(part).strip() for part in (replaced_parts or [])]
             if len(numbers) > 20 or any(not number or len(number) > 80 for number in numbers):
@@ -406,21 +409,30 @@ def close_case(
             case["replaced_parts"] = numbers if parts_replaced else []
             case["replaced_part_numbers"] = ", ".join(case["replaced_parts"])
             case["parts_recorded_at"] = now_iso()
-        _close_record(case, notes)
         actor_id = closed_by_id if closed_by_id is not None else case.get("agent_id")
         actor_name = (
             str(closed_by_name).strip()
             if closed_by_name
             else str(case.get("agent_name") or "").strip() or "Telegram Bot"
         )
-        if not case.get("closed_by_id") and actor_id is not None:
-            case["closed_by_id"] = actor_id
-        if not case.get("closed_by_name"):
-            case["closed_by_name"] = actor_name
+        if board_active:
+            now = now_iso()
+            case.update({
+                "telegram_closed_at": now,
+                "telegram_closed_by_id": actor_id,
+                "telegram_closed_by_name": actor_name,
+                "updated_at": now,
+            })
+        else:
+            _close_record(case, notes)
+            if not case.get("closed_by_id") and actor_id is not None:
+                case["closed_by_id"] = actor_id
+            if not case.get("closed_by_name"):
+                case["closed_by_name"] = actor_name
         _upsert_case_row(
             conn,
             case,
-            event_type="close",
+            event_type="telegram_close" if board_active else "close",
             actor_id=str(actor_id or ""),
             actor_name=actor_name,
         )

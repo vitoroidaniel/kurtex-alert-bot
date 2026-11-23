@@ -48,7 +48,7 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             sess["user"] = {"id": user["id"], "name": user["name"], "role": user["role"]}
             sess["workspace_csrf"] = "test-csrf"
 
-    def test_reported_case_hidden_from_telegram_bot_and_close_does_not_sync_done(self):
+    def test_telegram_close_leaves_report_on_board_until_manual_close(self):
         created = case_store.workspace_write(
             self.manager,
             {
@@ -90,10 +90,10 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
         client = server.app.test_client()
         self._auth_session(client, self.agent)
         with patch.object(workspace_board, "get_user", return_value=self.agent):
-            board_ids = [c["full_id"] for c in client.get("/api/workspace/board").get_json()["cases"]]
-        self.assertIn("CASE-701", board_ids)
+            board = client.get("/api/workspace/board").get_json()
+        cards = {c["full_id"]: c for c in board["cases"]}
+        self.assertEqual(cards["CASE-701"]["group"], "—")
 
-        # Closing via case_store.close_case (Telegram close) does not sync a Live Board Done history entry.
         closed = case_store.close_case(
             created["id"],
             parts_replaced=True,
@@ -101,12 +101,39 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             closed_by_id=self.agent["id"],
             closed_by_name=self.agent["name"],
         )
-        self.assertEqual(closed["status"], "done")
+        self.assertEqual(closed["status"], "reported")
+        self.assertIsNone(closed["closed_at"])
+        self.assertTrue(closed["telegram_closed_at"])
+        self.assertEqual(closed["replaced_parts"], ["ALT-900"])
         self.assertFalse(any(h.get("action") == "close" for h in closed.get("workspace_history", [])))
+        self.assertEqual(case_store.close_case(created["id"]), closed)
 
         with patch.object(workspace_board, "get_user", return_value=self.agent):
+            board_ids = [c["full_id"] for c in client.get("/api/workspace/board").get_json()["cases"]]
             done_ids = [c["full_id"] for c in client.get("/api/cases?filter=workspace_closed").get_json()["cases"]]
+        self.assertIn("CASE-701", board_ids)
         self.assertNotIn("CASE-701", done_ids)
+
+        edited = case_store.workspace_write(self.agent, {
+            "action": "edit",
+            "fields": {"group_name": "GR Sam – Chișinău"},
+            "revision": case_store.workspace_revision(closed),
+        }, created["id"])
+        self.assertEqual(edited["status"], "reported")
+        with patch.object(workspace_board, "get_user", return_value=self.agent):
+            cards = client.get("/api/workspace/board").get_json()["cases"]
+        self.assertEqual(next(c["group"] for c in cards if c["full_id"] == "CASE-701"), "GR Sam – Chișinău")
+
+        manually_closed = case_store.workspace_write(self.agent, {
+            "action": "close",
+            "revision": case_store.workspace_revision(edited),
+        }, created["id"])
+        self.assertEqual(manually_closed["status"], "done")
+        with patch.object(workspace_board, "get_user", return_value=self.agent):
+            board_ids = [c["full_id"] for c in client.get("/api/workspace/board").get_json()["cases"]]
+            done_ids = [c["full_id"] for c in client.get("/api/cases?filter=workspace_closed").get_json()["cases"]]
+        self.assertNotIn("CASE-701", board_ids)
+        self.assertIn("CASE-701", done_ids)
 
     def test_board_clear_keeps_cases_in_database_and_enforces_roles(self):
         c_active = case_store.workspace_write(

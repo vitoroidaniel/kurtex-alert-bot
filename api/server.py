@@ -287,7 +287,7 @@ def serialize_case(c):
             "id":          (c.get("id") or "")[:8],
             "full_id":     c.get("id") or "",
             "driver":      c.get("driver_name") or "вЂ”",
-            "group":       c.get("group_name") or "вЂ”",
+            "group":       str(c.get("group_name") or c.get("group") or "").strip().replace("вЂ”", "—") or "—",
             "agent":       c.get("agent_name") or "вЂ”",
             "agent_id":    c.get("agent_id"),
             "can_reassign": _workspace_can_manage(c, session.get("user") or {}) if session.get("user") else False,

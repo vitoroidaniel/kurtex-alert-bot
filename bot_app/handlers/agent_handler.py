@@ -63,6 +63,22 @@ def _inactive_bot_case_text(case: dict | None) -> str:
     return "This case is no longer active."
 
 
+def _can_close_in_telegram(case: dict | None, agent_id: int) -> bool:
+    return bool(
+        case
+        and not case.get("telegram_closed_at")
+        and not case.get("closed_at")
+        and (
+            case.get("status") == "assigned"
+            or (
+                case.get("status") == "reported"
+                and not case.get("board_hidden")
+                and str(case.get("agent_id")) == str(agent_id)
+            )
+        )
+    )
+
+
 def _active_case_text(case: dict, index: int | None = None, total: int | None = None) -> str:
     badge = "⏳ <b>Current Case</b>"
     if index is not None and total is not None:
@@ -516,7 +532,7 @@ async def cb_close_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         case_id = query.data.split("|")[1]
         case = await get_case(case_id)
 
-        if not case or case.get("status") != "assigned":
+        if not _can_close_in_telegram(case, update.effective_user.id):
             await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
             return ConversationHandler.END
 
@@ -542,7 +558,7 @@ async def cb_close_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     async with concurrent_ack(query):
         case_id = query.data.split("|", 1)[1]
         case = await get_case(case_id)
-        if not case or case.get("status") != "assigned":
+        if not _can_close_in_telegram(case, update.effective_user.id):
             _clear_close_parts(ctx)
             await safe_edit_message_text(query, _inactive_bot_case_text(case), parse_mode=None, reply_markup=None)
             return
@@ -581,7 +597,7 @@ async def _finish_close(
 ):
     """Persist close and confirm completion cleanly without extra navigation buttons."""
     case = await get_case(case_id)
-    if not case or case.get("status") != "assigned":
+    if not _can_close_in_telegram(case, update.effective_user.id):
         _clear_close_parts(ctx)
         message = _inactive_bot_case_text(case)
         if getattr(update, "callback_query", None):
@@ -606,7 +622,7 @@ async def _finish_close(
             closed_by_id=closer_id,
             closed_by_name=closer_name,
         )
-        if not saved or saved.get("status") != "done":
+        if not saved or (saved.get("status") != "done" and not saved.get("telegram_closed_at")):
             raise RuntimeError("Case close was not saved")
     except Exception:
         logger.exception("Failed to close case %s with replacement details", case_id)
@@ -622,7 +638,8 @@ async def _finish_close(
     user_id = update.effective_user.id
 
     lines = [
-        "✅ <b>Case closed!</b>",
+        "✅ <b>Closed in Telegram. The report stays on the Live Board.</b>"
+        if saved.get("status") == "reported" else "✅ <b>Case closed!</b>",
         "",
         f"📌 <b>Group:</b> {esc_html(case.get('group_name'))}",
         f"👤 <b>Driver:</b> {esc_html(case.get('driver_name'))}",
