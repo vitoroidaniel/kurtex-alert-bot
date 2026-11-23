@@ -206,7 +206,10 @@ class LiveBoardV318TestLaneRoutingTests(unittest.TestCase):
     def test_workspace_create_dummy_routes_to_test_and_manual_override_holds(self):
         with self._auth_patch():
             del_res = self.client.delete("/api/workspace/lanes/test", headers={"X-Workspace-CSRF": "csrf-1"})
-            self.assertEqual(del_res.status_code, 400)
+            self.assertEqual(del_res.status_code, 200)
+            self.assertIn("test", del_res.get_json().get("deleted_builtin_lanes", []))
+            rest_res = self.client.post("/api/workspace/lanes/restore", headers={"X-Workspace-CSRF": "csrf-1"}, json={"lane_id": "test"})
+            self.assertEqual(rest_res.status_code, 200)
 
             # Pure unit 1 / driver 1 / issue 1 auto-moves to test lane
             c_res = self.client.post(

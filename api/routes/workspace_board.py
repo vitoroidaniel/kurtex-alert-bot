@@ -1473,6 +1473,11 @@ def register_workspace_routes(server):
                 for f in (c.get("workspace_attachments") or [])
                 if isinstance(f, dict) and f.get("name")
             )[:400]
+            summary["proofs_count"] = sum(
+                1
+                for f in (c.get("workspace_attachments") or [])
+                if isinstance(f, dict) and str(f.get("category") or "").lower() == "proof"
+            )
             return summary
 
         cursor_raw = request.args.get("cursor", "").strip()

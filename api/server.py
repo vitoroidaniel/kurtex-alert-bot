@@ -341,6 +341,7 @@ def serialize_case(c):
             "location": c.get("location") or "",
             "notes_count": int(bool(c.get("comments") or (c.get("notes") and c.get("notes") != "case reported"))) + len(c.get("workspace_notes") or []),
             "attachment_count": len(c.get("media") or []) + len(c.get("workspace_attachments") or []),
+            "proofs_count": sum(1 for a in (c.get("workspace_attachments") or []) if isinstance(a, dict) and str(a.get("category") or "").lower() == "proof"),
             "status":      c.get("status") or "open",
             "source":      c.get("source") or "telegram",
             "is_test":     bool(c.get("is_test") or c.get("is_testing")),
