@@ -228,6 +228,74 @@ class CaseHeaderAndDeletionTests(unittest.TestCase):
         self.assertTrue(result.get_json()["file_cleanup_pending"])
         self.assertIsNone(case_store.get_case("CASE-NEW"))
 
+    def test_agent_can_move_card_away_and_take_it_back(self):
+        agent_two = {"id": 103, "name": "AgentTwo", "role": "agent"}
+        with db.write_tx(self.data_dir) as conn:
+            conn.execute("INSERT INTO users(id,name,role) VALUES(?,?,?)", (agent_two["id"], agent_two["name"], agent_two["role"]))
+
+        # Agent owns CASE-NEW -> moves it to AgentTwo -> loses can_manage, keeps can_reassign -> takes it back!
+        self.auth(self.agent)
+        move_away = self.client.patch(
+            "/api/workspace/cases/CASE-NEW",
+            headers=self.headers,
+            json={
+                "action": "move",
+                "agent_id": agent_two["id"],
+                "stage": "",
+                "allow_concurrent_move": True,
+                "revision": case_store.workspace_revision(self.case),
+            },
+        )
+        self.assertEqual(move_away.status_code, 200, move_away.get_json())
+
+        board_rows = self.client.get("/api/workspace/board").get_json()["cases"]
+        summary = next(r for r in board_rows if r.get("full_id") == "CASE-NEW")
+        self.assertEqual(str(summary["agent_id"]), str(agent_two["id"]))
+        self.assertFalse(summary["can_manage"])
+        self.assertTrue(summary["can_reassign"])
+
+        detail = self.client.get("/api/case?id=CASE-NEW").get_json()
+        self.assertFalse(detail["can_manage"])
+        self.assertTrue(detail["can_reassign"])
+
+        # Agent moves the card back into their own lane from AgentTwo!
+        move_back = self.client.patch(
+            "/api/workspace/cases/CASE-NEW",
+            headers=self.headers,
+            json={
+                "action": "move",
+                "agent_id": self.agent["id"],
+                "stage": "",
+                "allow_concurrent_move": True,
+                "revision": detail["revision"],
+            },
+        )
+        self.assertEqual(move_back.status_code, 200, move_back.get_json())
+        self.assertEqual(str(move_back.get_json()["case"]["agent_id"]), str(self.agent["id"]))
+
+        # Stage move on another agent's card works too; test cases remain blocked for non-developers.
+        stage_move = self.client.patch(
+            "/api/workspace/cases/CASE-NEW",
+            headers=self.headers,
+            json={
+                "action": "stage",
+                "stage": "monitoring",
+                "allow_concurrent_move": True,
+                "revision": move_back.get_json()["revision"],
+            },
+        )
+        self.assertEqual(stage_move.status_code, 200, stage_move.get_json())
+
+        case_store.workspace_write(self.dev, {"action": "set_test", "is_test": True}, "CASE-NEW")
+        test_detail = self.client.get("/api/case?id=CASE-NEW").get_json()
+        self.assertFalse(test_detail["can_reassign"])
+        blocked_test_move = self.client.patch(
+            "/api/workspace/cases/CASE-NEW",
+            headers=self.headers,
+            json={"action": "move", "agent_id": self.agent["id"], "stage": "", "revision": test_detail["revision"]},
+        )
+        self.assertEqual(blocked_test_move.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -118,6 +118,16 @@ def register_workspace_routes(server):
             or bool(user.get("id") and is_unassigned)
         )
 
+    def _workspace_can_move(case, user):
+        """Any active team member can move/reassign/claim active non-test cases."""
+        role = server._website_role(user.get("role"))
+        if bool(case.get("is_test") or case.get("is_testing")) and role != "developer":
+            return False
+        is_closed = case.get("status") not in ("open", "assigned", "reported") or bool(case.get("closed_at"))
+        if is_closed:
+            return _workspace_can_manage(case, user)
+        return bool(user.get("id")) and role in ("developer", "super_admin", "agent", "manager", "admin")
+
     def _workspace_actor():
         """Recheck current membership for writes; the login cookie is not role authority."""
         user = session.get("user")
@@ -1648,7 +1658,7 @@ def register_workspace_routes(server):
             summary["board_rank"] = float(c.get("board_rank") or 0.0)
             summary["revision"] = workspace_revision(c)
             summary["can_manage"] = _workspace_can_manage(c, actor)
-            summary["can_reassign"] = summary["can_manage"]
+            summary["can_reassign"] = _workspace_can_move(c, actor)
             summary["can_comment"] = (not summary.get("is_test")) or (str(actor.get("role") or "").lower() == "developer")
             can_del_board, can_del_perm = case_delete_permissions(c, actor)
             summary["can_delete_board"] = can_del_board
@@ -2907,6 +2917,7 @@ def register_workspace_routes(server):
 
     # Expose functions on `server` for backwards compatibility with callers/tests
     server._workspace_can_manage = _workspace_can_manage
+    server._workspace_can_move = _workspace_can_move
     server._workspace_actor = _workspace_actor
     server._workspace_actor_read = _workspace_actor_read
     server._workspace_board_version = _workspace_board_version
