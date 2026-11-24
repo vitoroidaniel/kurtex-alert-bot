@@ -303,6 +303,52 @@ class GlobalHistoryTests(unittest.TestCase):
         self.assertEqual(stored["agent_name"], "Maxim_AH_Renamed")
         self.assertEqual(stored["workspace_notes"][1]["author"], "Maxim_AH_Renamed")
 
+    def test_agent_recent_actions_and_version_endpoint(self):
+        c1 = case_store.workspace_write(
+            self.agent_a,
+            {
+                "id": "CASE-RECENT-1",
+                "request_id": "req-recent-1",
+                "driver": "Driver R1",
+                "unit_number": "801",
+                "issue": "Air line issue",
+                "vehicle_type": "truck",
+                "priority": "high",
+                "target_agent": self.agent_a,
+            },
+        )
+        c1 = case_store.workspace_write(
+            self.agent_a,
+            {
+                "action": "edit",
+                "revision": case_store.workspace_revision(c1),
+                "fields": {"shop_info": "TA #104"},
+            },
+            c1["id"],
+        )
+        case_store.workspace_write(
+            self.agent_a,
+            {
+                "action": "note",
+                "text": "Called TA #104",
+                "revision": case_store.workspace_revision(c1),
+            },
+            c1["id"],
+        )
+        self._auth(self.agent_a)
+        res = self.client.get(f"/api/workspace/agents/{self.agent_a['id']}/recent-actions?limit=5")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data["ok"])
+        self.assertGreaterEqual(len(data["events"]), 2)
+        self.assertLessEqual(len(data["events"]), 5)
+        self.assertTrue(all(ev["actor_id"] == str(self.agent_a["id"]) for ev in data["events"]))
+        self.assertNotIn("deleted_snapshot", data["events"][0])
+
+        ver = self.client.get("/api/workspace/version")
+        self.assertEqual(ver.status_code, 200)
+        self.assertTrue(bool(ver.get_json()["build_id"]))
+
 
 if __name__ == "__main__":
     unittest.main()

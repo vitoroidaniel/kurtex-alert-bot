@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import re
 import shutil
 import time
@@ -63,6 +64,23 @@ from backend.storage.preference_store import (
 from backend.storage.user_store import get_all_user_dicts, get_user
 
 _REALTIME_SALT = "kurtex-workspace-ws-v1"
+
+
+def _compute_backend_build_id() -> str:
+    dep = (os.getenv("RAILWAY_DEPLOYMENT_ID") or os.getenv("RAILWAY_GIT_COMMIT_SHA") or "").strip()
+    if dep:
+        return dep[:12]
+    root = Path(__file__).resolve().parents[2]
+    h = hashlib.sha256()
+    for rel in ("api/server.py", "api/routes/workspace_board.py", "backend/storage/case_store.py"):
+        fp = root / rel
+        if fp.is_file():
+            st = fp.stat()
+            h.update(f"{rel}:{st.st_mtime_ns}:{st.st_size};".encode("utf-8"))
+    return h.hexdigest()[:12]
+
+
+_BACKEND_BUILD_ID = _compute_backend_build_id()
 _presence_seq_lock = Lock()
 _presence_seq = 0
 
@@ -1528,6 +1546,43 @@ def register_workspace_routes(server):
             "actors": merged_actors,
         })
 
+    @app.route("/api/workspace/agents/<agent_id>/recent-actions", methods=["GET"])
+    def api_workspace_agent_recent_actions(agent_id):
+        """Return up to 5 latest workspace actions for an agent (usable by any active team member)."""
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        role = str(actor.get("role") or "").lower()
+        target_id = str(agent_id or "").strip()
+        if not target_id:
+            return jsonify({"ok": True, "agent_id": "", "events": []})
+        try:
+            limit = max(1, min(int(request.args.get("limit") or 5), 10))
+        except (TypeError, ValueError):
+            limit = 5
+        data = case_store.get_global_workspace_history(
+            actor_filter=target_id,
+            action_filter="all",
+            days=30,
+            query="",
+            include_test=(role == "developer"),
+            limit=limit,
+            offset=0,
+        )
+        events = list(data.get("events") or [])[:limit]
+        if role not in ("developer", "super_admin"):
+            for ev in events:
+                if isinstance(ev, dict):
+                    ev.pop("deleted_snapshot", None)
+        return jsonify({"ok": True, "agent_id": target_id, "events": events})
+
+    @app.route("/api/workspace/version", methods=["GET"])
+    def api_workspace_version():
+        """Lightweight backend build identifier for live update checks."""
+        resp = jsonify({"ok": True, "build_id": _BACKEND_BUILD_ID})
+        resp.headers["Cache-Control"] = "no-store, max-age=0"
+        return resp
+
     @app.route("/api/workspace/presence", methods=["GET", "POST"])
     def api_workspace_presence():
         """Return live team members, or record a short-lived authenticated session."""
@@ -1568,7 +1623,7 @@ def register_workspace_routes(server):
         version = _workspace_board_version(actor)
         latest_cursor = kurtex_db.get_latest_event_cursor(_data_dir())
         if since and version and hmac.compare_digest(since, version):
-            return jsonify({"unchanged": True, "version": version, "cursor": latest_cursor})
+            return jsonify({"unchanged": True, "version": version, "cursor": latest_cursor, "build_id": _BACKEND_BUILD_ID})
 
         def _agent_key(value):
             raw = str(value or "").strip()
@@ -1724,6 +1779,7 @@ def register_workspace_routes(server):
             "has_more": False,
             "version": version,
             "cursor": latest_cursor,
+            "build_id": _BACKEND_BUILD_ID,
             "unchanged": False,
         })
 
