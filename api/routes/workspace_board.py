@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from threading import Lock
 
-from flask import g, jsonify, request, send_file, session
+from flask import Response, g, jsonify, request, send_file, session, stream_with_context
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.utils import secure_filename
 
@@ -40,7 +40,7 @@ from backend.storage.board_order import (
     save_issue_categories,
     save_order,
 )
-from backend.storage.board_presence import heartbeat, snapshot
+from backend.storage.board_presence import ACTIONS as PRESENCE_ACTIONS, heartbeat, remove_session, snapshot
 from backend.storage.case_store import (
     clear_live_board_cases,
     remove_live_board_case,
@@ -966,13 +966,38 @@ def register_workspace_routes(server):
         version = _workspace_board_version(actor)
         cursor = kurtex_db.get_latest_event_cursor(_data_dir())
         pres_seq = _get_presence_seq()
+        ws_session_id = str(uuid.uuid4())
+        ws_has_presence = False
         ws.send(json.dumps({"type": "ready", "version": version, "cursor": cursor}))
         last_heartbeat = last_auth_check = last_version_check = connected_at = time.monotonic()
-        while True:
-            try:
+        try:
+            while True:
                 incoming = ws.receive(timeout=0.35)
                 if incoming:
-                    pass
+                    try:
+                        in_msg = json.loads(incoming)
+                    except (TypeError, ValueError):
+                        in_msg = None
+                    if isinstance(in_msg, dict) and in_msg.get("type") == "presence":
+                        p_act = str(in_msg.get("action") or "idle").strip().lower()
+                        if p_act in PRESENCE_ACTIONS:
+                            u_rec = get_user(user_id) or {}
+                            u_name = str(u_rec.get("name") or u_rec.get("first_name") or "Teammate").strip() or "Teammate"
+                            try:
+                                heartbeat(
+                                    ws_session_id,
+                                    user_id,
+                                    u_name,
+                                    p_act,
+                                    str(in_msg.get("case_id") or "")[:100],
+                                    str(in_msg.get("field") or "")[:60],
+                                    _data_dir(),
+                                    draft=str(in_msg.get("draft") or "")[:180],
+                                )
+                                ws_has_presence = True
+                                _bump_presence_seq()
+                            except ValueError:
+                                pass
                 now = time.monotonic()
                 if now - connected_at > 1800:
                     ws.close()
@@ -983,7 +1008,7 @@ def register_workspace_routes(server):
                         ws.close()
                         return
                     last_auth_check = now
-                if now - last_version_check >= 1.0:
+                if now - last_version_check >= 0.8:
                     last_version_check = now
                     next_version = _workspace_board_version(actor)
                     if next_version != version:
@@ -1001,8 +1026,69 @@ def register_workspace_routes(server):
                 if now - last_heartbeat >= 20:
                     ws.send(json.dumps({"type": "heartbeat"}))
                     last_heartbeat = now
-            except Exception:
-                return
+        except Exception:
+            return
+        finally:
+            if ws_has_presence:
+                try:
+                    remove_session(ws_session_id, _data_dir())
+                    _bump_presence_seq()
+                except Exception:
+                    pass
+
+    @app.route("/api/workspace/stream", methods=["GET"])
+    def api_workspace_stream():
+        """Same-origin SSE fallback stream for live board deltas & edit presence."""
+        actor, error = _workspace_actor_read()
+        if error:
+            return error
+        user_id = int(actor["id"])
+        try:
+            max_seconds = max(1.0, min(float(request.args.get("max_seconds") or 75), 110.0))
+        except (TypeError, ValueError):
+            max_seconds = 75.0
+        version = _workspace_board_version(actor)
+        cursor = kurtex_db.get_latest_event_cursor(_data_dir())
+        pres_seq = _get_presence_seq()
+
+        def _fmt_sse(ev_name, payload):
+            return f"event: {ev_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        def _stream():
+            nonlocal version, cursor, pres_seq
+            started = time.monotonic()
+            last_ping = started
+            yield "retry: 1500\n\n"
+            yield _fmt_sse("ready", {
+                "version": version,
+                "cursor": cursor,
+                "presence": snapshot(user_id, _data_dir()),
+            })
+            while (time.monotonic() - started) < max_seconds:
+                time.sleep(0.55)
+                next_version = _workspace_board_version(actor)
+                if next_version != version:
+                    version = next_version
+                    events = kurtex_db.get_events_since(cursor, limit=50, data_dir=_data_dir())
+                    if events:
+                        cursor = events[-1]["cursor"]
+                    else:
+                        cursor = kurtex_db.get_latest_event_cursor(_data_dir())
+                    yield _fmt_sse("changed", {"version": version, "cursor": cursor, "events": events})
+                next_pres_seq = _get_presence_seq()
+                if next_pres_seq != pres_seq:
+                    pres_seq = next_pres_seq
+                    yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir())})
+                now = time.monotonic()
+                if now - last_ping >= 18.0:
+                    last_ping = now
+                    yield _fmt_sse("ping", {"ts": int(time.time())})
+
+        return Response(
+            stream_with_context(_stream()),
+            content_type="text/event-stream; charset=utf-8",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.route("/api/workspace/order", methods=["GET", "PUT"])
     def api_workspace_order():
@@ -1342,24 +1428,39 @@ def register_workspace_routes(server):
             limit=limit,
             offset=offset,
         )
-        # Merge active team roster so every agent appears in the actor dropdown even with 0 edits
-        roster_actors = {str(a["key"]): dict(a) for a in data.get("actors", []) if a.get("key")}
+        # Merge active team roster canonically so each member appears once and synthetic labels never show up
+        synthetic_low = {"", "system", "team member", "deleted record (legacy)", "unknown"}
+        roster_actors = {}
+        name_to_key = {}
+        for a in data.get("actors", []):
+            uname = str(a.get("name") or "").strip()
+            if uname.lower() in synthetic_low:
+                continue
+            k = str(a.get("key") or uname)
+            roster_actors[k] = dict(a)
+            name_to_key[uname.lower()] = k
         for u in get_all_user_dicts():
             uid = str(u.get("id") or "")
             uname = str(u.get("name") or "").strip()
-            if not uid or not uname:
+            urole = str(u.get("role") or "").strip().lower()
+            if not uid or not uname or uname.lower() in synthetic_low:
                 continue
-            if uid not in roster_actors:
-                # Avoid duplicate name entry when legacy events lacked author_id
-                if any(str(existing.get("name") or "").strip().lower() == uname.lower() and not existing.get("id") for existing in roster_actors.values()):
-                    for k, existing in list(roster_actors.items()):
-                        if str(existing.get("name") or "").strip().lower() == uname.lower() and not existing.get("id"):
-                            existing["id"] = uid
-                            existing["key"] = uid
-                            roster_actors[uid] = roster_actors.pop(k)
-                            break
-                else:
-                    roster_actors[uid] = {"key": uid, "id": uid, "name": uname, "count": 0}
+            if uid in roster_actors:
+                if urole and not roster_actors[uid].get("role"):
+                    roster_actors[uid]["role"] = urole
+                continue
+            existing_key = name_to_key.get(uname.lower())
+            if existing_key and existing_key in roster_actors:
+                existing = roster_actors.pop(existing_key)
+                existing["id"] = uid
+                existing["key"] = uid
+                if urole and not existing.get("role"):
+                    existing["role"] = urole
+                roster_actors[uid] = existing
+                name_to_key[uname.lower()] = uid
+            else:
+                roster_actors[uid] = {"key": uid, "id": uid, "name": uname, "role": urole, "count": 0}
+                name_to_key[uname.lower()] = uid
         merged_actors = sorted(roster_actors.values(), key=lambda a: (-int(a.get("count") or 0), str(a.get("name") or "").lower()))
         return jsonify({
             "ok": True,

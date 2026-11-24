@@ -2035,16 +2035,40 @@ def get_global_workspace_history(
         cutoff_iso = (utc_now() - timedelta(days=int(days))).isoformat()
 
     raw_events: list[dict] = []
+    synthetic_actor_names = {"", "system", "team member", "deleted record (legacy)", "unknown"}
     with db.read_conn(_storage_dir()) as conn:
         user_rows = conn.execute("SELECT id, name, username, role FROM users").fetchall()
         users_by_id: dict[str, dict] = {}
         users_by_name: dict[str, str] = {}
+        users_by_username: dict[str, str] = {}
         for u in user_rows:
             uid = str(u["id"])
             uname = str(u["name"] or "").strip()
-            users_by_id[uid] = {"id": uid, "name": uname or uid, "role": str(u["role"] or "agent")}
+            uhandle = str(u["username"] or "").strip().lstrip("@").lower()
+            users_by_id[uid] = {"id": uid, "name": uname or uid, "username": uhandle, "role": str(u["role"] or "agent")}
             if uname:
                 users_by_name[uname.lower()] = uid
+            if uhandle:
+                users_by_username[uhandle] = uid
+
+        def _canonical_actor(raw_id: str, raw_name: str, raw_role: str = "") -> tuple[str, str, str]:
+            rid = str(raw_id or "").strip()
+            rname = str(raw_name or "").strip()
+            rlow = rname.lower()
+            rhandle = rlow.lstrip("@")
+            uid = ""
+            if rid and rid in users_by_id:
+                uid = rid
+            elif rlow and rlow in users_by_name:
+                uid = users_by_name[rlow]
+            elif rhandle and rhandle in users_by_username:
+                uid = users_by_username[rhandle]
+            if uid and uid in users_by_id:
+                urec = users_by_id[uid]
+                cname = urec["name"]
+                crole = str(raw_role or urec.get("role") or "").strip().lower()
+                return uid, cname, crole
+            return rid, rname, str(raw_role or "").strip().lower()
 
         case_rows = conn.execute("SELECT id, status, agent_id, unit_number, driver_name, data_json FROM cases").fetchall()
         present_case_ids: set[str] = set()
@@ -2074,15 +2098,11 @@ def get_global_workspace_history(
                 created_at = str(h.get("created_at") or "").strip()
                 if cutoff_iso and created_at and created_at < cutoff_iso:
                     continue
-                author_name = str(h.get("author") or h.get("author_name") or "System").strip() or "System"
-                author_id = str(h.get("author_id") or "").strip()
-                if not author_id and author_name.lower() in users_by_name:
-                    author_id = users_by_name[author_name.lower()]
-                if author_id and author_id in users_by_id and (not h.get("author") or author_name == "Team member"):
-                    author_name = users_by_id[author_id]["name"]
-                author_role = str(h.get("author_role") or "").strip().lower()
-                if not author_role and author_id and author_id in users_by_id:
-                    author_role = str(users_by_id[author_id].get("role") or "").strip().lower()
+                raw_name = str(h.get("author") or h.get("author_name") or "").strip()
+                raw_id = str(h.get("author_id") or "").strip()
+                raw_role = str(h.get("author_role") or "").strip().lower()
+                author_id, author_name, author_role = _canonical_actor(raw_id, raw_name, raw_role)
+                author_name = author_name or "System"
                 cat = _GLOBAL_HISTORY_CATEGORY.get(act, "other")
                 raw_events.append({
                     "event_id": f"{cid}:{idx}:{created_at}:{act}",
@@ -2138,15 +2158,10 @@ def get_global_workspace_history(
             del_is_test = bool(rec.get("is_test"))
             if del_is_test and not include_test:
                 return
-            d_actor_id = str(rec.get("actor_id") or row_actor_id or "").strip()
-            d_actor_name = str(rec.get("actor_name") or row_actor_name or "").strip()
-            if not d_actor_name and d_actor_id and d_actor_id in users_by_id:
-                d_actor_name = users_by_id[d_actor_id]["name"]
-            if not d_actor_id and d_actor_name and d_actor_name.lower() in users_by_name:
-                d_actor_id = users_by_name[d_actor_name.lower()]
-            d_actor_role = str(rec.get("actor_role") or "").strip().lower()
-            if not d_actor_role and d_actor_id and d_actor_id in users_by_id:
-                d_actor_role = str(users_by_id[d_actor_id].get("role") or "").strip().lower()
+            raw_id = str(rec.get("actor_id") or row_actor_id or "").strip()
+            raw_name = str(rec.get("actor_name") or row_actor_name or "").strip()
+            raw_role = str(rec.get("actor_role") or "").strip().lower()
+            d_actor_id, d_actor_name, d_actor_role = _canonical_actor(raw_id, raw_name, raw_role)
             d_unit = str(rec.get("unit_number") or "").strip()
             d_driver = str(rec.get("driver_name") or "").strip()
             d_issue = str(rec.get("issue_text") or "").strip()
@@ -2224,21 +2239,34 @@ def get_global_workspace_history(
                 continue
             _append_deleted_event(dcid, f"delrec:{dcid}", created_at, "", "", rec)
 
-    # Distinct actors across the time window before actor/action narrowing
+    # Distinct canonical team actors across the time window (merge IDs/names cleanly and omit synthetic placeholders)
     actor_counts: dict[str, dict] = {}
     for ev in raw_events:
-        key = ev["actor_id"] or f"name:{ev['actor_name'].lower()}"
-        if key not in actor_counts:
-            actor_counts[key] = {
-                "key": ev["actor_id"] or ev["actor_name"],
-                "id": ev["actor_id"],
-                "name": ev["actor_name"],
+        aname = str(ev.get("actor_name") or "").strip()
+        aname_low = aname.lower()
+        aid = str(ev.get("actor_id") or "").strip()
+        if aname_low in synthetic_actor_names:
+            continue
+        if aid and aid in users_by_id:
+            canon_key = aid
+        else:
+            canon_key = f"name:{aname_low}"
+        if canon_key not in actor_counts:
+            actor_counts[canon_key] = {
+                "key": aid or aname,
+                "id": aid,
+                "name": aname,
                 "role": ev.get("actor_role") or "",
                 "count": 0,
             }
-        elif not actor_counts[key].get("role") and ev.get("actor_role"):
-            actor_counts[key]["role"] = ev.get("actor_role") or ""
-        actor_counts[key]["count"] += 1
+        else:
+            existing = actor_counts[canon_key]
+            if aid and aid in users_by_id:
+                existing["id"] = aid
+                existing["key"] = aid
+            if not existing.get("role") and ev.get("actor_role"):
+                existing["role"] = ev.get("actor_role") or ""
+        actor_counts[canon_key]["count"] += 1
 
     # Filter by actor
     if actor_raw and actor_raw.lower() != "all":

@@ -10,7 +10,7 @@ os.environ.setdefault("BOT_TOKEN", "123456:TESTTOKEN")
 from api import server
 from api.routes import workspace_board
 from backend.ai.fleet_knowledge import FleetKnowledgeStore
-from backend.storage import case_store, db, preference_store, user_store
+from backend.storage import board_presence, case_store, db, preference_store, user_store
 
 
 class GlobalHistoryTests(unittest.TestCase):
@@ -187,6 +187,68 @@ class GlobalHistoryTests(unittest.TestCase):
         self.assertEqual(dev_del_ev["actor_role"], "developer")
         self.assertEqual(dev_del_ev["unit_number"], "777")
         self.assertTrue(any(a.get("name") == "Dev" and a.get("role") == "developer" for a in dev_body["actors"]))
+
+    def test_canonical_actor_merging_excludes_legacy_placeholder_and_merges_aliases(self):
+        # Create case with two legacy history entries for the same user under mixed handle/name/no-id
+        c = case_store.workspace_write(
+            self.manager,
+            {
+                "id": "CASE-ALIAS",
+                "request_id": "req-alias",
+                "driver": "Sam Driver",
+                "unit_number": "410",
+                "issue": "Wheel seal",
+                "vehicle_type": "truck",
+                "priority": "high",
+                "target_agent": self.agent_a,
+            },
+        )
+        # Inject mixed legacy author variants (username 'alexr' with no ID + display name 'Alex' with stale id)
+        import json
+        with db.write_tx(self.data_dir) as conn:
+            row = conn.execute("SELECT data_json FROM cases WHERE id=?", (c["id"],)).fetchone()
+            payload = json.loads(row["data_json"])
+            payload.setdefault("workspace_history", []).extend([
+                {"action": "edit", "author": "alexr", "author_id": "", "created_at": payload["opened_at"], "fields": ["shop_info"]},
+                {"action": "edit", "author": "Alex", "author_id": "legacy-alex", "created_at": payload["opened_at"], "fields": ["amount"]},
+            ])
+            # Also add an unattributed deleted record marker (triggers Deleted Record (Legacy))
+            conn.execute(
+                "INSERT OR REPLACE INTO kv_state(key, data_json) VALUES (?,?)",
+                ("workspace_deleted_records", json.dumps([{"case_id": "DEL-LEGACY-1", "unit_number": "901", "issue_text": "Old broken latch", "created_at": payload["opened_at"]}])),
+            )
+            conn.execute("UPDATE cases SET data_json=? WHERE id=?", (json.dumps(payload), c["id"]))
+
+        self._auth(self.manager)
+        body = self.client.get("/api/workspace/history").get_json()
+        self.assertTrue(body["ok"])
+        names = [a["name"] for a in body["actors"]]
+        self.assertEqual(names.count("Alex"), 1, f"Alex duplicated in actors: {body['actors']}")
+        alex_entry = next(a for a in body["actors"] if a["name"] == "Alex")
+        self.assertEqual(alex_entry["count"], 2)
+        self.assertNotIn("Deleted Record (Legacy)", names)
+        self.assertTrue(any(e.get("case_id") == "DEL-LEGACY-1" for e in body["events"]))
+
+    def test_realtime_sse_stream_and_presence_cleanup(self):
+        import uuid
+        sid = str(uuid.uuid4())
+        board_presence.heartbeat(sid, self.agent_a["id"], "Alex", "editing", "CASE-1", "shop_info", self.data_dir, draft="Love's")
+        snap = board_presence.snapshot(self.manager["id"], self.data_dir)
+        self.assertEqual(len(snap["peers"]), 1)
+        self.assertEqual(snap["peers"][0]["action"], "editing")
+
+        self._auth(self.manager)
+        res = self.client.get("/api/workspace/stream?max_seconds=1.0", headers={"Accept": "text/event-stream"})
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("text/event-stream", res.content_type)
+        raw_sse = res.get_data(as_text=True)
+        self.assertIn("event: ready", raw_sse)
+        self.assertIn('"editing"', raw_sse)
+
+        # Removing session deletes ephemeral row immediately
+        board_presence.remove_session(sid, self.data_dir)
+        snap2 = board_presence.snapshot(self.manager["id"], self.data_dir)
+        self.assertEqual(snap2["peers"], [])
 
 
 if __name__ == "__main__":

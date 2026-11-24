@@ -55,6 +55,15 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
         )
 
 
+def remove_session(session_id, data_dir=None):
+    """Remove an ephemeral session immediately when a realtime socket closes."""
+    if not isinstance(session_id, str) or not _UUID.fullmatch(session_id):
+        return
+    with db.write_tx(data_dir) as conn:
+        _ensure_table(conn, data_dir)
+        conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
+
+
 def snapshot(current_user, data_dir=None):
     now = time.time()
     with db.read_conn(data_dir) as conn:
