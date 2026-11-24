@@ -260,6 +260,49 @@ class GlobalHistoryTests(unittest.TestCase):
         snap2 = board_presence.snapshot(self.manager["id"], self.data_dir)
         self.assertEqual(snap2["peers"], [])
 
+    def test_case_notes_normalize_canonical_author_names_and_sync_renames(self):
+        # Simulate an agent whose notes contain legacy alias/username vs current display name
+        uid = 33001
+        user_store.add_user(uid, "Maxim_AH", "maximka", "agent")
+        self.agent_m = {"id": uid, "name": "Maxim_AH", "role": "agent"}
+        c = case_store.workspace_write(
+            self.manager,
+            {
+                "id": "CASE-NOTES-MAXIM",
+                "request_id": "req-maxim-1",
+                "driver": "Max Driver",
+                "unit_number": "712",
+                "issue": "Coolant leak",
+                "vehicle_type": "truck",
+                "priority": "high",
+                "target_agent": self.agent_m,
+            },
+        )
+        import json
+        with db.write_tx(self.data_dir) as conn:
+            row = conn.execute("SELECT data_json FROM cases WHERE id=?", (c["id"],)).fetchone()
+            payload = json.loads(row["data_json"])
+            payload["workspace_notes"] = [
+                {"id": "n1", "author": "maximka", "author_id": "", "author_role": "agent", "text": "Called shop", "created_at": payload["opened_at"]},
+                {"id": "n2", "author": "Old Name", "author_id": str(uid), "author_role": "agent", "text": "ETA 2 hours", "created_at": payload["opened_at"]},
+                {"id": "n3", "author": "Maxim_AH", "author_id": str(uid), "author_role": "agent", "text": "Approved", "created_at": payload["opened_at"]},
+            ]
+            conn.execute("UPDATE cases SET data_json=? WHERE id=?", (json.dumps(payload), c["id"]))
+
+        self._auth(self.manager)
+        detail = self.client.get(f"/api/case?id={c['id']}").get_json()
+        authors = [n["author"] for n in detail["workspace_notes"]]
+        author_ids = [n["author_id"] for n in detail["workspace_notes"]]
+        self.assertEqual(authors, ["Maxim_AH", "Maxim_AH", "Maxim_AH"])
+        self.assertEqual(author_ids, [str(uid), str(uid), str(uid)])
+
+        # Also test propagating a future rename across stored notes
+        updated_cnt = case_store.sync_user_display_on_cases(uid, "Maxim_AH_Renamed", "maxim_ah")
+        self.assertEqual(updated_cnt, 1)
+        stored = case_store.get_case(c["id"])
+        self.assertEqual(stored["agent_name"], "Maxim_AH_Renamed")
+        self.assertEqual(stored["workspace_notes"][1]["author"], "Maxim_AH_Renamed")
+
 
 if __name__ == "__main__":
     unittest.main()

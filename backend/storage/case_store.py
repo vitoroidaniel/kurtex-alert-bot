@@ -1556,17 +1556,15 @@ def close_all_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
 
 
 def sync_user_display_on_cases(user_id: int, name: str, username: str) -> int:
-    """Propagate a user's updated display name/@username across their active Live Board cases."""
+    """Propagate a user's updated display name/@username across active cases and notes."""
     sdir = _storage_dir()
     clean_name = str(name or "").strip()
     clean_uname = str(username or "").strip().lstrip("@")
+    uid_str = str(user_id)
     updated = 0
     now = now_iso()
     with db.write_tx(sdir) as conn:
-        rows = conn.execute(
-            "SELECT id, data_json FROM cases WHERE agent_id=? AND status IN ('open','assigned','reported')",
-            (int(user_id),),
-        ).fetchall()
+        rows = conn.execute("SELECT id, data_json FROM cases").fetchall()
         for r in rows:
             try:
                 c = json.loads(r["data_json"])
@@ -1574,13 +1572,31 @@ def sync_user_display_on_cases(user_id: int, name: str, username: str) -> int:
                 continue
             if not isinstance(c, dict):
                 continue
-            if c.get("agent_name") == clean_name and c.get("agent_username", "") == clean_uname:
+            changed = False
+            if str(c.get("agent_id") or "") == uid_str and c.get("status") in ("open", "assigned", "reported"):
+                if c.get("agent_name") != clean_name or c.get("agent_username", "") != clean_uname:
+                    c["agent_name"] = clean_name
+                    c["agent_username"] = clean_uname
+                    changed = True
+            if clean_name:
+                for note in (c.get("workspace_notes") or []):
+                    if isinstance(note, dict) and str(note.get("author_id") or "").strip() == uid_str:
+                        if note.get("author") != clean_name:
+                            note["author"] = clean_name
+                            changed = True
+            if not changed:
                 continue
-            c["agent_name"] = clean_name
-            c["agent_username"] = clean_uname
             c["updated_at"] = now
-            _upsert_case_row(conn, c, event_type="updated", actor_id=str(user_id), actor_name=clean_name)
+            _upsert_case_row(conn, c, event_type="updated", actor_id=uid_str, actor_name=clean_name)
             updated += 1
+        if clean_name:
+            try:
+                conn.execute(
+                    "UPDATE case_notes SET author_name=? WHERE author_id=?",
+                    (clean_name, uid_str),
+                )
+            except Exception:
+                pass
     return updated
 
 

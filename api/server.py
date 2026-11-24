@@ -4216,25 +4216,51 @@ def _current_viewer_role(session_user):
 
 def _normalize_case_notes(notes):
     from backend.storage.user_store import get_all_user_dicts
-    users_by_id = {
-        str(u["id"]): _website_role(u.get("role"))
-        for u in get_all_user_dicts()
-        if isinstance(u, dict) and u.get("id") is not None
-    }
+    users_by_id = {}
+    users_by_username = {}
+    name_buckets = {}
+    for u in get_all_user_dicts():
+        if not isinstance(u, dict) or u.get("id") is None:
+            continue
+        uid = str(u["id"]).strip()
+        users_by_id[uid] = u
+        uname = str(u.get("username") or "").strip().lstrip("@").lower()
+        if uname:
+            users_by_username[uname] = u
+        dname = str(u.get("name") or "").strip().lower()
+        if dname:
+            name_buckets.setdefault(dname, []).append(u)
+    users_by_name = {k: v[0] for k, v in name_buckets.items() if len(v) == 1}
     normalized = []
     for raw in (notes or []):
         if not isinstance(raw, dict):
             continue
         item = dict(raw)
         aid = str(item.get("author_id") or "").strip()
+        raw_author = str(item.get("author") or "").strip()
+        low_author = raw_author.lower()
+        low_handle = low_author.lstrip("@")
         if aid == "system" or item.get("system") or str(item.get("author_role") or "").lower() == "system":
             item["author_role"] = "system"
-            if not item.get("author"):
+            if not raw_author:
                 item["author"] = "System"
-        elif aid and aid in users_by_id:
-            item["author_role"] = users_by_id[aid]
-        elif item.get("author_role"):
-            item["author_role"] = _website_role(item.get("author_role"))
+        else:
+            matched_user = None
+            if aid and aid in users_by_id:
+                matched_user = users_by_id[aid]
+            elif low_handle and low_handle in users_by_username:
+                matched_user = users_by_username[low_handle]
+            elif low_author and low_author in users_by_name:
+                matched_user = users_by_name[low_author]
+            if matched_user:
+                canon_name = str(matched_user.get("name") or "").strip()
+                if canon_name:
+                    item["author"] = canon_name
+                if not aid and matched_user.get("id") is not None:
+                    item["author_id"] = str(matched_user["id"])
+                item["author_role"] = _website_role(matched_user.get("role"))
+            elif item.get("author_role"):
+                item["author_role"] = _website_role(item.get("author_role"))
         normalized.append(item)
     return normalized
 

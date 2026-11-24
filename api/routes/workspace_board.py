@@ -1617,9 +1617,12 @@ def register_workspace_routes(server):
                 if n.get("created_at")
             ]
             if human_notes:
+                last_aid = str(human_notes[-1].get("author_id") or "")
+                last_author_rec = roster_by_id.get(_agent_key(last_aid))
+                last_canon_name = str((last_author_rec or {}).get("name") or "").strip()
                 summary["last_note_at"] = str(human_notes[-1].get("created_at") or "")
-                summary["last_note_author_id"] = str(human_notes[-1].get("author_id") or "")
-                summary["last_note_author"] = str(human_notes[-1].get("author") or "")
+                summary["last_note_author_id"] = last_aid
+                summary["last_note_author"] = last_canon_name or str(human_notes[-1].get("author") or "")
             else:
                 summary["last_note_at"] = ""
                 summary["last_note_author_id"] = ""
