@@ -232,20 +232,30 @@ class GlobalHistoryTests(unittest.TestCase):
     def test_realtime_sse_stream_and_presence_cleanup(self):
         import uuid
         sid = str(uuid.uuid4())
+        sid_idle = str(uuid.uuid4())
         board_presence.heartbeat(sid, self.agent_a["id"], "Alex", "editing", "CASE-1", "shop_info", self.data_dir, draft="Love's")
+        # Even if a second tab/transport writes a newer 'idle' heartbeat, 'editing' stays prioritized.
+        board_presence.heartbeat(sid_idle, self.agent_a["id"], "Alex", "idle", "", "", self.data_dir)
         snap = board_presence.snapshot(self.manager["id"], self.data_dir)
         self.assertEqual(len(snap["peers"]), 1)
         self.assertEqual(snap["peers"][0]["action"], "editing")
+        self.assertEqual(snap["online"], 1)
 
         self._auth(self.manager)
+        agents_payload = self.client.get("/api/workspace/agents").get_json()
+        alex_roster = next(a for a in agents_payload["agents"] if a["id"] == self.agent_a["id"])
+        self.assertTrue(alex_roster["photo_url"].startswith("/api/avatar/"))
+
         res = self.client.get("/api/workspace/stream?max_seconds=1.0", headers={"Accept": "text/event-stream"})
         self.assertEqual(res.status_code, 200)
         self.assertIn("text/event-stream", res.content_type)
         raw_sse = res.get_data(as_text=True)
         self.assertIn("event: ready", raw_sse)
         self.assertIn('"editing"', raw_sse)
+        self.assertIn('"online": 2', raw_sse)
 
-        # Removing session deletes ephemeral row immediately
+        # Action 'left' and remove_session clean up immediately
+        board_presence.heartbeat(sid_idle, self.agent_a["id"], "Alex", "left", "", "", self.data_dir)
         board_presence.remove_session(sid, self.data_dir)
         snap2 = board_presence.snapshot(self.manager["id"], self.data_dir)
         self.assertEqual(snap2["peers"], [])

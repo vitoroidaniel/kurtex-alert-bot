@@ -221,6 +221,8 @@ def register_workspace_routes(server):
                     "name": u["name"],
                     "username": u.get("username", ""),
                     "role": server._website_role(u.get("role")),
+                    "photo_url": str(u.get("photo_url") or "").strip()
+                    or (f"/api/avatar/{u['id']}" if str(u.get("id") or "").isdigit() else ""),
                 }
                 for u in all_users
                 if u.get("role") in ("agent", "super_admin", "developer", "manager", "admin") and u.get("name")
@@ -966,10 +968,24 @@ def register_workspace_routes(server):
             return
         version = _workspace_board_version(actor)
         cursor = kurtex_db.get_latest_event_cursor(_data_dir())
-        pres_seq = _get_presence_seq()
         ws_session_id = str(uuid.uuid4())
         ws_has_presence = False
-        ws.send(json.dumps({"type": "ready", "version": version, "cursor": cursor}))
+        u_rec = get_user(user_id) or {}
+        u_name = str(u_rec.get("name") or u_rec.get("first_name") or "Teammate").strip() or "Teammate"
+        ws_cur_action, ws_cur_case, ws_cur_field, ws_cur_draft = "idle", "", "", ""
+        try:
+            heartbeat(ws_session_id, user_id, u_name, "idle", "", "", _data_dir())
+            ws_has_presence = True
+            _bump_presence_seq()
+        except Exception:
+            pass
+        pres_seq = _get_presence_seq()
+        ws.send(json.dumps({
+            "type": "ready",
+            "version": version,
+            "cursor": cursor,
+            "presence": snapshot(user_id, _data_dir()),
+        }))
         last_heartbeat = last_auth_check = last_version_check = connected_at = time.monotonic()
         try:
             while True:
@@ -984,18 +1000,22 @@ def register_workspace_routes(server):
                         if p_act in PRESENCE_ACTIONS:
                             u_rec = get_user(user_id) or {}
                             u_name = str(u_rec.get("name") or u_rec.get("first_name") or "Teammate").strip() or "Teammate"
+                            ws_cur_action = p_act
+                            ws_cur_case = str(in_msg.get("case_id") or "")[:100]
+                            ws_cur_field = str(in_msg.get("field") or "")[:60]
+                            ws_cur_draft = str(in_msg.get("draft") or "")[:180]
                             try:
                                 heartbeat(
                                     ws_session_id,
                                     user_id,
                                     u_name,
-                                    p_act,
-                                    str(in_msg.get("case_id") or "")[:100],
-                                    str(in_msg.get("field") or "")[:60],
+                                    ws_cur_action,
+                                    ws_cur_case,
+                                    ws_cur_field,
                                     _data_dir(),
-                                    draft=str(in_msg.get("draft") or "")[:180],
+                                    draft=ws_cur_draft,
                                 )
-                                ws_has_presence = True
+                                ws_has_presence = p_act != "left"
                                 _bump_presence_seq()
                             except ValueError:
                                 pass
@@ -1025,6 +1045,20 @@ def register_workspace_routes(server):
                     pres_seq = next_pres_seq
                     ws.send(json.dumps({"type": "presence", "presence": snapshot(user_id, _data_dir())}))
                 if now - last_heartbeat >= 20:
+                    if ws_has_presence and ws_cur_action != "left":
+                        try:
+                            heartbeat(
+                                ws_session_id,
+                                user_id,
+                                u_name,
+                                ws_cur_action,
+                                ws_cur_case,
+                                ws_cur_field,
+                                _data_dir(),
+                                draft=ws_cur_draft,
+                            )
+                        except Exception:
+                            pass
                     ws.send(json.dumps({"type": "heartbeat"}))
                     last_heartbeat = now
         except Exception:
@@ -1044,12 +1078,21 @@ def register_workspace_routes(server):
         if error:
             return error
         user_id = int(actor["id"])
+        user_name = str(actor.get("name") or actor.get("first_name") or "Teammate").strip() or "Teammate"
         try:
             max_seconds = max(1.0, min(float(request.args.get("max_seconds") or 75), 110.0))
         except (TypeError, ValueError):
             max_seconds = 75.0
         version = _workspace_board_version(actor)
         cursor = kurtex_db.get_latest_event_cursor(_data_dir())
+        sse_session_id = str(uuid.uuid4())
+        sse_has_presence = False
+        try:
+            heartbeat(sse_session_id, user_id, user_name, "idle", "", "", _data_dir())
+            sse_has_presence = True
+            _bump_presence_seq()
+        except Exception:
+            pass
         pres_seq = _get_presence_seq()
 
         def _fmt_sse(ev_name, payload):
@@ -1059,31 +1102,44 @@ def register_workspace_routes(server):
             nonlocal version, cursor, pres_seq
             started = time.monotonic()
             last_ping = started
-            yield "retry: 1500\n\n"
-            yield _fmt_sse("ready", {
-                "version": version,
-                "cursor": cursor,
-                "presence": snapshot(user_id, _data_dir()),
-            })
-            while (time.monotonic() - started) < max_seconds:
-                time.sleep(0.55)
-                next_version = _workspace_board_version(actor)
-                if next_version != version:
-                    version = next_version
-                    events = kurtex_db.get_events_since(cursor, limit=50, data_dir=_data_dir())
-                    if events:
-                        cursor = events[-1]["cursor"]
-                    else:
-                        cursor = kurtex_db.get_latest_event_cursor(_data_dir())
-                    yield _fmt_sse("changed", {"version": version, "cursor": cursor, "events": events})
-                next_pres_seq = _get_presence_seq()
-                if next_pres_seq != pres_seq:
-                    pres_seq = next_pres_seq
-                    yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir())})
-                now = time.monotonic()
-                if now - last_ping >= 18.0:
-                    last_ping = now
-                    yield _fmt_sse("ping", {"ts": int(time.time())})
+            try:
+                yield "retry: 1500\n\n"
+                yield _fmt_sse("ready", {
+                    "version": version,
+                    "cursor": cursor,
+                    "presence": snapshot(user_id, _data_dir()),
+                })
+                while (time.monotonic() - started) < max_seconds:
+                    time.sleep(0.55)
+                    next_version = _workspace_board_version(actor)
+                    if next_version != version:
+                        version = next_version
+                        events = kurtex_db.get_events_since(cursor, limit=50, data_dir=_data_dir())
+                        if events:
+                            cursor = events[-1]["cursor"]
+                        else:
+                            cursor = kurtex_db.get_latest_event_cursor(_data_dir())
+                        yield _fmt_sse("changed", {"version": version, "cursor": cursor, "events": events})
+                    next_pres_seq = _get_presence_seq()
+                    if next_pres_seq != pres_seq:
+                        pres_seq = next_pres_seq
+                        yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir())})
+                    now = time.monotonic()
+                    if now - last_ping >= 18.0:
+                        last_ping = now
+                        if sse_has_presence:
+                            try:
+                                heartbeat(sse_session_id, user_id, user_name, "idle", "", "", _data_dir())
+                            except Exception:
+                                pass
+                        yield _fmt_sse("ping", {"ts": int(time.time())})
+            finally:
+                if sse_has_presence:
+                    try:
+                        remove_session(sse_session_id, _data_dir())
+                        _bump_presence_seq()
+                    except Exception:
+                        pass
 
         return Response(
             stream_with_context(_stream()),

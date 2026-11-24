@@ -1,4 +1,4 @@
-"""Shared-volume ephemeral Live Board presence, with automatic 35-second expiry."""
+"""Shared-volume ephemeral Live Board presence, with automatic 50-second expiry."""
 from __future__ import annotations
 import re
 import time
@@ -16,7 +16,9 @@ _TABLE = '''CREATE TABLE IF NOT EXISTS workspace_presence (
  expires_at REAL NOT NULL
 )'''
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
-ACTIONS = frozenset(("viewing", "editing", "dragging", "idle"))
+ACTIONS = frozenset(("viewing", "editing", "dragging", "idle", "left"))
+_ACTIVE_ACTIONS = frozenset(("viewing", "editing", "dragging", "idle"))
+_ACTION_RANK = {"editing": 4, "dragging": 3, "viewing": 2, "idle": 1}
 
 
 _ENSURED_DIRS: set[str] = set()
@@ -38,6 +40,9 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
         raise ValueError("Invalid board session.")
     if action not in ACTIONS:
         raise ValueError("Invalid collaboration activity.")
+    if action == "left":
+        remove_session(session_id, data_dir=data_dir)
+        return
     if len(str(case_id)) > 100 or len(str(field)) > 60:
         raise ValueError("Invalid collaboration context.")
     clean_draft = str(draft or "").strip()[:240]
@@ -51,7 +56,7 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
             "user_id=excluded.user_id,user_name=excluded.user_name,action=excluded.action,"
             "case_id=excluded.case_id,field=excluded.field,draft=excluded.draft,"
             "updated_at=excluded.updated_at,expires_at=excluded.expires_at",
-            (session_id, user_id, str(user_name)[:70], action, str(case_id), str(field), clean_draft, now, now + 35)
+            (session_id, user_id, str(user_name)[:70], action, str(case_id), str(field), clean_draft, now, now + 50)
         )
 
 
@@ -70,27 +75,44 @@ def snapshot(current_user, data_dir=None):
         try:
             rows = conn.execute(
                 "SELECT user_id,user_name,action,case_id,field,draft,updated_at FROM workspace_presence "
-                "WHERE expires_at >= ? ORDER BY updated_at DESC LIMIT 100", (now,)
+                "WHERE expires_at >= ? ORDER BY updated_at DESC LIMIT 200", (now,)
             ).fetchall()
         except Exception:
             return {"online": 0, "editing": 0, "peers": [], "members": []}
     unique = {}
     for row in rows:
         uid = int(row["user_id"])
-        if uid not in unique:
+        act = str(row["action"] or "idle")
+        if act not in _ACTIVE_ACTIONS:
+            continue
+        rank = _ACTION_RANK.get(act, 1)
+        upd = float(row["updated_at"] or 0.0)
+        prev = unique.get(uid)
+        if not prev or rank > prev["_rank"] or (rank == prev["_rank"] and upd > prev["_upd"]):
             unique[uid] = {
                 "user_id": uid,
                 "name": row["user_name"],
-                "action": row["action"],
+                "action": act,
                 "case_id": row["case_id"],
                 "field": row["field"],
                 "draft": row["draft"] or "",
+                "updated_at": upd,
+                "_rank": rank,
+                "_upd": upd,
             }
-    peers = [p for k, p in unique.items() if k != int(current_user)]
-    editing = sum(1 for p in unique.values() if p.get("action") == "editing")
+    ordered = sorted(
+        unique.values(),
+        key=lambda item: (-item["_rank"], str(item["name"] or "").casefold(), item["user_id"]),
+    )
+    members = [
+        {k: v for k, v in item.items() if not k.startswith("_")}
+        for item in ordered
+    ]
+    peers = [p for p in members if int(p["user_id"]) != int(current_user)]
+    editing = sum(1 for p in members if p.get("action") == "editing")
     return {
-        "online": len(unique),
+        "online": len(members),
         "editing": editing,
         "peers": peers,
-        "members": list(unique.values()),
+        "members": members,
     }
