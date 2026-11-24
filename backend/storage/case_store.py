@@ -1223,6 +1223,24 @@ def _is_active_live_board_case(case: dict) -> bool:
     )
 
 
+_PRIVILEGED_DELETE_ROLES = ("developer", "super_admin", "admin", "manager")
+_BOARD_DELETE_ROLES = (*_PRIVILEGED_DELETE_ROLES, "agent")
+
+
+def case_delete_permissions(case: dict | None, actor_or_role, *, has_cases_access: bool = True) -> tuple[bool, bool]:
+    """Return `(can_delete_board, can_delete_permanent)` for an actor or role on a case."""
+    if not has_cases_access:
+        return (False, False)
+    if isinstance(actor_or_role, dict):
+        role = str(actor_or_role.get("role") or "").lower()
+    else:
+        role = str(actor_or_role or "").lower()
+    is_test = bool((case or {}).get("is_test") or (case or {}).get("is_testing"))
+    if is_test and role != "developer":
+        return (False, False)
+    return (role in _BOARD_DELETE_ROLES, role in _PRIVILEGED_DELETE_ROLES)
+
+
 def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: str) -> dict:
     """Hide one card or delete its stored content, under the same writer lock.
 
@@ -1230,15 +1248,18 @@ def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: st
     Uploaded files are cleaned by the API after this transaction commits.
     """
     role = str((actor or {}).get("role") or "").lower()
-    if role not in ("developer", "super_admin"):
-        raise PermissionError("Only managers and developers can delete cases.")
     if mode not in ("board", "permanent"):
         raise ValueError("Choose board removal or permanent deletion.")
+    can_board, can_permanent = case_delete_permissions(None, role)
+    if mode == "permanent" and not can_permanent:
+        raise PermissionError("Only managers and developers can permanently delete cases.")
+    if mode == "board" and not can_board:
+        raise PermissionError("You do not have permission to delete cases from the board.")
     from backend.storage.board_order import KEY as BOARD_ORDER_KEY
 
     now = now_iso()
     actor_id = str(actor.get("id") or "")
-    actor_name = str(actor.get("name") or "Manager")
+    actor_name = str(actor.get("name") or ("Agent" if role == "agent" else "Manager"))
     media_ids = []
     with db.write_tx(_storage_dir()) as conn:
         row = conn.execute("SELECT data_json FROM cases WHERE id=?", (case_id,)).fetchone()
@@ -1247,7 +1268,8 @@ def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: st
         case = json.loads(row["data_json"])
         if not is_maintenance_report(case):
             raise ValueError("Only maintenance report cases can be deleted here.")
-        if (case.get("is_test") or case.get("is_testing")) and role != "developer":
+        can_board_case, can_perm_case = case_delete_permissions(case, role)
+        if not (can_perm_case if mode == "permanent" else can_board_case):
             raise PermissionError("This test case is read-only for non-developers.")
         if not revision or revision != workspace_revision(case):
             raise ValueError("This report changed. Review it again before deleting.")

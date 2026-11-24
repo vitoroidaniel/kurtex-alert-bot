@@ -4312,7 +4312,11 @@ def api_case_detail():
                     "viewer_role": _current_viewer_role(session["user"]),
                     "viewer_id": str(session["user"]["id"]),
                 })
-                from backend.storage.case_store import workspace_revision
+                from backend.storage.case_store import case_delete_permissions, workspace_revision
+                has_cases_perm = "cases" in _load_role_permissions().get(data["viewer_role"], [])
+                can_del_board, can_del_perm = case_delete_permissions(c, data["viewer_role"], has_cases_access=has_cases_perm)
+                data["can_delete_board"] = can_del_board
+                data["can_delete_permanent"] = can_del_perm
                 data["revision"] = workspace_revision(c)
                 return jsonify(data)
         return jsonify({"error":"not found"}), 404

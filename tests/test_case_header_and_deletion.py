@@ -151,9 +151,37 @@ class CaseHeaderAndDeletionTests(unittest.TestCase):
         self.assertEqual(self.delete("unknown").status_code, 400)
         self.assertEqual(self.client.delete("/api/workspace/cases/CASE-NEW", json={"confirm": True}).status_code, 403)
         self.auth(self.agent)
-        self.assertEqual(self.delete().status_code, 403)
+        # Agents cannot permanently delete cases or skip confirmation, even with CSRF.
         self.assertEqual(self.delete("permanent").status_code, 403)
+        self.assertEqual(self.delete("board", confirm=False).status_code, 400)
         self.assertIsNotNone(case_store.get_case("CASE-NEW"))
+
+    def test_agent_can_remove_any_non_test_case_from_board_with_confirmation(self):
+        other_manager_case = case_store.workspace_write(self.manager, {
+            "id": "CASE-MGR-1", "request_id": "req-mgr-1", "driver": "Lee", "unit_number": "411",
+            "issue": "Wheel seal leak", "vehicle_type": "truck",
+            "priority": "medium", "target_agent": self.manager,
+        })
+        self.auth(self.agent)
+        detail = self.client.get("/api/case?id=CASE-MGR-1").get_json()
+        self.assertTrue(detail["can_delete_board"])
+        self.assertFalse(detail["can_delete_permanent"])
+        board_rows = self.client.get("/api/workspace/board").get_json()["cases"]
+        mgr_summary = next(r for r in board_rows if r.get("full_id") == "CASE-MGR-1" or r.get("id") == "CASE-MGR-1")
+        self.assertTrue(mgr_summary["can_delete_board"])
+        self.assertFalse(mgr_summary["can_delete_permanent"])
+
+        res = self.client.delete("/api/workspace/cases/CASE-MGR-1", headers=self.headers, json={
+            "mode": "board",
+            "confirm": True,
+            "revision": case_store.workspace_revision(other_manager_case),
+        })
+        self.assertEqual(res.status_code, 200, res.get_json())
+        self.assertTrue(res.get_json()["preserved_in_db"])
+        stored = case_store.get_case("CASE-MGR-1")
+        self.assertTrue(stored["board_hidden"])
+        self.assertEqual(stored["status"], "done")
+        self.assertEqual(stored["workspace_history"][-1]["author_role"], "agent")
 
     def test_stale_revision_preserves_all_data(self):
         self.seed_related()
@@ -165,6 +193,9 @@ class CaseHeaderAndDeletionTests(unittest.TestCase):
 
     def test_test_case_requires_developer(self):
         self.case = case_store.workspace_write(self.dev, {"action": "set_test", "is_test": True}, "CASE-NEW")
+        self.assertEqual(self.delete("permanent").status_code, 403)
+        self.auth(self.agent)
+        self.assertEqual(self.delete("board").status_code, 403)
         self.assertEqual(self.delete("permanent").status_code, 403)
         self.auth(self.dev)
         self.assertEqual(self.delete("permanent").status_code, 200)

@@ -42,6 +42,7 @@ from backend.storage.board_order import (
 )
 from backend.storage.board_presence import ACTIONS as PRESENCE_ACTIONS, heartbeat, remove_session, snapshot
 from backend.storage.case_store import (
+    case_delete_permissions,
     clear_live_board_cases,
     remove_live_board_case,
     close_all_live_board_cases,
@@ -1538,6 +1539,9 @@ def register_workspace_routes(server):
             summary["can_manage"] = _workspace_can_manage(c, actor)
             summary["can_reassign"] = summary["can_manage"]
             summary["can_comment"] = (not summary.get("is_test")) or (str(actor.get("role") or "").lower() == "developer")
+            can_del_board, can_del_perm = case_delete_permissions(c, actor)
+            summary["can_delete_board"] = can_del_board
+            summary["can_delete_permanent"] = can_del_perm
             active_notes = [
                 n
                 for n in (c.get("workspace_notes") or [])
