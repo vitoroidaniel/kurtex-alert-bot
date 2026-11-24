@@ -1203,16 +1203,24 @@ def _try_fast_analytics_answer(raw_msg, all_cases):
 
 
 _BOARD_SUMMARY_QUERY_RE = re.compile(
-    r'^(?:summarize\s+(?:the\s+)?(?:active\s+)?(?:live\s+)?board(?:\s+breakdowns)?|'
-    r'summarize\s+active\s+breakdowns(?:\s+on\s+the\s+board)?(?:\s+by\s+priority\s+and\s+shop)?|'
-    r'board\s+summary|live\s+board\s+summary|active\s+breakdowns\s+summary|board\s+overview)[\s?.!]*$',
+    r'^(?:(?:give\s+me\s+(?:a\s+)?|show\s+(?:me\s+)?(?:the\s+)?)?'
+    r'(?:summarize\s+(?:the\s+)?(?:active\s+|today\'?s\s+)?(?:live\s+)?board(?:\s+breakdowns)?(?:\s+for\s+today)?|'
+    r'summarize\s+active\s+breakdowns(?:\s+on\s+the\s+board)?(?:\s+by\s+priority\s+and\s+shop)?(?:\s+for\s+today)?|'
+    r'(?:today\'?s\s+|todays\s+|daily\s+|live\s+|active\s+)?board\s+(?:summary|overview)(?:\s+(?:for\s+)?today)?|'
+    r'active\s+breakdowns\s+summary))[\s?.!]*$',
     re.I,
 )
 
 
+def _strip_live_board_context(value):
+    raw = str(value or "")
+    cleaned = re.sub(r'\n*\[Live Board Summary\][\s\S]*$', '', raw, flags=re.I).strip()
+    return cleaned or raw.strip()
+
+
 def _try_fast_board_summary_answer(raw_msg, all_cases):
     """Build a crisp, grouped Markdown Live Board summary (headings + single-line bullets, zero inline blobs)."""
-    q = re.sub(r'\[Live Board Summary\][\s\S]*$', '', str(raw_msg or ''), flags=re.I).strip()
+    q = _strip_live_board_context(raw_msg)
     if not q or not _BOARD_SUMMARY_QUERY_RE.match(q):
         return None, None
     active_statuses = {"open", "assigned", "reported", "missed"}
@@ -1309,7 +1317,7 @@ def _try_fast_case_query_answer(message, history):
     raw = str(message or "").strip()
     if not raw:
         return None, None
-    q_only = re.sub(r'\[Live Board Summary\][\s\S]*$', '', raw, flags=re.I).strip()
+    q_only = _strip_live_board_context(raw)
     # Deterministic board summary check (clean grouped Markdown sections, never a wall of inline items)
     if _BOARD_SUMMARY_QUERY_RE.match(q_only):
         all_cases = [c for c in load_cases() if not is_testing(c)]
@@ -1854,9 +1862,10 @@ def api_ai_chats():
             msgs=c.get("messages") or []
             raw_title=str(c.get("title") or "").strip()
             if (not raw_title or raw_title=="New maintenance chat") and msgs:
-                first_user=next((str(m.get("content") or m.get("text") or "").strip() for m in msgs if m.get("role")=="user" and (m.get("content") or m.get("text"))), "")
+                first_user=next((_strip_live_board_context(m.get("content") or m.get("text") or "") for m in msgs if m.get("role")=="user" and (m.get("content") or m.get("text"))), "")
                 raw_title=_chat_title(first_user) if first_user else "Maintenance chat"
-            last_msg=next((str(m.get("content") or m.get("text") or "").strip() for m in reversed(msgs) if (m.get("content") or m.get("text"))), "")
+            last_entry=next((m for m in reversed(msgs) if (m.get("content") or m.get("text"))), None)
+            last_msg=(_strip_live_board_context(last_entry.get("content") or last_entry.get("text") or "") if last_entry and last_entry.get("role")=="user" else str((last_entry or {}).get("content") or (last_entry or {}).get("text") or "").strip())
             preview=re.sub(r"[#*_`>\[\]]+"," ",last_msg)
             preview=re.sub(r"\s+"," ",preview).strip()[:90]
             return {"id":c.get("id"),"title":raw_title or "Maintenance chat","preview":preview,"created_at":c.get("created_at"),
@@ -1882,7 +1891,9 @@ def api_ai_chat_item(chat_id):
     chats=_user_chats(); chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if not chat:return jsonify({"error":"Chat not found"}),404
     if request.method=="GET":
-        safe=dict(chat); safe["attachments"]=[{k:a.get(k) for k in ("id","name","kind","mime","created_at","duration","audio_status","audio_language","visual_status","frames_sampled","frame_timestamps","warning") if a.get(k) is not None} for a in (chat.get("attachments") or [])]
+        safe=dict(chat)
+        safe["messages"]=[({**m,"content":_strip_live_board_context(m.get("content") or m.get("text") or "")} if m.get("role")=="user" else m) for m in (chat.get("messages") or [])]
+        safe["attachments"]=[{k:a.get(k) for k in ("id","name","kind","mime","created_at","duration","audio_status","audio_language","visual_status","frames_sampled","frame_timestamps","warning") if a.get(k) is not None} for a in (chat.get("attachments") or [])]
         return jsonify(safe)
     if request.method=="DELETE":
         _save_user_chats([c for c in chats if str(c.get("id"))!=chat_id]); return jsonify({"ok":True})
@@ -2149,10 +2160,13 @@ def _finalize_ai_chat(chat, history, chats, message, answer, active_ids, request
 @ai_serialized
 def api_ai_chat():
     if not session.get("user"): return jsonify({"error":"unauthorized"}),401
-    data=request.get_json(silent=True) or {}; message=str(data.get("message") or "").strip()[:4000]
+    data=request.get_json(silent=True) or {}; raw_message=str(data.get("message") or "").strip()[:4000]
+    board_context=str(data.get("board_context") or "").strip()[:3200]
+    display_message=_strip_live_board_context(raw_message)
     page=str(data.get("page") or "operations")[:80]; chat_id=str(data.get("chat_id") or "").strip()
     requested_attachment_ids=[str(x) for x in (data.get("attachment_ids") or []) if str(x).strip()][:12]
-    if not message:return jsonify({"error":"Message is required"}),400
+    if not display_message:return jsonify({"error":"Message is required"}),400
+    message=(f"{display_message}\n\n[Live Board Summary]\n{board_context}" if board_context and "[live board summary]" not in raw_message.lower() else raw_message)
     request_id=str(data.get("request_id") or "")[:80]
     chats=_user_chats()
     if request_id:
@@ -2160,14 +2174,14 @@ def api_ai_chat():
             saved=saved_chat.get("messages",[])
             for index,turn in enumerate(saved[:-1]):
                 if turn.get("request_id")!=request_id:continue
-                if turn.get("content")!=message or (chat_id and saved_chat.get("id")!=chat_id):return jsonify(error="Request ID conflicts with an earlier message"),409
+                if _strip_live_board_context(turn.get("content"))!=display_message or (chat_id and saved_chat.get("id")!=chat_id):return jsonify(error="Request ID conflicts with an earlier message"),409
                 answer=saved[index+1]
                 return jsonify(answer=answer.get("content",""),message_id=answer.get("id"),chat_id=saved_chat["id"],title=saved_chat.get("title"),sources=answer.get("sources",[]),research_status=answer.get("research_status"),similar_cases=answer.get("similar_cases",[]),parts=answer.get("parts",[]),language=answer.get("language","en"),task=answer.get("task","maintenance_question"),replayed=True)
     chat=next((c for c in chats if str(c.get("id"))==chat_id),None)
     if chat_id and chat is None:
         return jsonify({"error":"Chat not found"}),404
     if chat is None:
-        chat={"id":uuid.uuid4().hex,"title":_chat_title(message),"created_at":_now_iso(),"updated_at":_now_iso(),"messages":[]}
+        chat={"id":uuid.uuid4().hex,"title":_chat_title(display_message),"created_at":_now_iso(),"updated_at":_now_iso(),"messages":[]}
         chats.append(chat)
     history=chat.get("messages") if isinstance(chat.get("messages"),list) else []
     available={str(a.get("id")):a for a in chat.get("attachments",[])}
@@ -2193,15 +2207,15 @@ def api_ai_chat():
     history_text=" ".join(str(m.get("content") or "")[:400] for m in history[-6:])
     response_contract=response_policy(message,has_video=video_present,has_images=bool(image_urls),transcript=speech_text)
     task=response_contract["task"]
-    visual_description_only=_ai_visual_description_request(message,bool(image_urls))
-    wants_similar_cases=bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(message)
+    visual_description_only=_ai_visual_description_request(display_message,bool(image_urls))
+    wants_similar_cases=bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(display_message)
     web_search_enabled=(data.get("web_search") is True)
-    wants_web=web_search_enabled and needs_web_search(message,task,bool(image_urls))
+    wants_web=web_search_enabled and needs_web_search(display_message,task,bool(image_urls))
     wants_stream=bool(data.get("stream")) or ("text/event-stream" in str(request.headers.get("Accept") or "").lower())
     is_trainer=_ai_is_trainer()
 
     # Deterministic Scope Guardrail: block off-topic / abuse queries before calling Workers AI
-    if is_out_of_scope_query(message, history_text=history_text, has_media=bool(image_urls or video_present or driver_reports)):
+    if is_out_of_scope_query(display_message, history_text=history_text, has_media=bool(image_urls or video_present or driver_reports)):
         refusal_text = out_of_scope_refusal(response_contract["language"])
         started_guard = time.monotonic()
         empty_ctx = {"retrieval": {"historical_cases_total": 0, "cases_in_prompt": 0, "approved_items_in_prompt": 0, "historical_chats_in_prompt": 0}}
@@ -2209,10 +2223,10 @@ def api_ai_chat():
         if wants_stream:
             def _stream_refusal():
                 yield _sse_frame("delta", {"delta": refusal_text})
-                final_payload = _finalize_ai_chat(chat, history, chats, message, refusal_text, active_ids, request_id, response_contract, message, empty_ctx, empty_res, image_urls, active_media, False, False, started_guard)
+                final_payload = _finalize_ai_chat(chat, history, chats, display_message, refusal_text, active_ids, request_id, response_contract, display_message, empty_ctx, empty_res, image_urls, active_media, False, False, started_guard)
                 yield _sse_frame("done", final_payload)
             return Response(stream_with_context(_stream_refusal()), content_type="text/event-stream; charset=utf-8", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-        return jsonify(_finalize_ai_chat(chat, history, chats, message, refusal_text, active_ids, request_id, response_contract, message, empty_ctx, empty_res, image_urls, active_media, False, False, started_guard))
+        return jsonify(_finalize_ai_chat(chat, history, chats, display_message, refusal_text, active_ids, request_id, response_contract, display_message, empty_ctx, empty_res, image_urls, active_media, False, False, started_guard))
 
     # Deterministic Fast-Path (<30ms) for unit case lookups, recent cases, negated unit filters, and most-recent follow-ups
     if not (image_urls or video_present or driver_reports):
@@ -2224,26 +2238,26 @@ def api_ai_chat():
             if wants_stream:
                 def _stream_fast():
                     yield _sse_frame("delta", {"delta": fast_answer})
-                    final_payload = _finalize_ai_chat(chat, history, chats, message, fast_answer, active_ids, request_id, response_contract, message, fast_ctx, fast_res, image_urls, active_media, False, False, started_fast)
+                    final_payload = _finalize_ai_chat(chat, history, chats, display_message, fast_answer, active_ids, request_id, response_contract, display_message, fast_ctx, fast_res, image_urls, active_media, False, False, started_fast)
                     yield _sse_frame("done", final_payload)
                 return Response(stream_with_context(_stream_fast()), content_type="text/event-stream; charset=utf-8", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-            return jsonify(_finalize_ai_chat(chat, history, chats, message, fast_answer, active_ids, request_id, response_contract, message, fast_ctx, fast_res, image_urls, active_media, False, False, started_fast))
+            return jsonify(_finalize_ai_chat(chat, history, chats, display_message, fast_answer, active_ids, request_id, response_contract, display_message, fast_ctx, fast_res, image_urls, active_media, False, False, started_fast))
 
     def _prepare_prompt_state():
         observations=""
-        clean_user_len=len(re.sub(r'\s+','',message))
+        clean_user_len=len(re.sub(r'\s+','',display_message))
         if image_urls and ((wants_web or wants_similar_cases) and clean_user_len < 24 or video_present):
             labels=", ".join(str(a.get("name")) for a in image_items)
             observations=_cf_ai([
                 {"role":"system","content":INSPECTION_POLICY},
-                {"role":"user","content":"List observed components, visible damage, and uncertainties in <=140 words referencing frame labels/timestamps. End with 'Search terms:' and key symptom terms only. Labels: "+labels+"\nQuestion: "+message}],300,.1,images=image_urls)
+                {"role":"user","content":"List observed components, visible damage, and uncertainties in <=140 words referencing frame labels/timestamps. End with 'Search terms:' and key symptom terms only. Labels: "+labels+"\nQuestion: "+display_message}],300,.1,images=image_urls)
         visual_terms=observations.rsplit("Search terms:",1)[-1][:300] if "Search terms:" in observations else ""
 
         def _run_with_app_context(fn, *args):
             with app.app_context():
                 return fn(*args)
 
-        active_unit, resolved_msg = _run_with_app_context(_resolve_conversational_context, message, history)
+        active_unit, resolved_msg = _run_with_app_context(_resolve_conversational_context, display_message, history)
         retrieval_query=multilingual_retrieval_query(resolved_msg+" "+visual_terms,speech_text)
 
         is_ops=(task=="board_ops" and not wants_similar_cases and not image_urls)
@@ -2307,7 +2321,8 @@ def api_ai_chat():
         if ctx_block:
             messages.append({"role":"system","content":"Read-only context (page="+page+"):\n"+ctx_block})
         for item in history[-6:]:
-            role=item.get("role"); content=_ai_clip(item.get("content"),1200)
+            role=item.get("role"); raw_item=item.get("content")
+            content=_ai_clip(_strip_live_board_context(raw_item) if role=="user" else raw_item,1200)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
         messages.append({"role":"user","content":message})
         pass_images=[] if (observations and video_present) else image_urls
@@ -2331,7 +2346,7 @@ def api_ai_chat():
                 if not answer:
                     raise RuntimeError("Workers AI returned an empty response")
                 stage="save_chat"
-                final_payload=_finalize_ai_chat(chat,history,chats,message,answer,active_ids,request_id,response_contract,retrieval_query,ctx,research,image_urls,active_media,wants_similar_cases,visual_description_only,started)
+                final_payload=_finalize_ai_chat(chat,history,chats,display_message,answer,active_ids,request_id,response_contract,retrieval_query,ctx,research,image_urls,active_media,wants_similar_cases,visual_description_only,started)
                 yield _sse_frame("done",final_payload)
             except Exception as e:
                 logger.exception("Kurtex AI stream failed at stage=%s: %s",stage,e)
@@ -2348,7 +2363,7 @@ def api_ai_chat():
         stage="workers_ai"
         answer=_cf_ai(messages,max_tok,.1,images=pass_images)
         stage="save_chat"
-        return jsonify(_finalize_ai_chat(chat,history,chats,message,answer,active_ids,request_id,response_contract,retrieval_query,ctx,research,image_urls,active_media,wants_similar_cases,visual_description_only,started))
+        return jsonify(_finalize_ai_chat(chat,history,chats,display_message,answer,active_ids,request_id,response_contract,retrieval_query,ctx,research,image_urls,active_media,wants_similar_cases,visual_description_only,started))
     except Exception as e:
         logger.exception("Kurtex AI chat failed at stage=%s: %s",stage,e)
         _notify_user("ai","Kurtex AI unavailable","AI chat failed at "+stage+". Try again or check AI Training diagnostics.","warning")

@@ -54,6 +54,7 @@ TASK_WORDS = {
                'analytics','under $','below $','less than $','over $'),
  'board_ops': ('[live board summary]','live board','active cases','active breakdowns','high priority',
                'unassigned','in shop','cost over','on shift','summarize board','board summary',
+               'board summary for today',"today's board summary",'todays board summary','daily board summary','board overview',
                'cazuri active','pe board','активные кейсы','на доске'),
 }
 

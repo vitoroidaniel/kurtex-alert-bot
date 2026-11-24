@@ -443,6 +443,51 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
         self.assertIn("\n- **Unit 289**", ans)
         self.assertNotIn("2. Unit", ans)
 
+    def test_board_summary_for_today_and_clean_history_persistence(self):
+        sample_cases = [
+            {"id": "b1", "unit_number": "R232", "vehicle_type": "truck", "issue_text": "No details", "priority": "low", "status": "reported", "board_stage": "", "agent_name": "Petru"},
+            {"id": "b2", "unit_number": "289", "vehicle_type": "truck", "issue_text": "Transmission leaks", "priority": "high", "status": "reported", "board_stage": "dealer_shop", "shop_info": "Freightliner Shop", "amount": "$1,200"},
+        ]
+        with patch.object(server, "load_cases", return_value=sample_cases), patch.object(server, "_cf_ai") as mock_cf:
+            r_clean = self.client.post(
+                "/api/ai/chat",
+                json={
+                    "message": "Board summary for today",
+                    "board_context": "Current Live Board: 2 active cases\nUnit #289 (truck, high, Dealer / Shop): Transmission leaks",
+                    "web_search": False,
+                },
+            )
+            self.assertEqual(r_clean.status_code, 200)
+            body_clean = r_clean.get_json()
+            self.assertIn("### High Priority (1)", body_clean["answer"])
+            chat_id = body_clean["chat_id"]
+
+            r_legacy = self.client.post(
+                "/api/ai/chat",
+                json={
+                    "chat_id": chat_id,
+                    "message": "Summarize active breakdowns on the board\n\n[Live Board Summary]\nCurrent Live Board: 51 active cases\nUnit #R246: Nail in tire",
+                    "web_search": False,
+                },
+            )
+            self.assertEqual(r_legacy.status_code, 200)
+            mock_cf.assert_not_called()
+
+        chat_detail = self.client.get(f"/api/ai/chats/{chat_id}")
+        self.assertEqual(chat_detail.status_code, 200)
+        msgs = chat_detail.get_json()["messages"]
+        user_msgs = [m["content"] for m in msgs if m["role"] == "user"]
+        self.assertEqual(user_msgs, ["Board summary for today", "Summarize active breakdowns on the board"])
+        for content in user_msgs:
+            self.assertNotIn("[Live Board Summary]", content)
+            self.assertNotIn("Unit #289", content)
+            self.assertNotIn("Unit #R246", content)
+
+        chat_list = self.client.get("/api/ai/chats")
+        self.assertEqual(chat_list.status_code, 200)
+        summary_item = next(item for item in chat_list.get_json()["items"] if item["id"] == chat_id)
+        self.assertEqual(summary_item["title"], "Board summary for today")
+
 
 if __name__ == "__main__":
     unittest.main()
