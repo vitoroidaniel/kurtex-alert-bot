@@ -566,6 +566,7 @@ def register_workspace_routes(server):
                 elif action == "edit":
                     fields = data.get("fields")
                     allowed = {
+                        "card_color",
                         "priority",
                         "location",
                         "description",
@@ -602,6 +603,8 @@ def register_workspace_routes(server):
                             raise ValueError("The " + key.replace("_", " ") + " field is too long.")
                         if key == "shop_info" and len(value.strip()) > 1000:
                             raise ValueError("The shop info field is too long.")
+                    if "card_color" in fields and not re.fullmatch(r"#[0-9a-f]{6}", fields["card_color"]):
+                        raise ValueError("Choose a valid card color.")
                     if "priority" in fields and fields["priority"] not in ("low", "medium", "high", "critical", "normal"):
                         raise ValueError("Choose a valid priority.")
                     if "vehicle_type" in fields and fields["vehicle_type"] not in ("truck", "trailer", "reefer", ""):
@@ -1712,6 +1715,11 @@ def register_workspace_routes(server):
                 summary["last_note_at"] = ""
                 summary["last_note_author_id"] = ""
                 summary["last_note_author"] = ""
+            latest = human_notes[-1] if human_notes else {}
+            summary["last_note_text"] = str(
+                latest.get("text") or ("Attachment" if latest.get("attachments") else "")
+                or c.get("comments") or (c.get("notes") if c.get("notes") != "case reported" else "") or ""
+            )[:500]
             summary["notes_search"] = " ".join(
                 str(n.get("text") or "").strip()
                 for n in active_notes
