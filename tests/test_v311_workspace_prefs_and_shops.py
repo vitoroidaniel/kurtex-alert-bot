@@ -170,7 +170,7 @@ class LiveBoardV311PrefsAndShopsTests(unittest.TestCase):
             self.assertFalse(agent_prefs["background_alerts"])
             self.assertEqual(agent_prefs["active_view_id"], "view-1")
 
-            # Shared saved view becomes visible in shared_views for other teammates
+            # Shared saved view becomes visible in shared_views for other teammates (including unread_only & vehicle_type)
             client.put(
                 "/api/workspace/preferences",
                 headers={"X-Workspace-CSRF": "test-csrf"},
@@ -178,7 +178,15 @@ class LiveBoardV311PrefsAndShopsTests(unittest.TestCase):
                     "saved_views": [{
                         "id": "view-shared-1",
                         "name": "Team High Risk",
-                        "filters": {"priority": "high", "shared": True},
+                        "pin_to_toolbar": True,
+                        "filters": {
+                            "priority": "high",
+                            "unread_only": True,
+                            "vehicle_type": "reefer",
+                            "shared": True,
+                            "match_mode": "any",
+                            "conditions": [{"field": "shop_info", "operator": "is_not_blank", "value": "", "values": []}],
+                        },
                     }]
                 },
             )
@@ -195,6 +203,40 @@ class LiveBoardV311PrefsAndShopsTests(unittest.TestCase):
                 self.assertEqual(len(tm_prefs["shared_views"]), 1)
                 self.assertEqual(tm_prefs["shared_views"][0]["name"], "Team High Risk")
                 self.assertEqual(tm_prefs["shared_views"][0]["owner_name"], "Daniel")
+                self.assertTrue(tm_prefs["shared_views"][0]["filters"]["unread_only"])
+                self.assertEqual(tm_prefs["shared_views"][0]["filters"]["vehicle_type"], "reefer")
+                self.assertEqual(tm_prefs["shared_views"][0]["filters"]["match_mode"], "any")
+                self.assertEqual(len(tm_prefs["shared_views"][0]["filters"]["conditions"]), 1)
+
+                # Another regular agent cannot edit/delete Daniel's shared filter directly
+                deny_edit = client.put(
+                    "/api/workspace/shared-views/view-shared-1",
+                    headers={"X-Workspace-CSRF": "test-csrf"},
+                    json={"name": "Hijacked"},
+                )
+                self.assertEqual(deny_edit.status_code, 403)
+                deny_del = client.delete(
+                    "/api/workspace/shared-views/view-shared-1",
+                    headers={"X-Workspace-CSRF": "test-csrf"},
+                )
+                self.assertEqual(deny_del.status_code, 403)
+
+            # Creator / developer can update and delete via /api/workspace/shared-views/<id>
+            self._auth_session(client, self.daniel)
+            ok_edit = client.put(
+                "/api/workspace/shared-views/view-shared-1",
+                headers={"X-Workspace-CSRF": "test-csrf"},
+                json={"name": "Team Reefer Risk"},
+            )
+            self.assertEqual(ok_edit.status_code, 200)
+            self.assertEqual(ok_edit.get_json()["shared_views"][0]["name"], "Team Reefer Risk")
+            ok_del = client.delete(
+                "/api/workspace/shared-views/view-shared-1",
+                headers={"X-Workspace-CSRF": "test-csrf"},
+            )
+            self.assertEqual(ok_del.status_code, 200)
+            self.assertEqual(ok_del.get_json()["shared_views"], [])
+            self.assertEqual(ok_del.get_json()["preferences"]["saved_views"], [])
 
             # Switch back to Daniel and reset restores defaults
             self._auth_session(client, self.daniel)

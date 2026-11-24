@@ -57,6 +57,7 @@ from backend.storage.preference_store import (
     get_case_reads,
     get_quick_replies,
     get_workspace_board_prefs,
+    manage_shared_workspace_view,
     save_case_reads,
     save_quick_replies,
     save_workspace_board_prefs,
@@ -2707,6 +2708,45 @@ def register_workspace_routes(server):
         return jsonify({
             "ok": True,
             "preferences": saved,
+        })
+
+    @app.route("/api/workspace/shared-views/<view_id>", methods=["PUT", "DELETE"])
+    def api_workspace_shared_view(view_id):
+        """Allow creator or manager/developer to edit, unshare, or delete a shared filter."""
+        actor, error = _workspace_actor()
+        if error:
+            return error
+        is_mgr = _can_view_live_activity(actor)
+        if request.method == "DELETE":
+            status, shared_views = manage_shared_workspace_view(
+                view_id,
+                actor_id=str(actor["id"]),
+                is_manager=is_mgr,
+                delete=True,
+                data_dir=_data_dir(),
+            )
+        else:
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict):
+                return jsonify({"error": "Invalid shared view payload."}), 400
+            status, shared_views = manage_shared_workspace_view(
+                view_id,
+                actor_id=str(actor["id"]),
+                is_manager=is_mgr,
+                delete=False,
+                updates=data,
+                data_dir=_data_dir(),
+            )
+        if status == "not_found":
+            return jsonify({"error": "Shared filter not found."}), 404
+        if status == "forbidden":
+            return jsonify({"error": "Only the filter creator or a manager/developer can modify this shared filter."}), 403
+        if status == "invalid":
+            return jsonify({"error": "Invalid shared filter details."}), 400
+        return jsonify({
+            "ok": True,
+            "shared_views": shared_views,
+            "preferences": get_workspace_board_prefs(actor["id"], data_dir=_data_dir()),
         })
 
     @app.route("/api/workspace/shops", methods=["GET"])

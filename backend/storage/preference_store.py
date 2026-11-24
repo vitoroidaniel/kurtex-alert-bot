@@ -255,14 +255,19 @@ def _sanitize_saved_view_filters(raw_filters) -> dict:
     view_mode = str(f.get("view") or "board").strip().lower()
     if view_mode not in ("board", "grid", "table"):
         view_mode = "board"
+    vtype = str(f.get("vehicle_type") or "all").strip().lower()
+    if vtype not in ("all", "truck", "trailer", "reefer"):
+        vtype = "all"
     match_mode = "any" if str(f.get("match_mode") or "all").strip().lower() == "any" else "all"
     return {
         "priority": prio,
         "agent": str(f.get("agent") or "all").strip()[:64] or "all",
         "my_cases": bool(f.get("my_cases", False)),
         "watchlist_only": bool(f.get("watchlist_only", False)),
+        "unread_only": bool(f.get("unread_only", False)),
         "has_shop": bool(f.get("has_shop", False)),
         "unassigned": bool(f.get("unassigned", False)),
+        "vehicle_type": vtype,
         "hide_off_shift": bool(f.get("hide_off_shift", True)),
         "query": str(f.get("query") or "")[:160],
         "view": view_mode,
@@ -304,22 +309,12 @@ def _sanitize_workspace_board_prefs(raw) -> dict:
     raw_views = src.get("saved_views")
     if isinstance(raw_views, list):
         for item in raw_views:
-            if not isinstance(item, dict):
+            entry = _sanitize_saved_view_item(item)
+            if not entry or entry["id"] in seen_ids:
                 continue
-            vid = "".join(ch for ch in str(item.get("id") or "").strip()[:48] if ch.isalnum() or ch in ("-", "_"))
-            name = " ".join(str(item.get("name") or "").split()).strip()[:48]
-            if not vid or not name or vid in seen_ids:
-                continue
-            seen_ids.add(vid)
-            entry = {
-                "id": vid,
-                "name": name,
-                "filters": _sanitize_saved_view_filters(item.get("filters")),
-                "pin_to_toolbar": bool(item.get("pin_to_toolbar", False)),
-            }
-            created_at = str(item.get("created_at") or "").strip()[:40]
-            if created_at:
-                entry["created_at"] = created_at
+            seen_ids.add(entry["id"])
+            entry.pop("owner_id", None)
+            entry.pop("owner_name", None)
             views.append(entry)
             if len(views) >= 20:
                 break
@@ -471,3 +466,95 @@ def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = N
     else:
         saved["shared_views"] = get_shared_workspace_views(data_dir=data_dir)
     return saved
+
+
+def manage_shared_workspace_view(
+    view_id: str,
+    *,
+    actor_id: str,
+    is_manager: bool = False,
+    delete: bool = False,
+    updates: dict | None = None,
+    data_dir: Path | None = None,
+) -> tuple[str, list[dict]]:
+    """Update or delete a team-shared filter by ID when authorized (owner or manager/developer)."""
+    vid = "".join(ch for ch in str(view_id or "").strip()[:48] if ch.isalnum() or ch in ("-", "_"))
+    if not vid:
+        return "not_found", []
+    storage = data_dir or _storage_dir()
+    now = utc_now().isoformat()
+    uid = str(actor_id)
+    target_owner_id = ""
+    updated_owner_copy = None
+
+    with db.write_tx(storage) as conn:
+        row = conn.execute("SELECT version, data_json FROM kv_state WHERE key=?", (SHARED_VIEWS_KEY,)).fetchone()
+        ver = int(row["version"]) if row else 0
+        existing = _read_shared_views_from_conn(conn) if row else []
+        target = next((v for v in existing if v.get("id") == vid), None)
+        if not target:
+            return "not_found", existing
+        target_owner_id = str(target.get("owner_id") or "")
+        if target_owner_id != uid and not is_manager:
+            return "forbidden", existing
+
+        if delete:
+            next_list = [v for v in existing if v.get("id") != vid]
+        else:
+            patch = updates if isinstance(updates, dict) else {}
+            candidate = {
+                **target,
+                **({"name": patch["name"]} if "name" in patch else {}),
+                **({"filters": patch["filters"]} if "filters" in patch else {}),
+                **({"pin_to_toolbar": patch["pin_to_toolbar"]} if "pin_to_toolbar" in patch else {}),
+            }
+            clean = _sanitize_saved_view_item(
+                candidate,
+                owner_id=target_owner_id,
+                owner_name=str(target.get("owner_name") or ""),
+            )
+            if not clean:
+                return "invalid", existing
+            updated_owner_copy = clean
+            if clean["filters"].get("shared"):
+                next_list = [clean if v.get("id") == vid else v for v in existing]
+            else:
+                next_list = [v for v in existing if v.get("id") != vid]
+
+        conn.execute(
+            "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+            "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+            (SHARED_VIEWS_KEY, ver + 1, json.dumps(next_list, ensure_ascii=False, separators=(",", ":"))),
+        )
+
+        # Keep the original creator's personal saved_views aligned when a manager updates/removes it.
+        if target_owner_id:
+            pref_row = conn.execute(
+                "SELECT data_json FROM preferences WHERE user_id=?",
+                (target_owner_id,),
+            ).fetchone()
+            if pref_row:
+                try:
+                    pdata = json.loads(pref_row["data_json"])
+                except Exception:
+                    pdata = {}
+                if isinstance(pdata, dict) and isinstance(pdata.get("workspace_board"), dict):
+                    wb = pdata["workspace_board"]
+                    sv = wb.get("saved_views")
+                    if isinstance(sv, list):
+                        if delete:
+                            wb["saved_views"] = [x for x in sv if not (isinstance(x, dict) and x.get("id") == vid)]
+                            if wb.get("active_view_id") == vid:
+                                wb["active_view_id"] = ""
+                        elif updated_owner_copy is not None:
+                            owner_clean = {k: v for k, v in updated_owner_copy.items() if k not in ("owner_id", "owner_name")}
+                            wb["saved_views"] = [
+                                owner_clean if (isinstance(x, dict) and x.get("id") == vid) else x
+                                for x in sv
+                            ]
+                        conn.execute(
+                            "UPDATE preferences SET data_json=?, updated_at=? WHERE user_id=?",
+                            (json.dumps(pdata, ensure_ascii=False, separators=(",", ":")), now, target_owner_id),
+                        )
+
+    return "ok", next_list
