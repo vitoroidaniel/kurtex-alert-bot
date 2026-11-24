@@ -422,7 +422,32 @@ def _migrate_bot_feedback_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE bot_feedback_messages ADD COLUMN local_file_key TEXT NOT NULL DEFAULT ''")
 
 
-_LIVE_BOARD_SCHEMA_VERSION = "4"
+_LIVE_BOARD_SCHEMA_VERSION = "5"
+
+
+def _migrate_proofs_to_invoices(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        """SELECT id, data_json FROM cases
+           WHERE json_valid(data_json) AND EXISTS (
+               SELECT 1 FROM json_each(cases.data_json, '$.workspace_attachments') AS file
+               WHERE lower(trim(json_extract(cases.data_json, file.fullkey || '.category'))) = 'proof'
+                 AND coalesce(json_extract(cases.data_json, file.fullkey || '.proof_type'), '') <> 'invoice'
+           )"""
+    ).fetchall()
+    for row in rows:
+        case = json.loads(row["data_json"])
+        for attachment in case["workspace_attachments"]:
+            if isinstance(attachment, dict) and str(attachment.get("category") or "").strip().lower() == "proof":
+                attachment["proof_type"] = "invoice"
+        conn.execute(
+            "UPDATE cases SET data_json=? WHERE id=?",
+            (json.dumps(case, ensure_ascii=False, separators=(",", ":")), row["id"]),
+        )
+    normalized = conn.execute(
+        "UPDATE case_attachments SET proof_type='invoice' WHERE lower(trim(category))='proof' AND proof_type<>'invoice'"
+    )
+    if rows or normalized.rowcount:
+        bump_version(conn, "cases_version")
 
 
 def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
@@ -618,6 +643,9 @@ def _migrate_live_board_schema(conn: sqlite3.Connection) -> None:
             "INSERT INTO meta(key,value) VALUES('test_lane_routed_v2','1') "
             "ON CONFLICT(key) DO UPDATE SET value='1'"
         )
+    schema = conn.execute("SELECT value FROM meta WHERE key='live_board_schema_version'").fetchone()
+    if not schema or schema["value"] != _LIVE_BOARD_SCHEMA_VERSION:
+        _migrate_proofs_to_invoices(conn)
     conn.execute(
         "INSERT INTO meta(key,value) VALUES('live_board_schema_version',?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

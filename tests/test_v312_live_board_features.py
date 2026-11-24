@@ -285,72 +285,18 @@ class LiveBoardV312Tests(unittest.TestCase):
         self.assertEqual(out["status"], "unavailable")
         self.assertEqual(out["shops"], [])
 
-    def test_ai_insights_merges_live_route_shops_and_skips_preload(self):
+    def test_ai_insights_never_looks_up_route_shops(self):
         client = server.app.test_client()
         self._auth_session(client, self.daniel)
-
-        def stub_live(**kwargs):
-            return {
-                "status": "ok",
-                "provider": "Google Places",
-                "anchors": [
-                    {"key": "pickup", "label": "Near Pickup", "query": "Chicago, IL"},
-                    {"key": "delivery", "label": "Near Delivery", "query": "Dallas, TX"},
-                ],
-                "shops": [
-                    {
-                        "shop": "TA Truck Service Gary",
-                        "address": "2510 Burr St, Gary, IN",
-                        "phone": "+1-219-555-0101",
-                        "rating": 4.4,
-                        "rating_count": 120,
-                        "category": "Heavy Truck Repair",
-                        "anchor_key": "pickup",
-                        "anchor_label": "Near Pickup",
-                        "anchor_query": "Chicago, IL",
-                        "distance_miles": 22.4,
-                        "map_url": "https://maps.google.com/?cid=123",
-                        "provider": "Google Places",
-                    },
-                    {
-                        "shop": "Lone Star Commercial Tire",
-                        "address": "400 I-20 E, Dallas, TX",
-                        "phone": "+1-214-555-0188",
-                        "rating": 4.8,
-                        "rating_count": 45,
-                        "category": "Commercial Tire Service",
-                        "anchor_key": "delivery",
-                        "anchor_label": "Near Delivery",
-                        "anchor_query": "Dallas, TX",
-                        "distance_miles": 4.2,
-                        "map_url": "https://maps.google.com/?cid=456",
-                        "provider": "Google Places",
-                    },
-                ],
-                "note": "Live shops loaded via Google Places.",
-            }
-
         with patch.object(workspace_board, "get_user", return_value=self.daniel), patch.object(
-            server, "_search_live_route_shops", stub_live
-        ):
-            res = client.get("/api/workspace/cases/case-route-1/ai-insights")
-            self.assertEqual(res.status_code, 200)
-            body = res.get_json()
-            self.assertEqual(body["route_shop_search"]["status"], "ok")
-            self.assertEqual(body["route_shop_search"]["provider"], "Google Places")
-            merged_ta = next(s for s in body["suggested_shops"] if s["shop_name"] == "TA Truck Service Gary")
-            self.assertEqual(merged_ta["source_type"], "fleet_and_live")
-            self.assertTrue(merged_ta["live"])
-            self.assertEqual(merged_ta["phone"], "+1-219-555-0101")
-            new_live = next(s for s in body["suggested_shops"] if s["shop_name"] == "Lone Star Commercial Tire")
-            self.assertEqual(new_live["source_type"], "live_route")
-            self.assertEqual(new_live["anchor_label"], "Near Delivery")
-
-            # Background badge preload must NOT invoke external live search
-            with patch.object(server, "_search_live_route_shops", side_effect=AssertionError("Called during preload")):
-                res_pre = client.get("/api/workspace/cases/case-route-1/ai-insights?preload=1")
-                self.assertEqual(res_pre.status_code, 200)
-                self.assertEqual(res_pre.get_json()["route_shop_search"]["status"], "skipped_preload")
+            server, "_search_live_route_shops"
+        ) as search:
+            for query in ("", "?preload=1", "?force_live=1"):
+                res = client.get("/api/workspace/cases/case-route-1/ai-insights" + query)
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(res.get_json()["suggested_shops"], [])
+                self.assertTrue(res.get_json()["triage"]["troubleshooting_steps"])
+            search.assert_not_called()
 
 
 if __name__ == "__main__":

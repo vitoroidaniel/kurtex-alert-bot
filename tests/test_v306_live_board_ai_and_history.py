@@ -49,7 +49,7 @@ class LiveBoardHistoryAndAITests(unittest.TestCase):
                     "case_type": "maintenance_report",
                     "unit_number": "308",
                     "vehicle_type": "truck",
-                    "issue_text": "Radiator hose coolant leak",
+                    "issue_text": "Coolant leak near radiator hose and overheating",
                     "description": "Coolant leak at upper clamp",
                     "shop_info": "TA Truck Service #142",
                     "amount": "640.00",
@@ -117,7 +117,25 @@ class LiveBoardHistoryAndAITests(unittest.TestCase):
         self.assertEqual(latest["workspace_history"][-1]["action"], "attachment_added")
         self.assertEqual(latest["workspace_history"][-1]["file_name"], "radiator_leak.jpg")
 
-    def test_ai_insights_aggregates_shops_costs_unit_history_and_llm_fallback(self):
+    def test_ai_insights_uses_close_matches_and_notes_for_troubleshooting(self):
+        with db.write_tx(self.data_dir) as conn:
+            unrelated = {
+                "id": "case-same-unit-unrelated",
+                "unit_number": "308",
+                "vehicle_type": "truck",
+                "issue_text": "Starter failure, no crank",
+                "status": "done",
+                "notes": "Radiator hose inspected during earlier maintenance.",
+            }
+            conn.execute(
+                "INSERT INTO cases(id,status,agent_id,data_json) VALUES(?,?,?,?)",
+                (unrelated["id"], "done", 101, json.dumps(unrelated)),
+            )
+        case_store.workspace_write(self.daniel, {
+            "action": "note",
+            "revision": case_store.workspace_revision(self.target),
+            "text": "Driver confirmed visible coolant near the upper clamp.",
+        }, "case-ai-target")
         client = server.app.test_client()
         with client.session_transaction() as sess:
             sess["user"] = {"id": 101, "name": "Daniel", "role": "super_admin"}
@@ -129,15 +147,14 @@ class LiveBoardHistoryAndAITests(unittest.TestCase):
         self.assertTrue(body["ok"])
         self.assertEqual(body["unit_insights"]["unit_number"], "308")
         self.assertGreaterEqual(body["unit_insights"]["resolved"], 1)
-        self.assertTrue(any(s["shop_name"] == "TA Truck Service #142" for s in body["suggested_shops"]))
-        top_shop = body["suggested_shops"][0]
-        self.assertEqual(top_shop["shop_name"], "TA Truck Service #142")
-        self.assertEqual(top_shop["avg_amount"], 780.0)
+        self.assertEqual(body["suggested_shops"], [])
+        self.assertEqual(body["triage"]["latest_note"], "Driver confirmed visible coolant near the upper clamp.")
+        self.assertTrue(any("temperature" in step for step in body["triage"]["troubleshooting_steps"]))
         self.assertEqual(body["cost_estimate"]["min"], 640.0)
-        self.assertEqual(body["cost_estimate"]["max"], 920.0)
-        similar_ids = [s["id"] for s in body["similar_cases"]]
+        similar_ids = [match["id"] for match in body["similar_cases"]]
         self.assertIn("case-hist-1", similar_ids)
-        self.assertIn("case-hist-2", similar_ids)
+        self.assertNotIn("case-same-unit-unrelated", similar_ids)
+        self.assertTrue(all(match.get("match_reason") for match in body["similar_cases"]))
         self.assertNotIn("case-ai-target", similar_ids)
 
         # Optional LLM request falls back cleanly when Cloudflare AI fails or is unconfigured
@@ -149,16 +166,42 @@ class LiveBoardHistoryAndAITests(unittest.TestCase):
             res_err = client.get("/api/workspace/cases/case-ai-target/ai-insights?llm=1")
         self.assertEqual(res_err.status_code, 200)
         self.assertIsNone(res_err.get_json()["llm_advice"])
-        self.assertIn("offline", res_err.get_json()["llm_error"])
+        self.assertIn("temporarily unavailable", res_err.get_json()["llm_error"])
 
         with client.session_transaction() as sess:
             sess["user"] = {"id": 101, "name": "Daniel", "role": "super_admin"}
         with patch.object(workspace_board, "get_user", return_value=self.daniel), \
              patch.object(server, "load_cases", side_effect=lambda: case_store.get_all_cases()), \
-             patch.object(server, "_cf_ai", return_value="• Route to TA Truck Service #142"):
+             patch.object(server, "_cf_ai", return_value="• Document when the coolant warning appeared") as generate:
             res_ok = client.get("/api/workspace/cases/case-ai-target/ai-insights?llm=1")
         self.assertEqual(res_ok.status_code, 200)
-        self.assertEqual(res_ok.get_json()["llm_advice"], "• Route to TA Truck Service #142")
+        self.assertEqual(res_ok.get_json()["llm_advice"], "• Document when the coolant warning appeared")
+        context = json.loads(generate.call_args.args[0][1]["content"])
+        self.assertIn("Driver confirmed visible coolant near the upper clamp.", context["recent_case_notes"])
+        self.assertNotIn("suggested_shops", context)
+
+    def test_legacy_proofs_become_invoices_without_changing_file_records(self):
+        case = dict(self.target, workspace_attachments=[
+            {"id": "receipt", "name": "receipt.pdf", "category": "proof", "proof_type": "receipt", "version_num": 2},
+            {"id": "proof", "name": "old proof.pdf", "category": "proof"},
+            {"id": "photo", "name": "photo.jpg", "category": "attachment"},
+        ])
+        with db.write_tx(self.data_dir) as conn:
+            conn.execute("UPDATE cases SET data_json=? WHERE id=?", (json.dumps(case), case["id"]))
+            db.sync_normalized_case_row(conn, case)
+            conn.execute("UPDATE meta SET value='4' WHERE key='live_board_schema_version'")
+            db._migrate_live_board_schema(conn)
+            db._migrate_live_board_schema(conn)
+            saved = json.loads(conn.execute("SELECT data_json FROM cases WHERE id=?", (case["id"],)).fetchone()["data_json"])
+            types = {r["id"]: r["proof_type"] for r in conn.execute(
+                "SELECT id,proof_type FROM case_attachments WHERE case_id=?", (case["id"],)
+            )}
+        self.assertEqual(types, {"receipt": "invoice", "proof": "invoice", "photo": ""})
+        self.assertEqual(saved["workspace_attachments"], [
+            {**case["workspace_attachments"][0], "proof_type": "invoice"},
+            {**case["workspace_attachments"][1], "proof_type": "invoice"},
+            case["workspace_attachments"][2],
+        ])
 
     def test_ai_insights_ignores_test_dummy_and_noise_matches(self):
         with db.write_tx(self.data_dir) as conn:
