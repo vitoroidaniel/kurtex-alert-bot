@@ -128,6 +128,10 @@ def register_workspace_routes(server):
             return _workspace_can_manage(case, user)
         return bool(user.get("id")) and role in ("developer", "super_admin", "agent", "manager", "admin")
 
+    def _can_view_live_activity(user):
+        """Only managers and developers may view live case/editing activity and teammate action logs."""
+        return server._website_role((user or {}).get("role")) in ("developer", "super_admin", "manager", "admin")
+
     def _workspace_actor():
         """Recheck current membership for writes; the login cookie is not role authority."""
         user = session.get("user")
@@ -1012,7 +1016,7 @@ def register_workspace_routes(server):
             "type": "ready",
             "version": version,
             "cursor": cursor,
-            "presence": snapshot(user_id, _data_dir()),
+            "presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor)),
         }))
         last_heartbeat = last_auth_check = last_version_check = connected_at = time.monotonic()
         try:
@@ -1071,7 +1075,7 @@ def register_workspace_routes(server):
                 next_pres_seq = _get_presence_seq()
                 if next_pres_seq != pres_seq:
                     pres_seq = next_pres_seq
-                    ws.send(json.dumps({"type": "presence", "presence": snapshot(user_id, _data_dir())}))
+                    ws.send(json.dumps({"type": "presence", "presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor))}))
                 if now - last_heartbeat >= 20:
                     if ws_has_presence and ws_cur_action != "left":
                         try:
@@ -1135,7 +1139,7 @@ def register_workspace_routes(server):
                 yield _fmt_sse("ready", {
                     "version": version,
                     "cursor": cursor,
-                    "presence": snapshot(user_id, _data_dir()),
+                    "presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor)),
                 })
                 while (time.monotonic() - started) < max_seconds:
                     time.sleep(0.55)
@@ -1151,7 +1155,7 @@ def register_workspace_routes(server):
                     next_pres_seq = _get_presence_seq()
                     if next_pres_seq != pres_seq:
                         pres_seq = next_pres_seq
-                        yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir())})
+                        yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor))})
                     now = time.monotonic()
                     if now - last_ping >= 18.0:
                         last_ping = now
@@ -1558,10 +1562,12 @@ def register_workspace_routes(server):
 
     @app.route("/api/workspace/agents/<agent_id>/recent-actions", methods=["GET"])
     def api_workspace_agent_recent_actions(agent_id):
-        """Return up to 5 latest workspace actions for an agent (usable by any active team member)."""
+        """Return up to 5 latest workspace actions for an agent (managers & developers only)."""
         actor, error = _workspace_actor_read()
         if error:
             return error
+        if not _can_view_live_activity(actor):
+            return jsonify({"error": "Only managers and developers can view teammate activity history."}), 403
         role = str(actor.get("role") or "").lower()
         target_id = str(agent_id or "").strip()
         if not target_id:
@@ -1600,7 +1606,7 @@ def register_workspace_routes(server):
             actor, error = _workspace_actor_read()
             if error:
                 return error
-            return jsonify(snapshot(actor["id"], _data_dir()))
+            return jsonify(snapshot(actor["id"], _data_dir(), include_activity=_can_view_live_activity(actor)))
         actor, error = _workspace_actor()
         if error:
             return error
@@ -1619,7 +1625,7 @@ def register_workspace_routes(server):
                 draft=data.get("draft", ""),
             )
             _bump_presence_seq()
-            return jsonify(snapshot(actor["id"], _data_dir()))
+            return jsonify(snapshot(actor["id"], _data_dir(), include_activity=_can_view_live_activity(actor)))
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
 
@@ -2692,7 +2698,12 @@ def register_workspace_routes(server):
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify({"error": "Invalid workspace preferences payload."}), 400
-        saved = save_workspace_board_prefs(actor["id"], data, data_dir=_data_dir())
+        saved = save_workspace_board_prefs(
+            actor["id"],
+            data,
+            data_dir=_data_dir(),
+            owner_name=str(actor.get("name") or actor.get("first_name") or ""),
+        )
         return jsonify({
             "ok": True,
             "preferences": saved,

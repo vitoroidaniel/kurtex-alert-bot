@@ -170,7 +170,34 @@ class LiveBoardV311PrefsAndShopsTests(unittest.TestCase):
             self.assertFalse(agent_prefs["background_alerts"])
             self.assertEqual(agent_prefs["active_view_id"], "view-1")
 
-            # Reset restores defaults
+            # Shared saved view becomes visible in shared_views for other teammates
+            client.put(
+                "/api/workspace/preferences",
+                headers={"X-Workspace-CSRF": "test-csrf"},
+                json={
+                    "saved_views": [{
+                        "id": "view-shared-1",
+                        "name": "Team High Risk",
+                        "filters": {"priority": "high", "shared": True},
+                    }]
+                },
+            )
+            teammate = {"id": 202, "name": "Agent Two", "role": "agent", "username": "agent2"}
+            with db.write_tx(self.data_dir) as conn:
+                conn.execute(
+                    "INSERT INTO users(id,name,username,role) VALUES (?,?,?,?)",
+                    (teammate["id"], teammate["name"], teammate["username"], teammate["role"]),
+                )
+            self._auth_session(client, teammate)
+            with patch.object(workspace_board, "get_user", return_value=teammate), \
+                 patch.object(workspace_board, "get_all_user_dicts", return_value=[self.daniel, teammate]):
+                tm_prefs = client.get("/api/workspace/preferences").get_json()["preferences"]
+                self.assertEqual(len(tm_prefs["shared_views"]), 1)
+                self.assertEqual(tm_prefs["shared_views"][0]["name"], "Team High Risk")
+                self.assertEqual(tm_prefs["shared_views"][0]["owner_name"], "Daniel")
+
+            # Switch back to Daniel and reset restores defaults
+            self._auth_session(client, self.daniel)
             res_reset = client.put(
                 "/api/workspace/preferences",
                 headers={"X-Workspace-CSRF": "test-csrf"},

@@ -69,7 +69,7 @@ def remove_session(session_id, data_dir=None):
         conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
 
 
-def snapshot(current_user, data_dir=None):
+def snapshot(current_user, data_dir=None, *, include_activity: bool = True):
     now = time.time()
     with db.read_conn(data_dir) as conn:
         try:
@@ -85,17 +85,17 @@ def snapshot(current_user, data_dir=None):
         act = str(row["action"] or "idle")
         if act not in _ACTIVE_ACTIONS:
             continue
-        rank = _ACTION_RANK.get(act, 1)
+        rank = _ACTION_RANK.get(act, 1) if include_activity else 1
         upd = float(row["updated_at"] or 0.0)
         prev = unique.get(uid)
         if not prev or rank > prev["_rank"] or (rank == prev["_rank"] and upd > prev["_upd"]):
             unique[uid] = {
                 "user_id": uid,
                 "name": row["user_name"],
-                "action": act,
-                "case_id": row["case_id"],
-                "field": row["field"],
-                "draft": row["draft"] or "",
+                "action": act if include_activity else "idle",
+                "case_id": row["case_id"] if include_activity else "",
+                "field": row["field"] if include_activity else "",
+                "draft": (row["draft"] or "") if include_activity else "",
                 "updated_at": upd,
                 "_rank": rank,
                 "_upd": upd,
@@ -109,7 +109,7 @@ def snapshot(current_user, data_dir=None):
         for item in ordered
     ]
     peers = [p for p in members if int(p["user_id"]) != int(current_user)]
-    editing = sum(1 for p in members if p.get("action") == "editing")
+    editing = sum(1 for p in members if p.get("action") == "editing") if include_activity else 0
     return {
         "online": len(members),
         "editing": editing,

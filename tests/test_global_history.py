@@ -335,7 +335,24 @@ class GlobalHistoryTests(unittest.TestCase):
             },
             c1["id"],
         )
+        # Regular agents are blocked from viewing recent actions & only receive online/offline presence (no case/editing activity)
         self._auth(self.agent_a)
+        res_forbidden = self.client.get(f"/api/workspace/agents/{self.agent_a['id']}/recent-actions?limit=5")
+        self.assertEqual(res_forbidden.status_code, 403)
+
+        # Seed active presence for manager and verify agent vs manager views
+        import uuid
+        sid_mgr = str(uuid.uuid4())
+        board_presence.heartbeat(sid_mgr, self.manager["id"], "Manager", "editing", c1["id"], "shop_info", self.data_dir, draft="Secret shop")
+        agent_pres = self.client.get("/api/workspace/presence").get_json()
+        self.assertEqual(agent_pres["online"], 1)
+        self.assertEqual(agent_pres["editing"], 0)
+        self.assertEqual(agent_pres["peers"][0]["action"], "idle")
+        self.assertEqual(agent_pres["peers"][0]["case_id"], "")
+        self.assertEqual(agent_pres["peers"][0]["draft"], "")
+
+        # Manager/developer gets recent actions + full presence activity
+        self._auth(self.manager)
         res = self.client.get(f"/api/workspace/agents/{self.agent_a['id']}/recent-actions?limit=5")
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
@@ -343,6 +360,16 @@ class GlobalHistoryTests(unittest.TestCase):
         self.assertGreaterEqual(len(data["events"]), 2)
         self.assertLessEqual(len(data["events"]), 5)
         self.assertTrue(all(ev["actor_id"] == str(self.agent_a["id"]) for ev in data["events"]))
+
+        # Live presence works in reverse direction too: manager sees agent_a's live activity when active
+        sid_a = str(uuid.uuid4())
+        board_presence.heartbeat(sid_a, self.agent_a["id"], "Alex", "viewing", c1["id"], "", self.data_dir)
+        mgr_pres = self.client.get("/api/workspace/presence").get_json()
+        peer_a = next(p for p in mgr_pres["peers"] if p["user_id"] == self.agent_a["id"])
+        self.assertEqual(peer_a["action"], "viewing")
+        self.assertEqual(peer_a["case_id"], c1["id"])
+        board_presence.remove_session(sid_mgr, self.data_dir)
+        board_presence.remove_session(sid_a, self.data_dir)
         self.assertNotIn("deleted_snapshot", data["events"][0])
 
         ver = self.client.get("/api/workspace/version")

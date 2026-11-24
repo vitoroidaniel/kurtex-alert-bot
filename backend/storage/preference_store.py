@@ -328,13 +328,100 @@ def _sanitize_workspace_board_prefs(raw) -> dict:
     return prefs
 
 
+def _sanitize_saved_view_item(item, *, owner_id: str = "", owner_name: str = ""):
+    if not isinstance(item, dict):
+        return None
+    vid = "".join(ch for ch in str(item.get("id") or "").strip()[:48] if ch.isalnum() or ch in ("-", "_"))
+    name = " ".join(str(item.get("name") or "").split()).strip()[:48]
+    if not vid or not name:
+        return None
+    entry = {
+        "id": vid,
+        "name": name,
+        "filters": _sanitize_saved_view_filters(item.get("filters")),
+        "pin_to_toolbar": bool(item.get("pin_to_toolbar", False)),
+    }
+    created_at = str(item.get("created_at") or "").strip()[:40]
+    if created_at:
+        entry["created_at"] = created_at
+    oid = str(owner_id or item.get("owner_id") or "").strip()[:48]
+    oname = " ".join(str(owner_name or item.get("owner_name") or "").split()).strip()[:64]
+    if oid:
+        entry["owner_id"] = oid
+    if oname:
+        entry["owner_name"] = oname
+    return entry
+
+
+SHARED_VIEWS_KEY = "workspace_shared_views"
+
+
+def _read_shared_views_from_conn(conn) -> list[dict]:
+    row = conn.execute("SELECT data_json FROM kv_state WHERE key=?", (SHARED_VIEWS_KEY,)).fetchone()
+    if not row:
+        return []
+    try:
+        raw = json.loads(row["data_json"])
+    except Exception:
+        return []
+    if not isinstance(raw, list):
+        return []
+    out = []
+    seen = set()
+    for item in raw:
+        clean = _sanitize_saved_view_item(item)
+        if not clean or clean["id"] in seen or not clean["filters"].get("shared"):
+            continue
+        seen.add(clean["id"])
+        out.append(clean)
+        if len(out) >= 40:
+            break
+    return out
+
+
+def get_shared_workspace_views(data_dir: Path | None = None) -> list[dict]:
+    """Return team-shared saved filters across all workspace members."""
+    with db.read_conn(data_dir or _storage_dir()) as conn:
+        return _read_shared_views_from_conn(conn)
+
+
+def _sync_user_shared_views(conn, user_id, owner_name: str, saved_views: list[dict]) -> list[dict]:
+    uid = str(user_id)
+    row = conn.execute("SELECT version, data_json FROM kv_state WHERE key=?", (SHARED_VIEWS_KEY,)).fetchone()
+    ver = int(row["version"]) if row else 0
+    existing = _read_shared_views_from_conn(conn) if row else []
+    others = [v for v in existing if str(v.get("owner_id") or "") != uid]
+    mine_shared = []
+    for item in saved_views:
+        clean = _sanitize_saved_view_item(item, owner_id=uid, owner_name=owner_name)
+        if clean and clean["filters"].get("shared"):
+            mine_shared.append(clean)
+    merged = []
+    seen = set()
+    for item in [*mine_shared, *others]:
+        if item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        merged.append(item)
+        if len(merged) >= 40:
+            break
+    conn.execute(
+        "INSERT INTO kv_state(key,version,data_json) VALUES(?,?,?) "
+        "ON CONFLICT(key) DO UPDATE SET version=excluded.version,data_json=excluded.data_json",
+        (SHARED_VIEWS_KEY, ver + 1, json.dumps(merged, ensure_ascii=False, separators=(",", ":"))),
+    )
+    return merged
+
+
 def get_workspace_board_prefs(user_id, data_dir: Path | None = None) -> dict:
-    """Return validated Live Board workspace settings, toolbar layout, and saved views."""
+    """Return validated Live Board workspace settings, toolbar layout, saved views, and shared team views."""
     raw = _read_user_prefs(user_id, data_dir=data_dir).get("workspace_board")
-    return _sanitize_workspace_board_prefs(raw)
+    prefs = _sanitize_workspace_board_prefs(raw)
+    prefs["shared_views"] = get_shared_workspace_views(data_dir=data_dir)
+    return prefs
 
 
-def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = None) -> dict:
+def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = None, *, owner_name: str = "") -> dict:
     """Atomically merge/update validated Live Board workspace settings and return stored copy."""
     updates = payload if isinstance(payload, dict) else {}
 
@@ -372,4 +459,15 @@ def save_workspace_board_prefs(user_id, payload: dict, data_dir: Path | None = N
         data["workspace_board"] = clean
         return clean
 
-    return _mutate_user_prefs(user_id, _apply, data_dir=data_dir)
+    saved = _mutate_user_prefs(user_id, _apply, data_dir=data_dir)
+    if "saved_views" in updates or updates.get("reset") is True:
+        with db.write_tx(data_dir or _storage_dir()) as conn:
+            saved["shared_views"] = _sync_user_shared_views(
+                conn,
+                user_id,
+                owner_name,
+                saved.get("saved_views") or [],
+            )
+    else:
+        saved["shared_views"] = get_shared_workspace_views(data_dir=data_dir)
+    return saved
