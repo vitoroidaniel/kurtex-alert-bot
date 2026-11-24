@@ -139,14 +139,54 @@ class GlobalHistoryTests(unittest.TestCase):
 
         # Filter by action=delete and search by query
         res_del = self.client.get("/api/workspace/history?action=delete")
-        self.assertEqual([e["case_id"] for e in res_del.get_json()["events"]], ["CASE-DEL"])
+        del_events = res_del.get_json()["events"]
+        self.assertEqual([e["case_id"] for e in del_events], ["CASE-DEL"])
+        self.assertEqual(del_events[0]["actor_name"], "Daniel")
+        self.assertEqual(del_events[0]["actor_role"], "super_admin")
+        self.assertEqual(del_events[0]["unit_number"], "555")
+        self.assertEqual(del_events[0]["driver_name"], "Drop Driver")
+        self.assertIsInstance(del_events[0].get("deleted_snapshot"), dict)
+        self.assertEqual(del_events[0]["deleted_snapshot"]["issue_text"], "Delete me")
+
         res_q = self.client.get("/api/workspace/history?q=Love")
         self.assertEqual(len(res_q.get_json()["events"]), 1)
 
-        # Developer sees test case events too
+        # Developer actions expose actor_role='developer' on events and actors list, and dev sees deleted test cases
+        c_dev_del = case_store.workspace_write(
+            self.dev,
+            {
+                "id": "CASE-DEV-DEL",
+                "request_id": "req-dev-del",
+                "driver": "Dev Driver",
+                "unit_number": "777",
+                "issue": "Dev sensor calibration check",
+                "vehicle_type": "truck",
+                "priority": "normal",
+                "target_agent": self.agent_a,
+            },
+        )
+        case_store.workspace_write(self.dev, {"action": "set_test", "is_test": True}, c_dev_del["id"])
+        case_store.remove_live_board_case(
+            self.dev,
+            c_dev_del["id"],
+            mode="permanent",
+            revision=case_store.workspace_revision(case_store.get_case(c_dev_del["id"])),
+        )
+        # Non-dev manager must NOT see deleted test case in deleted audit list
+        mgr_ids = {e["case_id"] for e in self.client.get("/api/workspace/history").get_json()["events"]}
+        self.assertNotIn("CASE-DEV-DEL", mgr_ids)
+
+        # Developer sees test case events + deleted test case record + actor_role='developer'
         self._auth(self.dev)
-        dev_ids = {e["case_id"] for e in self.client.get("/api/workspace/history").get_json()["events"]}
+        dev_body = self.client.get("/api/workspace/history").get_json()
+        dev_ids = {e["case_id"] for e in dev_body["events"]}
         self.assertIn("CASE-TEST", dev_ids)
+        self.assertIn("CASE-DEV-DEL", dev_ids)
+        dev_del_ev = next(e for e in dev_body["events"] if e["case_id"] == "CASE-DEV-DEL")
+        self.assertEqual(dev_del_ev["actor_name"], "Dev")
+        self.assertEqual(dev_del_ev["actor_role"], "developer")
+        self.assertEqual(dev_del_ev["unit_number"], "777")
+        self.assertTrue(any(a.get("name") == "Dev" and a.get("role") == "developer" for a in dev_body["actors"]))
 
 
 if __name__ == "__main__":

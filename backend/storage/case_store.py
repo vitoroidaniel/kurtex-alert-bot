@@ -1260,11 +1260,29 @@ def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: st
                          "board_hidden_by": actor_name, "updated_at": now})
             case.setdefault("workspace_history", []).append({
                 "action": "board_cleared", "author": actor_name, "author_id": actor_id,
-                "scope": "single", "created_at": now,
+                "author_role": role, "scope": "single", "created_at": now,
             })
             _upsert_case_row(conn, case, event_type="board_cleared",
                              actor_id=actor_id, actor_name=actor_name)
         else:
+            deleted_snapshot = {
+                "case_id": case_id,
+                "unit_number": str(case.get("unit_number") or "").strip(),
+                "vehicle_type": str(case.get("vehicle_type") or "").strip(),
+                "driver_name": str(case.get("report_driver") or case.get("driver_name") or "").strip(),
+                "issue_text": str(case.get("report_issue") or case.get("description") or "").strip()[:260],
+                "shop_info": str(case.get("shop_info") or "").strip()[:140],
+                "amount": str(case.get("amount") or "").strip()[:48],
+                "priority": str(case.get("priority") or "normal").strip(),
+                "board_stage": str(case.get("board_stage") or "").strip(),
+                "status": str(case.get("status") or "").strip(),
+                "agent_name": str(case.get("agent_name") or "").strip(),
+                "is_test": bool(case.get("is_test") or case.get("is_testing")),
+                "actor_id": actor_id,
+                "actor_name": actor_name,
+                "actor_role": role,
+                "created_at": now,
+            }
             for media in case.get("media") or []:
                 if isinstance(media, dict):
                     file_id = media.get("file_id") or media.get("id")
@@ -1300,8 +1318,28 @@ def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: st
                     conn.execute("UPDATE preferences SET data_json=?, updated_at=? WHERE user_id=?",
                                  (json.dumps(data, separators=(",", ":")), now, pref["user_id"]))
             conn.execute("DELETE FROM cases WHERE id=?", (case_id,))
-            # No old case details, notes, attachment metadata or actor PII in this marker.
+            # Keep case_events deletion sync marker content-free; persist global audit summary separately.
             db.append_case_event(conn, case_id, "deleted", created_at=now)
+            audit_row = conn.execute(
+                "SELECT version, data_json FROM kv_state WHERE key=?", ("workspace_deleted_records",)
+            ).fetchone()
+            audit_list = []
+            audit_ver = 0
+            if audit_row:
+                audit_ver = int(audit_row["version"] or 0)
+                try:
+                    parsed_audit = json.loads(audit_row["data_json"])
+                    if isinstance(parsed_audit, list):
+                        audit_list = [r for r in parsed_audit if isinstance(r, dict) and str(r.get("case_id") or "") != case_id]
+                except (TypeError, ValueError):
+                    audit_list = []
+            audit_list.insert(0, deleted_snapshot)
+            audit_list = audit_list[:400]
+            conn.execute(
+                "INSERT INTO kv_state(key, version, data_json) VALUES(?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET version=excluded.version, data_json=excluded.data_json",
+                ("workspace_deleted_records", audit_ver + 1, json.dumps(audit_list, separators=(",", ":"))),
+            )
             db.bump_version(conn, "cases_version")
 
         order = conn.execute("SELECT version, data_json FROM kv_state WHERE key=?", (BOARD_ORDER_KEY,)).fetchone()
@@ -2042,6 +2080,9 @@ def get_global_workspace_history(
                     author_id = users_by_name[author_name.lower()]
                 if author_id and author_id in users_by_id and (not h.get("author") or author_name == "Team member"):
                     author_name = users_by_id[author_id]["name"]
+                author_role = str(h.get("author_role") or "").strip().lower()
+                if not author_role and author_id and author_id in users_by_id:
+                    author_role = str(users_by_id[author_id].get("role") or "").strip().lower()
                 cat = _GLOBAL_HISTORY_CATEGORY.get(act, "other")
                 raw_events.append({
                     "event_id": f"{cid}:{idx}:{created_at}:{act}",
@@ -2056,6 +2097,7 @@ def get_global_workspace_history(
                     "category": cat,
                     "actor_id": author_id,
                     "actor_name": author_name,
+                    "actor_role": author_role,
                     "created_at": created_at,
                     "fields": list(h.get("fields") or []),
                     "changes": list(h.get("changes") or []),
@@ -2071,40 +2113,82 @@ def get_global_workspace_history(
                     "is_test_val": h.get("is_test"),
                 })
 
-        # Surface permanent deletion markers whose cases were purged from cases table
+        # Surface permanent deletion markers & deleted case audit records
+        deleted_audit_by_cid: dict[str, dict] = {}
+        audit_kv = conn.execute(
+            "SELECT data_json FROM kv_state WHERE key=?", ("workspace_deleted_records",)
+        ).fetchone()
+        if audit_kv and audit_kv["data_json"]:
+            try:
+                parsed_audit = json.loads(audit_kv["data_json"])
+                if isinstance(parsed_audit, list):
+                    for rec in parsed_audit:
+                        if isinstance(rec, dict) and rec.get("case_id"):
+                            deleted_audit_by_cid[str(rec["case_id"])] = rec
+            except (TypeError, ValueError):
+                deleted_audit_by_cid = {}
+
         del_rows = conn.execute(
             "SELECT id, case_id, actor_id, actor_name, created_at FROM case_events WHERE event_type='deleted' ORDER BY id DESC LIMIT 300"
         ).fetchall()
-        for dr in del_rows:
-            dcid = str(dr["case_id"] or "")
-            if dcid in present_case_ids:
-                continue
-            created_at = str(dr["created_at"] or "").strip()
-            if cutoff_iso and created_at and created_at < cutoff_iso:
-                continue
-            d_actor_id = str(dr["actor_id"] or "").strip()
-            d_actor_name = str(dr["actor_name"] or "").strip() or (
-                users_by_id[d_actor_id]["name"] if d_actor_id in users_by_id else "Manager / Admin"
-            )
+        seen_deleted_cids: set[str] = set()
+
+        def _append_deleted_event(dcid: str, eid: str, created_at: str, row_actor_id: str, row_actor_name: str, rec: dict | None) -> None:
+            rec = rec or {}
+            del_is_test = bool(rec.get("is_test"))
+            if del_is_test and not include_test:
+                return
+            d_actor_id = str(rec.get("actor_id") or row_actor_id or "").strip()
+            d_actor_name = str(rec.get("actor_name") or row_actor_name or "").strip()
+            if not d_actor_name and d_actor_id and d_actor_id in users_by_id:
+                d_actor_name = users_by_id[d_actor_id]["name"]
+            if not d_actor_id and d_actor_name and d_actor_name.lower() in users_by_name:
+                d_actor_id = users_by_name[d_actor_name.lower()]
+            d_actor_role = str(rec.get("actor_role") or "").strip().lower()
+            if not d_actor_role and d_actor_id and d_actor_id in users_by_id:
+                d_actor_role = str(users_by_id[d_actor_id].get("role") or "").strip().lower()
+            d_unit = str(rec.get("unit_number") or "").strip()
+            d_driver = str(rec.get("driver_name") or "").strip()
+            d_issue = str(rec.get("issue_text") or "").strip()
+            d_shop = str(rec.get("shop_info") or "").strip()
+            d_amount = str(rec.get("amount") or "").strip()
+            d_agent = str(rec.get("agent_name") or "").strip()
+            d_stage = str(rec.get("board_stage") or "").strip()
+            d_vehicle = str(rec.get("vehicle_type") or "").strip()
+            d_prev_status = str(rec.get("status") or "").strip()
+            d_prio = str(rec.get("priority") or "normal").strip() or "normal"
+            snapshot = {
+                "unit_number": d_unit,
+                "vehicle_type": d_vehicle,
+                "driver_name": d_driver,
+                "issue_text": d_issue,
+                "shop_info": d_shop,
+                "amount": d_amount,
+                "agent_name": d_agent,
+                "board_stage": d_stage,
+                "status": d_prev_status,
+                "priority": d_prio,
+            } if any((d_unit, d_driver, d_issue, d_shop, d_amount, d_agent, d_stage)) else None
             raw_events.append({
-                "event_id": f"del:{dr['id']}:{dcid}",
+                "event_id": eid,
                 "case_id": dcid,
-                "unit_number": "",
-                "driver_name": "",
+                "unit_number": d_unit,
+                "driver_name": d_driver,
                 "case_status": "deleted",
-                "priority": "normal",
+                "priority": d_prio,
                 "case_exists": False,
-                "is_test": False,
+                "is_test": del_is_test,
                 "action": "deleted",
                 "category": "delete",
                 "actor_id": d_actor_id,
-                "actor_name": d_actor_name,
+                "actor_name": d_actor_name or "Deleted Record (Legacy)",
+                "actor_role": d_actor_role,
                 "created_at": created_at,
                 "fields": [],
                 "changes": [],
                 "from": "",
                 "to": "",
-                "preview": "",
+                "preview": d_issue[:160],
                 "file_name": "",
                 "file_count": 0,
                 "version": None,
@@ -2112,7 +2196,33 @@ def get_global_workspace_history(
                 "source": "workspace",
                 "pinned": None,
                 "is_test_val": None,
+                "deleted_snapshot": snapshot,
             })
+
+        for dr in del_rows:
+            dcid = str(dr["case_id"] or "")
+            if not dcid or dcid in present_case_ids:
+                continue
+            seen_deleted_cids.add(dcid)
+            rec = deleted_audit_by_cid.get(dcid)
+            created_at = str((rec or {}).get("created_at") or dr["created_at"] or "").strip()
+            if cutoff_iso and created_at and created_at < cutoff_iso:
+                continue
+            _append_deleted_event(
+                dcid,
+                f"del:{dr['id']}:{dcid}",
+                created_at,
+                str(dr["actor_id"] or ""),
+                str(dr["actor_name"] or ""),
+                rec,
+            )
+        for dcid, rec in deleted_audit_by_cid.items():
+            if dcid in present_case_ids or dcid in seen_deleted_cids:
+                continue
+            created_at = str(rec.get("created_at") or "").strip()
+            if cutoff_iso and created_at and created_at < cutoff_iso:
+                continue
+            _append_deleted_event(dcid, f"delrec:{dcid}", created_at, "", "", rec)
 
     # Distinct actors across the time window before actor/action narrowing
     actor_counts: dict[str, dict] = {}
@@ -2123,8 +2233,11 @@ def get_global_workspace_history(
                 "key": ev["actor_id"] or ev["actor_name"],
                 "id": ev["actor_id"],
                 "name": ev["actor_name"],
+                "role": ev.get("actor_role") or "",
                 "count": 0,
             }
+        elif not actor_counts[key].get("role") and ev.get("actor_role"):
+            actor_counts[key]["role"] = ev.get("actor_role") or ""
         actor_counts[key]["count"] += 1
 
     # Filter by actor
@@ -2169,11 +2282,13 @@ def get_global_workspace_history(
                 f"{ch.get('field', '')} {ch.get('from', '')} {ch.get('to', '')}"
                 for ch in (ev.get("changes") or []) if isinstance(ch, dict)
             )
+            snap = ev.get("deleted_snapshot") or {}
             hay = " ".join([
                 ev["case_id"],
                 ev["unit_number"],
                 ev["driver_name"],
                 ev["actor_name"],
+                ev.get("actor_role") or "",
                 ev["action"],
                 ev["category"],
                 " ".join(str(f) for f in (ev.get("fields") or [])),
@@ -2183,6 +2298,11 @@ def get_global_workspace_history(
                 ev["preview"],
                 ev["file_name"],
                 ev["scope"],
+                str(snap.get("issue_text") or ""),
+                str(snap.get("shop_info") or ""),
+                str(snap.get("amount") or ""),
+                str(snap.get("agent_name") or ""),
+                str(snap.get("vehicle_type") or ""),
             ]).lower()
             if q_norm not in hay:
                 continue

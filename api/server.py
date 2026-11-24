@@ -592,10 +592,141 @@ def _ai_case_record(c):
       "agent":_sanitize_md_text(c.get("agent_name") or ""),
       "solved_by":_sanitize_md_text(c.get("closed_by_name") or c.get("closed_by") or c.get("resolved_by") or ""),
       "resolution":_sanitize_md_text(c.get("resolution") or c.get("solution") or c.get("close_notes") or c.get("closing_notes") or c.get("resolution_notes") or ""),
+      "shop":_sanitize_md_text(c.get("shop_info") or ""),
+      "amount":_sanitize_md_text(c.get("amount") or c.get("repair_amount") or ""),
+      "priority":str(c.get("priority") or "").strip().lower(),
+      "board_stage":str(c.get("board_stage") or "").strip(),
+      "board_hidden":bool(c.get("board_hidden")),
       "status":str(c.get("status") or "").strip(),
       "opened":opened_fmt,
       "opened_raw":opened_iso,
       "closed":closed_fmt
+    }
+
+
+def _parse_case_amount_usd(raw):
+    """Extract a positive USD cost float from messy dispatch/repair strings."""
+    text = str(raw or "").strip()
+    if not text or re.match(r"^\d{4}-\d{2}(?:-\d{2})?$", text):
+        return None
+    # Strip dates so timestamps inside strings do not look like huge costs
+    cleaned = re.sub(r"\b\d{4}-\d{1,2}-\d{1,2}\b", " ", text)
+    m = re.search(r"\$?\s*(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?", cleaned)
+    if not m:
+        return None
+    try:
+        val = float(m.group(1).replace(",", "") + ("." + m.group(2) if m.group(2) else ""))
+    except (TypeError, ValueError):
+        return None
+    if val <= 0 or val > 250000:
+        return None
+    return round(val, 2)
+
+
+def _compute_ai_fleet_analytics(cases):
+    """Aggregate breakdown frequency, spend tiers (<$500 / $500+), and shops over verified non-test cases."""
+    pool = [
+        c for c in (cases or [])
+        if isinstance(c, dict)
+        and not is_testing(c)
+        and not is_history_test_case(c)
+        and not is_test_group_name(c.get("group_name") or c.get("group") or "")
+    ]
+    active_statuses = {"open", "assigned", "reported", "missed"}
+    unit_stats = {}
+    shop_stats = {}
+    priced = []
+    vtype_counts = Counter()
+    active_count = 0
+    closed_count = 0
+    for c in pool:
+        r = _ai_case_record(c)
+        st = (r.get("status") or "open").lower()
+        is_act = (st in active_statuses) and not r.get("board_hidden")
+        if is_act:
+            active_count += 1
+        elif st == "done":
+            closed_count += 1
+        vt = r.get("type") or "other"
+        if vt in ("truck", "trailer", "reefer"):
+            vtype_counts[vt] += 1
+        else:
+            vtype_counts["other"] += 1
+        unit = str(r.get("unit") or "").strip()
+        amt_usd = _parse_case_amount_usd(r.get("amount"))
+        if unit:
+            key = (unit.upper(), vt)
+            st_u = unit_stats.setdefault(key, {
+                "unit": unit.upper(),
+                "vtype": vt,
+                "count": 0,
+                "active_count": 0,
+                "spend": 0.0,
+                "priced_count": 0,
+                "latest_opened": "",
+                "latest_issue": "",
+            })
+            st_u["count"] += 1
+            if is_act:
+                st_u["active_count"] += 1
+            if amt_usd is not None:
+                st_u["spend"] = round(st_u["spend"] + amt_usd, 2)
+                st_u["priced_count"] += 1
+            op = r.get("opened_raw") or ""
+            if op >= st_u["latest_opened"]:
+                st_u["latest_opened"] = op
+                st_u["latest_issue"] = _ai_clip(r.get("issue") or r.get("description") or "", 120)
+        if amt_usd is not None:
+            priced.append({
+                "cost": amt_usd,
+                "unit": unit.upper() if unit else "—",
+                "vtype": vt,
+                "issue": _ai_clip(r.get("issue") or r.get("description") or "Maintenance repair", 140),
+                "shop": _ai_clip(r.get("shop") or "", 80),
+                "status": st,
+                "is_active": is_act,
+                "opened": r.get("opened") or "",
+                "opened_raw": r.get("opened_raw") or "",
+                "priority": r.get("priority") or "",
+            })
+        shop = str(r.get("shop") or "").strip()
+        if shop:
+            s_key = shop.lower()
+            sh = shop_stats.setdefault(s_key, {"shop": shop, "count": 0, "spend": 0.0})
+            sh["count"] += 1
+            if amt_usd is not None:
+                sh["spend"] = round(sh["spend"] + amt_usd, 2)
+
+    all_units = sorted(unit_stats.values(), key=lambda x: (-x["count"], -x["active_count"], -x["spend"], x["unit"]))
+    top_trucks = [u for u in all_units if u["vtype"] == "truck"][:10]
+    if not top_trucks:
+        # Fallback if legacy records lack explicit vehicle_type
+        top_trucks = [u for u in all_units if not re.match(r"^(?:R|RT|TR)\d", u["unit"], re.I)][:10]
+    top_trailers = [u for u in all_units if u["vtype"] == "trailer"][:8]
+    top_reefers = [u for u in all_units if u["vtype"] == "reefer"][:8]
+    priced_by_cost = sorted(priced, key=lambda x: (-x["cost"], x["opened_raw"]))
+    priced_recent = sorted(priced, key=lambda x: (x["opened_raw"], x["cost"]), reverse=True)
+    under_500 = [p for p in priced_recent if p["cost"] < 500.0]
+    over_500 = [p for p in priced_by_cost if p["cost"] >= 500.0]
+    total_spend = round(sum(p["cost"] for p in priced), 2)
+    return {
+        "total_cases": len(pool),
+        "active_cases": active_count,
+        "closed_cases": closed_count,
+        "by_vehicle_type": dict(vtype_counts),
+        "top_all_units": all_units[:10],
+        "top_trucks": top_trucks,
+        "top_trailers": top_trailers,
+        "top_reefers": top_reefers,
+        "priced_cases": priced_by_cost,
+        "priced_count": len(priced),
+        "total_spend_usd": total_spend,
+        "avg_spend_usd": round(total_spend / len(priced), 2) if priced else 0.0,
+        "under_500_count": len(under_500),
+        "under_500_spend_usd": round(sum(p["cost"] for p in under_500), 2),
+        "over_500_count": len(over_500),
+        "over_500_spend_usd": round(sum(p["cost"] for p in over_500), 2),
+        "top_shops": sorted(shop_stats.values(), key=lambda x: (-x["spend"], -x["count"], x["shop"]))[:8],
     }
 
 def _ai_problem_family(text):
@@ -772,7 +903,7 @@ def _resolve_conversational_context(message, history, cases=None):
     return active_unit, augmented.strip()
 
 
-def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,active_unit="",excluded_unit=""):
+def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,active_unit="",excluded_unit="",include_analytics=False):
     """Build a focused, high-signal context without flooding the prompt."""
     cases=[c for c in load_cases() if not is_testing(c)]
     if not excluded_unit:
@@ -791,10 +922,10 @@ def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,ac
             item={"unit":r["unit"],"type":r["type"],"driver":r["driver"],"group":r["group"],
               "issue":_ai_clip(r["issue"],260),"description":_ai_clip(r["description"],340),
               "notes":_ai_clip(r["notes"],300),"solved_by":r["solved_by"],
-              "resolution":_ai_clip(r["resolution"],480),"status":r["status"],
-              "opened":r["opened"],"closed":r["closed"]}
+              "resolution":_ai_clip(r["resolution"],480),"shop":r["shop"],"amount":r["amount"],
+              "priority":r["priority"],"status":r["status"],"opened":r["opened"],"closed":r["closed"]}
             exact_unit_cases.append({k:v for k,v in item.items() if v not in ("",None,[])})
-    matched=_ai_relevant_cases(query,cases,min(limit,8)) if include_cases else []
+    matched=_ai_relevant_cases(query,cases,min(limit,10)) if include_cases else []
     if include_cases and not matched and not active_unit:
         # Fallback to newest fleet cases when query is a general '5 recent cases' / 'not related to unit X' request
         ex_low = excluded_unit.strip().lower() if excluded_unit else ""
@@ -815,8 +946,8 @@ def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,ac
         item={"unit":r["unit"],"type":r["type"],"driver":r["driver"],"group":r["group"],
           "issue":_ai_clip(r["issue"],260),"description":_ai_clip(r["description"],340),
           "notes":_ai_clip(r["notes"],300),"solved_by":r["solved_by"],
-          "resolution":_ai_clip(r["resolution"],480),"status":r["status"],
-          "opened":r["opened"],"closed":r["closed"]}
+          "resolution":_ai_clip(r["resolution"],480),"shop":r["shop"],"amount":r["amount"],
+          "priority":r["priority"],"status":r["status"],"opened":r["opened"],"closed":r["closed"]}
         cleaned_item={k:v for k,v in item.items() if v not in ("",None,[])}
         k=(cleaned_item.get("unit",""),cleaned_item.get("issue",""),cleaned_item.get("driver",""),cleaned_item.get("opened",""))
         if k not in seen_keys:
@@ -861,6 +992,8 @@ def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,ac
                 if fx_clean not in compact:
                     compact.insert(0,fx_clean)
     out={"retrieval":{"historical_cases_total":len(cases),"cases_in_prompt":len(compact),"approved_items_in_prompt":len(approved),"historical_chats_in_prompt":0}}
+    if include_analytics and cases:
+        out["fleet_analytics"] = _compute_ai_fleet_analytics(cases)
     if active_unit and include_cases:
         out["exact_unit_lookup"]={"unit":active_unit.upper(),"total_recorded":len(exact_unit_cases),"cases":exact_unit_cases[:12]}
     if excluded_unit:
@@ -951,10 +1084,137 @@ _FAST_GREETING_RE = re.compile(
 )
 
 
+_ANALYTICS_DEEP_LLM_RE = re.compile(
+    r'\b(?:analy[sz]\w*|recommend\w*|why\b|root\s+cause|suggest\w*|explain\w*|compare|action\s+plan|prevent\w*)\b',
+    re.I,
+)
+_COST_THRESHOLD_RE = re.compile(
+    r'\b(under|below|less\s+than|over|above|more\s+than)\s*\$?\s*(\d{2,5})\b',
+    re.I,
+)
+
+
+def _try_fast_analytics_answer(raw_msg, all_cases):
+    """Return a verified, exact deterministic analytics answer for fleet spend/breakdown queries."""
+    q = re.sub(r'\[Live Board Summary\][\s\S]*$', '', str(raw_msg or ''), flags=re.I).strip()
+    if not q or len(q.split()) > 14 or _ANALYTICS_DEEP_LLM_RE.search(q):
+        return None, None
+    q_low = q.lower()
+    task = classify_task(q)
+    if task != "analytics":
+        return None, None
+
+    analytics = _compute_ai_fleet_analytics(all_cases)
+    if not all_cases:
+        return None, None
+
+    only_active = bool(re.search(r'\b(?:active|live\s+board|on\s+(?:the\s+)?board|open)\b', q_low)) and ("closed" not in q_low and "all" not in q_low)
+    priced = [p for p in analytics["priced_cases"] if (not only_active or p["is_active"])]
+    scope_lbl = "active Live Board cases" if only_active else "all non-test Kurtex cases"
+
+    has_under = bool(re.search(r'\b(?:under|below|less\s+than)\b', q_low))
+    has_over = bool(re.search(r'\b(?:over|above|more\s+than)\b', q_low))
+    thresh_match = _COST_THRESHOLD_RE.search(q_low)
+
+    # 1. Both tiers or general spend / most expensive query
+    if (has_under and has_over) or any(w in q_low for w in ("most expensive", "highest cost", "highest spend", "spend breakdown", "cost breakdown", "repair spend", "total spend", "how much spent")):
+        if not priced:
+            return f"No recorded USD repair amounts were found across **{scope_lbl}** ({analytics['total_cases']} cases checked).", ""
+        total_amt = round(sum(p["cost"] for p in priced), 2)
+        avg_amt = round(total_amt / len(priced), 2)
+        u500 = [p for p in priced if p["cost"] < 500.0]
+        o500 = sorted([p for p in priced if p["cost"] >= 500.0], key=lambda x: (-x["cost"], x["opened_raw"]))
+        lines = [
+            f"**Fleet Repair Spend Breakdown** ({len(priced)} priced records across {scope_lbl}; total **${total_amt:,.2f}**, avg **${avg_amt:,.2f}**):",
+            f"- **Under $500:** **{len(u500)}** case(s) · **${sum(p['cost'] for p in u500):,.2f}**",
+            f"- **$500 and Over:** **{len(o500)}** case(s) · **${sum(p['cost'] for p in o500):,.2f}**",
+        ]
+        top_list = sorted(priced, key=lambda x: (-x["cost"], x["opened_raw"]))[:8]
+        if top_list:
+            lines.append("\n**Highest Recorded Repairs:**")
+            for i, p in enumerate(top_list, 1):
+                shop_txt = f" · Shop: {p['shop']}" if p["shop"] else ""
+                lines.append(f"{i}. **Unit {p['unit']}** — **${p['cost']:,.2f}** · `{p['status'].upper()}` · {p['issue']}{shop_txt}")
+        if analytics["top_shops"]:
+            lines.append("\n**Top Shops by Spend:**")
+            for s in analytics["top_shops"][:4]:
+                lines.append(f"- **{s['shop']}**: {s['count']} case(s) · **${s['spend']:,.2f}**")
+        return "\n".join(lines), ""
+
+    # 2. Specific dollar threshold ("under $500", "under 500", "over $500", "over 500", etc.)
+    if thresh_match:
+        op_word = thresh_match.group(1).lower()
+        threshold = float(thresh_match.group(2))
+        is_under = op_word in ("under", "below", "less than")
+        if is_under:
+            matches = sorted([p for p in priced if p["cost"] < threshold], key=lambda x: (x["opened_raw"], x["cost"]), reverse=True)
+            tier_label = f"Under ${threshold:,.0f}"
+        else:
+            matches = sorted([p for p in priced if p["cost"] >= threshold], key=lambda x: (-x["cost"], x["opened_raw"]))
+            tier_label = f"${threshold:,.0f} and Over"
+        if not matches:
+            return (
+                f"**0 recorded cases** {tier_label.lower()} across **{scope_lbl}** "
+                f"({len(priced)} priced cases checked out of {analytics['total_cases']} total)."
+            ), ""
+        tier_total = round(sum(p["cost"] for p in matches), 2)
+        shown = matches[:12]
+        header = (
+            f"**{len(matches)} repair case{'s' if len(matches) != 1 else ''} {tier_label}** across **{scope_lbl}** "
+            f"(combined spend **${tier_total:,.2f}**; showing {len(shown)}):"
+        )
+        lines = [header, ""]
+        for i, p in enumerate(shown, 1):
+            shop_txt = f" · Shop: {p['shop']}" if p["shop"] else ""
+            opened_txt = f" · {p['opened']}" if p["opened"] else ""
+            lines.append(f"{i}. **Unit {p['unit']}** — **${p['cost']:,.2f}** · `{p['status'].upper()}` · {p['issue']}{shop_txt}{opened_txt}")
+        return "\n".join(lines), ""
+
+    # 3. Top broken trucks / trailers / reefers / repeat units
+    wants_trucks = "truck" in q_low
+    wants_trailers = "trailer" in q_low
+    wants_reefers = "reefer" in q_low
+    if wants_trucks and not wants_trailers and not wants_reefers:
+        ranked = analytics["top_trucks"]
+        label = "Trucks"
+    elif wants_trailers and not wants_trucks:
+        ranked = analytics["top_trailers"]
+        label = "Trailers"
+    elif wants_reefers and not wants_trucks:
+        ranked = analytics["top_reefers"]
+        label = "Reefers"
+    else:
+        ranked = analytics["top_all_units"]
+        label = "Units"
+    if not ranked:
+        return f"No recorded breakdown frequency data found across **{analytics['total_cases']}** Kurtex cases.", ""
+    shown = ranked[:8]
+    lines = [
+        f"**{label} With Most Breakdowns** (from **{analytics['total_cases']}** verified non-test Kurtex cases · **{analytics['active_cases']}** currently active):",
+        "",
+    ]
+    for i, u in enumerate(shown, 1):
+        act_note = f" ({u['active_count']} active)" if u["active_count"] else ""
+        spend_note = f" · **${u['spend']:,.2f}** logged" if u["spend"] > 0 else ""
+        vt_note = f" [{u['vtype']}]" if (label == "Units" and u["vtype"]) else ""
+        latest = f" — Latest: {u['latest_issue']}" if u["latest_issue"] else ""
+        lines.append(f"{i}. **Unit {u['unit']}**{vt_note} — **{u['count']} breakdown{'s' if u['count'] != 1 else ''}**{act_note}{spend_note}{latest}")
+    return "\n".join(lines), ""
+
+
 def _try_fast_case_query_answer(message, history):
-    """Instant (<30ms) deterministic response for greetings, unit case lookups, recent cases, negated unit filters, symptom searches, and most-recent follow-ups."""
+    """Instant (<30ms) deterministic response for greetings, analytics lookups, unit case lookups, recent cases, negated unit filters, symptom searches, and most-recent follow-ups."""
     raw = str(message or "").strip()
-    if not raw or "[live board summary]" in raw.lower():
+    if not raw:
+        return None, None
+    q_only = re.sub(r'\[Live Board Summary\][\s\S]*$', '', raw, flags=re.I).strip()
+    # Deterministic fleet analytics check handles both standalone questions and Live Board context questions
+    if any(k in q_only.lower() for k in ("broke", "broken", "500", "under ", "over ", "below ", "above ", "expensive", "spend", "repeat", "top truck", "top unit", "top trailer", "top reefer", "analytics")):
+        all_cases = [c for c in load_cases() if not is_testing(c)]
+        ans_a, unit_a = _try_fast_analytics_answer(raw, all_cases)
+        if ans_a:
+            return ans_a, unit_a
+    if "[live board summary]" in raw.lower():
         return None, None
     if _FAST_GREETING_RE.match(raw):
         return (
@@ -1592,6 +1852,46 @@ def _format_ai_context_block(ctx_compact):
     if not ctx_compact:
         return ""
     sections = []
+    if ctx_compact.get("fleet_analytics"):
+        fa = ctx_compact["fleet_analytics"]
+        a_lines = [
+            f"- Scope: **{fa.get('total_cases', 0)}** verified non-test cases (**{fa.get('active_cases', 0)}** active, **{fa.get('closed_cases', 0)}** closed); vehicle mix: {fa.get('by_vehicle_type', {})}",
+        ]
+        if fa.get("priced_count"):
+            a_lines.append(
+                f"- Spend tiers ({fa['priced_count']} priced): total **${fa.get('total_spend_usd', 0):,.2f}** (avg **${fa.get('avg_spend_usd', 0):,.2f}**) | "
+                f"Under $500: **{fa.get('under_500_count', 0)}** (${fa.get('under_500_spend_usd', 0):,.2f}) | "
+                f"$500+: **{fa.get('over_500_count', 0)}** (${fa.get('over_500_spend_usd', 0):,.2f})"
+            )
+        if fa.get("top_trucks"):
+            a_lines.append(
+                "- Top broken trucks: " + "; ".join(
+                    f"Unit {u['unit']} ({u['count']}x, {u['active_count']} active" + (f", ${u['spend']:,.0f}" if u.get("spend") else "") + ")"
+                    for u in fa["top_trucks"][:6]
+                )
+            )
+        if fa.get("top_all_units"):
+            a_lines.append(
+                "- Top broken units overall: " + "; ".join(
+                    f"Unit {u['unit']} [{u.get('vtype') or 'unit'}] ({u['count']}x)"
+                    for u in fa["top_all_units"][:6]
+                )
+            )
+        if fa.get("priced_cases"):
+            a_lines.append(
+                "- Highest-cost repairs: " + "; ".join(
+                    f"Unit {p['unit']} ${p['cost']:,.2f} ({p['issue'][:60]}" + (f" @ {p['shop']}" if p.get("shop") else "") + ")"
+                    for p in fa["priced_cases"][:6]
+                )
+            )
+        if fa.get("top_shops"):
+            a_lines.append(
+                "- Top shops: " + "; ".join(
+                    f"{s['shop']} ({s['count']}x, ${s['spend']:,.0f})"
+                    for s in fa["top_shops"][:5]
+                )
+            )
+        sections.append("### Kurtex Fleet Analytics (Verified Database Totals)\n" + "\n".join(a_lines))
     if ctx_compact.get("visual_observations"):
         sections.append("### Visual Inspection Notes\n" + str(ctx_compact["visual_observations"]))
     if ctx_compact.get("driver_speech_reports"):
@@ -1624,6 +1924,10 @@ def _format_ai_context_block(ctx_compact):
                 issue = c.get("issue") or c.get("description") or "Reported maintenance issue"
                 meta = " · ".join(x for x in (c.get("driver"), c.get("group"), c.get("status") or "open", c.get("opened")) if x)
                 extra = [f"Fix: {c['resolution']}"] if c.get("resolution") else []
+                if c.get("shop"):
+                    extra.append(f"Shop: {c['shop']}")
+                if c.get("amount"):
+                    extra.append(f"Cost: {c['amount']}")
                 if c.get("notes"):
                     extra.append(f"Notes: {c['notes']}")
                 if c.get("solved_by"):
@@ -1638,6 +1942,10 @@ def _format_ai_context_block(ctx_compact):
             issue = c.get("issue") or c.get("description") or ""
             meta = " · ".join(x for x in (c.get("driver"), c.get("group"), c.get("status") or "open") if x)
             extra = [f"Fix: {c['resolution']}"] if c.get("resolution") else []
+            if c.get("shop"):
+                extra.append(f"Shop: {c['shop']}")
+            if c.get("amount"):
+                extra.append(f"Cost: {c['amount']}")
             if c.get("solved_by"):
                 extra.append(f"Closed by: {c['solved_by']}")
             suffix = (" | " + " · ".join(extra)) if extra else ""
@@ -1693,7 +2001,9 @@ def _build_ai_system_prompt(task, has_images, has_video, has_history, has_parts,
         "For brakes, steering, wheel-end, pressurized air, refrigerant, or high-current electrical hazards, advise qualified technician verification.",
     ]
     if task == "board_ops":
-        rules.append("Board operations request: rely strictly on the Live Board / Active Case summary provided. Summarize units, priorities, shops, and costs cleanly without mechanical guesswork.")
+        rules.append("Board operations request: rely strictly on the Live Board / Active Case summary and Fleet Analytics provided. Summarize units, priorities, shops, and costs cleanly without mechanical guesswork.")
+    elif task == "analytics":
+        rules.append("Fleet analytics request: rely strictly on the Verified Fleet Analytics totals, Active Live Board summary, and Database Cases provided. Give exact unit breakdown counts, spend tiers (<$500 / $500+), top shops, and actionable operational next steps.")
     if has_images or has_video:
         rules.append("Visual/Media: distinguish OBSERVED vs suspected vs unassessable; cite video frame timestamps when present; separate driver audio speech from visual proof.")
     if has_history:
@@ -1706,6 +2016,8 @@ def _sse_frame(event, data):
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 def _ai_max_tokens_for(task):
+    if task == "analytics":
+        return 800
     if task in ("board_ops", "visual"):
         return 550
     if task in ("maintenance_question", "history"):
@@ -1775,7 +2087,8 @@ def api_ai_chat():
     task=response_contract["task"]
     visual_description_only=_ai_visual_description_request(message,bool(image_urls))
     wants_similar_cases=bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(message)
-    wants_web=(data.get("web_search",True) is not False) and needs_web_search(message,task,bool(image_urls))
+    web_search_enabled=(data.get("web_search") is True)
+    wants_web=web_search_enabled and needs_web_search(message,task,bool(image_urls))
     wants_stream=bool(data.get("stream")) or ("text/event-stream" in str(request.headers.get("Accept") or "").lower())
     is_trainer=_ai_is_trainer()
 
@@ -1826,11 +2139,22 @@ def api_ai_chat():
         retrieval_query=multilingual_retrieval_query(resolved_msg+" "+visual_terms,speech_text)
 
         is_ops=(task=="board_ops" and not wants_similar_cases and not image_urls)
+        ctx_limit=10 if task=="analytics" else (6 if is_ops else 8)
         with ThreadPoolExecutor(max_workers=2) as pool:
-            ctx_fut=pool.submit(_run_with_app_context,_ai_context,retrieval_query,8,not is_ops and not visual_description_only,not is_ops and not visual_description_only,active_unit)
+            ctx_fut=pool.submit(
+                _run_with_app_context,
+                _ai_context,
+                retrieval_query,
+                ctx_limit,
+                not visual_description_only,
+                not is_ops and not visual_description_only,
+                active_unit,
+                "",
+                task in ("analytics","board_ops"),
+            )
             web_fut=pool.submit(_run_with_app_context,_ai_web_search,retrieval_query,5) if wants_web else None
             ctx=ctx_fut.result()
-            research=web_fut.result() if web_fut is not None else {"status":"skipped" if data.get("web_search",True) is not False else "disabled","results":[]}
+            research=web_fut.result() if web_fut is not None else {"status":"skipped" if web_search_enabled else "disabled","results":[]}
 
         if observations: ctx["visual_observations"]=observations
         if image_items: ctx["image_labels"]=[a.get("name") for a in image_items]

@@ -47,8 +47,13 @@ TASK_WORDS = {
  'visual': ('what do you see','describe the image','describe this picture','what is visible',
             'ce vezi','descrie imaginea','ce se vede','что видно','опиши фото','что видишь',
             'qué ves','que ves','describe la imagen','qué se ve','que se ve'),
+ 'analytics': ('broke down','broken down','break down','most breakdowns','under $500','under 500','below $500','below 500',
+               'over $500','over 500','above $500','above 500','most expensive','highest cost','highest spend',
+               'repair spend','total spend','spend breakdown','cost breakdown','repeat breakdowns','repeat units',
+               'top broken','top units','top trucks','top trailers','top reefers','breakdown count','how much spent',
+               'analytics','under $','below $','less than $','over $'),
  'board_ops': ('[live board summary]','live board','active cases','active breakdowns','high priority',
-               'unassigned','in shop','over $','cost over','on shift','summarize board','board summary',
+               'unassigned','in shop','cost over','on shift','summarize board','board summary',
                'cazuri active','pe board','активные кейсы','на доске'),
 }
 
@@ -79,6 +84,13 @@ def detect_language(message, transcript=''):
 def classify_task(message, has_video=False, has_images=False):
     text=_normalize(message)
     if has_video:return 'video_inspection'
+    question_text = re.sub(r'\[live board summary\][\s\S]*$', '', text).strip()
+    if (
+        any(phrase in question_text for phrase in TASK_WORDS['analytics'])
+        or re.search(r'\b(?:under|below|less\s+than|over|above|more\s+than)\s*\$?\s*\d{2,5}\b', question_text)
+        or re.search(r'\b(?:trucks?|trailers?|reefers?|units?)\s+(?:that\s+)?brok(?:e|en)\s+down\b', question_text)
+    ):
+        return 'analytics'
     if '[live board summary]' in text or any(phrase in text for phrase in TASK_WORDS['board_ops']):
         return 'board_ops'
     for task in ('history','fault_code','parts','visual'):
@@ -89,7 +101,7 @@ def classify_task(message, has_video=False, has_images=False):
 
 def needs_web_search(message, task, has_images=False):
     """Gate external web search to queries where technical/OEM snippets actually help."""
-    if task in ('board_ops', 'visual', 'history'):
+    if task in ('board_ops', 'analytics', 'visual', 'history'):
         return False
     text = _normalize(message)
     if len(text) < 12 and not has_images:
@@ -123,6 +135,7 @@ def response_policy(message, has_video=False, has_images=False, transcript=''):
     task=classify_task(message,has_video,has_images)
     sections={
         'board_ops':'Use ONLY the supplied Live Board / Active Case data. Group cleanly by Unit #, Priority, Stage/Shop, and Cost; keep it scannable and omit filler or maintenance disclaimers.',
+        'analytics':'Use ONLY the supplied Kurtex Fleet Analytics, Verified Database Cases, and Live Board Summary. Present exact counts, repeat Unit # rankings, dollar spend tiers (under/over thresholds), shops, and actionable fleet recommendations cleanly. Never invent units, cases, or dollar amounts.',
         'history':'Lead with matching fleet cases and confirmed recorded resolutions only. State the exact count of verified cases found in the supplied context. If the user asks for N cases (e.g., 5 cases) and fewer exist in the supplied context, state clearly how many recorded cases exist and list ONLY those verified cases—never invent extra cases. Omit generic troubleshooting unless asked.',
         'fault_code':'State exact code meaning if verified, make/model ambiguity, and the top 2-3 sharpest checks.',
         'parts':'Lead with verified part identification or state clearly that fitment is unconfirmed. Never invent OEM part numbers.',
@@ -137,7 +150,7 @@ def response_policy(message, has_video=False, has_images=False, transcript=''):
                 'STRICT GROUNDING: Never invent cases, unit history, repairs, or part numbers not in the supplied context. '
                 'Write like a crisp, senior fleet maintenance dispatcher: zero fluff, zero greetings, never repeat the user question, never output empty headings or boilerplate disclaimers. '
                 'FIRST LINE: direct answer or immediate safety action. '+sections[task]+' '
-                'Keep replies compact (1-2 short sentences + concise bullets) unless the user asks for deep detail.')}
+                + ('Provide structured metrics, clear unit/shop lists, and actionable next steps.' if task == 'analytics' else 'Keep replies compact (1-2 short sentences + concise bullets) unless the user asks for deep detail.'))}
 
 
 # Strict Maintenance-Only Scope Guardrail (blocks off-topic & abuse queries pre-LLM)
@@ -169,7 +182,8 @@ _MAINTENANCE_DOMAIN_RE = re.compile(
     r'gearbox|differential|driveline|u-joint|compressor|condenser|evaporator|refrigerant|freon|setpoint|temp|temperature|'
     r'thermo\s+king|carrier|freightliner|cascadia|kenworth|peterbilt|volvo|mack|international|cummins|detroit|paccar|bendix|wabco|'
     r'meritor|haldex|hendrickson|davco|kurtex|board|open|closed|done|reported|active|missed|priority|urgent|cost|vendor|towing|'
-    r'roadside|breakdown|crank|start|idle|stall|smoke|noise|vibration|crack|cracked|broken|worn|damaged|bent|loose|missing|'
+    r'spend|amount|expensive|under|over|below|above|analytics|statistics|stats|frequent|frequently|invoice|invoices|proof|proofs|dollar|usd|'
+    r'roadside|breakdown|breakdowns|broke|crank|start|idle|stall|smoke|noise|vibration|crack|cracked|broken|worn|damaged|bent|loose|missing|'
     r'camion|remorc[aă]|frân[aă]|frana|motor|anvelop[aă]|roat[aă]|jant[aă]|scurgere|pierde|aer|ulei|antigel|baterie|pies[aă]|caz|cazuri|defect|'
     r'грузовик|прицеп|рефрижератор|тормоз\w*|двигател\w*|колес\w*|шин\w*|диск|утечк\w*|воздух\w*|масл\w*|антифриз|аккумулятор|ошибк\w*|ремонт\w*|кейс\w*|заявк\w*|юнит|'
     r'camión|camion|remolque|freno|frenos|neumático|llanta|fuga|aceite|refrigerante|batería|pieza|avería|falla|caso|casos|reparación)\b',

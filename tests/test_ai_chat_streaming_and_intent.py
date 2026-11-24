@@ -327,6 +327,105 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
             mock_cf.assert_not_called()
             mock_stream.assert_not_called()
 
+    def test_web_search_defaults_off_when_omitted(self):
+        with patch.object(server, "_cf_ai", return_value="Check SPN 5246 DEF dosing valve."), patch.object(
+            server, "_ai_web_search"
+        ) as mock_web:
+            res = self.client.post("/api/ai/chat", json={"message": "Freightliner SPN 5246 FMI 0 check engine"})
+        self.assertEqual(res.status_code, 200)
+        body = res.get_json()
+        self.assertEqual(body["research_status"], "disabled")
+        mock_web.assert_not_called()
+
+    def test_analytics_top_trucks_and_spend_tiers_fast_and_llm_context(self):
+        self.assertEqual(classify_task("Which trucks broke down the most?\n\n[Live Board Summary]\n1 case"), "analytics")
+        self.assertFalse(needs_web_search("Which trucks broke down the most?", "analytics"))
+        self.assertEqual(classify_task("Show repairs under $500"), "analytics")
+        self.assertEqual(classify_task("Show repairs over $500"), "analytics")
+        sample_cases = [
+            {
+                "id": "a1",
+                "unit_number": "308",
+                "vehicle_type": "truck",
+                "issue_text": "Coolant leak at lower hose",
+                "shop_info": "Love's #412",
+                "amount": "$420.00",
+                "status": "reported",
+                "opened_at": "2026-11-20T10:00:00+00:00",
+            },
+            {
+                "id": "a2",
+                "unit_number": "308",
+                "vehicle_type": "truck",
+                "issue_text": "Turbo actuator fault",
+                "shop_info": "Freightliner Dealer",
+                "amount": "$1,650",
+                "status": "done",
+                "opened_at": "2026-11-18T10:00:00+00:00",
+            },
+            {
+                "id": "a3",
+                "unit_number": "512",
+                "vehicle_type": "truck",
+                "issue_text": "Alternator failure",
+                "shop_info": "TA Truck Service",
+                "amount": "$780",
+                "status": "reported",
+                "opened_at": "2026-11-19T10:00:00+00:00",
+            },
+            {
+                "id": "a4",
+                "unit_number": "R246",
+                "vehicle_type": "reefer",
+                "issue_text": "Reefer belt replacement",
+                "shop_info": "Thermo King",
+                "amount": "$290",
+                "status": "done",
+                "opened_at": "2026-11-17T10:00:00+00:00",
+            },
+        ]
+        with patch.object(server, "load_cases", return_value=sample_cases), patch.object(
+            server, "_cf_ai"
+        ) as mock_cf:
+            r_trucks = self.client.post("/api/ai/chat", json={"message": "Which trucks broke down the most?\n\n[Live Board Summary]\nUnit #308"})
+            self.assertEqual(r_trucks.status_code, 200)
+            ans_t = r_trucks.get_json()["answer"]
+            self.assertIn("Unit 308", ans_t)
+            self.assertIn("2 breakdowns", ans_t)
+            self.assertIn("Unit 512", ans_t)
+
+            r_u500 = self.client.post("/api/ai/chat", json={"message": "Show cases under 500"})
+            self.assertEqual(r_u500.status_code, 200)
+            ans_u = r_u500.get_json()["answer"]
+            self.assertIn("$420.00", ans_u)
+            self.assertIn("$290.00", ans_u)
+            self.assertNotIn("$1,650.00", ans_u)
+
+            r_o500 = self.client.post("/api/ai/chat", json={"message": "Show cases over $500"})
+            self.assertEqual(r_o500.status_code, 200)
+            ans_o = r_o500.get_json()["answer"]
+            self.assertIn("$1,650.00", ans_o)
+            self.assertIn("$780.00", ans_o)
+            self.assertNotIn("$290.00", ans_o)
+            mock_cf.assert_not_called()
+
+        # Deep analytical prompt goes to LLM with higher token budget (800) and grounded Fleet Analytics context
+        calls = []
+
+        def fake_cf(messages, max_tokens=900, temperature=0.2, **_kw):
+            calls.append({"messages": messages, "max_tokens": max_tokens})
+            return "Unit 308 leads with 2 breakdowns ($2,070 total)."
+
+        with patch.object(server, "load_cases", return_value=sample_cases), patch.object(
+            server, "_cf_ai", side_effect=fake_cf
+        ):
+            r_deep = self.client.post("/api/ai/chat", json={"message": "Analyze which trucks broke down the most and recommend preventive steps"})
+        self.assertEqual(r_deep.status_code, 200)
+        self.assertEqual(calls[0]["max_tokens"], 800)
+        sys_ctx = "\n".join(m["content"] for m in calls[0]["messages"] if m["role"] == "system")
+        self.assertIn("Kurtex Fleet Analytics", sys_ctx)
+        self.assertIn("Unit 308 (2x", sys_ctx)
+
 
 if __name__ == "__main__":
     unittest.main()
