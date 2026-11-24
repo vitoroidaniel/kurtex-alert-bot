@@ -426,6 +426,23 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
         self.assertIn("Kurtex Fleet Analytics", sys_ctx)
         self.assertIn("Unit 308 (2x", sys_ctx)
 
+    def test_board_summary_returns_grouped_scannable_markdown_without_inline_blob(self):
+        sample_cases = [
+            {"id": "b1", "unit_number": "R232", "vehicle_type": "truck", "issue_text": "No details", "priority": "low", "status": "reported", "board_stage": "", "agent_name": "Petru"},
+            {"id": "b2", "unit_number": "289", "vehicle_type": "truck", "issue_text": "Transmission leaks", "priority": "high", "status": "reported", "board_stage": "dealer_shop", "shop_info": "Freightliner Shop", "amount": "$1,200"},
+            {"id": "b3", "unit_number": "374", "vehicle_type": "truck", "issue_text": "Exhaust EGR leak", "priority": "medium", "status": "reported", "board_stage": "dealer_shop", "shop_info": "Love's #412", "amount": "$420"},
+            {"id": "b4", "unit_number": "264", "vehicle_type": "truck", "issue_text": "5th wheel stuck", "priority": "low", "status": "reported", "board_stage": "monitoring"},
+        ]
+        with patch.object(server, "load_cases", return_value=sample_cases), patch.object(server, "_cf_ai") as mock_cf:
+            res = self.client.post("/api/ai/chat", json={"message": "Summarize active breakdowns on the board by priority and shop\n\n[Live Board Summary]\nCurrent Live Board: 4 active"})
+        self.assertEqual(res.status_code, 200)
+        ans = res.get_json()["answer"]
+        mock_cf.assert_not_called()
+        self.assertIn("### High Priority (1)", ans)
+        self.assertIn("### Queue Breakdown", ans)
+        self.assertIn("\n- **Unit 289**", ans)
+        self.assertNotIn("2. Unit", ans)
+
 
 if __name__ == "__main__":
     unittest.main()

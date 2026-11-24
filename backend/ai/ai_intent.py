@@ -134,7 +134,7 @@ def response_policy(message, has_video=False, has_images=False, transcript=''):
     lang=detect_language(message,transcript)
     task=classify_task(message,has_video,has_images)
     sections={
-        'board_ops':'Use ONLY the supplied Live Board / Active Case data. Group cleanly by Unit #, Priority, Stage/Shop, and Cost; keep it scannable and omit filler or maintenance disclaimers.',
+        'board_ops':'Use ONLY the supplied Live Board / Active Case data. Format cleanly with Markdown headings (### High Priority, ### In Shop / Stage, ### Queue Overview) and ONE item per bullet line (- **Unit ...**). NEVER cram multiple numbered cases into one inline paragraph. Summarize large low-priority Monitoring queues as grouped counts.',
         'analytics':'Use ONLY the supplied Kurtex Fleet Analytics, Verified Database Cases, and Live Board Summary. Present exact counts, repeat Unit # rankings, dollar spend tiers (under/over thresholds), shops, and actionable fleet recommendations cleanly. Never invent units, cases, or dollar amounts.',
         'history':'Lead with matching fleet cases and confirmed recorded resolutions only. State the exact count of verified cases found in the supplied context. If the user asks for N cases (e.g., 5 cases) and fewer exist in the supplied context, state clearly how many recorded cases exist and list ONLY those verified cases—never invent extra cases. Omit generic troubleshooting unless asked.',
         'fault_code':'State exact code meaning if verified, make/model ambiguity, and the top 2-3 sharpest checks.',

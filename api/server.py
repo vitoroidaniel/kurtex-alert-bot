@@ -1202,12 +1202,120 @@ def _try_fast_analytics_answer(raw_msg, all_cases):
     return "\n".join(lines), ""
 
 
+_BOARD_SUMMARY_QUERY_RE = re.compile(
+    r'^(?:summarize\s+(?:the\s+)?(?:active\s+)?(?:live\s+)?board(?:\s+breakdowns)?|'
+    r'summarize\s+active\s+breakdowns(?:\s+on\s+the\s+board)?(?:\s+by\s+priority\s+and\s+shop)?|'
+    r'board\s+summary|live\s+board\s+summary|active\s+breakdowns\s+summary|board\s+overview)[\s?.!]*$',
+    re.I,
+)
+
+
+def _try_fast_board_summary_answer(raw_msg, all_cases):
+    """Build a crisp, grouped Markdown Live Board summary (headings + single-line bullets, zero inline blobs)."""
+    q = re.sub(r'\[Live Board Summary\][\s\S]*$', '', str(raw_msg or ''), flags=re.I).strip()
+    if not q or not _BOARD_SUMMARY_QUERY_RE.match(q):
+        return None, None
+    active_statuses = {"open", "assigned", "reported", "missed"}
+    pool = [
+        _ai_case_record(c)
+        for c in (all_cases or [])
+        if isinstance(c, dict)
+        and not is_testing(c)
+        and not is_history_test_case(c)
+        and not is_test_group_name(c.get("group_name") or c.get("group") or "")
+        and not c.get("board_hidden")
+        and str(c.get("status") or "").strip().lower() in active_statuses
+    ]
+    if not pool:
+        return None, None
+
+    high = [r for r in pool if r["priority"] == "high"]
+    med = [r for r in pool if r["priority"] == "medium"]
+    low = [r for r in pool if r["priority"] not in ("high", "medium")]
+    in_shop = [r for r in pool if r["board_stage"] == "dealer_shop" or bool(r["shop"])]
+    unassigned = [r for r in pool if not r["agent"] and not r["board_stage"]]
+    priced = [(_parse_case_amount_usd(r["amount"]), r) for r in pool]
+    priced = [(amt, r) for amt, r in priced if amt is not None]
+    total_spend = sum(amt for amt, _ in priced)
+
+    kpi_bits = [
+        f"**{len(pool)} active cases**",
+        f"**{len(high)} High**",
+        f"**{len(med)} Medium**",
+        f"**{len(low)} Low**",
+        f"**{len(in_shop)} in Shop**",
+        f"**{len(unassigned)} Unassigned**",
+    ]
+    if total_spend > 0:
+        kpi_bits.append(f"**${total_spend:,.2f}** logged")
+    lines = ["**Active Board Summary** — " + " · ".join(kpi_bits)]
+
+    def _fmt_unit_bullet(r):
+        u_lbl = r["unit"] or "No Unit"
+        tags = []
+        if r["type"]:
+            tags.append(r["type"].capitalize())
+        if r["priority"] in ("high", "medium"):
+            tags.append(r["priority"].capitalize())
+        if r["board_stage"]:
+            tags.append(r["board_stage"].replace("_", " ").title())
+        elif r["agent"]:
+            tags.append(r["agent"])
+        if r["shop"]:
+            tags.append(r["shop"])
+        amt_val = _parse_case_amount_usd(r["amount"])
+        if amt_val is not None:
+            tags.append(f"${amt_val:,.0f}" if amt_val.is_integer() else f"${amt_val:,.2f}")
+        meta = f" ({' · '.join(tags)})" if tags else ""
+        iss = _ai_clip(r["issue"] or r["description"] or "Active case", 95)
+        return f"- **Unit {u_lbl}**{meta} — {iss}"
+
+    if high:
+        lines.append(f"\n### High Priority ({len(high)})")
+        for r in high[:8]:
+            lines.append(_fmt_unit_bullet(r))
+        if len(high) > 8:
+            lines.append(f"- *…plus {len(high) - 8} more high-priority case(s).*")
+
+    shop_non_high = [r for r in in_shop if r["priority"] != "high"]
+    if shop_non_high:
+        lines.append(f"\n### In Shop / Dealer ({len(in_shop)} total)")
+        for r in shop_non_high[:6]:
+            lines.append(_fmt_unit_bullet(r))
+        if len(shop_non_high) > 6:
+            lines.append(f"- *…plus {len(shop_non_high) - 6} more unit(s) in shop.*")
+
+    med_rest = [r for r in med if r not in in_shop]
+    if med_rest:
+        lines.append(f"\n### Medium Priority Highlights ({len(med)} total)")
+        for r in med_rest[:5]:
+            lines.append(_fmt_unit_bullet(r))
+        if len(med_rest) > 5:
+            lines.append(f"- *…plus {len(med_rest) - 5} more medium-priority case(s).*")
+
+    stage_groups = Counter((r["board_stage"] or ("assigned" if r["agent"] else "unassigned")) for r in pool)
+    lines.append("\n### Queue Breakdown")
+    for st_key, cnt in stage_groups.most_common():
+        st_lbl = "Assigned Agent Queue" if st_key == "assigned" else ("Unassigned" if st_key == "unassigned" else st_key.replace("_", " ").title())
+        sample_units = [f"Unit {r['unit']}" for r in pool if (r["board_stage"] or ("assigned" if r["agent"] else "unassigned")) == st_key and r["unit"]][:4]
+        sample_txt = f" ({', '.join(sample_units)}{', …' if cnt > 4 else ''})" if sample_units else ""
+        lines.append(f"- **{st_lbl}:** **{cnt}**{sample_txt}")
+
+    return "\n".join(lines), ""
+
+
 def _try_fast_case_query_answer(message, history):
-    """Instant (<30ms) deterministic response for greetings, analytics lookups, unit case lookups, recent cases, negated unit filters, symptom searches, and most-recent follow-ups."""
+    """Instant (<30ms) deterministic response for greetings, board summary, analytics lookups, unit case lookups, recent cases, negated unit filters, symptom searches, and most-recent follow-ups."""
     raw = str(message or "").strip()
     if not raw:
         return None, None
     q_only = re.sub(r'\[Live Board Summary\][\s\S]*$', '', raw, flags=re.I).strip()
+    # Deterministic board summary check (clean grouped Markdown sections, never a wall of inline items)
+    if _BOARD_SUMMARY_QUERY_RE.match(q_only):
+        all_cases = [c for c in load_cases() if not is_testing(c)]
+        ans_b, unit_b = _try_fast_board_summary_answer(raw, all_cases)
+        if ans_b:
+            return ans_b, unit_b
     # Deterministic fleet analytics check handles both standalone questions and Live Board context questions
     if any(k in q_only.lower() for k in ("broke", "broken", "500", "under ", "over ", "below ", "above ", "expensive", "spend", "repeat", "top truck", "top unit", "top trailer", "top reefer", "analytics")):
         all_cases = [c for c in load_cases() if not is_testing(c)]
@@ -2001,7 +2109,7 @@ def _build_ai_system_prompt(task, has_images, has_video, has_history, has_parts,
         "For brakes, steering, wheel-end, pressurized air, refrigerant, or high-current electrical hazards, advise qualified technician verification.",
     ]
     if task == "board_ops":
-        rules.append("Board operations request: rely strictly on the Live Board / Active Case summary and Fleet Analytics provided. Summarize units, priorities, shops, and costs cleanly without mechanical guesswork.")
+        rules.append("Board operations request: rely strictly on the Live Board / Active Case summary and Fleet Analytics provided. ALWAYS format using clean Markdown headings (### High Priority, ### In Shop, ### Queue Overview) with ONE case per bullet line (- **Unit ...**); NEVER pack numbered items into a single inline paragraph.")
     elif task == "analytics":
         rules.append("Fleet analytics request: rely strictly on the Verified Fleet Analytics totals, Active Live Board summary, and Database Cases provided. Give exact unit breakdown counts, spend tiers (<$500 / $500+), top shops, and actionable operational next steps.")
     if has_images or has_video:
