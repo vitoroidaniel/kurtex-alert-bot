@@ -4256,6 +4256,9 @@ def _normalize_case_notes(notes):
                 canon_name = str(matched_user.get("name") or "").strip()
                 if canon_name:
                     item["author"] = canon_name
+                canon_handle = str(matched_user.get("username") or "").strip().lstrip("@")
+                if canon_handle:
+                    item["author_username"] = canon_handle
                 if not aid and matched_user.get("id") is not None:
                     item["author_id"] = str(matched_user["id"])
                 item["author_role"] = _website_role(matched_user.get("role"))

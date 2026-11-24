@@ -376,6 +376,83 @@ class GlobalHistoryTests(unittest.TestCase):
         self.assertEqual(ver.status_code, 200)
         self.assertTrue(bool(ver.get_json()["build_id"]))
 
+    def test_same_display_name_users_stay_strictly_isolated(self):
+        # Two completely separate people both named "Daniel": danikav (developer) & agent Daniel
+        dev_dan = {"id": 1615926408, "name": "Daniel", "username": "danikav", "role": "developer"}
+        agent_dan = {"id": 2099, "name": "Daniel", "username": "daniel_ops", "role": "agent"}
+        with db.write_tx(self.data_dir) as conn:
+            for person in (dev_dan, agent_dan):
+                conn.execute(
+                    "INSERT INTO users(id,name,username,role) VALUES (?,?,?,?)",
+                    (person["id"], person["name"], person["username"], person["role"]),
+                )
+        c1 = case_store.workspace_write(
+            agent_dan,
+            {
+                "id": "CASE-DUP-DAN",
+                "request_id": "req-dup-dan",
+                "driver": "Sam Driver",
+                "unit_number": "801",
+                "issue": "Air line",
+                "vehicle_type": "truck",
+                "priority": "high",
+                "target_agent": agent_dan,
+            },
+        )
+        c1 = case_store.workspace_write(
+            dev_dan,
+            {
+                "action": "edit",
+                "revision": case_store.workspace_revision(c1),
+                "fields": {"shop_info": "TA #555 Dev Edit"},
+            },
+            c1["id"],
+        )
+        c1 = case_store.workspace_write(
+            agent_dan,
+            {
+                "action": "edit",
+                "revision": case_store.workspace_revision(c1),
+                "fields": {"amount": "420.00"},
+            },
+            c1["id"],
+        )
+        case_store.workspace_write(
+            agent_dan,
+            {
+                "action": "note",
+                "text": "Agent Daniel note",
+                "revision": case_store.workspace_revision(c1),
+            },
+            c1["id"],
+        )
+        self._auth(dev_dan)
+        # Recent actions for danikav MUST include only dev_dan's events, never agent Daniel's events
+        dev_recent = self.client.get(f"/api/workspace/agents/{dev_dan['id']}/recent-actions?limit=10").get_json()
+        self.assertTrue(dev_recent["ok"])
+        self.assertEqual(len(dev_recent["events"]), 1)
+        self.assertEqual(dev_recent["events"][0]["actor_id"], str(dev_dan["id"]))
+        self.assertEqual(dev_recent["events"][0]["actor_role"], "developer")
+        self.assertEqual(dev_recent["events"][0]["actor_username"], "danikav")
+
+        # Recent actions for agent Daniel MUST include only agent_dan's events
+        ag_recent = self.client.get(f"/api/workspace/agents/{agent_dan['id']}/recent-actions?limit=10").get_json()
+        self.assertTrue(ag_recent["ok"])
+        self.assertEqual(len(ag_recent["events"]), 2)
+        self.assertTrue(all(ev["actor_id"] == str(agent_dan["id"]) for ev in ag_recent["events"]))
+        self.assertTrue(all(ev["actor_role"] == "agent" for ev in ag_recent["events"]))
+
+        # Global History actors list preserves both Daniels separately with distinct IDs, usernames, & roles
+        hist = self.client.get("/api/workspace/history").get_json()
+        dan_actors = [a for a in hist["actors"] if a["name"] == "Daniel"]
+        by_id = {a["id"]: a for a in dan_actors}
+        self.assertIn(str(dev_dan["id"]), by_id)
+        self.assertIn(str(agent_dan["id"]), by_id)
+        self.assertEqual(by_id[str(dev_dan["id"])]["role"], "developer")
+        self.assertEqual(by_id[str(dev_dan["id"])]["username"], "danikav")
+        self.assertEqual(by_id[str(agent_dan["id"])]["role"], "agent")
+        self.assertEqual(by_id[str(agent_dan["id"])]["count"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

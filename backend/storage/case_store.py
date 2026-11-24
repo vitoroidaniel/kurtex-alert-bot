@@ -2078,19 +2078,21 @@ def get_global_workspace_history(
     with db.read_conn(_storage_dir()) as conn:
         user_rows = conn.execute("SELECT id, name, username, role FROM users").fetchall()
         users_by_id: dict[str, dict] = {}
-        users_by_name: dict[str, str] = {}
         users_by_username: dict[str, str] = {}
+        name_buckets: dict[str, list[str]] = {}
         for u in user_rows:
             uid = str(u["id"])
             uname = str(u["name"] or "").strip()
             uhandle = str(u["username"] or "").strip().lstrip("@").lower()
             users_by_id[uid] = {"id": uid, "name": uname or uid, "username": uhandle, "role": str(u["role"] or "agent")}
             if uname:
-                users_by_name[uname.lower()] = uid
+                name_buckets.setdefault(uname.lower(), []).append(uid)
             if uhandle:
                 users_by_username[uhandle] = uid
+        users_by_name: dict[str, str] = {k: ids[0] for k, ids in name_buckets.items() if len(ids) == 1}
+        name_counts: dict[str, int] = {k: len(ids) for k, ids in name_buckets.items()}
 
-        def _canonical_actor(raw_id: str, raw_name: str, raw_role: str = "") -> tuple[str, str, str]:
+        def _canonical_actor(raw_id: str, raw_name: str, raw_role: str = "") -> tuple[str, str, str, str]:
             rid = str(raw_id or "").strip()
             rname = str(raw_name or "").strip()
             rlow = rname.lower()
@@ -2098,16 +2100,16 @@ def get_global_workspace_history(
             uid = ""
             if rid and rid in users_by_id:
                 uid = rid
-            elif rlow and rlow in users_by_name:
-                uid = users_by_name[rlow]
             elif rhandle and rhandle in users_by_username:
                 uid = users_by_username[rhandle]
+            elif rlow and rlow in users_by_name:
+                uid = users_by_name[rlow]
             if uid and uid in users_by_id:
                 urec = users_by_id[uid]
                 cname = urec["name"]
-                crole = str(raw_role or urec.get("role") or "").strip().lower()
-                return uid, cname, crole
-            return rid, rname, str(raw_role or "").strip().lower()
+                crole = str(urec.get("role") or raw_role or "").strip().lower()
+                return uid, cname, crole, urec.get("username", "")
+            return rid, rname, str(raw_role or "").strip().lower(), (rhandle if "@" in rname else "")
 
         case_rows = conn.execute("SELECT id, status, agent_id, unit_number, driver_name, data_json FROM cases").fetchall()
         present_case_ids: set[str] = set()
@@ -2140,7 +2142,7 @@ def get_global_workspace_history(
                 raw_name = str(h.get("author") or h.get("author_name") or "").strip()
                 raw_id = str(h.get("author_id") or "").strip()
                 raw_role = str(h.get("author_role") or "").strip().lower()
-                author_id, author_name, author_role = _canonical_actor(raw_id, raw_name, raw_role)
+                author_id, author_name, author_role, author_username = _canonical_actor(raw_id, raw_name, raw_role)
                 author_name = author_name or "System"
                 cat = _GLOBAL_HISTORY_CATEGORY.get(act, "other")
                 raw_events.append({
@@ -2156,6 +2158,7 @@ def get_global_workspace_history(
                     "category": cat,
                     "actor_id": author_id,
                     "actor_name": author_name,
+                    "actor_username": author_username,
                     "actor_role": author_role,
                     "created_at": created_at,
                     "fields": list(h.get("fields") or []),
@@ -2200,7 +2203,7 @@ def get_global_workspace_history(
             raw_id = str(rec.get("actor_id") or row_actor_id or "").strip()
             raw_name = str(rec.get("actor_name") or row_actor_name or "").strip()
             raw_role = str(rec.get("actor_role") or "").strip().lower()
-            d_actor_id, d_actor_name, d_actor_role = _canonical_actor(raw_id, raw_name, raw_role)
+            d_actor_id, d_actor_name, d_actor_role, d_actor_username = _canonical_actor(raw_id, raw_name, raw_role)
             d_unit = str(rec.get("unit_number") or "").strip()
             d_driver = str(rec.get("driver_name") or "").strip()
             d_issue = str(rec.get("issue_text") or "").strip()
@@ -2236,6 +2239,7 @@ def get_global_workspace_history(
                 "category": "delete",
                 "actor_id": d_actor_id,
                 "actor_name": d_actor_name or "Deleted Record (Legacy)",
+                "actor_username": d_actor_username,
                 "actor_role": d_actor_role,
                 "created_at": created_at,
                 "fields": [],
@@ -2292,9 +2296,10 @@ def get_global_workspace_history(
             canon_key = f"name:{aname_low}"
         if canon_key not in actor_counts:
             actor_counts[canon_key] = {
-                "key": aid or aname,
+                "key": aid or f"name:{aname_low}",
                 "id": aid,
                 "name": aname,
+                "username": ev.get("actor_username") or "",
                 "role": ev.get("actor_role") or "",
                 "count": 0,
             }
@@ -2303,22 +2308,49 @@ def get_global_workspace_history(
             if aid and aid in users_by_id:
                 existing["id"] = aid
                 existing["key"] = aid
+            if not existing.get("username") and ev.get("actor_username"):
+                existing["username"] = ev.get("actor_username") or ""
             if not existing.get("role") and ev.get("actor_role"):
                 existing["role"] = ev.get("actor_role") or ""
         actor_counts[canon_key]["count"] += 1
 
-    # Filter by actor
+    # Filter by actor strictly by canonical user ID when known; never merge two users sharing a display name
     if actor_raw and actor_raw.lower() != "all":
         actor_lower = actor_raw.lower()
-        target_name = ""
+        actor_handle = actor_lower.lstrip("@")
         if actor_raw in users_by_id:
-            target_name = users_by_id[actor_raw]["name"].strip().lower()
-        scoped_by_actor = [
-            ev for ev in raw_events
-            if (ev["actor_id"] and ev["actor_id"] == actor_raw)
-            or ev["actor_name"].strip().lower() == actor_lower
-            or (target_name and ev["actor_name"].strip().lower() == target_name)
-        ]
+            target_rec = users_by_id[actor_raw]
+            target_name = target_rec["name"].strip().lower()
+            target_handle = target_rec["username"]
+            allow_name_fallback = name_counts.get(target_name, 0) == 1
+            scoped_by_actor = [
+                ev for ev in raw_events
+                if ev["actor_id"] == actor_raw
+                or (
+                    (not ev["actor_id"] or ev["actor_id"] not in users_by_id)
+                    and (
+                        (target_handle and (ev.get("actor_username") or "").lower() == target_handle)
+                        or (allow_name_fallback and target_name and ev["actor_name"].strip().lower() == target_name)
+                    )
+                )
+            ]
+        elif actor_lower.startswith("name:"):
+            target_name = actor_lower[5:].strip()
+            scoped_by_actor = [
+                ev for ev in raw_events
+                if (not ev["actor_id"] or ev["actor_id"] not in users_by_id)
+                and ev["actor_name"].strip().lower() == target_name
+            ]
+        else:
+            scoped_by_actor = [
+                ev for ev in raw_events
+                if (ev["actor_id"] and ev["actor_id"] == actor_raw)
+                or (actor_handle and (ev.get("actor_username") or "").lower() == actor_handle)
+                or (
+                    (not ev["actor_id"] or ev["actor_id"] not in users_by_id)
+                    and ev["actor_name"].strip().lower() == actor_lower
+                )
+            ]
     else:
         scoped_by_actor = raw_events
 

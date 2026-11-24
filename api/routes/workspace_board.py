@@ -1518,39 +1518,52 @@ def register_workspace_routes(server):
             limit=limit,
             offset=offset,
         )
-        # Merge active team roster canonically so each member appears once and synthetic labels never show up
+        # Merge active team roster canonically by user ID (only merge ID-less legacy names when display name is unique)
         synthetic_low = {"", "system", "team member", "deleted record (legacy)", "unknown"}
+        all_roster = [u for u in get_all_user_dicts() if isinstance(u, dict) and u.get("id") is not None]
+        real_ids = {str(u["id"]) for u in all_roster}
+        user_name_counts: dict[str, int] = {}
+        for u in all_roster:
+            un = str(u.get("name") or "").strip().lower()
+            if un and un not in synthetic_low:
+                user_name_counts[un] = user_name_counts.get(un, 0) + 1
         roster_actors = {}
-        name_to_key = {}
+        unowned_name_to_key = {}
         for a in data.get("actors", []):
             uname = str(a.get("name") or "").strip()
             if uname.lower() in synthetic_low:
                 continue
-            k = str(a.get("key") or uname)
-            roster_actors[k] = dict(a)
-            name_to_key[uname.lower()] = k
-        for u in get_all_user_dicts():
+            aid = str(a.get("id") or "").strip()
+            k = aid if (aid and aid in real_ids) else f"name:{uname.lower()}"
+            if k in roster_actors:
+                roster_actors[k]["count"] = int(roster_actors[k].get("count") or 0) + int(a.get("count") or 0)
+            else:
+                roster_actors[k] = {**a, "key": aid if (aid and aid in real_ids) else k}
+            if k.startswith("name:") and user_name_counts.get(uname.lower(), 0) == 1:
+                unowned_name_to_key[uname.lower()] = k
+        for u in all_roster:
             uid = str(u.get("id") or "")
             uname = str(u.get("name") or "").strip()
-            urole = str(u.get("role") or "").strip().lower()
+            uhandle = str(u.get("username") or "").strip().lstrip("@")
+            urole = server._website_role(u.get("role"))
             if not uid or not uname or uname.lower() in synthetic_low:
                 continue
             if uid in roster_actors:
-                if urole and not roster_actors[uid].get("role"):
-                    roster_actors[uid]["role"] = urole
+                roster_actors[uid]["role"] = urole or roster_actors[uid].get("role") or ""
+                if uhandle and not roster_actors[uid].get("username"):
+                    roster_actors[uid]["username"] = uhandle
                 continue
-            existing_key = name_to_key.get(uname.lower())
+            existing_key = unowned_name_to_key.pop(uname.lower(), "") if user_name_counts.get(uname.lower(), 0) == 1 else ""
             if existing_key and existing_key in roster_actors:
                 existing = roster_actors.pop(existing_key)
                 existing["id"] = uid
                 existing["key"] = uid
-                if urole and not existing.get("role"):
-                    existing["role"] = urole
+                existing["role"] = urole or existing.get("role") or ""
+                if uhandle:
+                    existing["username"] = uhandle
                 roster_actors[uid] = existing
-                name_to_key[uname.lower()] = uid
             else:
-                roster_actors[uid] = {"key": uid, "id": uid, "name": uname, "role": urole, "count": 0}
-                name_to_key[uname.lower()] = uid
+                roster_actors[uid] = {"key": uid, "id": uid, "name": uname, "username": uhandle, "role": urole, "count": 0}
         merged_actors = sorted(roster_actors.values(), key=lambda a: (-int(a.get("count") or 0), str(a.get("name") or "").lower()))
         return jsonify({
             "ok": True,
