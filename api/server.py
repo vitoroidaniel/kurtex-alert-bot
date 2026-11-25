@@ -6699,7 +6699,7 @@ def api_smart_list(list_id):
 @app.route("/api/smart-lists/<list_id>/entries/<entry_id>", methods=["PUT", "DELETE"])
 def api_smart_list_entries(list_id, entry_id=None):
     from backend.storage import smart_lists_store
-    user, error = _smart_lists_actor(write=True, manager=request.method == "DELETE")
+    user, error = _smart_lists_actor(write=True)
     if error:
         return error
     if request.method == "DELETE":
