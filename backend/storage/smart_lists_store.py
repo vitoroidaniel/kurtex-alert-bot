@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -273,7 +274,7 @@ def update_list(list_id, body, user_id):
             valid.append({"key":key,"label":label,"type":typ,"options":opts})
         appearance = conn.execute("SELECT color FROM list_appearance WHERE list_id=?", (list_id,)).fetchone()
         color = body.get("color", appearance["color"] if appearance else "default")
-        if not isinstance(color, str) or color not in {"default","red","blue","green","amber","purple","slate"}:
+        if not isinstance(color, str) or (color not in {"default","red","blue","green","amber","purple","slate","teal","cyan","indigo","rose","orange","olive","brown","graphite","forest"} and not re.fullmatch(r"#[0-9a-fA-F]{6}", color)):
             raise ValueError("Invalid list color")
         if "color" in body:
             conn.execute("INSERT INTO list_appearance(list_id,color) VALUES(?,?) ON CONFLICT(list_id) DO UPDATE SET color=excluded.color", (list_id,color))

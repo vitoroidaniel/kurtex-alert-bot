@@ -91,6 +91,22 @@ class SmartListsBackendTests(unittest.TestCase):
         self.assertEqual(len(persisted), 1)
         self.assertEqual(persisted[0]["values"]["status"], "Completed")
 
+    def test_list_color_presets_and_custom_hex_round_trip(self):
+        headers = {"X-Workspace-CSRF": "test-csrf-token"}
+        path = "/api/smart-lists/equipment_campaigns"
+        for color in ("default", "teal", "rose", "orange", "graphite", "#12ab34", "#ABCDEF"):
+            with self.subTest(color=color):
+                response = self.client.patch(path, headers=headers, json={"color": color})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["list"]["color"], color)
+                self.assertEqual(self.client.get(path).get_json()["list"]["color"], color)
+                lists = self.client.get("/api/smart-lists").get_json()["lists"]
+                self.assertEqual(next(item for item in lists if item["id"] == "equipment_campaigns")["color"], color)
+        for color in ("#123", "#zzzzzz", "red; display:none", None, 123):
+            with self.subTest(invalid=color):
+                self.assertEqual(self.client.patch(path, headers=headers, json={"color": color}).status_code, 400)
+        self.assertEqual(self.client.get(path).get_json()["list"]["color"], "#ABCDEF")
+
 
 if __name__ == "__main__":
     unittest.main()
