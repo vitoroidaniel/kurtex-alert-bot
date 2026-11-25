@@ -83,6 +83,7 @@ def _db():
                 conn.execute(
                     "CREATE TABLE IF NOT EXISTS entry_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT, list_id TEXT, actor TEXT, action TEXT, values_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)"
                 )
+                conn.execute("CREATE TABLE IF NOT EXISTS list_appearance (list_id TEXT PRIMARY KEY, color TEXT NOT NULL DEFAULT 'default', FOREIGN KEY(list_id) REFERENCES lists(id))")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_list_updated ON entries(list_id, updated_at DESC)")
                 for ident, name, fields in DEFAULTS:
                     conn.execute(
@@ -125,8 +126,8 @@ def _validate_values(fields: list[dict], values: object) -> dict[str, str]:
 
 def list_all() -> list[dict]:
     with _db() as conn:
-        rows = conn.execute("SELECT l.*, (SELECT COUNT(*) FROM entries e WHERE e.list_id=l.id) AS count FROM lists l WHERE archived=0 ORDER BY name").fetchall()
-        return [{"id": r["id"], "name": r["name"], "fields": json.loads(r["fields"]), "count": r["count"]} for r in rows]
+        rows = conn.execute("SELECT l.*, COALESCE(a.color, 'default') AS color, (SELECT COUNT(*) FROM entries e WHERE e.list_id=l.id) AS count FROM lists l LEFT JOIN list_appearance a ON a.list_id=l.id WHERE l.archived=0 ORDER BY l.rowid").fetchall()
+        return [{"id": r["id"], "name": r["name"], "fields": json.loads(r["fields"]), "count": r["count"], "color": r["color"]} for r in rows]
 
 
 def create_list(name: str, fields: list[dict], user_id: str) -> str:
@@ -157,11 +158,12 @@ def get_list_with_entries(list_id: str) -> tuple[dict | None, list[dict]]:
         row = conn.execute("SELECT * FROM lists WHERE id=? AND archived=0", (list_id,)).fetchone()
         if not row:
             return None, []
+        appearance = conn.execute("SELECT color FROM list_appearance WHERE list_id=?", (list_id,)).fetchone()
         entries = conn.execute(
             "SELECT * FROM entries WHERE list_id=? ORDER BY updated_at DESC,id DESC", (list_id,)
         ).fetchall()
         return (
-            {"id": row["id"], "name": row["name"], "fields": json.loads(row["fields"]), "count": len(entries)},
+            {"id": row["id"], "name": row["name"], "fields": json.loads(row["fields"]), "count": len(entries), "color": appearance["color"] if appearance else "default"},
             [{"id": e["id"], "values": json.loads(e["values_json"]), "updated_at": e["updated_at"]} for e in entries],
         )
 
@@ -269,6 +271,14 @@ def update_list(list_id, body, user_id):
             used.add(key)
             opts = [str(v)[:80] for v in f.get("options",[])[:40]] if typ=="select" and isinstance(f.get("options"),list) else []
             valid.append({"key":key,"label":label,"type":typ,"options":opts})
+        appearance = conn.execute("SELECT color FROM list_appearance WHERE list_id=?", (list_id,)).fetchone()
+        color = body.get("color", appearance["color"] if appearance else "default")
+        if not isinstance(color, str) or color not in {"default","red","blue","green","amber","purple","slate"}:
+            raise ValueError("Invalid list color")
+        if "color" in body:
+            conn.execute("INSERT INTO list_appearance(list_id,color) VALUES(?,?) ON CONFLICT(list_id) DO UPDATE SET color=excluded.color", (list_id,color))
+        if "fields" not in body:
+            valid = fields
         conn.execute("UPDATE lists SET name=?,fields=? WHERE id=?",(name,json.dumps(valid),list_id))
-        conn.execute("INSERT INTO entry_audit(list_id,actor,action,values_json) VALUES(?,?,?,?)",(list_id,str(user_id),"list_update",json.dumps({"name":name,"fields":valid})))
-        return {"id":list_id,"name":name,"fields":valid}
+        conn.execute("INSERT INTO entry_audit(list_id,actor,action,values_json) VALUES(?,?,?,?)",(list_id,str(user_id),"list_update",json.dumps({"name":name,"fields":valid,"color":color})))
+        return {"id":list_id,"name":name,"fields":valid,"color":color}
