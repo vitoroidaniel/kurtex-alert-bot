@@ -1253,8 +1253,8 @@ def register_workspace_routes(server):
         actor, error = _workspace_actor()
         if error:
             return error
-        if actor["role"] not in ("developer", "super_admin"):
-            return jsonify({"error": "Only managers and developers can delete Live Board cards."}), 403
+        if actor["role"] != "developer":
+            return jsonify({"error": "Only developers can delete all Live Board cards."}), 403
         data = request.get_json(silent=True) or {}
         if data.get("confirm") is not True:
             return jsonify({"error": "Confirmation is required before deleting Live Board cards."}), 400

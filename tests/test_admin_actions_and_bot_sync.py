@@ -183,7 +183,9 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
 
         self._auth_session(client, self.manager)
         with patch.object(workspace_board, "get_user", return_value=self.manager):
-            self.assertEqual(client.post("/api/workspace/board/clear", headers=headers, json={}).status_code, 400)
+            self.assertEqual(client.post("/api/workspace/board/clear", headers=headers, json={"confirm": True}).status_code, 403)
+            with self.assertRaises(PermissionError):
+                case_store.clear_live_board_cases(self.manager, scope="active_and_done")
             close_res = client.post(
                 "/api/workspace/board/close-all",
                 headers=headers,
@@ -197,6 +199,9 @@ class AdminActionsAndBotSyncTests(unittest.TestCase):
             self.assertEqual(reset_res.status_code, 200)
             self.assertEqual(board_order.read_order(self.data_dir)["groups"], {})
 
+        self._auth_session(client, self.dev)
+        with patch.object(workspace_board, "get_user", return_value=self.dev):
+            self.assertEqual(client.post("/api/workspace/board/clear", headers=headers, json={}).status_code, 400)
             clear_res = client.post(
                 "/api/workspace/board/clear",
                 headers=headers,

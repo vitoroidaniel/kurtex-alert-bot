@@ -1380,8 +1380,8 @@ def remove_live_board_case(actor: dict, case_id: str, *, mode: str, revision: st
 def clear_live_board_cases(actor: dict, *, scope: str = "active") -> dict:
     """Remove cards from Live Board while keeping every case record safely in the database."""
     role = str((actor or {}).get("role") or "").lower()
-    if role not in ("developer", "super_admin"):
-        raise PermissionError("Only managers and developers can clear the Live Board.")
+    if role != "developer":
+        raise PermissionError("Only developers can clear the Live Board.")
     clean_scope = str(scope or "active").strip().lower()
     if clean_scope not in ("active", "active_and_done", "test_only"):
         raise ValueError("Choose a valid Live Board clear scope.")
