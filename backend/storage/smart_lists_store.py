@@ -125,8 +125,8 @@ def _validate_values(fields: list[dict], values: object) -> dict[str, str]:
 
 def list_all() -> list[dict]:
     with _db() as conn:
-        rows = conn.execute("SELECT * FROM lists WHERE archived=0 ORDER BY name").fetchall()
-        return [{"id": r["id"], "name": r["name"], "fields": json.loads(r["fields"])} for r in rows]
+        rows = conn.execute("SELECT l.*, (SELECT COUNT(*) FROM entries e WHERE e.list_id=l.id) AS count FROM lists l WHERE archived=0 ORDER BY name").fetchall()
+        return [{"id": r["id"], "name": r["name"], "fields": json.loads(r["fields"]), "count": r["count"]} for r in rows]
 
 
 def create_list(name: str, fields: list[dict], user_id: str) -> str:
@@ -148,6 +148,7 @@ def create_list(name: str, fields: list[dict], user_id: str) -> str:
             "INSERT INTO lists(id,name,fields,created_by) VALUES(?,?,?,?)",
             (ident, name.strip()[:90], json.dumps(valid), str(user_id)),
         )
+        conn.execute("INSERT INTO entry_audit(list_id,actor,action,values_json) VALUES(?,?,?,?)", (ident, str(user_id), "list_create", json.dumps({"name": name, "fields": valid})))
     return ident
 
 
@@ -157,22 +158,23 @@ def get_list_with_entries(list_id: str) -> tuple[dict | None, list[dict]]:
         if not row:
             return None, []
         entries = conn.execute(
-            "SELECT * FROM entries WHERE list_id=? ORDER BY updated_at DESC LIMIT 2000", (list_id,)
+            "SELECT * FROM entries WHERE list_id=? ORDER BY updated_at DESC,id DESC", (list_id,)
         ).fetchall()
         return (
-            {"id": row["id"], "name": row["name"], "fields": json.loads(row["fields"])},
+            {"id": row["id"], "name": row["name"], "fields": json.loads(row["fields"]), "count": len(entries)},
             [{"id": e["id"], "values": json.loads(e["values_json"]), "updated_at": e["updated_at"]} for e in entries],
         )
 
 
-def archive_list(list_id: str) -> str:
+def archive_list(list_id: str, user_id: str = "") -> str:
     if list_id in {ident for ident, _, _ in DEFAULTS}:
         return "builtin"
     with _db() as conn:
-        row = conn.execute("SELECT id FROM lists WHERE id=? AND archived=0", (list_id,)).fetchone()
+        row = conn.execute("SELECT id,name,fields FROM lists WHERE id=? AND archived=0", (list_id,)).fetchone()
         if not row:
             return "not_found"
         conn.execute("UPDATE lists SET archived=1 WHERE id=?", (list_id,))
+        conn.execute("INSERT INTO entry_audit(list_id,actor,action,values_json) VALUES(?,?,?,?)", (list_id, str(user_id), "list_delete", json.dumps({"name": row["name"], "fields": json.loads(row["fields"])})))
     return "ok"
 
 
@@ -209,11 +211,64 @@ def delete_entry(list_id: str, entry_id: str, user_id: str) -> str:
         row = conn.execute("SELECT 1 FROM lists WHERE id=? AND archived=0", (list_id,)).fetchone()
         if not row:
             return "list_not_found"
-        if not conn.execute("SELECT 1 FROM entries WHERE id=? AND list_id=?", (entry_id, list_id)).fetchone():
+        old = conn.execute("SELECT values_json FROM entries WHERE id=? AND list_id=?", (entry_id, list_id)).fetchone()
+        if not old:
             return "entry_not_found"
         conn.execute("DELETE FROM entries WHERE id=? AND list_id=?", (entry_id, list_id))
         conn.execute(
             "INSERT INTO entry_audit(entry_id,list_id,actor,action,values_json) VALUES(?,?,?,?,?)",
-            (entry_id, list_id, str(user_id), "delete", "{}"),
+            (entry_id, list_id, str(user_id), "delete", old["values_json"]),
         )
         return "ok"
+
+
+def audit_history(limit=50, before=0):
+    with _db() as conn:
+        rows = conn.execute("SELECT a.*, l.name AS list_name FROM entry_audit a LEFT JOIN lists l ON l.id=a.list_id WHERE (?=0 OR a.id<?) ORDER BY a.id DESC LIMIT ?", (before,before,limit+1)).fetchall()
+        return [{"id": r["id"], "entry_id": r["entry_id"], "list_id": r["list_id"], "list_name": r["list_name"], "actor": r["actor"], "action": r["action"], "values": json.loads(r["values_json"] or "{}"), "created_at": r["created_at"]} for r in rows]
+
+def bulk_entries(list_id, rows, user_id):
+    if not isinstance(rows,list) or not 1 <= len(rows) <= 2000:
+        raise ValueError("Provide 1–2,000 rows")
+    with _db() as conn:
+        row = conn.execute("SELECT fields FROM lists WHERE id=? AND archived=0",(list_id,)).fetchone()
+        if not row:
+            return None
+        fields = json.loads(row["fields"])
+        values = [_validate_values(fields, item.get("values",item) if isinstance(item,dict) else item) for item in rows]
+        ids = []
+        for value in values:
+            eid = secrets.token_hex(12)
+            ids.append(eid)
+            data = json.dumps(value)
+            conn.execute("INSERT INTO entries(id,list_id,values_json,updated_by) VALUES(?,?,?,?)",(eid,list_id,data,str(user_id)))
+            conn.execute("INSERT INTO entry_audit(entry_id,list_id,actor,action,values_json) VALUES(?,?,?,?,?)",(eid,list_id,str(user_id),"create",data))
+        return ids
+
+def update_list(list_id, body, user_id):
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM lists WHERE id=? AND archived=0",(list_id,)).fetchone()
+        if not row:
+            return None
+        name = str(body.get("name",row["name"])).strip()[:90]
+        fields = json.loads(row["fields"])
+        raw = body.get("fields",fields)
+        if not name or not isinstance(raw,list) or not 1<=len(raw)<=25:
+            raise ValueError("Name and 1–25 fields required")
+        existing = {f["key"] for f in fields}
+        used = set()
+        valid = []
+        for f in raw:
+            if not isinstance(f,dict): raise ValueError("Invalid field")
+            typ = f.get("type")
+            label = str(f.get("label","")).strip()[:60]
+            if typ not in ("text","number","date","select","checkbox") or not label: raise ValueError("Invalid field")
+            key = str(f.get("key",""))
+            if key not in existing or key in used:
+                key = next("f"+str(i) for i in range(10000) if "f"+str(i) not in existing|used)
+            used.add(key)
+            opts = [str(v)[:80] for v in f.get("options",[])[:40]] if typ=="select" and isinstance(f.get("options"),list) else []
+            valid.append({"key":key,"label":label,"type":typ,"options":opts})
+        conn.execute("UPDATE lists SET name=?,fields=? WHERE id=?",(name,json.dumps(valid),list_id))
+        conn.execute("INSERT INTO entry_audit(list_id,actor,action,values_json) VALUES(?,?,?,?)",(list_id,str(user_id),"list_update",json.dumps({"name":name,"fields":valid})))
+        return {"id":list_id,"name":name,"fields":valid}

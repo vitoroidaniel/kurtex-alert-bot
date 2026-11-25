@@ -30,6 +30,19 @@ class SmartListsBackendTests(unittest.TestCase):
             sess["user"] = {"id": 101, "name": "Daniel", "role": "developer"}
             sess["workspace_csrf"] = "test-csrf-token"
 
+    def test_agent_can_add_and_edit_but_cannot_manage_lists_or_audit(self):
+        headers={"X-Workspace-CSRF":"test-csrf-token"}
+        with patch("backend.storage.user_store.get_user",return_value={"id":101,"name":"Agent","role":"agent"}):
+            self.assertEqual(self.client.post("/api/smart-lists",headers=headers,json={"name":"test"}).status_code,403)
+            self.assertEqual(self.client.get("/api/smart-lists/history").status_code,403)
+            res=self.client.post("/api/smart-lists/equipment_campaigns/entries",headers=headers,json={"values":{"unit":"101"}})
+            self.assertEqual(res.status_code,200)
+            eid=res.get_json()["id"]
+            self.assertEqual(self.client.put(f"/api/smart-lists/equipment_campaigns/entries/{eid}",headers=headers,json={"values":{"unit":"102"}}).status_code,200)
+            self.assertEqual(self.client.delete(f"/api/smart-lists/equipment_campaigns/entries/{eid}",headers=headers).status_code,403)
+        history=self.client.get("/api/smart-lists/history").get_json()["events"]
+        self.assertTrue(any(event["action"]=="update" for event in history))
+
     def test_smart_list_crud_persists_records(self):
         res = self.client.get("/api/smart-lists")
         self.assertEqual(res.status_code, 200)

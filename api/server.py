@@ -6670,30 +6670,36 @@ def api_smart_lists():
         return jsonify(error=str(exc)), 400
 
 
-@app.route("/api/smart-lists/<list_id>", methods=["GET", "DELETE"])
+@app.route("/api/smart-lists/<list_id>", methods=["GET", "DELETE", "PUT", "PATCH"])
 def api_smart_list(list_id):
     from backend.storage import smart_lists_store
     user, error = _smart_lists_actor(write=request.method != "GET", manager=request.method != "GET")
     if error:
         return error
     if request.method == "DELETE":
-        res = smart_lists_store.archive_list(list_id)
+        res = smart_lists_store.archive_list(list_id, user["id"])
         if res == "builtin":
             return jsonify(error="Built-in lists cannot be deleted"), 403
         if res == "not_found":
             return jsonify(error="List not found"), 404
         return jsonify(ok=True)
+    if request.method in ("PUT", "PATCH"):
+        try:
+            item = smart_lists_store.update_list(list_id, request.get_json(silent=True) or {}, user["id"])
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        return (jsonify(ok=True,list=item) if item else (jsonify(error="List not found"),404))
     item, entries = smart_lists_store.get_list_with_entries(list_id)
     if not item:
         return jsonify(error="List not found"), 404
-    return jsonify(list=item, entries=entries, can_manage=user["manager"])
+    return jsonify(list=item, entries=entries, count=item["count"], total=item["count"], can_manage=user["manager"])
 
 
 @app.route("/api/smart-lists/<list_id>/entries", methods=["POST"])
 @app.route("/api/smart-lists/<list_id>/entries/<entry_id>", methods=["PUT", "DELETE"])
 def api_smart_list_entries(list_id, entry_id=None):
     from backend.storage import smart_lists_store
-    user, error = _smart_lists_actor(write=True, manager=True)
+    user, error = _smart_lists_actor(write=True, manager=request.method == "DELETE")
     if error:
         return error
     if request.method == "DELETE":
@@ -6714,6 +6720,34 @@ def api_smart_list_entries(list_id, entry_id=None):
         return jsonify(error="Entry not found"), 404
     return jsonify(ok=True, id=saved_id)
 
+
+@app.route("/api/smart-lists/history", methods=["GET"])
+def api_smart_lists_history():
+    from backend.storage import smart_lists_store, user_store
+    user,error = _smart_lists_actor(manager=True)
+    if error: return error
+    limit = max(1,min(100,request.args.get("limit",50,type=int) or 50))
+    before = max(0,request.args.get("before",0,type=int) or 0)
+    rows = smart_lists_store.audit_history(limit,before)
+    names = {}
+    for row in rows[:limit]:
+        actor = row["actor"]
+        if actor not in names:
+            stored = user_store.get_user(int(actor)) if str(actor).isdigit() else None
+            names[actor] = (stored or {}).get("name") or actor
+        row["actor_name"] = names[actor]
+    return jsonify(events=rows[:limit],next_before=rows[limit-1]["id"] if len(rows)>limit else None)
+
+@app.route("/api/smart-lists/<list_id>/entries/bulk", methods=["POST"])
+def api_smart_lists_bulk(list_id):
+    from backend.storage import smart_lists_store
+    user,error = _smart_lists_actor(write=True)
+    if error: return error
+    try:
+        ids = smart_lists_store.bulk_entries(list_id,(request.get_json(silent=True) or {}).get("entries"),user["id"])
+    except ValueError as exc:
+        return jsonify(error=str(exc)),400
+    return (jsonify(ok=True,count=len(ids),ids=ids),201) if ids is not None else (jsonify(error="List not found"),404)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
