@@ -912,9 +912,9 @@ def _resolve_conversational_context(message, history, cases=None):
     return active_unit, augmented.strip()
 
 
-def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,active_unit="",excluded_unit="",include_analytics=False):
+def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,active_unit="",excluded_unit="",include_analytics=False,board_cases=None):
     """Build a focused, high-signal context without flooding the prompt."""
-    cases=[c for c in load_cases() if not is_testing(c)]
+    cases=board_cases if board_cases is not None else [c for c in load_cases() if not is_testing(c)]
     if not excluded_unit:
         known_units={str(c.get("unit_number") or "").strip().lower() for c in cases if str(c.get("unit_number") or "").strip()}
         excluded_unit=_extract_excluded_unit(query,known_units)
@@ -982,8 +982,8 @@ def _ai_context(query="",limit=6,include_cases=True,include_chat_history=True,ac
     for x in (_ai_knowledge_matches(query,3) if "_ai_knowledge_matches" in globals() else []):
         approved.append({"id":x.get("id"),"title":_ai_clip(x.get("title"),120),
           "tags":(x.get("tags") or [])[:6],"content":knowledge_excerpt(x.get("content"),query,1000)})
-    lessons=learning_store.matches(query,limit=3) if include_cases else []
-    fleet_exp=fleet_knowledge_store.matches(query,4) if (include_cases and len(compact)<4) else []
+    lessons=learning_store.matches(query,limit=3) if include_cases and board_cases is None else []
+    fleet_exp=fleet_knowledge_store.matches(query,4) if (include_cases and len(compact)<4 and board_cases is None) else []
     if include_cases and active_unit and not exact_unit_cases:
         u_low=active_unit.strip().lower()
         for fx in fleet_exp:
@@ -1320,6 +1320,74 @@ def _try_fast_board_summary_answer(raw_msg, all_cases):
 
     return "\n".join(lines), ""
 
+
+
+def _ai_live_board_cases():
+    """Match the workspace board's reported, visible maintenance case scope."""
+    return [c for c in load_cases() if isinstance(c, dict)
+            and case_store.is_maintenance_report(c)
+            and not is_testing(c) and not is_history_test_case(c)
+            and not is_test_group_name(c.get("group_name") or c.get("group") or "")
+            and not c.get("board_hidden") and c.get("status") == "reported"
+            and not c.get("closed_at")
+            and (chicago_date_str(c.get("reported_at")) or "") >= "2026-10-12"]
+
+def _ai_board_answer(message, cases):
+    q = message.lower().strip()
+    if _FAST_GREETING_RE.match(message):
+        return "I can help with your current Live Board. Ask about active repairs, priority cases, repair costs or assignments."
+    if not cases:
+        return "There are no current maintenance cases on the Live Board."
+    if _BOARD_SUMMARY_QUERY_RE.match(message):
+        return _try_fast_board_summary_answer(message, cases)[0]
+    threshold = _COST_THRESHOLD_RE.search(q)
+    selected = None
+    title = ""
+    if threshold:
+        value = float(threshold.group(2))
+        under = threshold.group(1).lower() in ("under", "below", "less than")
+        selected = [c for c in cases if (amt := _parse_case_amount_usd(c.get("amount"))) is not None
+                    and (amt < value if under else amt >= value)]
+        title = f"Repairs {'under' if under else 'at or above'} ${value:,.0f}"
+    elif re.search(r'\b(?:broke|broken|breakdowns?|top trucks|top units)\b', q):
+        records = [_ai_case_record(c) for c in cases]
+        if "truck" in q:
+            records = [r for r in records if str(r["type"]).lower() == "truck"]
+        elif "trailer" in q:
+            records = [r for r in records if str(r["type"]).lower() == "trailer"]
+        grouped = {}
+        for r in records:
+            if r["unit"]:
+                grouped.setdefault(r["unit"], []).append(r)
+        ranked = sorted(grouped.items(), key=lambda item: (-len(item[1]), item[0]))
+        if not ranked:
+            return "No matching units have active cases on the Live Board."
+        lines = ["### Active breakdowns", f"{len(records)} current cases across {len(ranked)} identified units. Ranked by current case count, not historical breakdown frequency.", ""]
+        for unit, rows in ranked[:12]:
+            spend = sum(_parse_case_amount_usd(r["amount"]) or 0 for r in rows)
+            lines.extend([f"**Unit {unit}** · {len(rows)} active case(s)" + (f" · ${spend:,.2f} logged" if spend else ""), _ai_clip(rows[0]["issue"] or "Maintenance issue", 180), ""])
+        if len(ranked) > 12:
+            lines.append(f"Showing 12 of {len(ranked)} units.")
+        return "\n".join(lines)
+    elif "high priority" in q or "high-priority" in q:
+        selected = [c for c in cases if _ai_case_record(c)["priority"] == "high"]
+        title = "High-priority cases"
+    elif "unassigned" in q:
+        selected = [c for c in cases if not _ai_case_record(c)["agent"] and not _ai_case_record(c)["board_stage"]]
+        title = "Unassigned cases"
+    elif "in shop" in q:
+        selected = [c for c in cases if _ai_case_record(c)["board_stage"] == "dealer_shop" or _ai_case_record(c)["shop"]]
+        title = "Cases in shop"
+    if selected is None:
+        return None
+    lines = [f"### {title}", f"{len(selected)} matching current board cases.", ""]
+    for c in selected[:12]:
+        r = _ai_case_record(c)
+        amt = _parse_case_amount_usd(r["amount"])
+        lines.extend([f"**Unit {r['unit'] or 'Unknown'}**" + (f" · ${amt:,.2f}" if amt is not None else ""), _ai_clip(r["issue"] or "Maintenance issue", 180), ""])
+    if len(selected) > 12:
+        lines.append(f"Showing 12 of {len(selected)} cases.")
+    return "\n".join(lines)
 
 def _try_fast_case_query_answer(message, history):
     """Instant (<30ms) deterministic response for greetings, board summary, analytics lookups, unit case lookups, recent cases, negated unit filters, symptom searches, and most-recent follow-ups."""
@@ -2243,7 +2311,9 @@ def api_ai_chat():
     response_contract=response_policy(message,has_video=video_present,has_images=bool(image_urls),transcript=speech_text)
     task=response_contract["task"]
     visual_description_only=_ai_visual_description_request(display_message,bool(image_urls))
-    wants_similar_cases=bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(display_message)
+    board_only = page == "live_board"
+    board_cases = _ai_live_board_cases() if board_only else None
+    wants_similar_cases=(_ai_explicit_similar_case_request(display_message) if board_only else bool(data.get("similar_cases")) or _ai_explicit_similar_case_request(display_message))
     web_search_enabled=(data.get("web_search") is True)
     wants_web=web_search_enabled and needs_web_search(display_message,task,bool(image_urls))
     wants_stream=bool(data.get("stream")) or ("text/event-stream" in str(request.headers.get("Accept") or "").lower())
@@ -2265,10 +2335,13 @@ def api_ai_chat():
 
     # Deterministic Fast-Path (<30ms) for unit case lookups, recent cases, negated unit filters, and most-recent follow-ups
     if not (image_urls or video_present or driver_reports):
-        fast_answer, _fast_unit = _try_fast_case_query_answer(message, history)
+        if board_only:
+            fast_answer, _fast_unit = _ai_board_answer(display_message, board_cases), None
+        else:
+            fast_answer, _fast_unit = _try_fast_case_query_answer(message, history)
         if fast_answer:
             started_fast = time.monotonic()
-            fast_ctx = {"retrieval": {"historical_cases_total": len(load_cases()), "cases_in_prompt": 1, "approved_items_in_prompt": 0, "historical_chats_in_prompt": 0}}
+            fast_ctx = {"retrieval": {"historical_cases_total": len(board_cases) if board_only else len(load_cases()), "cases_in_prompt": 1, "approved_items_in_prompt": 0, "historical_chats_in_prompt": 0}}
             fast_res = {"status": "skipped", "results": []}
             if wants_stream:
                 def _stream_fast():
@@ -2292,7 +2365,7 @@ def api_ai_chat():
             with app.app_context():
                 return fn(*args)
 
-        active_unit, resolved_msg = _run_with_app_context(_resolve_conversational_context, display_message, history)
+        active_unit, resolved_msg = _run_with_app_context(_resolve_conversational_context, display_message, history, board_cases)
         retrieval_query=multilingual_retrieval_query(resolved_msg+" "+visual_terms,speech_text)
 
         is_ops=(task=="board_ops" and not wants_similar_cases and not image_urls)
@@ -2308,6 +2381,7 @@ def api_ai_chat():
                 active_unit,
                 "",
                 task in ("analytics","board_ops"),
+                board_cases,
             )
             web_fut=pool.submit(_run_with_app_context,_ai_web_search,retrieval_query,5) if wants_web else None
             ctx=ctx_fut.result()
@@ -2351,6 +2425,8 @@ def api_ai_chat():
             response_contract=response_contract,
         )
         messages=[{"role":"system","content":sys_prompt}]
+        if board_only:
+            messages.append({"role":"system","content":"Use only current Live Board cases for operational counts, rankings, unit lookups and expenses. Never treat earlier chat answers or historical records as current board evidence. The current board case count is "+str(len(board_cases))+". Say when the available context is insufficient. Prefer short headings and separated case rows."})
         ctx_compact={k:v for k,v in ctx.items() if k!="retrieval"}
         ctx_block=_format_ai_context_block(ctx_compact)
         if ctx_block:
