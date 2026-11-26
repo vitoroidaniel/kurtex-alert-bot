@@ -1161,7 +1161,7 @@ def register_workspace_routes(server):
                         pres_seq = next_pres_seq
                         yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor))})
                     now = time.monotonic()
-                    if now - last_ping >= 18.0:
+                    if now - last_ping >= 5.0:
                         last_ping = now
                         if sse_has_presence:
                             try:

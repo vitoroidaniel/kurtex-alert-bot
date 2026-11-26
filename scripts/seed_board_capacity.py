@@ -47,6 +47,16 @@ def seed_capacity():
         agent_counts[str(uid)]=rng.randint(5,10)
         for j in range(agent_counts[str(uid)]):
             plan.append(("reported","",(uid,name)))
+    # Repair the original fixture: Done lane membership requires a recorded close action.
+    with db.write_tx(root) as conn:
+        rows=conn.execute("SELECT data_json FROM cases WHERE id LIKE ? AND status='done'",(PREFIX+"%",)).fetchall()
+        for row in rows:
+            case=json.loads(row[0])
+            if case.get("synthetic_dataset")!="staging-capacity-v2" or case.get("board_hidden"): continue
+            history=case.setdefault("workspace_history",[])
+            if any(h.get("action")=="close" for h in history if isinstance(h,dict)): continue
+            history.append(dict(action="close",at=case.get("closed_at"),actor_id=case.get("agent_id"),actor_name="Capacity Fixture"))
+            _upsert_case_row(conn,case,event_type="updated",actor_name="Capacity Fixture")
     inserted=0
     for base in range(0,len(plan),100):
         with db.write_tx(root) as conn:
@@ -63,6 +73,7 @@ def seed_capacity():
                 issue=ISSUES[i%len(ISSUES)]
                 notes=[dict(id=cid+"-n"+str(k),author_id=agents[(i+k)%len(agents)][0],author=agents[(i+k)%len(agents)][1],text="SIM: "+NOTES[k%len(NOTES)],created_at=(opened+timedelta(minutes=20*k)).isoformat()) for k in range(note_count)]
                 case=dict(id=cid,status=status,agent_id=uid,agent_name=name,driver_name="Synthetic Driver "+str(i+1),report_driver="Synthetic Driver "+str(i+1),group_name="Synthetic Fleet",description=issue,issue_text=issue,opened_at=stamp,assigned_at=stamp,reported_at=stamp,updated_at=end or stamp,closed_at=end,source="workspace",workspace_request_id=cid,created_by_id=uid,vehicle_type="truck" if i%2 else "trailer",unit_number="CAP"+str(10000+i),priority=priority,board_stage=stage,board_rank=float(i),shop_info="SIM Repair Center "+str(i%12+1),amount=str(cost),load_type="Loaded" if i%2 else "Empty",workspace_notes=notes,workspace_attachments=[],synthetic_dataset="staging-capacity-v2")
+                if status=="done": case["workspace_history"]=[dict(action="close",at=end,actor_id=uid,actor_name=name)]
                 _upsert_case_row(conn,case,event_type="created",actor_id=str(uid),actor_name="Capacity Fixture")
                 inserted+=1
     with db.read_conn(root) as conn:
