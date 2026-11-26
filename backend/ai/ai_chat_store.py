@@ -4,6 +4,9 @@ import copy
 import hashlib
 import json
 import sqlite3
+import os
+import tempfile
+from contextlib import contextmanager, closing
 from pathlib import Path
 
 class ChatStore:
@@ -22,12 +25,25 @@ class ChatStore:
                 for key,chats in data.items():
                     db.execute('INSERT OR IGNORE INTO users VALUES (?,?)',(key,json.dumps(self.externalize(chats))))
                 db.execute("INSERT INTO metadata VALUES ('legacy_import')")
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(self.db,timeout=10)
+        with closing(sqlite3.connect(self.db, timeout=10)) as db:
+            db.execute('PRAGMA busy_timeout=10000')
+            with db:
+                yield db
     def put_blob(self,raw):
         digest=hashlib.sha256(raw).hexdigest()
         path=self.media/digest
-        if not path.exists():path.write_bytes(raw)
+        if not path.exists():
+            fd, temp = tempfile.mkstemp(prefix='.blob-', dir=self.media)
+            try:
+                with os.fdopen(fd, 'wb') as stream:
+                    stream.write(raw)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temp, path)
+            finally:
+                Path(temp).unlink(missing_ok=True)
         return digest
     def blob_path(self,digest):
         if len(digest)!=64 or any(c not in '0123456789abcdef' for c in digest):raise ValueError('Invalid media reference')

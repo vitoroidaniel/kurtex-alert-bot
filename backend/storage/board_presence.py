@@ -32,6 +32,7 @@ def _ensure_table(conn, data_dir=None):
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(workspace_presence)").fetchall()}
     if "draft" not in cols:
         conn.execute("ALTER TABLE workspace_presence ADD COLUMN draft TEXT NOT NULL DEFAULT ''")
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_workspace_presence_expiry ON workspace_presence(expires_at)')
     _ENSURED_DIRS.add(key)
 
 
@@ -41,7 +42,7 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
     if action not in ACTIONS:
         raise ValueError("Invalid collaboration activity.")
     if action == "left":
-        remove_session(session_id, data_dir=data_dir)
+        remove_session(session_id, data_dir=data_dir, user_id=user_id)
         return
     if len(str(case_id)) > 100 or len(str(field)) > 60:
         raise ValueError("Invalid collaboration context.")
@@ -55,18 +56,22 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
             "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET "
             "user_id=excluded.user_id,user_name=excluded.user_name,action=excluded.action,"
             "case_id=excluded.case_id,field=excluded.field,draft=excluded.draft,"
-            "updated_at=excluded.updated_at,expires_at=excluded.expires_at",
+            "updated_at=excluded.updated_at,expires_at=excluded.expires_at "
+            "WHERE workspace_presence.user_id=excluded.user_id",
             (session_id, user_id, str(user_name)[:70], action, str(case_id), str(field), clean_draft, now, now + 50)
         )
 
 
-def remove_session(session_id, data_dir=None):
+def remove_session(session_id, data_dir=None, *, user_id=None):
     """Remove an ephemeral session immediately when a realtime socket closes."""
     if not isinstance(session_id, str) or not _UUID.fullmatch(session_id):
         return
     with db.write_tx(data_dir) as conn:
         _ensure_table(conn, data_dir)
-        conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
+        if user_id is None:
+            conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
+        else:
+            conn.execute("DELETE FROM workspace_presence WHERE session_id=? AND user_id=?", (session_id, user_id))
 
 
 def snapshot(current_user, data_dir=None, *, include_activity: bool = True):
