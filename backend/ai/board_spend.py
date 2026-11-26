@@ -5,7 +5,7 @@ from decimal import Decimal
 
 def spending_answer(question, records):
     q = question.lower()
-    thresholds = list(re.finditer(r"\b(under|below|less\s+than|over|above|more\s+than)\s*$?\s*([\d,]+(?:\.\d{1,2})?)", q))
+    thresholds = list(re.finditer(r"\b(under|below|less\s+than|over|above|more\s+than)\s*\$?\s*([\d,]+(?:\.\d{1,2})?)", q))
     under = [Decimal(m[2].replace(",", "")) for m in thresholds if m[1] in ("under","below","less than")]
     over = [Decimal(m[2].replace(",", "")) for m in thresholds if m[1] in ("over","above","more than")]
     shops = bool(re.search(r"\b(?:top|highest|leading|most expensive)\s+(?:\d+\s+)?shops\b|shops?\s+by\s+(?:spend|cost)", q))
