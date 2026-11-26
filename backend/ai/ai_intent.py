@@ -147,7 +147,7 @@ def response_policy(message, has_video=False, has_images=False, transcript=''):
     }
     return {'language':lang,'language_name':LANGUAGE_NAMES[lang],'task':task,
             'instructions':('Reply in '+LANGUAGE_NAMES[lang]+'. Preserve original fault codes, unit numbers, and part numbers verbatim. '
-                'STRICT SCOPE: Answer ONLY commercial truck, trailer, reefer maintenance, fleet case history, fault codes, parts manual, and Kurtex operations questions. Refuse any off-topic request. '
+                'SCOPE: Answer fleet maintenance, transportation, logistics, dispatch, shipping, invoices, receipts and payment paperwork. Describe supplied attachments when asked even if their maintenance relevance is unclear. Refuse unrelated standalone requests. '
                 'STRICT GROUNDING: Never invent cases, unit history, repairs, or part numbers not in the supplied context. '
                 'Write like a crisp, senior fleet maintenance dispatcher: zero fluff, zero greetings, never repeat the user question, never output empty headings or boilerplate disclaimers. '
                 'FIRST LINE: direct answer or immediate safety action. '+sections[task]+' '
@@ -183,7 +183,7 @@ _MAINTENANCE_DOMAIN_RE = re.compile(
     r'gearbox|differential|driveline|u-joint|compressor|condenser|evaporator|refrigerant|freon|setpoint|temp|temperature|'
     r'thermo\s+king|carrier|freightliner|cascadia|kenworth|peterbilt|volvo|mack|international|cummins|detroit|paccar|bendix|wabco|'
     r'meritor|haldex|hendrickson|davco|kurtex|board|open|closed|done|reported|active|missed|priority|urgent|cost|vendor|towing|'
-    r'spend|amount|expensive|under|over|below|above|analytics|statistics|stats|frequent|frequently|invoice|invoices|proof|proofs|dollar|usd|'
+    r'spend|amount|expensive|under|over|below|above|analytics|statistics|stats|frequent|frequently|invoice|invoices|receipt|receipts|payment|payments|shipping|freight|logistics|transportation|proof|proofs|dollar|usd|'
     r'roadside|breakdown|breakdowns|broke|crank|start|idle|stall|smoke|noise|vibration|crack|cracked|broken|worn|damaged|bent|loose|missing|'
     r'camion|remorc[aă]|frân[aă]|frana|motor|anvelop[aă]|roat[aă]|jant[aă]|scurgere|pierde|aer|ulei|antigel|baterie|pies[aă]|caz|cazuri|defect|'
     r'грузовик|прицеп|рефрижератор|тормоз\w*|двигател\w*|колес\w*|шин\w*|диск|утечк\w*|воздух\w*|масл\w*|антифриз|аккумулятор|ошибк\w*|ремонт\w*|кейс\w*|заявк\w*|юнит|'
