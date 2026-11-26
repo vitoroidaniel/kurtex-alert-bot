@@ -3960,14 +3960,16 @@ def api_cases():
                 and case_store._storage_dir().resolve() == DATA_DIR.resolve()):
             where = """status='done' AND NOT COALESCE(json_extract(data_json,'$.board_hidden'),0)
                        AND EXISTS (SELECT 1 FROM json_each(data_json,'$.workspace_history') h
-                                   WHERE json_extract(h.value,'$.action')='close')"""
+                                   WHERE CASE WHEN h.type='object' THEN json_extract(h.value,'$.action') END='close')"""
+            # Subsequent history pages need only a look-ahead, not another full count.
+            skip_count = request.args.get("skip_total") == "1" and offset > 0
             with kurtex_db.read_conn(DATA_DIR) as conn:
-                total = conn.execute("SELECT count(*) FROM cases WHERE " + where).fetchone()[0]
+                total = None if skip_count else conn.execute("SELECT count(*) FROM cases WHERE " + where).fetchone()[0]
                 rows = conn.execute("SELECT data_json FROM cases WHERE " + where +
-                                    " ORDER BY opened_at DESC, id DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
-            page = [serialize_case(normalize_case(json.loads(row[0]))) for row in rows]
+                                    " ORDER BY opened_at DESC, id DESC LIMIT ? OFFSET ?", (limit + 1, offset)).fetchall()
+            page = [serialize_case(normalize_case(json.loads(row[0]))) for row in rows[:limit]]
             return jsonify({"cases": page, "total": total, "offset": offset, "limit": limit,
-                            "has_more": offset + limit < total})
+                            "has_more": len(rows) > limit})
         cases = load_cases()
         if f == "workspace":
             if "cases" not in _current_allowed_pages():
