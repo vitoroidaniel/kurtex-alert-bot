@@ -92,10 +92,10 @@ def classify_task(message, has_video=False, has_images=False):
         or re.search(r'\b(?:trucks?|trailers?|reefers?|units?)\s+(?:that\s+)?brok(?:e|en)\s+down\b', question_text)
     ):
         return 'analytics'
-    if '[live board summary]' in text or any(phrase in text for phrase in TASK_WORDS['board_ops']):
+    if any(phrase in question_text for phrase in TASK_WORDS['board_ops']):
         return 'board_ops'
     for task in ('history','fault_code','parts','visual'):
-        if any(phrase in text for phrase in TASK_WORDS[task]):return task
+        if any(phrase in question_text for phrase in TASK_WORDS[task]):return task
     if has_images:return 'image_inspection'
     return 'maintenance_question'
 

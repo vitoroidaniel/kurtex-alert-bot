@@ -2268,10 +2268,8 @@ def api_ai_chat():
     available={str(a.get("id")):a for a in chat.get("attachments",[])}
     if any(i not in available for i in requested_attachment_ids):
         return jsonify({"error":"An attached file is no longer available. Attach it again."}),400
-    # Follow-ups reuse only the latest user turn's images, never arbitrary old uploads.
-    active_ids=requested_attachment_ids
-    if not active_ids:
-        active_ids=next((m.get("attachment_ids",[]) for m in reversed(history) if m.get("role")=="user"),[])
+    from backend.ai.turn_context import select_attachment_ids, is_social_turn, is_weather_turn
+    active_ids=select_attachment_ids(display_message, requested_attachment_ids, history, available)
     active_media=[chat_store.hydrate(available[i]) for i in active_ids if i in available and available[i].get("kind") in ("image","video","audio")]
     active_documents=[available[i] for i in active_ids if i in available and available[i].get("kind")=="document"]
     image_items=[];driver_reports=[]
@@ -2287,7 +2285,7 @@ def api_ai_chat():
     video_present=any(m.get('kind')=='video' for m in active_media)
     speech_text=" ".join(str(x.get('transcript') or '')[:1800] for x in driver_reports)
     history_text=" ".join(str(m.get("content") or "")[:400] for m in history[-6:])
-    response_contract=response_policy(message,has_video=video_present,has_images=bool(image_urls),transcript=speech_text)
+    response_contract=response_policy(display_message,has_video=video_present,has_images=bool(image_urls),transcript=speech_text)
     task=response_contract["task"]
     visual_description_only=_ai_visual_description_request(display_message,bool(image_urls))
     board_only = page == "live_board"
@@ -2299,8 +2297,10 @@ def api_ai_chat():
     is_trainer=_ai_is_trainer()
 
     # Deterministic Scope Guardrail: block off-topic / abuse queries before calling Workers AI
-    if is_out_of_scope_query(display_message, history_text=history_text, has_media=bool(image_urls or video_present or driver_reports or active_documents)):
-        refusal_text = out_of_scope_refusal(response_contract["language"])
+    social_reply = is_social_turn(display_message) if not active_ids else None
+    weather_request = is_weather_turn(display_message) if not active_ids else False
+    if social_reply or weather_request or is_out_of_scope_query(display_message, history_text=history_text, has_media=bool(image_urls or video_present or driver_reports or active_documents)):
+        refusal_text = social_reply or ("I don’t have live weather data in this workspace. For a weather or road conditions check, provide a location and use a live weather service." if weather_request else "I can help with fleet maintenance, dispatch, logistics, repair costs and attached documents. What would you like to check?")
         started_guard = time.monotonic()
         empty_ctx = {"retrieval": {"historical_cases_total": 0, "cases_in_prompt": 0, "approved_items_in_prompt": 0, "historical_chats_in_prompt": 0}}
         empty_res = {"status": "skipped", "results": []}
@@ -2344,7 +2344,8 @@ def api_ai_chat():
             with app.app_context():
                 return fn(*args)
 
-        active_unit, resolved_msg = _run_with_app_context(_resolve_conversational_context, display_message, history, board_cases)
+        attachment_focus = bool(active_ids) and (visual_description_only or bool(active_documents) or task in ("image_inspection","video_inspection","visual"))
+        active_unit, resolved_msg = ("", display_message) if attachment_focus else _run_with_app_context(_resolve_conversational_context, display_message, history, board_cases)
         retrieval_query=multilingual_retrieval_query(resolved_msg+" "+visual_terms,speech_text)
 
         is_ops=(task=="board_ops" and not wants_similar_cases and not image_urls)
@@ -2355,11 +2356,11 @@ def api_ai_chat():
                 _ai_context,
                 retrieval_query,
                 ctx_limit,
-                not visual_description_only,
-                not is_ops and not visual_description_only,
+                not visual_description_only and not attachment_focus,
+                not is_ops and not visual_description_only and not attachment_focus,
                 active_unit,
                 "",
-                task in ("analytics","board_ops"),
+                task in ("analytics","board_ops") and not attachment_focus,
                 board_cases,
             )
             web_fut=pool.submit(_run_with_app_context,_ai_web_search,retrieval_query,5) if wants_web else None
@@ -2387,7 +2388,7 @@ def api_ai_chat():
                     selected.append({"id":k.get("id"),"title":_ai_clip(k.get("title"),140),"tags":(k.get("tags") or [])[:8],"content":knowledge_excerpt(k.get("content"),retrieval_query,2400)})
         if attachments: ctx["chat_attachments"]=attachments
         if selected: ctx["chat_selected_knowledge"]=selected
-        if not is_ops and not visual_description_only:
+        if not is_ops and not visual_description_only and not attachment_focus:
             parts=_ai_parts_matches(retrieval_query,3)
             if parts: ctx["parts_manual_matches"]=parts
         if research["results"]:
@@ -2418,7 +2419,7 @@ def api_ai_chat():
             role=item.get("role"); raw_item=item.get("content")
             content=_ai_clip(_strip_live_board_context(raw_item) if role=="user" else raw_item,1200)
             if role in ("user","assistant") and content:messages.append({"role":role,"content":content})
-        messages.append({"role":"user","content":message})
+        messages.append({"role":"user","content":display_message if attachment_focus else message})
         pass_images=[] if (observations and video_present) else image_urls
         return messages, pass_images, retrieval_query, ctx, research, _ai_max_tokens_for(task)
 
