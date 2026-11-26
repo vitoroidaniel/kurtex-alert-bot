@@ -23,6 +23,9 @@ def main():
     if not (edit_role(uid, "developer") if existing else add_user(uid, "Staging Developer", "", "developer")):
         raise RuntimeError("Developer bootstrap failed")
     print("Staging developer bootstrap successful; starting Telegram polling", flush=True)
+    if os.getenv("STAGING_SEED_CASES"):
+        from scripts.seed_staging import seed
+        seed(int(os.environ["STAGING_SEED_CASES"]))
     runpy.run_module("bot", run_name="__main__")
 
 if __name__ == "__main__":
