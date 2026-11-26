@@ -1331,18 +1331,22 @@ def _ai_board_answer(message, cases):
         return "There are no current maintenance cases on the Live Board."
     if _BOARD_SUMMARY_QUERY_RE.match(message):
         return _try_fast_board_summary_answer(message, cases)[0]
-    requested = re.search(r"\btop\s+(\d{1,2})\b", q)
-    limit = min(50, max(1, int(requested.group(1)))) if requested else 5
-    if any(term in q for term in ("most expensive", "highest cost", "highest priced", "costliest")):
-        priced = [(amt, c) for c in cases if (amt := _parse_case_amount_usd(c.get("amount"))) is not None]
-        priced.sort(key=lambda item: item[0], reverse=True)
+    from backend.ai.ranking import ranking_limit
+    limit = ranking_limit(q)
+    if any(term in q for term in ("most expensive", "highest cost", "highest priced", "costliest", "most costly", "cheapest", "lowest cost", "lowest priced")) and not re.search(r"\b(?:and|versus|vs|compare|by shop|shops|yesterday|last week|last month|historical|closed)\b", q):
+        priced = [(amt, c) for c in cases if (amt := _parse_case_amount_usd(_ai_case_record(c)["amount"])) is not None]
+        cheapest = any(term in q for term in ("cheapest", "lowest cost", "lowest priced"))
+        priced.sort(key=lambda item: item[0], reverse=not cheapest)
         if not priced:
             return "No current board cases have recorded repair amounts."
         shown = priced[:limit]
-        lines = [f"### {len(shown)} highest repair costs", "Current Live Board only. Ranked by recorded repair amount.", ""]
+        direction = "Lowest" if cheapest else "Highest"
+        title = ("Cheapest repair" if cheapest else "Most expensive repair") if limit == 1 else f"{len(shown)} {direction.lower()} repair costs"
+        lines = [f"### {title}", ""]
         for amt, c in shown:
             r = _ai_case_record(c)
             lines.extend([f"**Unit {r['unit'] or 'Unknown'}** · **$%s**" % format(amt, ",.2f"), _ai_clip(r["issue"] or "Maintenance issue", 160), ""])
+        if len(shown) < limit: lines.append(f"Only {len(shown)} priced cases are available on the current board.")
         return "\n".join(lines)
     from backend.ai.board_spend import spending_answer
     spend_records = []
