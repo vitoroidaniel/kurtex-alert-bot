@@ -41,7 +41,7 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
     if action not in ACTIONS:
         raise ValueError("Invalid collaboration activity.")
     if action == "left":
-        remove_session(session_id, data_dir=data_dir)
+        remove_session(session_id, data_dir=data_dir, user_id=user_id)
         return
     if len(str(case_id)) > 100 or len(str(field)) > 60:
         raise ValueError("Invalid collaboration context.")
@@ -50,6 +50,9 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
     with db.write_tx(data_dir) as conn:
         _ensure_table(conn, data_dir)
         conn.execute("DELETE FROM workspace_presence WHERE expires_at < ?", (now,))
+        owner = conn.execute('SELECT user_id FROM workspace_presence WHERE session_id=?', (session_id,)).fetchone()
+        if owner is not None and int(owner['user_id']) != int(user_id):
+            raise ValueError('Collaboration session belongs to another user.')
         conn.execute(
             "INSERT INTO workspace_presence(session_id,user_id,user_name,action,case_id,field,draft,updated_at,expires_at) "
             "VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET "
@@ -60,13 +63,17 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
         )
 
 
-def remove_session(session_id, data_dir=None):
+def remove_session(session_id, data_dir=None, *, user_id=None):
     """Remove an ephemeral session immediately when a realtime socket closes."""
     if not isinstance(session_id, str) or not _UUID.fullmatch(session_id):
         return
     with db.write_tx(data_dir) as conn:
         _ensure_table(conn, data_dir)
-        conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
+        if user_id is None:
+            # Internal legacy callers only; authenticated transports supply the owner.
+            conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
+        else:
+            conn.execute("DELETE FROM workspace_presence WHERE session_id=? AND user_id=?", (session_id, user_id))
 
 
 def snapshot(current_user, data_dir=None, *, include_activity: bool = True):

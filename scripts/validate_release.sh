@@ -18,7 +18,7 @@ suite = unittest.TestSuite()
 sys.path.insert(0, "tests")
 with patch.object(socket.socket, "connect", no_network), patch.object(socket.socket, "connect_ex", no_network), patch.object(socket, "getaddrinfo", no_network):
     for name in ("test_sqlite_snapshot", "test_smart_list_query_plan",
-                 "test_smart_lists_store_and_routes",
+                 "test_smart_lists_store_and_routes", "test_presence_concurrency",
                  "test_v304_live_board_collaboration",
                  "test_v305_live_board_production_storage"):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))

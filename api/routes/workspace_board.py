@@ -1102,7 +1102,7 @@ def register_workspace_routes(server):
         finally:
             if ws_has_presence:
                 try:
-                    remove_session(ws_session_id, _data_dir())
+                    remove_session(ws_session_id, _data_dir(), user_id=user_id)
                     _bump_presence_seq()
                 except Exception:
                     pass
@@ -1172,7 +1172,7 @@ def register_workspace_routes(server):
             finally:
                 if sse_has_presence:
                     try:
-                        remove_session(sse_session_id, _data_dir())
+                        remove_session(sse_session_id, _data_dir(), user_id=user_id)
                         _bump_presence_seq()
                     except Exception:
                         pass
