@@ -85,7 +85,9 @@ def _db():
                     "CREATE TABLE IF NOT EXISTS entry_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT, list_id TEXT, actor TEXT, action TEXT, values_json TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)"
                 )
                 conn.execute("CREATE TABLE IF NOT EXISTS list_appearance (list_id TEXT PRIMARY KEY, color TEXT NOT NULL DEFAULT 'default', FOREIGN KEY(list_id) REFERENCES lists(id))")
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_list_updated ON entries(list_id, updated_at DESC)")
+                # Cover the stable tie-breaker too; large lists often have thousands of
+                # rows imported in the same second. Keep the older index for rollback.
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_list_updated_id ON entries(list_id, updated_at DESC, id DESC)")
                 for ident, name, fields in DEFAULTS:
                     conn.execute(
                         "INSERT OR IGNORE INTO lists(id,name,fields,created_by) VALUES(?,?,?,?)",
