@@ -29,6 +29,9 @@ def main():
     if os.getenv("STAGING_BOARD_CAPACITY") == "1":
         from scripts.seed_board_capacity import seed_capacity
         seed_capacity()
+    if os.getenv("STAGING_REALISTIC_FIXTURE") == "1":
+        from scripts.realistic_board_fixture import enrich
+        enrich()
     if int(os.getenv("STAGING_SIM_AGENTS") or "0") > 0:
         from scripts.staging_presence import start
         start(int(os.environ["STAGING_SIM_AGENTS"]), int(os.getenv("STAGING_SIM_SECONDS", "1800")))

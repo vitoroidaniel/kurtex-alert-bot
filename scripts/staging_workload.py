@@ -7,7 +7,7 @@ from scripts.staging_presence import BASE, NAMES
 
 def start(count=8, seconds=600):
     guard()
-    if not 1 <= count <= 8 or not 30 <= seconds <= 1800:
+    if not 1 <= count <= 12 or not 30 <= seconds <= 1800:
         raise ValueError("Workload limit exceeded")
     def run():
         try:
@@ -24,7 +24,7 @@ def execute(count, seconds):
     from backend.storage.case_store import workspace_revision
     from backend.storage.user_store import get_user
     from PIL import Image, ImageDraw
-    prefix="stg-load-v1-"
+    prefix="stg-capacity-v2-"
     runid=uuid.uuid4().hex[:10]
     deadline=time.monotonic()+seconds
     metrics=defaultdict(list)
@@ -72,17 +72,17 @@ def execute(count, seconds):
             records=[json.loads(r[0]) for r in rows]
             return rng.choice(records) if records else None
         try:
-            for tick in range(90):
+            for tick in range(120):
                 if time.monotonic()>=deadline: break
                 case=current()
                 if case:
                     cid=case["id"]
-                    if not cid.startswith(prefix) or case.get("synthetic_dataset")!="staging-load-v1": raise RuntimeError("Non-synthetic target")
+                    if not cid.startswith(prefix) or case.get("synthetic_dataset")!="staging-capacity-v2": raise RuntimeError("Non-synthetic target")
                     path="/api/workspace/cases/"+cid
                     rev=workspace_revision(case)
                     action=tick%6
                     if action==0:
-                        draft="SIM: Repair shop confirmed technician availability."
+                        draft=rng.choice(["SIM: Shop confirmed technician availability; waiting on estimate.","SIM: Driver sent new status; dispatch updated on ETA.","SIM: Parts ordered, follow-up scheduled with service advisor.","SIM: Reviewed itemized estimate and requested approval."])
                         presence("editing",cid,"notes",draft[:17])
                         time.sleep(.5)
                         presence("editing",cid,"notes",draft)
@@ -108,6 +108,9 @@ def execute(count, seconds):
                 if tick%3==0:
                     req("board","GET","/api/workspace/board")
                     req("history","GET","/api/cases?filter=all&limit=50")
+                    req("done_page","GET","/api/cases?filter=workspace_closed&lite=1&limit=50&offset="+str((tick*50)%3000))
+                    req("search","GET","/api/cases?filter=all&lite=1&search=ABS&limit=50")
+                    req("stats","GET","/api/stats")
                 if tick%4==0:
                     lid=lists[i%len(lists)]
                     ent=req("list_add","POST",f"/api/smart-lists/{lid}/entries",json={"values":{"f0":f"SIM-{i}-{tick}","f1":"Repair pending"}})
