@@ -4,7 +4,7 @@
 <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/kurtex-logo.png') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/kurtex-logo.png') }}">
 <meta name="theme-color" content="#f4f6fb"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Kurtex">
-<link rel="stylesheet" href="{{ url_for('static',filename='css/auth/login.css') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/auth/login.css', v='staging-login-3') }}">
 <link rel="preconnect" href="https://telegram.org" crossorigin>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
@@ -35,8 +35,9 @@
       {% if error %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>We couldn't verify your account. Please try again or contact your administrator.</span></div>{% endif %}
       {% if bot_username %}
       <div class="telegram-login" id="telegramLogin">
+        <span class="telegram-loading" role="status">Loading secure Telegram sign-in…</span>
         <div class="telegram-native" id="telegramNative">
-          <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="12" data-auth-url="/auth/telegram" data-request-access="write"></script>
+          <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="12" data-userpic="false" data-auth-url="/auth/telegram" data-request-access="write"></script>
         </div>
       </div>
       <div class="secure-access"><i class="ph ph-lock-key"></i><span>Secure access</span><b>·</b><span>Authorized accounts only</span></div>
@@ -70,7 +71,8 @@
     login.classList.add('is-loading');
     const observer = new MutationObserver(updateTelegramState);
     observer.observe(native, {childList:true, subtree:true});
-    setTimeout(() => { if (!updateTelegramState()) { login.classList.remove('is-loading'); retry.classList.add('is-visible'); } }, 7000);
+    updateTelegramState();
+    setTimeout(() => { if (!updateTelegramState()) { login.classList.remove('is-loading'); login.classList.add('is-unavailable'); retry.classList.add('is-visible'); } }, 7000);
     retry.addEventListener('click', () => window.location.reload());
   }
 
