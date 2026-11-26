@@ -29,6 +29,9 @@ def main():
     if os.getenv("STAGING_SIM_AGENTS"):
         from scripts.staging_presence import start
         start(int(os.environ["STAGING_SIM_AGENTS"]), int(os.getenv("STAGING_SIM_SECONDS", "1800")))
+    if os.getenv("STAGING_WORKLOAD_AGENTS"):
+        from scripts.staging_workload import start as start_workload
+        start_workload(int(os.environ["STAGING_WORKLOAD_AGENTS"]), int(os.getenv("STAGING_WORKLOAD_SECONDS","600")))
     runpy.run_module("bot", run_name="__main__")
 
 if __name__ == "__main__":
