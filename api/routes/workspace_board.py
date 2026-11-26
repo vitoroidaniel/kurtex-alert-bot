@@ -1015,7 +1015,7 @@ def register_workspace_routes(server):
             _bump_presence_seq()
         except Exception:
             pass
-        pres_seq = _get_presence_seq()
+        pres_seq = kurtex_db.get_version('workspace_presence_version', _data_dir())
         ws.send(json.dumps({
             "type": "ready",
             "version": version,
@@ -1076,7 +1076,7 @@ def register_workspace_routes(server):
                         else:
                             cursor = kurtex_db.get_latest_event_cursor(_data_dir())
                         ws.send(json.dumps({"type": "changed", "version": version, "cursor": cursor, "events": events}))
-                next_pres_seq = _get_presence_seq()
+                next_pres_seq = kurtex_db.get_version('workspace_presence_version', _data_dir())
                 if next_pres_seq != pres_seq:
                     pres_seq = next_pres_seq
                     ws.send(json.dumps({"type": "presence", "presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor))}))
@@ -1129,7 +1129,7 @@ def register_workspace_routes(server):
             _bump_presence_seq()
         except Exception:
             pass
-        pres_seq = _get_presence_seq()
+        pres_seq = kurtex_db.get_version('workspace_presence_version', _data_dir())
 
         def _fmt_sse(ev_name, payload):
             return f"event: {ev_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -1156,7 +1156,7 @@ def register_workspace_routes(server):
                         else:
                             cursor = kurtex_db.get_latest_event_cursor(_data_dir())
                         yield _fmt_sse("changed", {"version": version, "cursor": cursor, "events": events})
-                    next_pres_seq = _get_presence_seq()
+                    next_pres_seq = kurtex_db.get_version('workspace_presence_version', _data_dir())
                     if next_pres_seq != pres_seq:
                         pres_seq = next_pres_seq
                         yield _fmt_sse("presence", {"presence": snapshot(user_id, _data_dir(), include_activity=_can_view_live_activity(actor))})

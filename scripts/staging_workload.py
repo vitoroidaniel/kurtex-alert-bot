@@ -84,16 +84,21 @@ def execute(count, seconds):
                     if action==0:
                         draft=rng.choice(["SIM: Shop confirmed technician availability; waiting on estimate.","SIM: Driver sent new status; dispatch updated on ETA.","SIM: Parts ordered, follow-up scheduled with service advisor.","SIM: Reviewed itemized estimate and requested approval."])
                         presence("editing",cid,"notes",draft[:17])
-                        time.sleep(.5)
+                        time.sleep(1.5)
                         presence("editing",cid,"notes",draft)
+                        time.sleep(2.5)
                         req("note","PATCH",path,json=dict(action="note",revision=rev,text=draft))
                     elif action==1:
                         presence("dragging",cid)
+                        time.sleep(rng.uniform(2.0,3.5))
                         req("rank","PATCH",path,json=dict(action="rank",board_rank=rng.randint(1,9999)))
                     elif action==2:
                         presence("editing",cid,"shop_info","SIM Repair Center")
+                        time.sleep(3)
                         req("edit","PATCH",path,json=dict(action="edit",revision=rev,fields={"shop_info":"SIM Repair Center","amount":str(rng.randint(150,1800))}))
                     elif action==3:
+                        presence("editing",cid,"attachment","Uploading service photo")
+                        time.sleep(2)
                         if shutil.disk_usage("/app/data").free>200*1024*1024:
                             im=Image.new("RGB",(640,360),"#dddddd")
                             ImageDraw.Draw(im).text((25,25),"SYNTHETIC REPAIR PHOTO "+runid,fill="black")
@@ -101,9 +106,11 @@ def execute(count, seconds):
                             req("attachment","POST",path+"/attachments",data={"file":(buf,"sim-repair.png"),"category":"attachment"})
                     elif action==4:
                         presence("dragging",cid)
+                        time.sleep(rng.uniform(2.0,3.5))
                         req("move","PATCH",path,json=dict(action="move",revision=rev,agent_id=str(BASE+(i+1)%count),stage="",board_rank=rng.randint(1,9999),allow_concurrent_move=True))
                     else:
-                        presence("viewing",cid)
+                        presence("dragging",cid)
+                        time.sleep(2.5)
                         req("stage","PATCH",path,json=dict(action="stage",revision=rev,stage="monitoring" if case.get("board_stage")!="monitoring" else "",allow_concurrent_move=True))
                 if tick%3==0:
                     req("board","GET","/api/workspace/board")

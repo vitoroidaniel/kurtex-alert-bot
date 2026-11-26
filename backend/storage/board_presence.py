@@ -60,6 +60,7 @@ def heartbeat(session_id, user_id, user_name, action="idle", case_id="", field="
             "WHERE workspace_presence.user_id=excluded.user_id",
             (session_id, user_id, str(user_name)[:70], action, str(case_id), str(field), clean_draft, now, now + 50)
         )
+        db.bump_version(conn, 'workspace_presence_version')
 
 
 def remove_session(session_id, data_dir=None, *, user_id=None):
@@ -72,6 +73,7 @@ def remove_session(session_id, data_dir=None, *, user_id=None):
             conn.execute("DELETE FROM workspace_presence WHERE session_id=?", (session_id,))
         else:
             conn.execute("DELETE FROM workspace_presence WHERE session_id=? AND user_id=?", (session_id, user_id))
+        db.bump_version(conn, "workspace_presence_version")
 
 
 def snapshot(current_user, data_dir=None, *, include_activity: bool = True):
