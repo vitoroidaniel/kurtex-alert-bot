@@ -27,3 +27,7 @@ def select_attachment_ids(message, requested, history, available):
         return []
     last_user = next((m for m in reversed(history) if m.get("role") == "user"), {})
     return [str(x) for x in last_user.get("attachment_ids", []) if str(x) in available]
+
+def is_live_time_turn(message):
+    text = str(message or "").strip().lower()
+    return bool(re.search(r"\b(?:current time|local time|what time is it|time now|time in|time zone|timezone)\b", text) or re.match(r"^(?:time|ora|время)\s+\S", text))
