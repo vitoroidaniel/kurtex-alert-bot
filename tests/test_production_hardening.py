@@ -40,3 +40,26 @@ class HardeningTests(unittest.TestCase):
             board_presence.heartbeat(sid,2,"Two",action="left",data_dir=folder)
             members=board_presence.snapshot(1,data_dir=folder)["members"]
             self.assertEqual([m["user_id"] for m in members],[1])
+
+    def test_concurrent_transaction_versions(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from backend.storage import db
+        with tempfile.TemporaryDirectory() as folder:
+            with db.write_tx(folder) as conn:
+                db.bump_version(conn, "hardening_test")
+            def update(_):
+                with db.write_tx(folder) as conn:
+                    return db.bump_version(conn, "hardening_test")
+            with ThreadPoolExecutor(max_workers=30) as workers:
+                versions = list(workers.map(update, range(60)))
+            self.assertEqual(sorted(versions), list(range(2, 62)))
+            self.assertEqual(db.get_version("hardening_test", folder), 61)
+
+    def test_transaction_rollback(self):
+        from backend.storage import db
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(RuntimeError):
+                with db.write_tx(folder) as conn:
+                    db.bump_version(conn, "rollback_test")
+                    raise RuntimeError("simulated failure")
+            self.assertEqual(db.get_version("rollback_test", folder), 0)
