@@ -9,8 +9,16 @@ def main():
     uid = int(os.environ["STAGING_DEVELOPER_ID"])
     drivers = int(os.environ["DRIVER_GROUP_ID"])
     reports = int(os.environ["REPORTS_GROUP_ID"])
-    if uid <= 0 or drivers >= 0 or reports >= 0 or drivers == reports or not os.environ.get("BOT_TOKEN") or not os.environ.get("BOT_USERNAME"):
-        raise RuntimeError("Invalid staging bot configuration")
+    if uid <= 0:
+        raise RuntimeError("STAGING_DEVELOPER_ID must be positive")
+    if drivers >= 0:
+        raise RuntimeError("DRIVER_GROUP_ID must be a negative Telegram group ID")
+    if reports >= 0:
+        raise RuntimeError("REPORTS_GROUP_ID must be a negative Telegram group ID")
+    if drivers == reports:
+        raise RuntimeError("Staging requires distinct driver and report groups")
+    if not os.environ.get("BOT_TOKEN") or not os.environ.get("BOT_USERNAME"):
+        raise RuntimeError("BOT_TOKEN or BOT_USERNAME is missing")
     existing = get_user(uid)
     if not (edit_role(uid, "developer") if existing else add_user(uid, "Staging Developer", "", "developer")):
         raise RuntimeError("Developer bootstrap failed")
