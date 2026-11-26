@@ -210,5 +210,30 @@ class LiveBoardV317BackendTests(unittest.TestCase):
                 self.assertIn("versions_json", cols)
 
 
+    def test_active_svg_download_only_for_existing_and_new_versions(self):
+        # SVG is retained for downloading, but must never become a same-origin
+        # executable document via the inline preview parameter.
+        with self._auth_patch():
+            url = f"/api/workspace/cases/{self.case['id']}/attachments"
+            headers = {"X-Workspace-CSRF": "csrf-1"}
+            svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>0</script></svg>'
+            up = self.client.post(url, headers=headers, data={"file": (io.BytesIO(svg), "diagram.svg")})
+            self.assertEqual(up.status_code, 200, up.get_json())
+            location = url + "/" + up.get_json()["id"]
+            with self.client.get(location + "?inline=1") as download:
+                self.assertEqual(download.status_code, 200)
+                self.assertEqual(download.mimetype, "application/octet-stream")
+                self.assertTrue(download.headers["Content-Disposition"].startswith("attachment"))
+                self.assertEqual(download.data, svg)
+            v2 = self.client.post(location + "/versions", headers=headers,
+                                  data={"file": (io.BytesIO(svg), "diagram-v2.svg")})
+            self.assertEqual(v2.status_code, 200, v2.get_json())
+            for version in v2.get_json()["attachment"]["versions"]:
+                with self.client.get(location + "/versions/" + version["id"] + "?inline=1") as download:
+                    self.assertEqual(download.status_code, 200)
+                    self.assertEqual(download.mimetype, "application/octet-stream")
+                    self.assertTrue(download.headers["Content-Disposition"].startswith("attachment"))
+
+
 if __name__ == "__main__":
     unittest.main()

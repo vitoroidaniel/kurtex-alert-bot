@@ -726,6 +726,8 @@ def register_workspace_routes(server):
 
     @app.route("/api/workspace/cases/<case_id>/attachments", methods=["POST"])
     def api_workspace_attachment_upload(case_id):
+        if case_id in (".", "..") or "\\" in case_id or "/" in case_id:
+            return jsonify({"error": "Invalid case identifier."}), 400
         actor, error = _workspace_actor()
         if error:
             return error
@@ -779,7 +781,6 @@ def register_workspace_routes(server):
         ".jpeg": "image/jpeg",
         ".gif": "image/gif",
         ".webp": "image/webp",
-        ".svg": "image/svg+xml",
         ".mp4": "video/mp4",
         ".webm": "video/webm",
         ".mov": "video/quicktime",
@@ -843,8 +844,8 @@ def register_workspace_routes(server):
             if not path.is_file():
                 return jsonify({"error": "File unavailable."}), 404
             ext = str(item.get("extension") or "").lower()
-            inline = request.args.get("inline") == "1"
-            mime = _INLINE_MIMES.get(ext, "application/octet-stream") if inline else "application/octet-stream"
+            inline = request.args.get("inline") == "1" and ext in _INLINE_MIMES
+            mime = _INLINE_MIMES[ext] if inline else "application/octet-stream"
             return send_file(path, as_attachment=not inline, download_name=item["name"], mimetype=mime)
         except PermissionError as exc:
             return jsonify({"error": str(exc)}), 403
@@ -855,6 +856,8 @@ def register_workspace_routes(server):
 
     @app.route("/api/workspace/cases/<case_id>/attachments/<attachment_id>/versions", methods=["POST"])
     def api_workspace_attachment_new_version(case_id, attachment_id):
+        if case_id in (".", "..") or "\\" in case_id or "/" in case_id:
+            return jsonify({"error": "Invalid case identifier."}), 400
         actor, error = _workspace_actor()
         if error:
             return error
@@ -908,8 +911,8 @@ def register_workspace_routes(server):
             path = _data_dir() / "workspace_uploads" / case_id / (blob_id + ext)
             if not path.is_file():
                 return jsonify({"error": "Version file unavailable."}), 404
-            inline = request.args.get("inline") == "1"
-            mime = _INLINE_MIMES.get(ext, "application/octet-stream") if inline else "application/octet-stream"
+            inline = request.args.get("inline") == "1" and ext in _INLINE_MIMES
+            mime = _INLINE_MIMES[ext] if inline else "application/octet-stream"
             return send_file(path, as_attachment=not inline, download_name=ver.get("name") or item["name"], mimetype=mime)
         except LookupError as exc:
             return jsonify({"error": str(exc)}), 404
