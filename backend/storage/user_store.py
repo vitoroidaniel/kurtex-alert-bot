@@ -256,7 +256,7 @@ def get_alert_recipients() -> list[int]:
     return [
         int(uid)
         for uid, u in _load().items()
-        if u["role"] in ("super_admin", "agent")
+        if u["role"] in ("super_admin", "agent") and not u.get("synthetic_staging")
     ]
 
 

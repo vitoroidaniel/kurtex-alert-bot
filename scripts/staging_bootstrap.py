@@ -26,6 +26,9 @@ def main():
     if os.getenv("STAGING_SEED_CASES"):
         from scripts.seed_staging import seed
         seed(int(os.environ["STAGING_SEED_CASES"]))
+    if os.getenv("STAGING_SIM_AGENTS"):
+        from scripts.staging_presence import start
+        start(int(os.environ["STAGING_SIM_AGENTS"]), int(os.getenv("STAGING_SIM_SECONDS", "1800")))
     runpy.run_module("bot", run_name="__main__")
 
 if __name__ == "__main__":
