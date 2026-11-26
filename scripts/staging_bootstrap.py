@@ -23,13 +23,16 @@ def main():
     if not (edit_role(uid, "developer") if existing else add_user(uid, "Staging Developer", "", "developer")):
         raise RuntimeError("Developer bootstrap failed")
     print("Staging developer bootstrap successful; starting Telegram polling", flush=True)
-    if os.getenv("STAGING_SEED_CASES"):
+    if int(os.getenv("STAGING_SEED_CASES") or "0") > 0:
         from scripts.seed_staging import seed
         seed(int(os.environ["STAGING_SEED_CASES"]))
-    if os.getenv("STAGING_SIM_AGENTS"):
+    if os.getenv("STAGING_BOARD_CAPACITY") == "1":
+        from scripts.seed_board_capacity import seed_capacity
+        seed_capacity()
+    if int(os.getenv("STAGING_SIM_AGENTS") or "0") > 0:
         from scripts.staging_presence import start
         start(int(os.environ["STAGING_SIM_AGENTS"]), int(os.getenv("STAGING_SIM_SECONDS", "1800")))
-    if os.getenv("STAGING_WORKLOAD_AGENTS"):
+    if int(os.getenv("STAGING_WORKLOAD_AGENTS") or "0") > 0:
         from scripts.staging_workload import start as start_workload
         start_workload(int(os.environ["STAGING_WORKLOAD_AGENTS"]), int(os.getenv("STAGING_WORKLOAD_SECONDS","600")))
     runpy.run_module("bot", run_name="__main__")
