@@ -35,11 +35,6 @@
       {% if error %}<div class="error" role="alert"><i class="ph ph-warning-circle"></i><span>We couldn't verify your account. Please try again or contact your administrator.</span></div>{% endif %}
       {% if bot_username %}
       <div class="telegram-login" id="telegramLogin">
-        <div class="telegram-visual" aria-hidden="true">
-          <span class="telegram-icon"><i class="ph ph-telegram-logo"></i></span>
-          <span class="telegram-label">Continue with Telegram</span>
-          <i class="ph ph-arrow-right telegram-arrow"></i>
-        </div>
         <div class="telegram-native" id="telegramNative">
           <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="{{ bot_username }}" data-size="large" data-radius="12" data-auth-url="/auth/telegram" data-request-access="write"></script>
         </div>
