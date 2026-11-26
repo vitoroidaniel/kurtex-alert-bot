@@ -4410,11 +4410,15 @@ def api_case_detail():
         for c in matches:
             if c:
                 data = serialize_case(c)
-                try:
-                    ki_tags = _cached_case_intelligence_tags()
-                    data["ki_tags"] = ki_tags.get(_ki_case_id(c), [])
-                except Exception:
-                    data["ki_tags"] = []
+                data["ki_tags"] = []
+                # Live Board detail does not consume fleet-wide intelligence tags.
+                # Avoid rebuilding the entire analytics dataset on concurrent writes.
+                if request.args.get("lite") != "1":
+                    try:
+                        ki_tags = _cached_case_intelligence_tags()
+                        data["ki_tags"] = ki_tags.get(_ki_case_id(c), [])
+                    except Exception:
+                        pass
                 data.update({
                     "full_description": c.get("description",""),
                     "full_notes":       c.get("notes","") or "",
