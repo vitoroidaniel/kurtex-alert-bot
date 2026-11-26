@@ -10,6 +10,7 @@ from pathlib import Path
 from threading import Thread, Lock
 from functools import wraps, lru_cache
 from backend.ai.ai_chat_store import ChatStore
+from backend.ai.request_guard import UserOperations, UserRateLimit
 from backend.ai.ai_learning import LearningStore
 from backend.ai.ai_learning_routes import register_learning_routes
 from backend.ai.fleet_knowledge import FleetKnowledgeStore
@@ -63,7 +64,8 @@ web_login_complete = register_web_sso(app, DATA_DIR, lambda: _current_allowed_pa
 chat_store = ChatStore(DATA_DIR)
 learning_store = LearningStore(DATA_DIR / "ai_learning.sqlite3")
 fleet_knowledge_store = FleetKnowledgeStore(DATA_DIR / "fleet_knowledge.sqlite3")
-_ai_user_locks = [Lock() for _ in range(64)]
+_ai_user_operations = UserOperations()
+_ai_chat_rate = UserRateLimit(limit=20, window=60)
 
 def ai_serialized(fn):
     @wraps(fn)
@@ -72,8 +74,8 @@ def ai_serialized(fn):
             return jsonify({"error":"unauthorized"}),401
         if request.method in ("GET","HEAD"):
             return fn(*args, **kwargs)
-        lock = _ai_user_locks[int(hashlib.sha256(_ai_user_key().encode()).hexdigest(),16) % 64]
-        if not lock.acquire(blocking=False):
+        release = _ai_user_operations.acquire(_ai_user_key())
+        if release is None:
             return jsonify({"error":"A chat operation is still running. Please wait before retrying."}),409
         handed_to_stream = False
         try:
@@ -85,13 +87,19 @@ def ai_serialized(fn):
                         for chunk in inner:
                             yield chunk
                     finally:
-                        lock.release()
+                        try:
+                            close = getattr(inner, 'close', None)
+                            if close:
+                                close()
+                        finally:
+                            release()
                 res.response = _guarded()
+                res.call_on_close(release)
                 handed_to_stream = True
             return res
         finally:
             if not handed_to_stream:
-                lock.release()
+                release()
     return wrapped
 
 # Persistent browser sign-in is bounded by the backend's signed-cookie lifetime.
@@ -1619,9 +1627,35 @@ def api_notifications_seen_all():
 
 AI_KNOWLEDGE_FILE = DATA_DIR / "ai_maintenance_knowledge.json"
 
+@app.before_request
+def _authorize_ai_request():
+    if not request.path.startswith("/api/ai/") or request.method == "OPTIONS":
+        return None
+    from backend.storage.user_store import get_user
+    user = session.get("user") or {}
+    if not isinstance(user, dict) or not user.get("id"):
+        return jsonify(error="Sign in required"), 401
+    stored = get_user(user["id"])
+    if not stored:
+        return jsonify(error="Account no longer authorized"), 403
+    role = _website_role(stored.get("role"))
+    g.ai_actor_role = role
+    allowed = _load_role_permissions().get(role, [])
+    # The case-detail related-cases action is also used outside AI Assistant.
+    has_case_lookup = request.path == "/api/ai/related_cases" and "cases" in allowed
+    if not has_case_lookup and not any(page in allowed for page in ("ai_assistant", "ai_knowledge")):
+        return jsonify(error="AI access is not available for this account"), 403
+    if request.path == "/api/ai/chat" and request.method == "POST":
+        if not _ai_chat_rate.allow(str(user["id"])):
+            result = jsonify(error="Too many AI requests. Please retry in a minute.")
+            result.headers["Retry-After"] = "60"
+            return result, 429
+    return None
+
+
 def _ai_is_trainer():
-    user=session.get("user") or {}
-    return isinstance(user,dict) and user.get("role","agent") == "developer"
+    # Cookie roles can be stale after an administrator changes permissions.
+    return getattr(g, "ai_actor_role", None) == "developer"
 
 def _read_ai_knowledge():
     try:

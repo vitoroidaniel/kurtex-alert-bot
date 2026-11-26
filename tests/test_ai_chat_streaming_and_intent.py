@@ -23,7 +23,9 @@ class AiChatStreamingAndIntentTests(unittest.TestCase):
         p_learn = patch.object(server.learning_store, "matches", return_value=[])
         p_fleet = patch.object(server.fleet_knowledge_store, "matches", return_value=[])
         p_learn_cap = patch.object(server.learning_store, "capture_chat", return_value=None)
-        for p in (p_store, p_cases, p_learn, p_fleet, p_learn_cap):
+        p_actor = patch("backend.storage.user_store.get_user", return_value={"role":"developer", "name":"Fixture"})
+        p_rate = patch.object(server, "_ai_chat_rate", server.UserRateLimit(limit=100, window=60))
+        for p in (p_store, p_cases, p_learn, p_fleet, p_learn_cap, p_actor, p_rate):
             p.start()
             self.addCleanup(p.stop)
         self.client = server.app.test_client()

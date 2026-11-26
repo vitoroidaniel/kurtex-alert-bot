@@ -21,7 +21,7 @@ with patch.object(socket.socket, "connect", no_network), patch.object(socket.soc
                  "test_smart_lists_store_and_routes", "test_presence_concurrency",
                  "test_v304_live_board_collaboration",
                  "test_v305_live_board_production_storage",
-                 "test_v317_lanes_proofs_attachments", "test_attachment_inventory"):
+                 "test_v317_lanes_proofs_attachments", "test_attachment_inventory", "test_ai_request_guard", "test_ai_chat_streaming_and_intent"):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
     result = unittest.TextTestRunner(verbosity=2).run(suite)
 if not result.wasSuccessful():
